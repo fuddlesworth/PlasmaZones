@@ -24,6 +24,7 @@ class SurfaceShaderRegistry;
 
 namespace PlasmaZones {
 
+class DecorationPreviewController;
 class ISettings;
 
 /// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
@@ -74,6 +75,19 @@ class DecorationPageController : public PhosphorControl::PageController
 
     /// The decoration-set store, bound by DecorationSetsPage as its `bridge`.
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
+
+    /// Live-preview data source for the shader browser's detail dialog. The
+    /// pack-agnostic ShaderBrowserDetailDialog reads `bridge.previewController`
+    /// and shows a preview pane when it is non-null — the animation browser
+    /// leaves it null and shows none. Typed as QObject* because the dialog is
+    /// shared with the zone/overlay browser, whose controller is an unrelated
+    /// class; `previewKind` below is what tells the dialog which pane to load.
+    Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
+
+    /// Which preview pane the detail dialog should load for this bridge.
+    /// "decoration" here; the zone/overlay bridges report "zone". A bridge
+    /// with no previewController reports an empty string and shows no pane.
+    Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
 
 public:
     /// @param registry Optional — when null, the `*ShaderEffects()`
@@ -238,6 +252,10 @@ public:
         return m_sets;
     }
 
+    QObject* previewController() const;
+
+    QString previewKind() const;
+
     /// Test hook: redirect the sets directory to @p dir instead of the XDG
     /// default. Pass an empty string to restore the default. Mirrors
     /// AnimationsPageController::setUserProfilesDirOverride, and exists for the
@@ -270,6 +288,11 @@ private:
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+
+    /// Owned via QObject parenting (this). Constructed eagerly: it is cheap
+    /// until the pane actually asks for a chain, and CONSTANT Q_PROPERTYs must
+    /// not change identity after first read.
+    DecorationPreviewController* m_preview = nullptr;
 
     QString m_setsDirOverride; ///< Empty = use the XDG default
 

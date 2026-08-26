@@ -173,6 +173,20 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         const auto validated = validateTexturePathWithinEffectDir(e.previewPath, effectDir, e.id,
                                                                   PhosphorFsLoader::AbsolutePathPolicy::Reject);
         e.previewPath = validated.value_or(QString());
+    } else {
+        // Convention fallback: an unreferenced `preview.png` beside the
+        // metadata IS the pack's thumbnail, matching the overlay registry
+        // (shaderregistry.cpp) so pack authors and the bundled generator script
+        // do not have to touch metadata.json just to add a thumbnail. Only
+        // consulted when metadata declares no explicit preview, so an explicit
+        // one always wins. Like the overlay side this is deliberately outside
+        // the watch set and the content signature: the preview never feeds the
+        // GPU pipeline, so re-registering (and re-baking) a pack because its
+        // thumbnail changed would be pure churn.
+        const QString conventional = QDir(effectDir).filePath(QStringLiteral("preview.png"));
+        if (QFile::exists(conventional)) {
+            e.previewPath = conventional;
+        }
     }
 
     // Resolve user-texture paths to absolute form once at scan time —

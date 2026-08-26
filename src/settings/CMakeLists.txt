@@ -139,6 +139,8 @@ set(plasmazones_settings_SRCS
     # mutations write straight to the Settings decorationProfileTree.
     pages/decorationpagecontroller.h
     pages/decorationpagecontroller.cpp
+    pages/decorationpreviewcontroller.h
+    pages/decorationpreviewcontroller.cpp
     # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
     # separate TU.
     pages/decorationpagecontroller_paths.cpp
@@ -509,6 +511,7 @@ qt_add_qml_module(plasmazones-settings
         # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
         # invisible instances, Rules + shader browser directly).
         qml/components/StayOpenMenuItem.qml
+        qml/pages/shaders/DecorationPreviewPane.qml
         qml/pages/shaders/ShaderBrowserDetailDialog.qml
         qml/pages/animations/CurveEditorDialog.qml
         qml/pages/animations/CurvePresets.qml

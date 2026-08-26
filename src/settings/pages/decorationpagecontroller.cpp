@@ -4,6 +4,7 @@
 #include "decorationpagecontroller.h"
 
 #include "decoration_controller_detail.h"
+#include "decorationpreviewcontroller.h"
 
 #include "core/interfaces/isettings.h"
 
@@ -113,6 +114,7 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
     : PhosphorControl::PageController(QStringLiteral("decoration-staging"), parent)
     , m_registry(registry)
     , m_settings(settings)
+    , m_preview(new DecorationPreviewController(registry, settings, this))
 {
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
@@ -135,6 +137,16 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
 }
 
 DecorationPageController::~DecorationPageController() = default;
+
+QObject* DecorationPageController::previewController() const
+{
+    return m_preview;
+}
+
+QString DecorationPageController::previewKind() const
+{
+    return QStringLiteral("decoration");
+}
 
 // ── Available packs ───────────────────────────────────────────────────────
 

@@ -71,6 +71,19 @@ Kirigami.Dialog {
     // column an editable editor only here.
     readonly property var previewController: bridge && bridge.previewController ? bridge.previewController : null
     readonly property bool _livePreview: previewController !== null && effect !== null
+    // Which preview pane this bridge wants. The decoration bridge reports
+    // "decoration"; the zone/overlay bridges predate the property and report
+    // nothing, so a controller with no declared kind falls back to "zone" —
+    // that fallback is what keeps the snapping and overlay browsers unchanged.
+    readonly property string _previewKind: (bridge && bridge.previewKind) ? bridge.previewKind : (previewController ? "zone" : "")
+    // The two panes need different halves of this dialog. A zone preview drives
+    // the shader-info / translated-param / preset machinery below; a decoration
+    // preview drives none of it (its controller composes a whole chain instead,
+    // and exposes no preset API), so those calls are gated on the zone kind
+    // rather than on _livePreview alone — calling getShaderInfo on the
+    // decoration controller would be a hard "not a function" at open time.
+    readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
+    readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -119,7 +132,10 @@ Kirigami.Dialog {
         _previewTimeDelta = 0;
         _previewFrame = 0;
         _previewLastTime = Date.now() / 1000;
-        _shaderInfo = previewController.getShaderInfo(effect.id) || ({});
+        // Zone-only: the decoration controller has no getShaderInfo, and its
+        // pane reads what it needs (parameters, audio / backdrop flags) from
+        // packInfo itself.
+        _shaderInfo = _zonePreview ? (previewController.getShaderInfo(effect.id) || ({})) : ({});
         var p = {};
         var params = effect.parameters || [];
         for (var i = 0; i < params.length; i++) {
@@ -136,11 +152,15 @@ Kirigami.Dialog {
         Qt.callLater(function () {
             // Guard on `opened` too: if the dialog was closed between the
             // deferral and this call, don't re-arm the renderer.
-            root._rendererActive = root.opened && root._livePreview;
+            root._rendererActive = root.opened && root._zonePreview;
         });
     }
     function _recompute() {
-        if (!_livePreview)
+        // Zone-only. A decoration pack's params reach its shader inside the
+        // composed chain (previewChain translates them through the SAME builder
+        // the daemon uses), so there is no separate translated-param map here
+        // and no translateShaderParams on that controller to call.
+        if (!_zonePreview)
             return;
         _translatedParams = previewController.translateShaderParams(effect.id, _liveParams) || ({});
     }
@@ -198,7 +218,7 @@ Kirigami.Dialog {
         // its left and Default anchors to its right edge — lining up under the
         // params/preview split and the per-row lock column above.
         Item {
-            visible: root._livePreview && root._hasParameters
+            visible: root._zonePreview && root._hasParameters
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
@@ -554,14 +574,35 @@ Kirigami.Dialog {
             }
 
             // ── RIGHT: pinned preview (fills the column) ────────────────
-            // Only the zone/overlay browser has a live preview — hidden (and so
-            // excluded from the row, letting the params fill width) for the
-            // animation browser.
+            // Hidden (and so excluded from the row, letting the params fill
+            // width) for the animation browser, which has no previewController.
+            // The zone/overlay and decoration browsers each get their own pane
+            // below, selected by _previewKind.
             Item {
                 visible: root._livePreview
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 24
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 20
                 Layout.fillHeight: true
+
+                // Live decoration preview: the stand-in card run through the
+                // real SurfaceDecoration chain host. In a Loader so the whole
+                // capture / shader chain is only instantiated for a decoration
+                // pack, and is torn down with the dialog rather than lingering.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root._decorationPreview
+                    visible: active
+
+                    sourceComponent: DecorationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        // Same gate the zone pane's clock uses: nothing ticks
+                        // while the dialog is shut or the app is backgrounded.
+                        active: root.opened && root._appActive
+                    }
+                }
 
                 // Live ZoneShaderItem preview (zone/overlay browser).
                 Rectangle {
@@ -569,7 +610,7 @@ Kirigami.Dialog {
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
-                    visible: root._livePreview
+                    visible: root._zonePreview
                     radius: Kirigami.Units.smallSpacing
                     // Intentionally a true-black backdrop (not a theme color): the
                     // shader renders over this, and a tinted background would
@@ -583,7 +624,7 @@ Kirigami.Dialog {
                     // the label texture, and the hover hit-test. Recomputed on
                     // resize; the settings backend supplies a 2-zone sample so
                     // multi-zone + per-zone-highlight effects are visible.
-                    readonly property var _zones: (root._livePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
+                    readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
                     // Mouse position within the pane (preview pixels); -1,-1 when
                     // not hovering. Drives iMouse + the hovered-zone highlight.
                     property point _mouse: Qt.point(-1, -1)
@@ -634,9 +675,9 @@ Kirigami.Dialog {
                     // Expensive feeds cached as properties so the per-frame
                     // config rebuild below (iTime) doesn't re-run C++ calls —
                     // these recompute only when zones / size / shader change.
-                    readonly property string _preamble: (root._livePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
-                    readonly property var _labelsTex: (root._livePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
-                    readonly property var _wallpaperTex: (root._livePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
+                    readonly property string _preamble: (root._zonePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
+                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
+                    readonly property var _wallpaperTex: (root._zonePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
                     // Cached so the per-frame config rebuild below doesn't read it
                     // off the controller every frame (a QVariant vector copy) and
                     // doesn't hand the renderer a new container reference each tick;

@@ -527,7 +527,14 @@ private Q_SLOTS:
     /// null-checks and treats as "no preview pane" (its docstring says so).
     void everyBridgeCallFromTheShaderBrowserIsReachable()
     {
-        const QSet<QString> documentedOptional{QStringLiteral("previewController")};
+        // `previewKind` joins `previewController` as documented-optional: the
+        // detail dialog reads it to choose between the zone/overlay and
+        // decoration preview panes, and guards the read
+        // (`bridge && bridge.previewKind ? … : …`). A bridge that omits it —
+        // the animations controller here, and the zone/overlay controllers
+        // that predate the property — falls back to the zone pane, which is
+        // exactly what keeps those routes unchanged.
+        const QSet<QString> documentedOptional{QStringLiteral("previewController"), QStringLiteral("previewKind")};
 
         // Only the files the animations route instantiates: the browser page
         // and its detail dialog. ShaderSetsPage lives in the same directory

@@ -1633,6 +1633,10 @@ add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 # test below, so a new controller TU can't silently miss one of the two.
 set(_decoration_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller.cpp
+    # The page controller constructs one of these in its ctor, so every TU that
+    # links the controller needs it — omitting it is a link error in both tests
+    # below, not a silent degradation.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_browser.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_sets.cpp
@@ -1661,10 +1665,30 @@ target_link_libraries(test_decorationpagecontroller
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
+
+# Data surface behind the settings app's live decoration preview: chain
+# composition, the extended-FBO padding request, and the degraded paths a
+# browsing user can reach (unknown pack, no registry). Links only the preview
+# controller — it has no page-controller dependency.
+add_executable(test_decorationpreviewcontroller
+    settings/pages/test_decorationpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
+)
+target_link_libraries(test_decorationpreviewcontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio
+        plasmazones_core
+)
+add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
 
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,
@@ -1680,6 +1704,7 @@ target_link_libraries(test_decoration_sets
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1698,6 +1723,7 @@ target_link_libraries(test_decoration_sets_validation
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
