@@ -55,10 +55,16 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     m_u.uSurfaceFrameSize[0] = state.surfaceFrameSize[0];
     m_u.uSurfaceFrameSize[1] = state.surfaceFrameSize[1];
 
-    // The daemon NEVER has a scene behind a surface, so uHasBackdrop is
-    // pinned 0 here; only the compositor branch (classic uniforms, not this
-    // UBO) can raise its counterpart.
-    m_u.uHasBackdrop = 0.0f;
+    // A daemon surface has no live scene behind it the way a compositor-side
+    // window does, but it CAN be handed a stand-in for one — the desktop
+    // wallpaper. When a host binds that, the node raises state.hasBackdrop and
+    // a needsBackdrop pack (the glass / blur family) samples it instead of
+    // falling back; when nothing is bound this stays 0 and the pack takes its
+    // documented fallback appearance exactly as before.
+    //
+    // Derived by the node from the live binding rather than passed down by a
+    // host, so this gate can never claim a backdrop the shader cannot sample.
+    m_u.uHasBackdrop = state.hasBackdrop;
     // No rule opacity on the daemon — qt_Opacity carries host opacity.
     m_u.uSurfaceOpacity = 1.0f;
 

@@ -34,7 +34,7 @@
             "id": "contentOpacity",
             "name": "Content opacity",
             "type": "float",
-            "default": 1.0,
+            "default": 0.7,
             "min": 0.0,
             "max": 1.0,
             "description": "How visible the window content stays over the pane, where 1.0 is fully opaque and 0.0 shows only the phosphor glass"

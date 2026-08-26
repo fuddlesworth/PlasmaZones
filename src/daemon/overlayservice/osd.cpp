@@ -28,6 +28,7 @@
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
+#include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
@@ -494,6 +495,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const auto clearDecoration = [this, slot]() {
         writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(QVariantList()));
         writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), 0.0);
+        // Drop the backdrop with the chain: an undecorated slot has nothing to
+        // sample it, and holding the image would keep a wallpaper-sized texture
+        // uploaded for a surface that draws none of it.
+        writeQmlProperty(slot, QStringLiteral("backdropTexture"), QVariant());
         // No decoration -> no audio need on this slot; let CAVA wind down if it
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {
@@ -548,6 +553,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     QVariantList stages;
     double outerPadding = 0.0;
     bool chainWantsAudio = false;
+    bool chainWantsBackdrop = false;
     // Theme colours for the pack flag resolver, read once for the whole chain.
     const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
@@ -566,6 +572,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // Audio-reactive pack in the chain -> this decoration slot wants the
         // live CAVA spectrum (gated below so a plain border never starts audio).
         chainWantsAudio = chainWantsAudio || effect.audio;
+        // A pack that samples the scene behind the surface gets the desktop
+        // wallpaper as a stand-in for it (see the backdrop write below).
+        chainWantsBackdrop = chainWantsBackdrop || effect.needsBackdrop;
         const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
 
         // Outer-margin request (the pack's declared paddingParam, e.g. glow's
@@ -627,6 +636,20 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // per-property protocol needed a clear-first + source-last dance for the
     // same guarantee).
     writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), outerPadding);
+    // Backdrop BEFORE the chain, for the same reason as the padding: the chain
+    // write is the load trigger, so everything a stage reads on its first bake
+    // has to be in place first.
+    //
+    // A daemon surface has no live scene behind it, so a needsBackdrop pack
+    // (the glass / blur family) is handed the desktop wallpaper as a stand-in.
+    // It is an approximation — it shows the wallpaper, not the windows actually
+    // under the card — but it is the difference between a frosted OSD reading
+    // as frosted glass and reading as a flat tint. Only resolved for a chain
+    // that actually samples it; every other chain writes a null image, leaves
+    // uHasBackdrop at 0, and behaves exactly as it did before.
+    writeQmlProperty(slot, QStringLiteral("backdropTexture"),
+                     chainWantsBackdrop ? QVariant::fromValue(PhosphorShaders::ShaderRegistry::loadWallpaperImage())
+                                        : QVariant());
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile

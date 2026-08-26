@@ -70,9 +70,11 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
     u.uSurfaceFrameTopLeft[1] = s.surfaceFrameTopLeft[1];
     u.uSurfaceFrameSize[0] = s.surfaceFrameSize[0];
     u.uSurfaceFrameSize[1] = s.surfaceFrameSize[1];
-    // Daemon-pinned contract gates: no scene behind a daemon surface, and no
-    // rule opacity (qt_Opacity carries host opacity) — mirrors fill().
-    u.uHasBackdrop = 0.0f;
+    // uHasBackdrop tracks the state's gate: a daemon surface has no live scene
+    // behind it, but a host can bind a stand-in (the desktop wallpaper) and the
+    // node raises this when that binding is live. Still pinned is the rule
+    // opacity — qt_Opacity carries host opacity. Mirrors fill().
+    u.uHasBackdrop = s.hasBackdrop;
     u.uSurfaceOpacity = 1.0f;
     for (int i = 0; i < 8; ++i) {
         for (int c = 0; c < 4; ++c) {
@@ -113,6 +115,17 @@ class TestSurfaceUniformProfile : public QObject
 {
     Q_OBJECT
 
+private:
+    /// One float read out of the filled block at a byte offset, so a test can
+    /// assert a single member landed where the std140 layout says it does
+    /// rather than only comparing whole blocks.
+    static float readFloatAt(const SurfaceUniformProfile& profile, std::size_t offset)
+    {
+        float out = 0.0f;
+        std::memcpy(&out, static_cast<const char*>(profile.data()) + offset, sizeof(out));
+        return out;
+    }
+
 private Q_SLOTS:
     void baseSize_is_656()
     {
@@ -146,6 +159,32 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(sizeof(reference)), profile.baseSize());
         const int rc = std::memcmp(profile.data(), &reference, sizeof(SurfaceUniforms));
         QCOMPARE(rc, 0);
+    }
+
+    /// The backdrop gate reaches the UBO. A needsBackdrop pack (the glass /
+    /// blur family) branches on uHasBackdrop to choose between sampling the
+    /// backdrop and its fallback appearance, so a gate stuck at 0 is exactly
+    /// the "blur renders as a flat tint" failure — silent, and indistinguishable
+    /// from the pack simply having no backdrop to show.
+    void backdrop_gate_reaches_the_ubo()
+    {
+        PhosphorShaders::UboFrameState state = makeFixedState();
+        SurfaceUniformProfile profile;
+
+        // Default: nothing bound, pack takes its fallback.
+        state.hasBackdrop = 0.0f;
+        profile.fill(state);
+        QCOMPARE(readFloatAt(profile, offsetof(SurfaceUniforms, uHasBackdrop)), 0.0f);
+
+        // Raised once the node sees a live backdrop binding.
+        state.hasBackdrop = 1.0f;
+        profile.fill(state);
+        QCOMPARE(readFloatAt(profile, offsetof(SurfaceUniforms, uHasBackdrop)), 1.0f);
+
+        // And the whole block still matches the reference with it raised, so
+        // the gate cannot be landing on top of a neighbouring member.
+        const SurfaceUniforms reference = makeReference(state);
+        QCOMPARE(std::memcmp(profile.data(), &reference, sizeof(SurfaceUniforms)), 0);
     }
 
     void no_app_fields()

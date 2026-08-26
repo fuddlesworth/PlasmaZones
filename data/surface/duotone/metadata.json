@@ -38,7 +38,7 @@
             "id": "contentOpacity",
             "name": "Content opacity",
             "type": "float",
-            "default": 1.0,
+            "default": 0.7,
             "min": 0.0,
             "max": 1.0,
             "group": "Content",

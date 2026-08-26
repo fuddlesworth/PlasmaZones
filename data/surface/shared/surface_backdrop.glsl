@@ -27,6 +27,22 @@
 // blitted, so backdropTexel() clamps samples into this rect.
 uniform sampler2D uBackdrop;
 uniform vec4 uBackdropRect;
+#else
+// Daemon branch: the stand-in for "the scene behind this surface" — the desktop
+// wallpaper, where the host supplies one. Shares binding 11 with the overlay
+// category's wallpaper sampler, which is the same texture from the same
+// resolver, so no new binding point enters the dialect.
+//
+// The host keeps this binding populated even with nothing to show (a 1x1
+// dummy), because a pack's SPIR-V declares the sampler on every host it runs
+// on. Whether there is anything real here is uHasBackdrop's job, never the
+// binding's presence.
+//
+// No uBackdropRect counterpart: the compositor needs one because a padded
+// canvas can hang off the edge of an output and those texels are never
+// blitted. A wallpaper image has no invalid region, so the whole texture is
+// valid and samples need no clamping.
+layout(binding = 11) uniform sampler2D uBackdrop;
 #endif
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
@@ -39,7 +55,17 @@ vec4 backdropTexel(vec2 uv) {
     td = clamp(td, uBackdropRect.xy, uBackdropRect.xy + uBackdropRect.zw);
     return texture(uBackdrop, vec2(td.x, 1.0 - td.y));
 #else
-    return vec4(0.0);
+    // Transparent when nothing is bound, so a pack that samples without
+    // checking uHasBackdrop first degrades to "no backdrop" rather than to the
+    // dummy texel. Same shape as the old unconditional vec4(0.0), just now
+    // reachable past the gate.
+    if (uHasBackdrop < 0.5) {
+        return vec4(0.0);
+    }
+    // Sampled with the incoming uv directly, matching surfaceTexel: the daemon
+    // delivers a Y-down vTexCoord against Qt-RHI's top-origin texture, so the
+    // wallpaper lands upright without a flip here.
+    return texture(uBackdrop, uv);
 #endif
 }
 

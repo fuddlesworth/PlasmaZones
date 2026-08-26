@@ -636,10 +636,27 @@ void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBindin
 
 void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
 {
-    if (m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler) {
-        bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage,
-                                                                  m_wallpaperTexture.get(), m_wallpaperSampler.get()));
+    // Binding 11 stays POPULATED whether or not a wallpaper is in play,
+    // substituting the 1x1 dummy — the same discipline the user-texture slots
+    // (bindings 7-10) already follow.
+    //
+    // It used to be appended only when a wallpaper existed, which was safe
+    // while binding 11 belonged solely to overlay packs that opt into the
+    // wallpaper module and always enable it. Surface packs broke that
+    // assumption: a needsBackdrop pack (the glass / blur family) declares
+    // uBackdrop at this binding unconditionally, and its SPIR-V says so on
+    // every host, including a daemon surface with nothing behind it. Leaving
+    // the binding out there is a resource-binding layout that does not match
+    // the shader, which fails the pipeline rather than degrading. The pack's
+    // fallback path is selected by uHasBackdrop (0 here), not by the absence
+    // of the binding.
+    const bool live = m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler;
+    QRhiTexture* tex = live ? m_wallpaperTexture.get() : m_dummyChannelTexture.get();
+    QRhiSampler* sam = live ? m_wallpaperSampler.get() : m_dummyChannelSampler.get();
+    if (!tex || !sam) {
+        return;
     }
+    bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage, tex, sam));
 }
 
 void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const

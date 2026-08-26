@@ -65,6 +65,15 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // detection uses, so the flip and the forced re-upload cannot disagree.
     state.yUpInNDC = rhi->isYUpInNDC() && !renderingIntoTexture();
 
+    // Backdrop gate. Derived from whether the binding is actually live, NOT
+    // from a host flag: a pack branches on uHasBackdrop to decide whether to
+    // sample uBackdrop at all, so a gate that outran the binding would have it
+    // sampling a texture nobody bound. appendWallpaperBinding() keeps binding
+    // 11 populated either way (a dummy when there is nothing to show), so this
+    // is the only thing standing between a real backdrop and the pack's
+    // fallback appearance.
+    state.hasBackdrop = (m_useWallpaper && m_wallpaperTexture) ? 1.0f : 0.0f;
+
     // Surface-only fields — read by a SurfaceUniformProfile, ignored by the
     // BaseUniformProfile (so the overlay/animation UBO bytes are unchanged).
     state.qtOpacity = m_surfaceOpacity;
