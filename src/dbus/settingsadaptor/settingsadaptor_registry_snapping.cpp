@@ -76,6 +76,9 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        if (v.typeId() != QMetaType::QString && v.typeId() != QMetaType::QByteArray) {                                 \
+            return false;                                                                                              \
+        }                                                                                                              \
         concrete->setter(v.toString());                                                                                \
         return true;                                                                                                   \
     };                                                                                                                 \

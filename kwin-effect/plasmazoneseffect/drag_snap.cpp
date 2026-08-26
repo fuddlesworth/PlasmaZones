@@ -181,12 +181,27 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // tests or animation endpoints, so neither divergence bites there — do not
     // add an equality comparand among THOSE without revisiting this.
     //
-    // One equality against this rect is sanctioned and lives in
-    // applyWindowGeometry: the already-at-target no-op skip compares `geo`
-    // to `frameGeometry().toRect()`. It is safe because a miss costs only a
-    // redundant moveResize (KWin's own moveResize is internally a no-op at
-    // matching geometry), never a wrong rect — the divergences can defeat the
-    // skip, they cannot make it fire on the wrong window position.
+    // Three equalities against this rect are sanctioned, all in
+    // applyWindowGeometry, and all comparing against `frameGeometry().toRect()`
+    // so they share one rounding rule:
+    //
+    //   1. the already-at-target no-op skip, on the whole rect;
+    //   2. the size-preserving move()/moveResize() split on the non-animated
+    //      arm, on the size alone;
+    //   3. the same split on the animated arm.
+    //
+    // All three are safe for the same reason: a MISS costs only the more
+    // conservative route — a redundant moveResize (KWin's own moveResize is
+    // internally a no-op at matching geometry) for the first, and the ordinary
+    // configure path for the other two. None can produce a wrong rect. The
+    // divergences documented above can defeat these comparisons; they cannot
+    // make one fire on the wrong window position, which is what makes the
+    // failure direction acceptable.
+    //
+    // A fourth comparand needs the same argument made explicitly, and it must
+    // compare against toRect() rather than qRound()-ing the extent separately —
+    // QRectF::toRect derives the integer size from the rect's POSITION too, so
+    // the two disagree by a pixel exactly where fractional-scale residue lives.
     //
     // Idempotent — and the rounding direction below is what makes it so.
     // KWin's own constrainFrameSize is already a fixed point (clamp to
@@ -532,7 +547,23 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             endRestoreSuppression(window);
             return;
         }
-        kw->moveResize(targetFrame);
+        // Same size-preserving split as the non-animated arm at the tail of
+        // this function, and for the same reason: a pure move() takes KWin's
+        // Move branch, which clears the pending-position flag on queued
+        // configures, so a client that acks a superseded configure cannot be
+        // re-anchored to where that older request would have put it. A strip
+        // step-scroll is animated by default, so this is the arm the drifting
+        // Picture-in-Picture case actually takes — fixing only the sibling left
+        // the common path on the configure route.
+        //
+        // Integer-aligned like the sibling: frameGeometry() carries qreal
+        // precision and a fractional-scale output leaves sub-pixel residue, so
+        // an exact QSizeF equality would miss.
+        if (targetFrame.toRect().size() == kw->frameGeometry().toRect().size()) {
+            kw->move(targetFrame.topLeft());
+        } else {
+            kw->moveResize(targetFrame);
+        }
 
         // Per-window animation motion-cascade: rule → per-event motion node
         // (incl. the `window.movement` "All") → global animator profile. A

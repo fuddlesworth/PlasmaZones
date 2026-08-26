@@ -174,7 +174,12 @@ void SettingsAdaptor::initializeRegistry()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toDouble());                                                                              \
+        bool ok = false;                                                                                               \
+        const double parsed = v.toDouble(&ok);                                                                         \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
@@ -249,6 +254,9 @@ void SettingsAdaptor::initializeRegistry()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        if (v.typeId() != QMetaType::QString && v.typeId() != QMetaType::QByteArray) {                                 \
+            return false;                                                                                              \
+        }                                                                                                              \
         concrete->setter(v.toString());                                                                                \
         return true;                                                                                                   \
     };                                                                                                                 \

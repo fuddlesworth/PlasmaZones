@@ -73,7 +73,12 @@ void SettingsAdaptor::initializeRegistryAutotile()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toInt());                                                                                   \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(parsed);                                                                                      \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
@@ -82,7 +87,12 @@ void SettingsAdaptor::initializeRegistryAutotile()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toDouble());                                                                                \
+        bool ok = false;                                                                                               \
+        const double parsed = v.toDouble(&ok);                                                                         \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(parsed);                                                                                      \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
@@ -91,6 +101,9 @@ void SettingsAdaptor::initializeRegistryAutotile()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        if (v.typeId() != QMetaType::QString && v.typeId() != QMetaType::QByteArray) {                                 \
+            return false;                                                                                              \
+        }                                                                                                              \
         concrete->setter(v.toString());                                                                                \
         return true;                                                                                                   \
     };                                                                                                                 \

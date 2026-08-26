@@ -1695,6 +1695,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // Inert for a window that accepts its column: the sizes match,
                 // so the offer is the column rect unchanged and every branch
                 // below sees exactly what it saw before.
+                // Null unless this batch is a plain strip entry that reaches
+                // the record below; see the capture site for why the two are
+                // separated.
+                QRect stripOfferedColumn;
                 if (isScrollingScreen(snap.screenId) && !snap.isMonocle && !snap.isWindowedFullscreen
                     && snap.window->isWaylandClient()) {
                     const QSize columnSize = geo.size();
@@ -1705,9 +1709,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // decides whether the client has answered for this column.
                     const bool columnUnchanged =
                         offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->size() == columnSize;
-                    // The whole rect is stored: the commit-time correction
+                    // The whole rect is captured: the commit-time correction
                     // below needs the column's position to centre within it.
-                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, geo);
+                    //
+                    // CAPTURED here, RECORDED after the commit decision further
+                    // down. The entry means "this client has been offered this
+                    // column", and the batch has not offered anything yet — the
+                    // apply below can still be skipped as redundant, deferred
+                    // to windowFinishUserMovedResized mid-gesture, or bailed on
+                    // the non-member fullscreen path. Recording it here made the
+                    // NEXT batch read columnUnchanged against a column the
+                    // client was never sent, skip offering it, and hand back
+                    // whatever size the window happens to be holding — which
+                    // never self-corrects, because the offer looks answered.
+                    // The commanded-rect sibling already guards the same three
+                    // cases; this is the missing half of that pairing.
+                    stripOfferedColumn = geo;
                     if (columnUnchanged && !committedSize.isEmpty() && committedSize != columnSize) {
                         // Centred the same way the paint resolver centres
                         // (scrollVisualTranslationFor), so the drawn and
@@ -1747,6 +1764,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             qCDebug(lcEffect) << "Skipping redundant moveResize for centered Wayland window"
                                               << snap.windowId << "zone=" << geo;
                         }
+                    }
+                }
+
+                // Record the strip offer now that the commit decision is known.
+                // Three ways this batch can fail to deliver the column it
+                // computed: the redundant-apply skip just above, a deferred
+                // commit mid-gesture (applyWindowGeometry hands those to
+                // windowFinishUserMovedResized), and the non-member fullscreen
+                // bail, which commits nothing at all. In each case the client
+                // has not been offered this column, so the entry is dropped
+                // rather than written — a stale one would be read as answered.
+                if (!stripOfferedColumn.isNull()) {
+                    const bool offerNotDelivered = skipMoveResize || snap.window->isUserMove()
+                        || snap.window->isUserResize() || fullscreenBailSkippedCommit;
+                    if (offerNotDelivered) {
+                        m_effect->m_scrollOfferedColumn.remove(snap.windowId);
+                    } else {
+                        m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
                     }
                 }
 
@@ -2279,6 +2314,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                    // Defensive on this arm, not load-bearing: the offer is only
+                    // ever written for a Wayland client, and this is the X11
+                    // leg, so the entry is normally absent. Kept because the
+                    // Wayland arm now applies this same predicate at its own
+                    // record site, and the two should stay legible as one rule;
+                    // removing an absent key costs nothing.
                     m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
                     m_effect->m_scrollCommandedRects.insert(snap.windowId,

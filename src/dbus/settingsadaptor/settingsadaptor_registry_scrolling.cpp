@@ -78,7 +78,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toDouble());                                                                              \
+        bool ok = false;                                                                                               \
+        const double parsed = v.toDouble(&ok);                                                                         \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
@@ -173,7 +178,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toInt());                                                                                   \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(parsed);                                                                                      \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
@@ -182,7 +192,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toDouble());                                                                                \
+        bool ok = false;                                                                                               \
+        const double parsed = v.toDouble(&ok);                                                                         \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(parsed);                                                                                      \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
@@ -191,6 +206,9 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        if (v.typeId() != QMetaType::QString && v.typeId() != QMetaType::QByteArray) {                                 \
+            return false;                                                                                              \
+        }                                                                                                              \
         concrete->setter(v.toString());                                                                                \
         return true;                                                                                                   \
     };                                                                                                                 \
@@ -397,12 +415,25 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // non-Settings backend keeps the keys), so they register through the
     // interface rather than in the concrete block below. No LayoutMode /
     // GridColumns / MaxRows twin: the strip popup is one card row along the
-    // strip. The int/bool keys keep the shared macros' coercing setters ON
-    // PURPOSE (the macros are frozen boilerplate across four registry TUs,
-    // and the config schema's clampInt one layer down bounds anything a
-    // coerced 0 could write); only the two ENUM keys need the hand-written
-    // refuse-non-numeric form, because a coerced 0 IS a meaningful member
-    // there.
+    // strip. The int/bool keys go through the shared macros, which now refuse
+    // a payload they cannot parse rather than coercing it.
+    //
+    // They used to coerce, on the argument that "the config schema's clampInt
+    // one layer down bounds anything a coerced 0 could write". That argument
+    // only holds where the clamp's floor is above zero. For every key whose
+    // floor is zero or negative — the opacity and tint keys, the tab-indicator
+    // gap, the drag-scroll delay, the focus-follows-mouse cap, the two preset
+    // indices — a coerced 0 is IN range, so it persisted as a legitimate-looking
+    // user choice while the caller was told the write succeeded. The two ENUM
+    // keys still carry the hand-written form because they need more than a
+    // parse check: a numerically valid value can still name no member.
+    //
+    // The macros parse with toInt/toDouble(&ok), which accepts every numeric
+    // sender D-Bus can produce — int, uint, longlong, float, double, and a
+    // numeric string — and rejects only lists, maps and non-numeric strings,
+    // i.e. exactly the payloads that used to become 0. A metatype-identity
+    // check would have been wrong here: it would reject a generic client
+    // legitimately sending an int for a double-typed key.
     REGISTER_BOOL_SETTING("scrollingZoneSelectorEnabled", scrollingZoneSelectorEnabled, setScrollingZoneSelectorEnabled)
     REGISTER_INT_SETTING("scrollingZoneSelectorTriggerDistance", scrollingZoneSelectorTriggerDistance,
                          setScrollingZoneSelectorTriggerDistance)
