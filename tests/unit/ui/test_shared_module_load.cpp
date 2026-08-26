@@ -150,6 +150,37 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("DecorationPreviewCard"));
     }
+    /// SurfaceDecoration's readiness gate compares a stage against
+    /// `SurfaceShaderItem.Ready`, an enum it reaches through the registered
+    /// type rather than declaring itself.
+    ///
+    /// Worth pinning because the failure is silent and inverted: an
+    /// unresolvable enum yields `undefined`, every `status === undefined`
+    /// comparison is false, so `chainReady` never goes true and a host that
+    /// covers its preview until then covers it forever. A permanent "Preview
+    /// unavailable" over a preview that is in fact rendering perfectly.
+    void surfaceShaderItemStatusEnumResolves()
+    {
+        QQmlComponent comp(&m_engine);
+        comp.setData(QByteArrayLiteral("import QtQuick\nimport PlasmaZones 1.0\n"
+                                       "Item {\n"
+                                       "    property int ready: SurfaceShaderItem.Ready\n"
+                                       "    property int loading: SurfaceShaderItem.Loading\n"
+                                       "}\n"),
+                     QUrl(QStringLiteral("inline://surfacestatus.qml")));
+        QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
+        if (comp.status() != QQmlComponent::Ready) {
+            qWarning() << "status enum:" << comp.status() << "errors:" << comp.errorString();
+        }
+        QVERIFY(!comp.isError());
+        std::unique_ptr<QObject> obj(comp.create());
+        QVERIFY(obj != nullptr);
+        // Distinct and non-negative: proves they resolved to the real
+        // enumerators rather than both collapsing to a default-constructed int.
+        QVERIFY(obj->property("ready").toInt() >= 0);
+        QVERIFY(obj->property("ready").toInt() != obj->property("loading").toInt());
+    }
+
     void singletonResolves()
     {
         QQmlComponent comp(&m_engine);

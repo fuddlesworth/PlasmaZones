@@ -93,6 +93,33 @@ Item {
                 audioSpectrum: root._audioSpectrum
                 cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
             }
+
+            // Covers the preview until the chain has actually compiled, the way
+            // the zone pane's placeholder covers its renderer's load. Without it
+            // the pane shows the plain undecorated card, then a gap while the
+            // stages compile, and the decoration snaps in — the preview appears
+            // to pop into place.
+            //
+            // COVERS rather than hides: the preview underneath has to keep
+            // rendering to reach `ready` at all, because a ShaderEffectSource
+            // whose chain is not visible is starved and never compiles. Opaque,
+            // and the same colour as this frame, so it reads as the empty slot.
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                visible: !chainPreview.ready
+                color: Kirigami.Theme.alternateBackgroundColor
+                radius: Kirigami.Units.smallSpacing
+
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width - Kirigami.Units.largeSpacing * 2
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                    text: i18nc("@info:placeholder decoration preview", "Preview unavailable")
+                }
+            }
         }
 
         RowLayout {

@@ -59,6 +59,17 @@ Item {
     /// translated — this file stays free of user-facing copy.
     property string cardTitle: ""
 
+    /// Whether the decorated card is fully drawn: a chain resolved, an anchor
+    /// found, and every stage's shader compiled.
+    ///
+    /// A host showing this preview to a user should COVER it until this is
+    /// true. The frames before it are the plain undecorated card, then a gap
+    /// once the capture hides that card and the stages take over with nothing
+    /// compiled yet — which is what makes a preview appear to pop into place.
+    /// Cover it, never hide it: a starved capture chain never reaches Ready, so
+    /// hiding to wait for this waits forever.
+    readonly property bool ready: decoration.chainReady
+
     /// The ground a previewed decoration is composited over.
     ///
     /// Deliberately NOTHING of its own: the wallpaper covers this whole item
@@ -197,6 +208,8 @@ Item {
     }
 
     PZCommon.SurfaceDecoration {
+        id: decoration
+
         anchors.fill: parent
         contentItem: card
         decorationChain: root._chain

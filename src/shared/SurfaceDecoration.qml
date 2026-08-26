@@ -178,6 +178,27 @@ Item {
     /// undecorated card pays nothing and draws its native card.
     readonly property bool decorationActive: (decorationChain ? decorationChain.length : 0) > 0 && shaderAnchorItem !== null
 
+    /// Whether every stage in the chain has COMPILED and is drawing.
+    ///
+    /// decorationActive only says a chain was resolved and an anchor found. The
+    /// moment it goes true the capture hides the real card (hideSource) and the
+    /// stages take over drawing it — but a stage's shader compiles
+    /// asynchronously, so for the frames in between there is a decoration host
+    /// covering the card with nothing to show yet. A host that reveals its
+    /// preview on decorationActive alone therefore shows the plain card, then a
+    /// gap, then the decorated card.
+    ///
+    /// Hosts that care should keep their preview RENDERING and cover it, never
+    /// hide it: a ShaderEffectSource with visible false is starved and its
+    /// stages would never reach Ready, so hiding to wait for this would wait
+    /// forever.
+    readonly property bool chainReady: decorationActive && _readyStageCount >= (decorationChain ? decorationChain.length : 0)
+
+    /// Stages whose shader has compiled. Maintained by the delegates rather
+    /// than derived, because Repeater.itemAt is not notifiable — a binding over
+    /// it would not re-evaluate when a stage's status changed.
+    property int _readyStageCount: 0
+
     /// The shaderAnchor capture item inside (or equal to) the loaded content.
     /// Re-resolved whenever the content swaps (Loader re-instantiation on each
     /// show produces a fresh anchor — matches the per-show shaderAnchor the
@@ -342,6 +363,25 @@ Item {
             readonly property bool isLast: stage.index === (root.decorationChain ? root.decorationChain.length : 0) - 1
             // Output tap for the NEXT stage's sourceItem lookup.
             readonly property Item outputTap: tap
+
+            /// This stage's shader has compiled and is drawing.
+            ///
+            /// Counted into root._readyStageCount rather than read from outside,
+            /// because a Repeater's delegates are not reachable by a binding
+            /// that would re-evaluate when one of them changed status. Both
+            /// edges are handled: a stage that errors and later recompiles
+            /// leaves and re-enters the count, and a delegate released on a
+            /// chain change takes its contribution with it.
+            readonly property bool stageReady: stageItem.status === SurfaceShaderItem.Ready
+            onStageReadyChanged: root._readyStageCount += stage.stageReady ? 1 : -1
+            Component.onCompleted: {
+                if (stage.stageReady)
+                    root._readyStageCount += 1;
+            }
+            Component.onDestruction: {
+                if (stage.stageReady)
+                    root._readyStageCount -= 1;
+            }
 
             // Called by the Repeater's onItemRemoved when this delegate is
             // released: imperative assignment clears the animator tags AND
