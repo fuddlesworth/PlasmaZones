@@ -96,29 +96,40 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
     return QRect(g.x(), g.y(), g.width(), g.height());
 }
 
-QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const QString& windowId, const QRectF& paintRect) const
+QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const QString& windowId, const QRectF& frameRect) const
 {
     const auto it = m_scrollVisualDelta.constFind(windowId);
     if (it == m_scrollVisualDelta.constEnd()) {
         return {};
     }
+    // ALWAYS pass the window's FRAME here, never its expanded band and never a
+    // rect that already carries a translation. The centring term below is
+    // derived from the rect it is handed, so handing it a band centres by the
+    // band's size and lands the answer half the decoration asymmetry away from
+    // where the window is drawn. Consumers that move a band apply the returned
+    // translation to the band; they resolve on the frame.
+    //
     // Centred by the tile's OWN size within the column it was handed, which is
     // where both constrain paths put a smaller frame on screen (the X11
     // pre-pass does it explicitly; KWin does it for a Wayland client that
-    // renegotiated). Not clamped at zero: constrainTileGeometry centres in
-    // BOTH directions, so a tile with a minimum larger than its column
-    // overflows it symmetrically and a negative offset is the same rule.
+    // renegotiated). Clamped at zero to match constrainTileGeometry
+    // (drag_snap.cpp, `qMax(0, ...)`): when a minimum size exceeds the column
+    // the window stays anchored at the column's origin rather than shifting
+    // past its edge, and the drawn position has to follow the committed one.
     //
-    // Integer division truncates toward zero on both axes, matching the
-    // centring the commit paths perform, so a one-pixel remainder lands the
-    // same way here as it does there.
-    const int offsetX = (it->columnSize.width() - qRound(paintRect.width())) / 2;
-    const int offsetY = (it->columnSize.height() - qRound(paintRect.height())) / 2;
+    // Both terms come off toRect() rather than qRound()-ing width and height
+    // separately, because QRectF::toRect() derives its integer extent from the
+    // rect's POSITION as well as its size. Every commit path that must agree
+    // with this uses frameGeometry().toRect(), so reading the same way is what
+    // keeps the drawn and committed centring identical on a fractional-scale
+    // output, where the two differ by a pixel.
+    const QRect r = frameRect.toRect();
+    const int offsetX = qMax(0, it->columnSize.width() - r.width()) / 2;
+    const int offsetY = qMax(0, it->columnSize.height() - r.height()) / 2;
     // The translation to APPLY, not the destination: every consumer adds this
     // to a rect it already has, so the shape matches what the stored delta
     // used to hand them.
-    return QPoint(it->stripPos.x() + offsetX - qRound(paintRect.x()),
-                  it->stripPos.y() + offsetY - qRound(paintRect.y()));
+    return QPoint(it->stripPos.x() + offsetX - r.x(), it->stripPos.y() + offsetY - r.y());
 }
 
 bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const
@@ -143,21 +154,21 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // shadow reaching into the viewport from a just-offscreen column keeps
     // painting; the chain's outer padding is added below for the same reason.
     //
-    // Resolving against the drawn band — rather than differencing an absolute
-    // strip position against the committed rect — is what keeps this predicate
-    // honest for a size-constrained frame: such a window sits centred inside
-    // its column, so the absolute form would test a band at the column's
-    // corner instead of where the window is drawn, and cull against the wrong
-    // rect.
+    // The band is what gets tested, but the strip placement is always resolved
+    // against the FRAME (see below), so a size-constrained frame still lands
+    // centred inside its column rather than at the column's corner.
+    const QRectF frame = w->frameGeometry();
     QRectF visual = w->expandedGeometry();
     if (visual.isEmpty()) {
-        visual = w->frameGeometry();
+        visual = frame;
     }
-    if (visual.isEmpty()) {
+    if (visual.isEmpty() || frame.isEmpty()) {
         // Degenerate geometry (mid-unmap, zero-size commit): an empty rect
         // never intersects anything, so falling through would answer PARKED
         // for a window we cannot actually locate — and the reap consumer
-        // would release its surface state on that answer. Fail open like
+        // would release its surface state on that answer. The frame is checked
+        // too because it is what the placement resolves against; a zero-size
+        // frame would centre the window by the whole column. Fail open like
         // every other unknown in this predicate.
         return false;
     }
@@ -172,16 +183,20 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // the frame rect does not carry. (The backdrop helper itself is not
     // shareable here — it composes a device-space capture rect, not the
     // logical band this intersects test needs.)
-    const QRectF frame = w->frameGeometry();
     const QRectF animated = m_windowAnimator->currentValue(w, QRectF());
-    if (animated.isValid() && !frame.isEmpty()) {
+    if (animated.isValid()) {
         visual = animated.adjusted(visual.left() - frame.left(), visual.top() - frame.top(),
                                    visual.right() - frame.right(), visual.bottom() - frame.bottom());
     }
-    // Resolved against the band actually being drawn (the animator's rect
-    // mid-leg, the committed frame otherwise), so a park that did not land
-    // where it was requested is judged where the window really is.
-    const QPoint translation = scrollVisualTranslationFor(windowId, visual);
+    // Resolved against the COMMITTED frame and applied to the band. Resolving
+    // against the band would centre by the band's size, which differs from the
+    // frame's by the decoration margins and is asymmetric on the vertical axis
+    // for a bottom-heavy shadow. Resolving against the ANIMATOR's rect would be
+    // worse still: the resolver subtracts the rect it is handed, so the
+    // relocation applied just above would cancel out and this predicate would
+    // judge the window at its destination for the whole leg — exactly the blink
+    // the relocation exists to prevent.
+    const QPoint translation = scrollVisualTranslationFor(windowId, frame);
     visual.translate(translation.x(), translation.y());
     // The clip predicate has to follow the SAME axis the strip is sliding on,
     // or an off-view column is judged against a band ninety degrees from where

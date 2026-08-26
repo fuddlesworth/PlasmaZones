@@ -977,6 +977,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
+                // The other two strip companions go with it. Every other
+                // teardown funnel sheds all three together; this one shed only
+                // the relocation, so a window untiled by a rule change kept the
+                // column it was last OFFERED. On re-tile the apply then reads
+                // columnUnchanged against that stale offer, skips offering the
+                // column, and hands the client whatever size it is holding now
+                // — possibly one the user resized during the untiled interval.
+                // No damage pairing: neither is a paint input (the offered
+                // column feeds a move(), the commanded rect gates a
+                // counter-assert), unlike the relocation removed above.
+                m_effect->m_scrollCommandedRects.remove(wid);
+                m_effect->m_scrollOfferedColumn.remove(wid);
                 if (!win || win->isMinimized()) {
                     // A minimized (or vanished) window KEEPS its centering
                     // target: the re-tile on unminimize re-asserts it.
@@ -1696,13 +1708,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // The whole rect is stored: the commit-time correction
                     // below needs the column's position to centre within it.
                     m_effect->m_scrollOfferedColumn.insert(snap.windowId, geo);
-                    if (columnUnchanged && committedSize.isValid() && committedSize != columnSize) {
-                        // Centred with the same truncation the paint resolver
-                        // uses (scrollVisualTranslationFor), so the drawn and
-                        // committed positions agree to the pixel.
-                        geo = QRect(geo.x() + (columnSize.width() - committedSize.width()) / 2,
-                                    geo.y() + (columnSize.height() - committedSize.height()) / 2, committedSize.width(),
-                                    committedSize.height());
+                    if (columnUnchanged && !committedSize.isEmpty() && committedSize != columnSize) {
+                        // Centred the same way the paint resolver centres
+                        // (scrollVisualTranslationFor), so the drawn and
+                        // committed positions agree: same toRect() rounding on
+                        // the size, and the same clamp at zero. The clamp is
+                        // what constrainTileGeometry already does for the X11
+                        // pre-centre — a frame whose minimum exceeds its column
+                        // stays anchored at the column's origin instead of
+                        // shifting past its edge.
+                        //
+                        // isEmpty rather than isValid: QSize::isValid() admits
+                        // 0x0, and a degenerate mid-unmap commit would then
+                        // centre the window by the whole column.
+                        geo = QRect(geo.x() + qMax(0, columnSize.width() - committedSize.width()) / 2,
+                                    geo.y() + qMax(0, columnSize.height() - committedSize.height()) / 2,
+                                    committedSize.width(), committedSize.height());
                         qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
                                           << "holding=" << committedSize << "offer=" << geo;
                     }
@@ -2160,6 +2181,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // converges on stable absence with one damage on the transition
             // batch instead of an insert/remove repaint pair per batch.
 
+            // A strip entry never takes the reactive centring pass, whatever
+            // KIND of entry it is. The split below only reaches its removal arm
+            // for a non-monocle Wayland entry, so a MONOCLE batch on a
+            // scrolling screen — which the sibling block below documents as
+            // routine during a mode flip, while m_scrollingScreens arrives on
+            // its own D-Bus signal — matches neither arm and keeps whatever its
+            // earlier autotile placement armed. Shedding both maps here, before
+            // the split, covers every kind.
+            //
+            // m_centeredWaylandZones goes with m_tileTargetZones: the same
+            // autotile placement arms both, and it is the map the
+            // skipMoveResize short-circuit in the apply above actually reads,
+            // so a survivor there silently downgrades a strip resize to a move.
+            //
+            // Disjoint from the write arm below (that one runs only for a
+            // NON-scrolling screen), so this cannot delete an entry the
+            // autotile arm is about to install.
+            if (isScrollingScreen(snap.screenId)) {
+                m_tileTargetZones.remove(snap.windowId);
+                m_centeredWaylandZones.remove(snap.windowId);
+            }
+
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
                 // windowedFullscreen is excluded like monocle: KWin owns the
                 // committed frame during the fullscreen round-trip, and a
@@ -2206,7 +2249,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Removed rather than merely not written: a window that
                     // moves from an autotile screen to a scrolling one would
                     // otherwise keep the entry its autotile placement armed.
-                    m_tileTargetZones.remove(snap.windowId);
+                    // The removal itself now happens before this split, so it
+                    // also covers the monocle and windowed-fullscreen kinds
+                    // that never reach here.
                 } else if (!snap.isWindowedFullscreen) {
                     m_tileTargetZones[snap.windowId] = snap.geometry;
                 }

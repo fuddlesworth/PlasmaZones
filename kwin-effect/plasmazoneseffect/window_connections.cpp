@@ -16,6 +16,7 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
@@ -928,12 +929,34 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
                     if (colIt != m_scrollOfferedColumn.constEnd()) {
                         const QRect live = safeW->frameGeometry().toRect();
-                        if (live.size() != colIt->size() && live.size().isValid()) {
-                            // Same centring, and the same truncation, as the
-                            // strip apply and the paint resolver.
-                            const QPoint centred(colIt->x() + (colIt->width() - live.width()) / 2,
-                                                 colIt->y() + (colIt->height() - live.height()) / 2);
+                        if (live.size() != colIt->size() && !live.size().isEmpty()) {
+                            // Same centring as the strip apply and the paint
+                            // resolver: the same toRect() rounding, and the
+                            // same clamp at zero, so a frame whose minimum
+                            // exceeds its column stays anchored at the column's
+                            // origin rather than shifting past its edge.
+                            //
+                            // isEmpty rather than isValid: QSize::isValid()
+                            // admits 0x0, which would centre a degenerate
+                            // mid-unmap commit by the whole column.
+                            const QPoint centred(colIt->x() + qMax(0, colIt->width() - live.width()) / 2,
+                                                 colIt->y() + qMax(0, colIt->height() - live.height()) / 2);
                             if (live.topLeft() != centred && safeW->window()) {
+                                // Bracketed like every other geometry commit
+                                // in the tree. The move emits a synchronous
+                                // frameGeometryChanged, which re-enters this
+                                // signal's whole connection list from the top
+                                // — including the virtual-screen crossing
+                                // detector and the autotile reactive centring
+                                // pass, both connected ahead of this lambda.
+                                // Without the gate they treat a move the effect
+                                // itself made as a user-driven one.
+                                // Save/restore, not set/clear (nesting-safe).
+                                const bool prevInApply = m_daemonGate.inGeometryApply;
+                                m_daemonGate.inGeometryApply = true;
+                                const auto restoreGate = qScopeGuard([this, prevInApply] {
+                                    m_daemonGate.inGeometryApply = prevInApply;
+                                });
                                 safeW->window()->move(QPointF(centred));
                             }
                         }

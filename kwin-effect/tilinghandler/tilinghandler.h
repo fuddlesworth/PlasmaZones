@@ -727,6 +727,18 @@ public:
     /// internals that are incomplete at this point in the header.
     void clearActiveLayoutsForTeardown();
 
+    /// Drop every autotile centring target, for daemon teardown.
+    ///
+    /// Their consumer is the reactive centring pass in
+    /// slotWindowFrameGeometryChanged, which KWin drives off the window's own
+    /// geometry changes and which carries no daemon gate. So unlike the rest of
+    /// the per-session state, these stay LIVE with the daemon gone: a user
+    /// resize still finds its entry and moveResizes the window into a zone rect
+    /// nothing owns any more, clamping it onto that zone's output. The bring-up
+    /// drain already clears both maps; this is the matching teardown half, so
+    /// the behaviour does not depend on a daemon coming back.
+    void clearCenteringTargetsForTeardown();
+
     /// The set this discriminator actually answers over.
     ///
     /// Because the answer is an INTERSECTION, it can change when EITHER input

@@ -1716,16 +1716,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // absolute moveTopLeft here discarded whatever the animator term
             // above contributed, so a parked column with a live per-window leg
             // sampled its backdrop slice at the wrong x for the leg's
-            // duration. Resolving against animatedFrame is what keeps the two
-            // in step: the draw resolves against the rect IT uses, so passing
-            // a different rect here would reintroduce the same divergence.
+            // duration. The resolve rect is the COMMITTED frame on both sides:
+            // the draw passes w->frameGeometry() and translates `data`, so
+            // passing animatedFrame here would subtract the animator's own
+            // top-left and cancel the term this block just added, leaving the
+            // predictor pinned at the destination for the whole leg. It would
+            // also centre by the size a geometry leg is still interpolating,
+            // where the draw centres by the committed one.
             if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
                 if (m_scrollVisualDelta.contains(windowId)) {
-                    // Resolved against animatedFrame, matching the draw.
-                    const QPoint translation = scrollVisualTranslationFor(windowId, animatedFrame);
+                    // Resolved against the committed frame, matching the draw.
+                    const QPoint translation = scrollVisualTranslationFor(windowId, w->frameGeometry());
                     animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));

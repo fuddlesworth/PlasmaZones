@@ -819,6 +819,15 @@ void ScrollEngine::endArrivalBurst()
         // mid-burst means the deferred apply's strip is no longer the one on
         // screen: skip it, the switch-back retile covers the mutated strip.
         if (key != currentKeyForScreen(key.screenId)) {
+            // The seed still dies here. It was captured for the transition
+            // this burst belongs to, and that transition is over the moment
+            // the context moves — applying it to whatever context arrives
+            // next would re-anchor a view the user has since moved. Taken
+            // rather than left, because nothing downstream of this `continue`
+            // ever revisits the entry: the switch-back retile does not consume
+            // seeds, so a skipped drain leaves it armed indefinitely for some
+            // later, unrelated burst to pick up.
+            m_pendingInitialFocus.remove(key.screenId);
             continue;
         }
         // Mode-transition focus restore, consumed here and nowhere else.

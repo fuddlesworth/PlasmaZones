@@ -159,11 +159,25 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     //
     // Drained (take) so a screen that flips again in a later pass cannot
     // re-apply this one's focus.
+    //
+    // Runs over every entering screen, NOT the WTS-gated sequence the order
+    // loop uses. The order loop fails closed because filterEngineSeedOrder
+    // cannot run without a WTS and an unfiltered order would hand the strip a
+    // window that should have been restored floating. The focus seed has no
+    // such dependency: it comes from this pass's own capture, and the engine
+    // drops it if the named window is not in the strip. Seeding it on a
+    // degraded pass anchors the view on the window the user actually had
+    // focused, which is strictly better than anchoring on whichever column was
+    // adopted first.
+    //
+    // Called UNCONDITIONALLY, including with an empty string. Empty is not a
+    // no-op on the engine side: setInitialFocusedWindow treats it as "this
+    // transition captured no focus" and CLEARS any seed left armed by an
+    // earlier one. Guarding the call on non-empty made that arm unreachable
+    // from the only production caller, so the engine's own self-healing path
+    // was dead code.
     for (const QString& screenId : enteringScreens) {
-        const QString focused = m_transitionFocusSeed.take(screenId);
-        if (!focused.isEmpty()) {
-            m_scrollEngine->setInitialFocusedWindow(screenId, focused);
-        }
+        m_scrollEngine->setInitialFocusedWindow(screenId, m_transitionFocusSeed.take(screenId));
     }
 
     // Four-tier precedence, collapsed daemon-side exactly like autotile's

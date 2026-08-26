@@ -463,13 +463,28 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // that can reach here with live membership must do the same, or resolve
     // the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
-    if (!m_effect->m_windowedFullscreenWindows.isEmpty()) {
+    {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
             if (!leavingScrolling.contains(it.value())) {
                 continue;
             }
             const QString wid = m_effect->getWindowId(it.key());
+            // The offered column describes a strip this window is leaving. An
+            // engine flip does not move the window, so nothing else sheds it:
+            // the batch apply's size-continuity block only runs for windows on
+            // a SCROLLING screen, and this screen has just stopped being one.
+            // Left behind, it is read again if the screen flips back, and the
+            // apply then treats a column the client was never offered as
+            // already answered.
+            //
+            // Rides the same announce enumeration the windowed-fullscreen
+            // release above depends on, and inherits the same stated
+            // limitation: an announceFlipped=false caller leaves this empty and
+            // sheds nothing. That is bounded here — a stale offer costs one
+            // redundant resize, not a lost relocation — but it is why this is
+            // not the whole answer for such a caller.
+            m_effect->m_scrollOfferedColumn.remove(wid);
             if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
                 forgetWindowedFullscreen(wid);
                 windowedFsLeavingScrolling.append(wid);
@@ -628,6 +643,16 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
+}
+
+void TilingHandler::clearCenteringTargetsForTeardown()
+{
+    // Both maps, because both arm the same pass: m_tileTargetZones supplies the
+    // zone it re-centres into, m_centeredWaylandZones the already-centred
+    // record that short-circuits it. See the header for why these cannot be
+    // left to the bring-up drain like the rest of the per-session state.
+    m_tileTargetZones.clear();
+    m_centeredWaylandZones.clear();
 }
 
 void TilingHandler::clearActiveLayoutsForTeardown()

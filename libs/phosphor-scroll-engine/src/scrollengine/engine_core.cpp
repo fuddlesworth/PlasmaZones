@@ -183,6 +183,13 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // pruneStatesForRemovedScreen is the output-removal purge.
         m_pendingInitialOrder.remove(screenId);
         m_consumedInitialOrder.remove(screenId);
+        // The focus seed is PASS-SCOPED, exactly as the daemon declares it:
+        // a focus is only true for the transition that captured it. Its only
+        // consumer is the arrival burst, and a screen that leaves without
+        // bursting never reaches one — so the drop has to happen at the
+        // lifecycle edges like its order twin, or the seed sits armed and
+        // re-anchors a view the user has since moved, several transitions later.
+        m_pendingInitialFocus.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -269,6 +276,10 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // no relayout will ever run for a departed screen to do it.
     m_pendingInitialOrder.remove(screenId);
     m_consumedInitialOrder.remove(screenId);
+    // Same reasoning for the focus seed: it is scoped to the transition that
+    // captured it, so a state teardown ends its validity whether or not any
+    // burst consumed it.
+    m_pendingInitialFocus.remove(screenId);
     // Latch and payload cleared inline (plain containers, safe), but the
     // broadcast is DEFERRED: this function runs from inside
     // PerScreenStates::removeStatesIf's iteration over m_states, and a
@@ -859,6 +870,13 @@ void ScrollEngine::setInitialWindowOrder(const QString& screenId, const QStringL
     } else {
         m_pendingInitialOrder.insert(screenId, windowIds);
     }
+    // A re-seed IS the "new transition" boundary the seed is scoped to, so the
+    // focus half of the previous one cannot outlive it. The daemon writes the
+    // two under different gates, so without this a fresh order can arrive
+    // paired with a focus captured for an earlier flip. Cleared rather than
+    // required-to-be-rewritten, because the caller may legitimately have no
+    // focus to report; setInitialFocusedWindow then re-arms it.
+    m_pendingInitialFocus.remove(screenId);
 }
 
 QString ScrollEngine::managedFocusedWindow(const QString& screenId) const
