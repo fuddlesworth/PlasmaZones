@@ -877,6 +877,35 @@ private Q_SLOTS:
         QVERIFY2(offeredIds.contains(QStringLiteral("opacity-tint")), "the opacity-tint pack must be selectable");
         QVERIFY2(offeredIds.contains(QStringLiteral("glowish")), "an ordinary pack must still be offered");
     }
+
+    /// The route token the shader browser switches its preview pane on.
+    ///
+    /// The literal is duplicated across this controller and the QML that
+    /// compares against it (ShaderBrowserCard's live-preview gate and
+    /// ShaderBrowserDetailDialog's pane choice), and the QML side reads it
+    /// through a guarded `bridge.previewKind ? ... : "zone"` fallback. So
+    /// changing it here does not fail anything loudly: the decoration route
+    /// silently reverts to the zone pane and the live preview just disappears.
+    /// Both halves are pinned here so that cannot happen quietly.
+    void preview_kind_is_the_token_the_browser_switches_on()
+    {
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings);
+        QCOMPARE(c.previewKind(), QStringLiteral("decoration"));
+
+        const QString qmlDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        for (const QString& name :
+             {QStringLiteral("/ShaderBrowserCard.qml"), QStringLiteral("/ShaderBrowserDetailDialog.qml")}) {
+            QFile f(qmlDir + name);
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(name));
+            const QString src = QString::fromUtf8(f.readAll());
+            QVERIFY2(src.contains(QStringLiteral("previewKind === \"decoration\"")),
+                     qPrintable(QStringLiteral("%1 no longer compares previewKind against \"decoration\" — the "
+                                               "controller's token and the QML's have drifted")
+                                    .arg(name)));
+        }
+    }
 };
 
 QTEST_MAIN(TestDecorationPageController)

@@ -63,6 +63,11 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * stops predicting what the daemon draws. The kwin-effect compositor path
  * builds GL uniform value arrays instead of a stage map and shares only
  * paddingRequest() above.
+ *
+ * Returns an EMPTY map for an effect that is not `isValid()` (no id, or no
+ * fragment shader — which is also what the path-traversal guard leaves behind
+ * when it rejects a pack's declared shader). Hosts must treat that as "skip
+ * this stage" rather than appending it, or they add a stage with no source.
  */
 PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect,
                                                    const QVariantMap& resolvedParams);

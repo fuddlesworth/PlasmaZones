@@ -62,6 +62,14 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
 QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams)
 {
     QVariantMap stageMap;
+    // An unusable pack composes to nothing rather than to a half-formed stage.
+    // translateSurfaceParams already returns an empty map for one, so without
+    // this the result carries a preamble and an `animated` flag alongside an
+    // empty `source` url and no params — a shape a host would still add to its
+    // chain. Callers treat an empty map as "skip this stage".
+    if (!effect.isValid()) {
+        return stageMap;
+    }
     stageMap.insert(QLatin1String("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
     stageMap.insert(QLatin1String("vertexSource"),
                     effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));

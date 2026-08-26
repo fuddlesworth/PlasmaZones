@@ -22,7 +22,9 @@ PhosphorShaders::UboFrameState makeFixedState()
     s.yUpInNDC = true;
     s.qtOpacity = 0.75f;
     s.surfaceScale = 2.0f;
-    s.surfaceFocused = 1.0f;
+    // Deliberately NOT 1.0: that is what a hardcoded field would produce,
+    // so pinning it here would make the focus pass-through untestable.
+    s.surfaceFocused = 0.35f;
     s.surfaceSize[0] = 800.0f;
     s.surfaceSize[1] = 600.0f;
     s.surfaceFrameTopLeft[0] = 4.0f;
@@ -185,6 +187,59 @@ private Q_SLOTS:
         // the gate cannot be landing on top of a neighbouring member.
         const SurfaceUniforms reference = makeReference(state);
         QCOMPARE(std::memcmp(profile.data(), &reference, sizeof(SurfaceUniforms)), 0);
+    }
+
+    /// std140 offsets, as LITERALS.
+    ///
+    /// The golden-byte tests above cannot catch a layout change: makeReference
+    /// builds the struct BY MEMBER NAME, so reordering two same-typed members
+    /// moves the reference and the profile together and the memcmp still
+    /// passes — while every shader, which addresses by offset, breaks. These
+    /// numbers are the contract data/surface/shared/surface_uniforms.glsl
+    /// declares, so they must be spelled out rather than derived from the
+    /// struct they are meant to police.
+    void std140_offsets_are_pinned()
+    {
+        QCOMPARE(static_cast<int>(sizeof(SurfaceUniforms)), 656);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, qt_Opacity)), 64);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceScale)), 68);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceFocused)), 72);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iTime)), 76);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceSize)), 80);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceFrameTopLeft)), 88);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceFrameSize)), 96);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uHasBackdrop)), 104);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceOpacity)), 108);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, customParams)), 112);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, customColors)), 240);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iMouse)), 576);
+    }
+
+    /// iMouse.zw on a surface whose size has not been pushed yet.
+    ///
+    /// The normalized pair divides by uSurfaceSize, so the zero-size case has
+    /// its own branch — and that branch runs on the first frames of a freshly
+    /// created decoration item, before geometry lands. A pack testing
+    /// `iMouse.z < 0.0` for "no hover" must not read a phantom hover at the
+    /// top-left there.
+    void mouse_normalization_survives_a_zero_surface_size()
+    {
+        PhosphorShaders::UboFrameState state = makeFixedState();
+        state.surfaceSize[0] = 0.0f;
+        state.surfaceSize[1] = 0.0f;
+        state.mouseX = -1.0f;
+        state.mouseY = -1.0f;
+
+        SurfaceUniformProfile profile;
+        profile.fill(state);
+        const int base = static_cast<int>(offsetof(SurfaceUniforms, iMouse));
+        // The raw pair keeps the off-surface sentinel.
+        QVERIFY(readFloatAt(profile, base) < 0.0f);
+        QVERIFY(readFloatAt(profile, base + 4) < 0.0f);
+        // The normalized pair must agree with it rather than reading as a
+        // hover at the origin: strictly negative, so `iMouse.z < 0.0` holds.
+        QVERIFY(readFloatAt(profile, base + 8) < 0.0f);
+        QVERIFY(readFloatAt(profile, base + 12) < 0.0f);
     }
 
     void no_app_fields()

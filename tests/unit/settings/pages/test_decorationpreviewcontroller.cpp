@@ -30,12 +30,17 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaMethod>
+#include <QMetaObject>
+#include <QRegularExpression>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QUrl>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include "helpers/StubSettings.h"
 #include "settings/pages/decorationpreviewcontroller.h"
 
 using namespace PlasmaZones;
@@ -102,9 +107,33 @@ private Q_SLOTS:
                                       {QStringLiteral("parameters"),
                                        QJsonArray{floatParam(QStringLiteral("glowSize"), 16.0, 0.0, 64.0)}}}));
 
+        // Backdrop-sampling multipass pack, modelled on the shipping glass /
+        // blur family. Without one of these the multipass and needsBackdrop
+        // branches are unreachable and asserting on them only pins a constant.
+        //
+        // The builtin: tokens resolve against a `shared/` directory that is a
+        // SIBLING of the pack dir (surfacebuiltinbuffers.cpp), and an
+        // unresolvable token fails CLOSED — isMultipass is forced false and the
+        // buffer list is cleared. Writing the stubs is therefore what makes the
+        // multipass assertion mean anything; the QStandardPaths fallback is not
+        // usable here because the test's XDG sandbox does not cover
+        // XDG_DATA_DIRS, so it would find an installed pack on a developer box
+        // and nothing in CI.
+        QVERIFY(writeFile(root + QStringLiteral("/shared/gaussian_h.frag"), QByteArrayLiteral("void main() {}")));
+        QVERIFY(writeFile(root + QStringLiteral("/shared/gaussian_v.frag"), QByteArrayLiteral("void main() {}")));
+        QVERIFY(writePack(
+            root, QStringLiteral("frost"),
+            QJsonObject{{QStringLiteral("needsBackdrop"), true},
+                        {QStringLiteral("multipass"), true},
+                        {QStringLiteral("bufferShaders"),
+                         QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")}},
+                        {QStringLiteral("parameters"),
+                         QJsonArray{floatParam(QStringLiteral("blurRadius"), 12.0, 1.0, 64.0)}}}));
+
         m_registry.addSearchPath(root, PhosphorFsLoader::LiveReload::Off);
         QVERIFY2(m_registry.hasEffect(QStringLiteral("border")), "fixture packs must be discoverable");
         QVERIFY(m_registry.hasEffect(QStringLiteral("glow")));
+        QVERIFY(m_registry.hasEffect(QStringLiteral("frost")));
     }
 
     // ── previewChain ─────────────────────────────────────────────────
@@ -216,6 +245,103 @@ private Q_SLOTS:
         c.startAudioCapture();
         QVERIFY(c.audioSpectrumVariant().value<QVector<float>>().isEmpty());
         c.stopAudioCapture(); // must be safe with no provider ever created
+
+        // With real settings whose visualizer is OFF, so the setting itself is
+        // what refuses. The null-settings case above short-circuits on the
+        // first operand and would still pass if the enableAudioVisualizer()
+        // check were deleted outright, which is not what this slot claims.
+        StubSettings off;
+        off.setEnableAudioVisualizer(false);
+        DecorationPreviewController gated(&m_registry, &off);
+        QVERIFY(!gated.audioVisualizerEnabled());
+        gated.startAudioCapture();
+        QVERIFY(gated.audioSpectrumVariant().value<QVector<float>>().isEmpty());
+        gated.stopAudioCapture();
+    }
+
+    /// The multipass and backdrop flags must carry the pack's real VALUES.
+    ///
+    /// Asserting only that the keys are present passes for a stage that always
+    /// reports false, which is what a fixture set with no multipass pack in it
+    /// silently guaranteed. SurfaceDecoration.qml gates its buffer layer on
+    /// `multipass === true` and a pack's whole fallback branch hangs off
+    /// needsBackdrop, so both directions are worth pinning.
+    void stage_flags_carry_the_packs_real_values()
+    {
+        DecorationPreviewController c(&m_registry, nullptr);
+
+        const QVariantMap plain = c.previewChain(QStringLiteral("border"), {}).first().toMap();
+        QCOMPARE(plain.value(QStringLiteral("multipass")).toBool(), false);
+
+        const QVariantMap frost = c.previewChain(QStringLiteral("frost"), {}).first().toMap();
+        QCOMPARE(frost.value(QStringLiteral("multipass")).toBool(), true);
+        QCOMPARE(frost.value(QStringLiteral("bufferShaderPaths")).toStringList().size(), 2);
+
+        QCOMPARE(c.packInfo(QStringLiteral("frost")).value(QStringLiteral("needsBackdrop")).toBool(), true);
+        QCOMPARE(c.packInfo(QStringLiteral("border")).value(QStringLiteral("needsBackdrop")).toBool(), false);
+    }
+
+    /// Every `previewController.<name>` the decoration preview QML calls must
+    /// exist on this controller.
+    ///
+    /// The animations route has the same guard for its `bridge.*` surface, but
+    /// it only ever instantiates AnimationsPageController, so it cannot speak
+    /// for these files — and `previewController` itself is on its
+    /// documented-optional list, which excludes it from every check there. A
+    /// renamed or mistyped invokable is otherwise a silent runtime TypeError
+    /// and a blank preview, not a build failure.
+    void every_preview_controller_call_from_the_decoration_qml_is_reachable()
+    {
+        // The DECORATION-only files. ShaderBrowserCard and
+        // ShaderBrowserDetailDialog are deliberately excluded: their
+        // `previewController` is whichever controller the route supplied, so
+        // the zone route's calls (getShaderInfo, zonesForShaderPreview,
+        // shaderPresetDirectory, …) legitimately appear there behind
+        // `_zonePreview` guards and belong to ShaderPreviewController. Holding
+        // this controller to those would demand the wrong route's API, which is
+        // the same mistake the animations guard makes in the other direction.
+        const QString settingsQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        const QStringList files{settingsQml + QStringLiteral("/DecorationChainPreview.qml"),
+                                settingsQml + QStringLiteral("/DecorationPreviewPane.qml")};
+
+        // Comments are stripped before scraping so a commented-out call cannot
+        // stand in for a real one, and a `//` inside a string cannot swallow
+        // the rest of a line that carries one.
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+        static const QRegularExpression callRe(QStringLiteral("\\bpreviewController\\.([A-Za-z_][A-Za-z0-9_]*)"));
+
+        QSet<QString> used;
+        for (const QString& file : files) {
+            QFile f(file);
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(QStringLiteral("cannot read ") + file));
+            QString src = QString::fromUtf8(f.readAll());
+            src.remove(blockCommentRe);
+            src.remove(lineCommentRe);
+            auto it = callRe.globalMatch(src);
+            while (it.hasNext())
+                used.insert(it.next().captured(1));
+        }
+        QVERIFY2(!used.isEmpty(), "scraped no previewController.* names — the QML tree or receiver name moved");
+
+        DecorationPreviewController c(&m_registry, nullptr);
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("the decoration preview QML calls these on previewController, but the "
+                                           "controller lacks them: %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
     }
 
 private:

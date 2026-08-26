@@ -212,6 +212,43 @@ private Q_SLOTS:
                  "friendly param id must not survive into the stage's uploaded params");
         QCOMPARE(params.value(QStringLiteral("customParams1_x")).toDouble(), 5.0);
     }
+
+    /// An unusable pack composes to nothing at all.
+    ///
+    /// A pack whose fragment shader was cleared — which is what the
+    /// path-traversal guard does when it rejects a declared path — is not
+    /// merely a stage that draws nothing: without the validity gate it is a
+    /// stage carrying a preamble and an `animated` flag over an empty source
+    /// url, which a host would still append to its chain. Emptiness is the
+    /// signal callers skip on.
+    void composeStageMap_is_empty_for_an_unusable_pack()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.fragmentShaderPath.clear();
+        QVERIFY(!e.isValid());
+        QVERIFY2(composeStageMap(e, {}).isEmpty(), "a pack with no fragment shader must compose to no stage");
+
+        SurfaceShaderEffect noId = basePack();
+        noId.id.clear();
+        QVERIFY(!noId.isValid());
+        QVERIFY(composeStageMap(noId, {}).isEmpty());
+    }
+
+    /// A padding override of the wrong TYPE must not suppress the declared
+    /// default. QVariant::toDouble() answers 0.0 for anything it cannot
+    /// convert, so gating on presence alone silently collapsed a pack's
+    /// margin to zero whenever a stored profile held a non-numeric value.
+    void paddingRequest_ignores_a_non_numeric_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("not a number")}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QVariant()}}), 16.0);
+        // A numeric string is a legitimate override and still wins.
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
+    }
 };
 
 QTEST_MAIN(TestSurfaceChainCompose)

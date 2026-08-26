@@ -453,7 +453,16 @@ private Q_SLOTS:
     void shaderBrowserTypeCatalogCoversEveryEventClass()
     {
         const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
-        const QString src = readFile(qmlPath);
+        // Comments stripped before the window is taken, like every sibling
+        // scrape in this file. Without it a commented-out or merely
+        // explanatory `// "key": "..."` inside the block satisfies the
+        // coverage check for a class that has no real catalog entry, and
+        // inverts the negative assertion below — the exact false pass this
+        // slot exists to prevent.
+        static const QRegularExpression catalogLineCommentRe(QStringLiteral("//[^\n]*"));
+        static const QRegularExpression catalogBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                              QRegularExpression::DotMatchesEverythingOption);
+        const QString src = readFile(qmlPath).remove(catalogBlockCommentRe).remove(catalogLineCommentRe);
         QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
 
         const int start = src.indexOf(QStringLiteral("_typeCatalog"));
@@ -536,8 +545,9 @@ private Q_SLOTS:
         // exactly what keeps those routes unchanged.
         const QSet<QString> documentedOptional{QStringLiteral("previewController"), QStringLiteral("previewKind")};
 
-        // Only the files the animations route instantiates: the browser page
-        // and its detail dialog. ShaderSetsPage lives in the same directory
+        // Only the files the animations route instantiates: the browser page,
+        // its card delegate and its detail dialog. ShaderSetsPage lives in the
+        // same directory
         // but is a DIFFERENT route with a set-capable bridge the animations
         // controller never provides, so sweeping the whole directory would
         // demand its API of the wrong controller.

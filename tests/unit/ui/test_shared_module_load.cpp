@@ -9,6 +9,7 @@
 
 #include <QtPlugin>
 
+#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneshaderitem.h"
 
 Q_IMPORT_PLUGIN(org_plasmazones_commonPlugin)
@@ -65,6 +66,11 @@ private Q_SLOTS:
         // composition roots register imperatively — mirror that here so the
         // shared component's `import PlasmaZones` resolves.
         qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
+        // SurfaceDecoration instantiates one SurfaceShaderItem per chain stage
+        // and reaches it through the same imperative `import PlasmaZones`, so
+        // without this the decoration types below fail with "SurfaceShaderItem
+        // is not a type" rather than telling us anything about the module.
+        qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
     }
     void loadsLayoutCard()
     {
@@ -129,6 +135,20 @@ private Q_SLOTS:
     {
         // config is nullable by design (safeConfig falls back to {}).
         loadType(QStringLiteral("ZoneShaderRenderer"), QStringLiteral("config: null"));
+    }
+    void loadsSurfaceDecoration()
+    {
+        // The daemon overlays and the settings decoration preview both reach
+        // this through the module rather than through a same-directory import,
+        // which is exactly what broke when the file moved here: the hosts kept
+        // instantiating it unqualified under a namespaced import. An undecorated
+        // instance is the interesting case — every host starts here and only
+        // then writes a chain.
+        loadType(QStringLiteral("SurfaceDecoration"), QStringLiteral("decorationChain: []; decorationOuterPadding: 0"));
+    }
+    void loadsDecorationPreviewCard()
+    {
+        loadType(QStringLiteral("DecorationPreviewCard"));
     }
     void singletonResolves()
     {

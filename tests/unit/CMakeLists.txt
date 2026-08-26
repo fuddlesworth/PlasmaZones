@@ -1634,8 +1634,8 @@ add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 set(_decoration_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller.cpp
     # The page controller constructs one of these in its ctor, so every TU that
-    # links the controller needs it — omitting it is a link error in both tests
-    # below, not a silent degradation.
+    # links the controller needs it — omitting it is a link error in each of the
+    # three consumers of this list, not a silent degradation.
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_browser.cpp
@@ -1669,6 +1669,10 @@ target_link_libraries(test_decorationpagecontroller
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+# P_SOURCE_DIR: the previewKind slot pins the controller's route token against
+# the QML that compares literally against it. The QML side falls back to the
+# zone pane when the token does not match, so a drift is silent otherwise.
+target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
 # Data surface behind the settings app's live decoration preview: chain
@@ -1688,6 +1692,12 @@ target_link_libraries(test_decorationpreviewcontroller
         PhosphorAudio::PhosphorAudio
         plasmazones_core
 )
+# P_SOURCE_DIR: the QML-contract slot scrapes the decoration preview QML for
+# `previewController.*` names and checks each against the controller's
+# metaobject. The animations route has the same guard for its `bridge.*`
+# surface, but it only ever instantiates AnimationsPageController, so it cannot
+# speak for this route's controllers.
+target_compile_definitions(test_decorationpreviewcontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
 
 # Companion test executable: decoration-set CRUD over the shared

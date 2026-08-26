@@ -266,7 +266,10 @@ private Q_SLOTS:
         {
             QFile f(qmlPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(kSceneQml);
+            // Checked: a short write leaves a truncated scene.qml, and the
+            // failure then surfaces as the far less obvious "scene.qml failed
+            // to load" further down.
+            QCOMPARE(f.write(kSceneQml), qint64(qstrlen(kSceneQml)));
         }
 
         QQuickView view;
