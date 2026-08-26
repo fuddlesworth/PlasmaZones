@@ -160,6 +160,19 @@ void AutotileEngine::clearScreenScheduling(const QString& screenId)
     // recreates vs:N ids), its first applyTiling would consume the stale
     // entry and activate a window from the previous session of that screen.
     m_pendingFocusByScreen.remove(screenId);
+    // The initial-order seed trio, for the same reason and one the state
+    // teardown cannot cover. That teardown only visits screens that HAVE a
+    // state at the current key, and a screen seeded before any of its windows
+    // arrived never built one — the seed probe is deliberately non-creating. So
+    // its seed used to outlive its removal, and a strict order is consumed on
+    // re-entry as if it were fresh.
+    //
+    // The reaper is not a backstop here: it re-arms itself indefinitely while
+    // any seeded window still reads as minimized, so a removed screen could
+    // hold a live timer chain as well as the stale order.
+    m_pendingInitialOrders.remove(screenId);
+    m_pendingOrderGeneration.remove(screenId);
+    m_strictInitialOrderScreens.remove(screenId);
 }
 
 void AutotileEngine::setCurrentActivity(const QString& activity)

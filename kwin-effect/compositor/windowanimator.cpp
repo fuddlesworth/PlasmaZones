@@ -277,8 +277,9 @@ PhosphorAnimation::RetargetResult WindowAnimator::retargetWithResult(KWin::Effec
     }
 
     // Release path: DROP the animation rather than leaving it in the map heading
-    // to its OLD target. The sole caller tests only for DegenerateReap, so an
-    // InternalError falls through — and by then `moveResize(targetFrame)` has
+    // to its OLD target. No caller distinguishes an InternalError — one tests
+    // for DegenerateReap and the other discards the result entirely — so it
+    // falls through either way, and by then `moveResize(targetFrame)` has
     // already committed the new geometry, so a surviving stale animation would
     // visibly drive the window to the wrong rect and snap on completion.
     // Degrading to "no animation" is contained; degrading to "wrong animation"

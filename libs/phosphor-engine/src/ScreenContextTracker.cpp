@@ -129,6 +129,15 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // the stores they key into. A surviving in-range pin whose CONTENT
     // shifted heals on the next setCurrentDesktopForScreen push, which KWin
     // triggers when it relocates the screen off the removed desktop.
+    //
+    // Dropping a per-output entry here is safe, and NOT in tension with
+    // releaseScreenOwnership's argument that the same entry must survive a mode
+    // leave. The difference is what re-establishes it. On this path the daemon
+    // clamps every screen's desktop and pushes the new values BEFORE the count
+    // change propagates, so a dropped entry is rewritten immediately. On a mode
+    // leave nothing pushes at all, and the global desktop the lookup would fall
+    // back to is written once at startup — so there the drop is permanent and
+    // merges every output onto one desktop.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);

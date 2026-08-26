@@ -897,8 +897,16 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         // Velocity carried across would re-scale to a
                         // correction that is a few hundred pixels at most and
                         // overshoot it.
-                        m_windowAnimator->retargetWithResult(safeW.data(), committed,
-                                                             PhosphorAnimation::RetargetPolicy::PreservePosition);
+                        //
+                        // Result deliberately discarded, unlike the drag-snap
+                        // caller which starts a replacement leg on a
+                        // DegenerateReap. A reap here means the retarget landed
+                        // on the rect the window already occupies — the leg has
+                        // converged, which is the outcome this correction wants,
+                        // and reaping it runs the completion handler that ends
+                        // the leg cleanly. There is nothing to replace it with.
+                        static_cast<void>(m_windowAnimator->retargetWithResult(
+                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition));
                     }
                 }
                 // Body -0.5 — centre a client that answered its column with

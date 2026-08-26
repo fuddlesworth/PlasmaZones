@@ -55,6 +55,16 @@ public:
     ///   2. per-output virtual desktop (#648) — the normal per-screen input;
     ///   3. the global current desktop — fallback.
     /// The activity dimension is always the current activity.
+    ///
+    /// Tier 3 is a STARTUP SEED, not a live input, and reading it as one is the
+    /// mistake to avoid here. Under per-output desktops the daemon pushes the
+    /// global desktop once during startup and every later change arrives
+    /// through setCurrentDesktopForScreen, unconditionally, for every screen —
+    /// so a screen that reaches tier 3 after startup is resolving against a
+    /// value frozen at login. That is why a per-output entry must never be
+    /// dropped while its screen still exists: the fallback below it does not
+    /// track anything, and every output falling through to it lands on one
+    /// shared desktop.
     PlacementStateKey currentKeyForScreen(const QString& screenId) const;
 
     // ── Getters ──────────────────────────────────────────────────────────────

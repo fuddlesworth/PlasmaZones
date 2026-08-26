@@ -249,9 +249,18 @@ QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
 QString AutotileEngine::managedFocusedWindow(const QString& screenId) const
 {
     // Same non-creating, CURRENT-context lookup capturedWindowOrder uses, so
-    // the order and the focus a mode transition captures always describe one
-    // state. stateForKey (not tilingStateForScreen) because the capture must
-    // never lazily materialise a state for a screen that has none.
+    // the order and the focus a mode transition captures are read from one
+    // state. They share a KEY, not a membership: capturedWindowOrder omits
+    // genuine (non-minimized) floats, while this slot is shared by tiles and
+    // floats alike, so a screen whose focus sits on a floated window reports a
+    // focus that is not in the order shipped beside it. The receiving engine
+    // drops a seed naming a window its strip does not contain, so the effect is
+    // "no focus restored" rather than a wrong one — which is the safe direction,
+    // and the reason this is left as-is rather than falling back to the order's
+    // first entry: a float is not where the view belongs.
+    //
+    // stateForKey (not tilingStateForScreen) because the capture must never
+    // lazily materialise a state for a screen that has none.
     PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     return state ? state->focusedWindow() : QString();
 }
