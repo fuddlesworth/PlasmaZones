@@ -18,6 +18,7 @@
 #include <QStandardPaths>
 
 #include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -187,24 +188,27 @@ void SurfaceShaderItem::syncBackdropRect(PhosphorRendering::ShaderNodeRhi* node)
         return;
     }
 
-    // Reuses the overlay category's cover-fit: the wallpaper is placed over the
-    // screen aspect-correct and centred with the overflow cropped, exactly as
-    // wallpaper.glsl::wallpaperUv does, and then the surface's own rect is cut
-    // out of that placement. Doing the fit here rather than in the shader is
-    // what keeps a 16:9 wallpaper from being stretched into a 4:3 surface.
-    const QRect crop = PhosphorShaders::ShaderRegistry::computeWallpaperCropRect(
+    // The UNCLAMPED slice. The wallpaper is placed over the screen
+    // aspect-correct and centred with the overflow cropped, exactly as
+    // wallpaper.glsl::wallpaperUv does, and the surface's rect is mapped into
+    // that placement. Doing the fit here rather than in the shader is what
+    // keeps a 16:9 wallpaper from being stretched into a 4:3 surface.
+    //
+    // Unclamped matters: a padded stage is the anchor grown by outerPad on
+    // every side, so a glow or shadow near the screen edge legitimately reaches
+    // past it. The shader spreads uv across that whole padded quad, so a slice
+    // clamped to the screen would be stretched to cover it and shift the
+    // backdrop by the overhang. Out-of-range coordinates instead let the
+    // sampler's edge clamp handle it, which is what a halo running off the
+    // screen should look like.
+    const std::optional<QRectF> slice = PhosphorShaders::ShaderRegistry::wallpaperSliceNormalized(
         wallpaper.size(), m_backdropScreenRect.toAlignedRect(), m_backdropSurfaceRect.toAlignedRect());
-    if (!crop.isValid()) {
-        // The helper declines when the surface covers the whole screen, or when
-        // it falls outside it — both mean "no narrowing to do".
+    if (!slice) {
         node->setBackdropRect(kWholeTexture[0], kWholeTexture[1], kWholeTexture[2], kWholeTexture[3]);
         return;
     }
-
-    const float iw = static_cast<float>(wallpaper.width());
-    const float ih = static_cast<float>(wallpaper.height());
-    node->setBackdropRect(static_cast<float>(crop.x()) / iw, static_cast<float>(crop.y()) / ih,
-                          static_cast<float>(crop.width()) / iw, static_cast<float>(crop.height()) / ih);
+    node->setBackdropRect(static_cast<float>(slice->x()), static_cast<float>(slice->y()),
+                          static_cast<float>(slice->width()), static_cast<float>(slice->height()));
 }
 
 // ============================================================================

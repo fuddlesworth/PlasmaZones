@@ -244,6 +244,95 @@ private Q_SLOTS:
             QVERIFY(wpBounds.contains(crop));
         }
     }
+
+    // ── wallpaperSliceNormalized: the unclamped sibling ───────────────────
+
+    /// A surface inside the screen maps to the same placement the crop does.
+    ///
+    /// The two must agree wherever both are defined, because they mirror the
+    /// same cover-fit; they differ only in what they do at the edges.
+    void sliceAgreesWithCropInsideTheScreen()
+    {
+        const QSize wp(3840, 2160);
+        const QRect phys(0, 0, 1920, 1080); // same aspect: cover is the whole image
+        const QRect sub(480, 270, 960, 540); // centred quarter
+
+        const auto slice = ShaderRegistry::wallpaperSliceNormalized(wp, phys, sub);
+        QVERIFY(slice.has_value());
+        // The centred quarter of a same-aspect screen is the centred quarter of
+        // the image, in normalized coords.
+        QVERIFY(qFuzzyCompare(slice->x() + 1.0, 0.25 + 1.0));
+        QVERIFY(qFuzzyCompare(slice->y() + 1.0, 0.25 + 1.0));
+        QVERIFY(qFuzzyCompare(slice->width() + 1.0, 0.5 + 1.0));
+        QVERIFY(qFuzzyCompare(slice->height() + 1.0, 0.5 + 1.0));
+
+        const QRect crop = ShaderRegistry::computeWallpaperCropRect(wp, phys, sub);
+        QVERIFY(crop.isValid());
+        QCOMPARE(qRound(slice->x() * wp.width()), crop.x());
+        QCOMPARE(qRound(slice->width() * wp.width()), crop.width());
+    }
+
+    /// An overhanging surface runs OUT of range instead of being clamped.
+    ///
+    /// This is the whole reason the helper exists. A padded decoration stage is
+    /// the window grown by its outer margin, so a glow at the screen edge
+    /// legitimately reaches past it. The shader maps uv across that entire
+    /// padded quad, so a slice clamped to the screen would be stretched over it
+    /// and shift the backdrop by the overhang. Out-of-range coordinates let the
+    /// sampler's edge clamp handle it instead.
+    void sliceRunsOutOfRangeForAnOverhangingSurface()
+    {
+        const QSize wp(1920, 1080);
+        const QRect phys(0, 0, 1920, 1080);
+        // Hangs 100px off the left and top edges.
+        const QRect sub(-100, -100, 400, 400);
+
+        const auto slice = ShaderRegistry::wallpaperSliceNormalized(wp, phys, sub);
+        QVERIFY(slice.has_value());
+        QVERIFY2(slice->x() < 0.0, "an overhanging surface must not be clamped to the screen");
+        QVERIFY2(slice->y() < 0.0, "an overhanging surface must not be clamped to the screen");
+        // And the SIZE is the surface's true size, not the visible remainder —
+        // that is what keeps the mapping from being stretched.
+        QVERIFY(qFuzzyCompare(slice->width() + 1.0, (400.0 / 1920.0) + 1.0));
+
+        // The crop helper, by contract, clamps instead. Pinned so the divergence
+        // is deliberate rather than discovered later.
+        const QRect crop = ShaderRegistry::computeWallpaperCropRect(wp, phys, sub);
+        QVERIFY(crop.isEmpty() || crop.x() >= 0);
+    }
+
+    /// A surface covering the whole screen maps to the whole cover region.
+    ///
+    /// computeWallpaperCropRect treats this as "use the full image" and declines,
+    /// which is right for producing an image and wrong for a mapping: the slice
+    /// still has to say WHERE, and for a letterboxed aspect that is not the
+    /// whole texture.
+    void sliceCoversTheScreenWhereTheCropDeclines()
+    {
+        const QSize wp(3840, 1080); // twice as wide as the screen's aspect
+        const QRect phys(0, 0, 1920, 1080);
+        const QRect sub = phys;
+
+        QVERIFY(ShaderRegistry::computeWallpaperCropRect(wp, phys, sub).isEmpty());
+
+        const auto slice = ShaderRegistry::wallpaperSliceNormalized(wp, phys, sub);
+        QVERIFY(slice.has_value());
+        // Cover fit of a 3.55:1 image onto a 16:9 screen crops the sides, so the
+        // slice is the centred half, NOT the whole texture. Sampling the whole
+        // texture here is exactly the stretch this avoids.
+        QVERIFY(qFuzzyCompare(slice->width() + 1.0, 0.5 + 1.0));
+        QVERIFY(qFuzzyCompare(slice->x() + 1.0, 0.25 + 1.0));
+        QVERIFY(qFuzzyCompare(slice->height() + 1.0, 1.0 + 1.0));
+    }
+
+    void sliceRejectsDegenerateInputs()
+    {
+        const QRect phys(0, 0, 1920, 1080);
+        const QRect sub(0, 0, 100, 100);
+        QVERIFY(!ShaderRegistry::wallpaperSliceNormalized(QSize(), phys, sub).has_value());
+        QVERIFY(!ShaderRegistry::wallpaperSliceNormalized(QSize(1920, 1080), QRect(), sub).has_value());
+        QVERIFY(!ShaderRegistry::wallpaperSliceNormalized(QSize(1920, 1080), phys, QRect()).has_value());
+    }
 };
 
 QTEST_MAIN(WallpaperCropTest)

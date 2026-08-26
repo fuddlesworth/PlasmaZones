@@ -168,6 +168,10 @@ Item {
     ///
     /// A host whose root item IS the full screen can simply bind
     /// `Qt.rect(0, 0, width, height)`.
+    ///
+    /// Must CONTAIN the decorated stage, which is the anchor grown by
+    /// `outerPad` on every side. A stage hanging over the edge falls back to
+    /// sampling the backdrop whole rather than being handed a stretched slice.
     property rect backdropSourceArea: Qt.rect(0, 0, 0, 0)
 
     /// Whether any decoration is active. Gates the capture + shader items so an

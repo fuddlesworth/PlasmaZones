@@ -254,8 +254,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // when we never owned the shader slot looks like it could strand a glow
         // outside the window rect. It cannot. There are exactly two ways an
         // entry with padding reaches here with shaderApplied false: a live
-        // transition took the slot (renderSurfaceChain clears the flag and
-        // returns), in which case the transition is still painting the window
+        // transition took the slot (reconcileDecorationShader clears the flag
+        // and returns), in which case the transition is still painting the window
         // and drives its own damage, and releaseSurfaceState below deliberately
         // preserves the composite it is sampling; or the present shader failed
         // to compile, and THAT path already called releaseDecorationGl itself

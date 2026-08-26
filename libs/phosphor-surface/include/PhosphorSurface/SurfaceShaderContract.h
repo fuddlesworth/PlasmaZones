@@ -186,11 +186,20 @@ inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 /// transparent when nothing was bound.
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
-/// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the
-/// backdrop capture in TOP-DOWN normalized coords (xy = min, zw = size).
-/// Canvas parts that hang off the output are never blitted (they stay
-/// cleared); `backdropTexel()` clamps samples into this rect so edge
-/// windows don't smear the cleared margin into their frost.
+/// `vec4 uBackdropRect` — a sub-rect of the bound backdrop in TOP-DOWN
+/// normalized coords (xy = min, zw = size). BOTH runtimes have one, and they
+/// answer DIFFERENT questions.
+///
+/// The compositor's answers "which texels of this window's own capture are
+/// valid": canvas parts hanging off the output are never blitted, so
+/// `backdropTexel()` clamps into this rect and an edge window does not smear
+/// the cleared margin into its frost. It is a loose uniform, and this constant
+/// is its name.
+///
+/// The daemon's answers "which slice of the shared image lies behind THIS
+/// surface", because a daemon or preview host binds one desktop-sized wallpaper
+/// to every surface it decorates. It is a UBO member rather than a loose
+/// uniform (see SurfaceShaderUniforms), so this constant does not name it.
 inline constexpr const char* kUBackdropRect = "uBackdropRect";
 
 /// `float uHasBackdrop` — 1.0 when the host bound a backdrop this frame,

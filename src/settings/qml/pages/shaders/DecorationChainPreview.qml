@@ -79,10 +79,22 @@ Item {
     /// call — only on the properties an expression touches. Without naming this
     /// one, a theme change or a pack install would leave an open preview
     /// showing its old composition until the dialog was reopened.
+    ///
+    /// Read via a bare `void root._rev;` statement, the same idiom
+    /// SurfaceDecoration uses for the dependencies mapToItem does not register.
+    /// Folding it into the guard as `&& _rev >= 0` also works, but reads like a
+    /// condition and invites a later "simplification" that would silently make
+    /// the whole mechanism inert.
     readonly property int _rev: previewController ? previewController.previewRevision : 0
 
-    readonly property var _chain: (active && previewController && packId.length > 0 && root._rev >= 0) ? (previewController.previewChain(packId, params) || []) : []
-    readonly property real _outerPad: (active && previewController && packId.length > 0 && root._rev >= 0) ? previewController.previewOuterPadding(packId, params) : 0
+    readonly property var _chain: {
+        void root._rev;
+        return (active && previewController && packId.length > 0) ? (previewController.previewChain(packId, params) || []) : [];
+    }
+    readonly property real _outerPad: {
+        void root._rev;
+        return (active && previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0;
+    }
 
     /// Window-ish aspect the stand-in card always keeps, so the same pack reads
     /// identically in a browser thumbnail and in the detail pane. Matches
@@ -118,7 +130,10 @@ Item {
     readonly property string _wallpaper: (active && previewController) ? (previewController.wallpaperPath() || "") : ""
 
     /// Whether the browsed pack samples the scene behind the window.
-    readonly property bool _needsBackdrop: (previewController && packId.length > 0 && root._rev >= 0) ? (previewController.packInfo(packId) || ({})).needsBackdrop === true : false
+    readonly property bool _needsBackdrop: {
+        void root._rev;
+        return (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})).needsBackdrop === true : false;
+    }
 
     /// The wallpaper decoded for the backdrop sampler. Only fetched for a pack
     /// that samples it — decoding a wallpaper per card otherwise would be pure

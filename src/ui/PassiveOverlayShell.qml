@@ -244,6 +244,13 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // The desktop wallpaper, standing in for the scene a daemon surface has
+        // no way to capture. Under the SAME declare-and-forward contract as
+        // decorationChain above, and it is the case that proved the contract:
+        // applyDecoration wrote this and nothing declared it, so it became a
+        // dead dynamic property and every needsBackdrop pack on the daemon
+        // silently took its no-backdrop fallback.
+        property var backdropTexture: null
         // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
         // Same declare-and-forward contract as decorationChain: C++ writes it
         // with setProperty, so an undeclared name would silently become a dead
@@ -386,6 +393,7 @@ Window {
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
             decorationOuterPadding: osdSlot.decorationOuterPadding
+            backdropTexture: osdSlot.backdropTexture
             // The slot spans the screen, so its own rect is the area the
             // wallpaper backdrop covers. Without it a glass or blur pack would
             // refract the whole desktop squeezed into the card.
@@ -587,6 +595,13 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // The desktop wallpaper, standing in for the scene a daemon surface has
+        // no way to capture. Under the SAME declare-and-forward contract as
+        // decorationChain above, and it is the case that proved the contract:
+        // applyDecoration wrote this and nothing declared it, so it became a
+        // dead dynamic property and every needsBackdrop pack on the daemon
+        // silently took its no-backdrop fallback.
+        property var backdropTexture: null
         // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
         // Same declare-and-forward contract as decorationChain: C++ writes it
         // with setProperty, so an undeclared name would silently become a dead
@@ -700,6 +715,7 @@ Window {
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain
             decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
+            backdropTexture: zoneSelectorSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: zoneSelectorSlot.audioSpectrum
         }

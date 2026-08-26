@@ -145,6 +145,76 @@ QImage ShaderRegistry::loadWallpaperImage()
     return s_cachedWallpaperImage;
 }
 
+namespace {
+
+/// The wallpaper's "cover" placement over a screen, in wallpaper pixels:
+/// aspect-correct fill, centred, overflow cropped.
+///
+/// Factored out because two callers need the identical placement and only
+/// differ in what they do with it — one cuts an image out of it, the other maps
+/// it across a quad. Two copies of this would be two chances to disagree with
+/// shaders/wallpaper.glsl::wallpaperUv, which both of them mirror.
+struct WallpaperCover
+{
+    qreal x = 0.0;
+    qreal y = 0.0;
+    qreal w = 0.0;
+    qreal h = 0.0;
+};
+
+WallpaperCover wallpaperCoverFor(QSize wpSize, const QRect& physGeom)
+{
+    const qreal wpW = wpSize.width();
+    const qreal wpH = wpSize.height();
+    const qreal physW = physGeom.width();
+    const qreal physH = physGeom.height();
+    const qreal wpAspect = wpW / qMax<qreal>(wpH, 1.0);
+    // NOT clamped to 1.0. physGeom.isValid() guarantees height >= 1 so this is
+    // strictly positive, and clamping silently rewrote the crop for every
+    // PORTRAIT or rotated output (physAspect < 1), where it must divide by the
+    // real aspect — the shader this mirrors uses it unclamped too.
+    const qreal physAspect = physW / qMax<qreal>(physH, 1.0);
+
+    WallpaperCover cover;
+    if (wpAspect > physAspect) {
+        cover.h = wpH;
+        cover.w = wpH * physAspect;
+        cover.x = (wpW - cover.w) * 0.5;
+        cover.y = 0.0;
+    } else {
+        cover.w = wpW;
+        cover.h = wpW / physAspect;
+        cover.x = 0.0;
+        cover.y = (wpH - cover.h) * 0.5;
+    }
+    return cover;
+}
+
+} // namespace
+
+std::optional<QRectF> ShaderRegistry::wallpaperSliceNormalized(QSize wpSize, const QRect& physGeom,
+                                                               const QRect& subGeom)
+{
+    if (wpSize.isEmpty() || !subGeom.isValid() || !physGeom.isValid()) {
+        return std::nullopt;
+    }
+    const WallpaperCover cover = wallpaperCoverFor(wpSize, physGeom);
+
+    // Fractions of the SCREEN, taken from the raw subGeom so an overhanging
+    // surface produces an out-of-range slice rather than a clamped one.
+    const qreal physW = physGeom.width();
+    const qreal physH = physGeom.height();
+    const qreal fracL = (subGeom.x() - physGeom.x()) / physW;
+    const qreal fracT = (subGeom.y() - physGeom.y()) / physH;
+    const qreal fracW = subGeom.width() / physW;
+    const qreal fracH = subGeom.height() / physH;
+
+    const qreal wpW = wpSize.width();
+    const qreal wpH = wpSize.height();
+    return QRectF((cover.x + fracL * cover.w) / wpW, (cover.y + fracT * cover.h) / wpH, (fracW * cover.w) / wpW,
+                  (fracH * cover.h) / wpH);
+}
+
 QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom)
 {
     if (wpSize.isEmpty() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
