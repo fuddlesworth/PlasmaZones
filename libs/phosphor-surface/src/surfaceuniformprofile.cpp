@@ -112,12 +112,14 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     // itself before pushing iMouse.
     m_u.iMouse[0] = state.mouseX;
     m_u.iMouse[1] = state.mouseY;
-    // The degenerate divisor falls back to the sentinel, not to zero. Zero
-    // reads as a hover at the top-left corner, and this branch is exactly the
-    // first frames of a fresh decoration item, before the host has pushed any
-    // geometry — so a pack testing `iMouse.z < 0.0` would see a phantom hover
-    // there. Keeping it negative is what makes the comment above true of .zw
-    // as well as .xy.
+    // The degenerate divisor passes the raw value through rather than writing
+    // zero. Zero reads as a hover at the top-left corner, and this branch is
+    // exactly the first frames of a fresh decoration item, before the host has
+    // pushed any geometry — so for a host that seeds the (-1, -1) sentinel (as
+    // SurfaceShaderItem does) .zw stays negative alongside .xy and a pack
+    // testing `iMouse.z < 0.0` still reads "off surface". A host that pushes no
+    // mouse at all leaves the UboFrameState default of 0, which this cannot
+    // improve on; the guarantee is only as good as the sentinel it is handed.
     m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : state.mouseX;
     m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : state.mouseY;
 

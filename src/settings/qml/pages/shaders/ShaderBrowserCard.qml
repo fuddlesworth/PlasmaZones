@@ -105,12 +105,9 @@ ItemDelegate {
         const viewH = root.viewport.height;
         if (viewH <= 0)
             return false;
-        // Read every input FIRST: mapToItem registers no QML dependency, so
-        // this only re-evaluates when something it actually touched changes.
-        // The card's own y and the flow's width matter as much as the scroll
-        // position — a section expanding, the Flow re-wrapping on a resize, or
-        // a filter change all move a card without moving contentY. Same idiom
-        // SurfaceDecoration.qml uses for its anchor mapping.
+        // The card's own position matters as much as the scroll offset: a
+        // section expanding, the Flow re-wrapping on a resize, or a filter
+        // change all move a card without moving contentY.
         const selfY = root.y;
         const selfX = root.x;
         void selfY;

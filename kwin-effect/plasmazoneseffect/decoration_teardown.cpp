@@ -247,8 +247,9 @@ void PlasmaZonesEffect::clearAllDecorations()
     // cached state authoritative. A poll armed just before the daemon died
     // would otherwise fire after this loop and call updateWindowDecoration,
     // re-resolving from the still-populated tree and re-inserting a decoration
-    // this teardown had just released. Clearing the set makes the poll's own
-    // membership re-check below the thing that stops it.
+    // this teardown had just released. Clearing the set is what stops it: the
+    // poll's lambda (deferDecorationTeardownWhileAnimated, in decorations.cpp)
+    // bails when its id is no longer a member.
     m_animatedDecoTeardownPending.clear();
     const QStringList ids = m_windowDecorations.keys();
     for (const QString& windowId : ids) {
