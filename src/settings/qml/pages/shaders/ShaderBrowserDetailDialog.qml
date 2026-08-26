@@ -607,24 +607,36 @@ Kirigami.Dialog {
                 // real SurfaceDecoration chain host. In a Loader so the whole
                 // capture / shader chain is only instantiated for a decoration
                 // pack, and is torn down when the dialog closes rather than
-                // lingering. The `opened` term is what makes that true: this
-                // dialog is a single reused instance, and _decorationPreview
-                // depends only on the controller and the effect, neither of
-                // which is cleared on close, so without it the pane and its
-                // whole chain would stay instantiated for the app's life.
+                // lingering: this dialog is a single reused instance, and
+                // _decorationPreview depends only on the controller and the
+                // effect, neither of which is cleared on close, so an ungated
+                // Loader would keep the pane and its whole chain alive for the
+                // app's life.
+                //
+                // `visible`, NOT `opened`. Popup.opened only goes true once the
+                // ENTER TRANSITION has finished, so gating on it composed the
+                // chain after the dialog had already animated in — you watched
+                // the card arrive bare and then turn decorated. `visible` is
+                // true for the whole shown state including both transitions, so
+                // the chain is ready as the dialog appears, and the pane still
+                // tears down on close. It also stops the pane emptying on the
+                // first frame of the CLOSE animation, which gating on `opened`
+                // did at the other end.
                 Loader {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
-                    active: root.opened && root._decorationPreview
+                    active: root.visible && root._decorationPreview
                     visible: active
 
                     sourceComponent: DecorationPreviewPane {
                         previewController: root.previewController
                         packId: root.effect ? (root.effect.id || "") : ""
                         liveParams: root._liveParams
-                        // Same gate the zone pane's clock uses: nothing ticks
-                        // while the dialog is shut or the app is backgrounded.
-                        active: root.opened && root._appActive
+                        // Same `visible` rather than `opened`, and for the same
+                        // reason: this gates the chain composition, not just the
+                        // ticking, so deferring it to the end of the open
+                        // transition is what produced the pop.
+                        active: root.visible && root._appActive
                     }
                 }
 
