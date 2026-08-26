@@ -391,8 +391,12 @@ void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
     }
     m_wallpaperImage = image;
     m_wallpaperDirty = true;
-    // Wallpaper is a plain texture at binding 11 with no BaseUniforms field —
-    // its upload goes through m_wallpaperDirty and doesn't need a UBO roundtrip.
+    // The texture upload itself goes through m_wallpaperDirty. The UBO still
+    // has to follow, because the surface profile derives uHasBackdrop from
+    // wallpaperBindingLive(), which reads the image's nullness — swapping a
+    // real wallpaper for a null one (or back) moves the gate.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setUseWallpaper(bool use)
@@ -409,6 +413,14 @@ void ShaderNodeRhi::setUseWallpaper(bool use)
     // release path (releaseRhiResources) frees them and clears m_initialized,
     // which is the one recreate trigger that exists. Freeing eagerly needs a
     // lazy ensureWallpaperResources() first.
+    // The UBO must follow the binding: the surface profile derives
+    // uHasBackdrop from wallpaperBindingLive(), so a flip that reset the
+    // bindings without re-uploading would leave a pack believing it still had
+    // the previous backdrop state. A time-animated pack self-heals on its next
+    // tick; a static one (a plain border, a non-animated glass config) never
+    // would.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
     resetAllBindingsAndPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }

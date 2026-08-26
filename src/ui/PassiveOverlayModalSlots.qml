@@ -127,7 +127,7 @@ Item {
         // Captures the loaded content's shaderAnchor (the SnapAssistContent root
         // itself carries `shaderAnchor: true`) and re-renders it through the
         // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
@@ -255,7 +255,7 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.layoutPicker" surface pack. Inert when the
         // source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
@@ -347,7 +347,7 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and
         // re-renders it through the resolved "popup.cheatsheet" surface
         // pack. Inert when the source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain

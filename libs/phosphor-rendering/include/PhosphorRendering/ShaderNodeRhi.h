@@ -418,6 +418,23 @@ private:
     void uploadExtensionToUbo(QRhiResourceUpdateBatch* batch);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// Whether binding 11 carries a real wallpaper rather than the dummy.
+    ///
+    /// The single source of truth for two things that must never disagree:
+    /// which texture appendWallpaperBinding() puts at binding 11, and what
+    /// syncBaseUniforms() reports in uHasBackdrop. A pack branches on that
+    /// uniform to decide whether to sample uBackdrop at all, so a gate that
+    /// outran the binding would have it sampling the 1x1 dummy (or a
+    /// transparent fallback) while believing it had a real backdrop, instead
+    /// of taking its documented no-backdrop appearance.
+    ///
+    /// The image must be non-null as well as the GPU objects: the upload path
+    /// deliberately writes a transparent fallback for a null image, so
+    /// "a texture exists" alone is not "there is something to show".
+    bool wallpaperBindingLive() const
+    {
+        return m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler && !m_wallpaperImage.isNull();
+    }
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// How the pass an SRB belongs to touches the depth texture.
     ///

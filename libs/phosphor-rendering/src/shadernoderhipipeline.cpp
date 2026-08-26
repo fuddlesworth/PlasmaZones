@@ -70,6 +70,13 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!m_depthTexture->create()) {
             qCWarning(lcShaderNode) << "Failed to create depth texture";
+            // Drop the failed object for the same reason the sampler below
+            // does: this branch is gated on the texture's pixelSize(), which
+            // QRhiTexture reports from the requested size whether or not
+            // create() succeeded. A latched failed texture would therefore
+            // never be retried, yet would still pass appendDepthBinding's
+            // null check and reach the SRB uncreated.
+            m_depthTexture.reset();
             return false;
         }
         if (!m_depthSampler) {
@@ -97,7 +104,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         }
     }
 
-    if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
+    if (m_useDepthBuffer && multiBufferMode) {
         if (!m_depthMultiBufferWarned) {
             m_depthMultiBufferWarned = true;
             qCWarning(lcShaderNode)
@@ -118,7 +125,14 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                      std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
         tex.reset(
             rhi->newTexture(bufferFormat, bufferSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
+        // Every failure exit clears what it allocated. Callers gate the retry
+        // on "does the object exist and is it the right pixelSize?", and
+        // pixelSize() answers from the requested size even after a failed
+        // create() — so leaving a failed object installed latches the failure
+        // permanently and lets ensureBufferPipeline build an SRB and pipeline
+        // against an uncreated texture and render target.
         if (!tex->create()) {
+            tex.reset();
             return false;
         }
         QRhiTextureRenderTargetDescription desc;
@@ -130,7 +144,13 @@ bool ShaderNodeRhi::ensureBufferTarget()
         rt.reset(rhi->newTextureRenderTarget(desc));
         rpd.reset(rt->newCompatibleRenderPassDescriptor());
         rt->setRenderPassDescriptor(rpd.get());
-        return rt->create();
+        if (!rt->create()) {
+            tex.reset();
+            rt.reset();
+            rpd.reset();
+            return false;
+        }
+        return true;
     };
 
     if (multiBufferMode) {
@@ -445,7 +465,6 @@ bool ShaderNodeRhi::ensurePipeline()
     m_renderPassFormat = format;
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool hasMultipass = !m_bufferPath.isEmpty() || multiBufferMode;
 
     auto createImageSrbSingle = [rhi,
                                  this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
@@ -494,12 +513,14 @@ bool ShaderNodeRhi::ensurePipeline()
     // uTexture<N> without a loaded texture must read the documented
     // transparent black rather than leave the declared binding without an
     // SRB entry (strict backends reject the mismatch; lenient ones sample
-    // undefined). Single call for both consumers: for a single-pass shader a
-    // failed create is best-effort (falls back to omit-the-binding), while a
-    // multipass shader hard-requires it (unwritten iChannel slots bind the
-    // dummy), so its absence fails the build below.
-    ensureDummyChannelResources(rhi);
-    if (hasMultipass && (!m_dummyChannelTexture || !m_dummyChannelSampler)) {
+    // undefined). Every consumer now hard-requires it: a multipass shader
+    // binds it into unwritten iChannel slots, and appendWallpaperBinding
+    // substitutes it at binding 11 whenever no wallpaper is bound, which a
+    // single-pass surface pack declaring uBackdrop relies on. Omitting the
+    // binding instead would reproduce the very layout mismatch the dummy
+    // exists to prevent, so a failed create fails the build here rather than
+    // degrading silently.
+    if (!ensureDummyChannelResources(rhi) || !m_dummyChannelTexture || !m_dummyChannelSampler) {
         return false;
     }
 
@@ -650,7 +671,7 @@ void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& b
     // the shader, which fails the pipeline rather than degrading. The pack's
     // fallback path is selected by uHasBackdrop (0 here), not by the absence
     // of the binding.
-    const bool live = m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler;
+    const bool live = wallpaperBindingLive();
     QRhiTexture* tex = live ? m_wallpaperTexture.get() : m_dummyChannelTexture.get();
     QRhiSampler* sam = live ? m_wallpaperSampler.get() : m_dummyChannelSampler.get();
     if (!tex || !sam) {

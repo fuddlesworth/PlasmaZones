@@ -71,8 +71,9 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // sampling a texture nobody bound. appendWallpaperBinding() keeps binding
     // 11 populated either way (a dummy when there is nothing to show), so this
     // is the only thing standing between a real backdrop and the pack's
-    // fallback appearance.
-    state.hasBackdrop = (m_useWallpaper && m_wallpaperTexture) ? 1.0f : 0.0f;
+    // fallback appearance. Both sides read the same predicate so they cannot
+    // drift: see wallpaperBindingLive().
+    state.hasBackdrop = wallpaperBindingLive() ? 1.0f : 0.0f;
 
     // Surface-only fields — read by a SurfaceUniformProfile, ignored by the
     // BaseUniformProfile (so the overlay/animation UBO bytes are unchanged).
