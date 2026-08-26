@@ -145,18 +145,42 @@ Kirigami.Dialog {
         _liveParams = p;
         _lockedParams = {};
         _recompute();
-        // Destroy + recreate the renderer so it starts fresh on the new shader
-        // (no previous shader's stale Error). Deactivate now, reactivate next
-        // tick — _shaderInfo is already set above, so the new item loads it.
+        // Tear the old renderer down here; ARMING the new one is onOpened's
+        // job (see _armZoneRenderer). Only the teardown belongs this early.
         _rendererActive = false;
-        Qt.callLater(function () {
-            // Guard on `visible`, not `opened`: this now runs from aboutToShow,
-            // where the enter transition has not started and `opened` is still
-            // false — arming on it would leave the zone renderer permanently
-            // inactive. `visible` says the same thing (the dialog is still
-            // being shown) and is already true by the time this deferral runs.
-            root._rendererActive = root.visible && root._zonePreview;
-        });
+        // Unless we are ALREADY open, which is the case onOpened will not cover
+        // — a caller resetting mid-session would otherwise tear the renderer
+        // down and leave nothing to bring it back. Deferred so the Loader gets
+        // a tick to destroy the old item before the new one is created, which
+        // is what keeps the previous shader's Error state from surviving.
+        if (opened)
+            Qt.callLater(_armZoneRenderer);
+    }
+
+    /// Arm the zone renderer, from onOpened and nowhere else.
+    ///
+    /// Deliberately NOT done in _resetPreview alongside the state reset, even
+    /// though both concern the same preview. The two want opposite timing:
+    ///
+    ///   - The state (parameters, shaderInfo, clock) must be right BEFORE the
+    ///     panes are built, because the decoration pane's Loader activates on
+    ///     `visible` and composes immediately from whatever it finds. Resetting
+    ///     after that gave it the previous pack's parameters and made it
+    ///     compose twice, which was the preview / unavailable / preview flicker.
+    ///
+    ///   - Arming this renderer is the EXPENSIVE half: it creates a
+    ///     ZoneShaderItem that compiles and links a shader. Doing that before
+    ///     the popup is visible spends it on a window nobody can see yet, so
+    ///     the dialog appeared only once the compile had finished — no
+    ///     placeholder, just a pause and then a finished preview.
+    ///
+    /// onOpened runs after the enter transition, so the popup is on screen with
+    /// the placeholder showing, and the compile happens where the user can see
+    /// it is happening. The Loader has been inactive since _resetPreview, so
+    /// this genuinely recreates the item and no previous shader's Error state
+    /// survives.
+    function _armZoneRenderer() {
+        root._rendererActive = root.opened && root._zonePreview;
     }
     function _recompute() {
         // Zone-only. A decoration pack's params reach its shader inside the
@@ -192,6 +216,10 @@ Kirigami.Dialog {
             _resetPreview();
     }
     onOpened: {
+        // AFTER the popup is on screen, so the placeholder covers the compile
+        // rather than the compile delaying the popup — see _armZoneRenderer.
+        if (_livePreview)
+            _armZoneRenderer();
         // Gate on _appActive: opening the dialog while the settings app
         // is backgrounded must not start CAVA — the on_AppActiveChanged
         // handler starts it when the app comes to the front.

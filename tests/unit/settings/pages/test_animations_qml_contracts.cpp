@@ -818,6 +818,72 @@ private Q_SLOTS:
         }
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("; "))));
     }
+
+    /// The shared detail dialog resets preview STATE early and arms the zone
+    /// renderer LATE, and those two must not be merged.
+    ///
+    /// One dialog serves the zone/overlay browser and the decoration browser,
+    /// and the two want opposite timing from it. That has now broken in both
+    /// directions, each time by moving one line:
+    ///
+    ///   - Resetting state in onOpened (after the enter transition) was too
+    ///     late for the decoration pane, whose Loader activates on `visible`.
+    ///     It composed with the PREVIOUS pack's parameters, then recomposed
+    ///     when the reset landed: preview / unavailable / preview on every open.
+    ///
+    ///   - Moving the WHOLE reset to onAboutToShow fixed that and broke the
+    ///     other side, because it dragged the zone renderer's arm along with
+    ///     it. Creating a ZoneShaderItem compiles and links a shader, and doing
+    ///     that before the popup is visible spent it on a window nobody could
+    ///     see — the dialog appeared only once the compile had finished, with
+    ///     no placeholder phase at all.
+    ///
+    /// So: state in onAboutToShow, arm in onOpened. This pins the split by
+    /// where the call sites are, because neither failure shows up in a headless
+    /// test — both are timing, and the zone renderer needs a GPU.
+    ///
+    /// Source-scrape, with the limitations this file documents elsewhere: it
+    /// checks WHERE the arm is called from, not what it does.
+    void theDetailDialogArmsTheZoneRendererOnOpenedNotAboutToShow()
+    {
+        const QString path =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml");
+        QString src = readFile(path);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("cannot read ") + path));
+
+        // Comments carry the rationale for this very split, so leaving them in
+        // would let the prose satisfy the assertions the code has to.
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+        src.remove(blockCommentRe);
+        src.remove(lineCommentRe);
+
+        const int aboutToShow = src.indexOf(QLatin1String("onAboutToShow:"));
+        const int opened = src.indexOf(QLatin1String("onOpened:"));
+        const int closed = src.indexOf(QLatin1String("onClosed:"));
+        QVERIFY2(aboutToShow >= 0, "onAboutToShow handler not found");
+        QVERIFY2(opened > aboutToShow, "onOpened handler not found after onAboutToShow");
+        QVERIFY2(closed > opened, "onClosed handler not found after onOpened");
+
+        const QString aboutToShowBody = src.mid(aboutToShow, opened - aboutToShow);
+        const QString openedBody = src.mid(opened, closed - opened);
+
+        QVERIFY2(openedBody.contains(QLatin1String("_armZoneRenderer")),
+                 "onOpened must arm the zone renderer: arming it earlier makes the shader compile "
+                 "before the popup is visible, so the dialog appears only once the preview is finished "
+                 "and the placeholder never shows");
+        QVERIFY2(!aboutToShowBody.contains(QLatin1String("_armZoneRenderer")),
+                 "onAboutToShow must NOT arm the zone renderer — see the comment on _armZoneRenderer");
+        QVERIFY2(aboutToShowBody.contains(QLatin1String("_resetPreview")),
+                 "onAboutToShow must reset preview state: resetting it later hands the decoration pane "
+                 "the previous pack's parameters and makes it compose twice");
+
+        // The arm itself must stay gated on `opened`. A guard weakened to
+        // `visible` re-admits the broken ordering without moving the call.
+        QVERIFY2(src.contains(QLatin1String("_rendererActive = root.opened")),
+                 "_armZoneRenderer must gate on `opened`, not `visible`");
+    }
 };
 
 QTEST_MAIN(TestAnimationsQmlContracts)
