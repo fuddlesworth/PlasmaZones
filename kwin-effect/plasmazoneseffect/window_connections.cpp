@@ -900,6 +900,45 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                                              PhosphorAnimation::RetargetPolicy::PreservePosition);
                     }
                 }
+                // Body -0.5 — centre a client that answered its column with
+                // a different size.
+                //
+                // The strip offers the full column rect the first time it
+                // sees a column SIZE, because until the client has answered
+                // there is nothing else to offer. A client that will not take
+                // that size commits its own at the column's top-left, so a
+                // freshly inserted window — or one that just went full width —
+                // hugs the top (or the left) until the next batch, which is
+                // the first placement able to offer the settled size centred.
+                //
+                // Correct it here instead of waiting: the commit that just
+                // arrived IS the answer, so the centred position is known now.
+                // Measured rather than predicted, like every other placement
+                // decision on this path — the alternative would be modelling
+                // the client's own size rule, which is not knowable up front.
+                //
+                // A pure move(), so it cannot renegotiate the size it just
+                // settled on and cannot be re-anchored by a queued configure.
+                // Converges in one step: the guard compares against the
+                // position it is about to install, so the synchronous
+                // frameGeometryChanged this emits re-enters and does nothing.
+                if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()
+                    && scrollManagedOutputFor(safeW.data())) {
+                    const QString scrollId = getWindowId(safeW.data());
+                    const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
+                    if (colIt != m_scrollOfferedColumn.constEnd()) {
+                        const QRect live = safeW->frameGeometry().toRect();
+                        if (live.size() != colIt->size() && live.size().isValid()) {
+                            // Same centring, and the same truncation, as the
+                            // strip apply and the paint resolver.
+                            const QPoint centred(colIt->x() + (colIt->width() - live.width()) / 2,
+                                                 colIt->y() + (colIt->height() - live.height()) / 2);
+                            if (live.topLeft() != centred && safeW->window()) {
+                                safeW->window()->move(QPointF(centred));
+                            }
+                        }
+                    }
+                }
                 // Body 0 — deferred maximize-morph completion. The maximize
                 // state edge above arms this entry when it fires before the
                 // client has committed the new size (see PendingMaximizeMorph);

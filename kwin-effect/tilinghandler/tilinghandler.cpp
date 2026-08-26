@@ -774,7 +774,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // its dead strip position. Pairing here rather than at the call sites
     // covers every caller at once.
     m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumnSize.remove(windowId);
+    m_effect->m_scrollOfferedColumn.remove(windowId);
     if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
@@ -1221,7 +1221,7 @@ void TilingHandler::clearPerSessionDaemonState()
         }
     }
     m_effect->m_scrollCommandedRects.clear();
-    m_effect->m_scrollOfferedColumnSize.clear();
+    m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep

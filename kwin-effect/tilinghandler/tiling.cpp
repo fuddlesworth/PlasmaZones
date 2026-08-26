@@ -1687,10 +1687,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     && snap.window->isWaylandClient()) {
                     const QSize columnSize = geo.size();
                     const QSize committedSize = snap.window->frameGeometry().toRect().size();
-                    const auto offeredIt = m_effect->m_scrollOfferedColumnSize.constFind(snap.windowId);
+                    const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
+                    // SIZE only. The column's position changes on every scroll
+                    // step while its size does not, and it is the size that
+                    // decides whether the client has answered for this column.
                     const bool columnUnchanged =
-                        offeredIt != m_effect->m_scrollOfferedColumnSize.constEnd() && *offeredIt == columnSize;
-                    m_effect->m_scrollOfferedColumnSize.insert(snap.windowId, columnSize);
+                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->size() == columnSize;
+                    // The whole rect is stored: the commit-time correction
+                    // below needs the column's position to centre within it.
+                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, geo);
                     if (columnUnchanged && committedSize.isValid() && committedSize != columnSize) {
                         // Centred with the same truncation the paint resolver
                         // uses (scrollVisualTranslationFor), so the drawn and
@@ -2229,7 +2234,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
-                    m_effect->m_scrollOfferedColumnSize.remove(snap.windowId);
+                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
                     m_effect->m_scrollCommandedRects.insert(snap.windowId,
                                                             {snap.window->frameGeometry().toRect(), 0, 0});
@@ -2249,7 +2254,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // reads scrolling for a few ticks while monocle batches are
                 // still in flight.
                 m_effect->m_scrollCommandedRects.remove(snap.windowId);
-                m_effect->m_scrollOfferedColumnSize.remove(snap.windowId);
+                m_effect->m_scrollOfferedColumn.remove(snap.windowId);
             }
         },
         onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());

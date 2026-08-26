@@ -2551,7 +2551,7 @@ private:
     /// round trip and a screen change, where m_lastReportedMinSize
     /// deliberately persists. A settled size surviving either would place the
     /// window at a stale size on re-entry.
-    QHash<QString, QSize> m_scrollOfferedColumnSize;
+    QHash<QString, QRect> m_scrollOfferedColumn;
 
     /// Per-output-pass state for the compositor-drawn tab indicators (see
     /// paintScrollTabIndicators). Recomputed by prePaintScreen at the top of
