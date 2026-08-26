@@ -5,10 +5,11 @@
 // window (frost / glass / blur families). `#include <surface_backdrop.glsl>` in
 // a pack that declares `"needsBackdrop": true`, then read backdropTexel().
 //
-// Compositor-only capability: the kwin effect captures the scene under the
-// window's (padded) canvas each frame and binds it here; the daemon has no
-// scene behind its surfaces, so backdropTexel() is transparent there and a pack
-// styles a fallback on the uHasBackdrop gate (which lives in the core contract,
+// The kwin effect captures the scene under the window's (padded) canvas each
+// frame and binds it here. A daemon or preview host has no scene to capture and
+// binds the desktop wallpaper as a stand-in instead, or nothing at all, in which
+// case backdropTexel() is transparent and a pack styles a fallback on the
+// uHasBackdrop gate (which lives in the core contract,
 // surface_uniforms.glsl, because it is a pinned UBO member on the daemon).
 //
 // Only the capture SAMPLER lives in this module. The gate scalar (uHasBackdrop)
@@ -41,14 +42,16 @@ uniform vec4 uBackdropRect;
 // No uBackdropRect counterpart: the compositor needs one because a padded
 // canvas can hang off the edge of an output and those texels are never
 // blitted. A wallpaper image has no invalid region, so the whole texture is
-// valid and samples need no clamping.
+// valid and samples need no clamping. Note this rect answers only "which texels
+// are real", not "which part of the desktop is behind THIS surface" — the
+// stand-in is currently sampled across the surface's own canvas uv.
 layout(binding = 11) uniform sampler2D uBackdrop;
 #endif
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
 // takes), clamped into the capture's valid sub-rect so edge windows never smear
-// the cleared off-output margin. Compositor-only: the daemon returns transparent
-// here, so gate styling on uHasBackdrop for an explicit fallback.
+// the cleared off-output margin. On a host that bound no backdrop this returns
+// transparent, so gate styling on uHasBackdrop for an explicit fallback.
 vec4 backdropTexel(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
     vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel

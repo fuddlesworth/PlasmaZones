@@ -50,7 +50,7 @@ struct alignas(16) SurfaceUniforms
     // 1.0 when the host provides a backdrop capture (compositor branch's
     // uBackdrop sampler); ALWAYS 0.0 on the daemon, whose surfaces have no
     // scene behind them. needsBackdrop packs gate their styling on this.
-    float uHasBackdrop; // float: 4 bytes at offset 104 (always 0 on the daemon)
+    float uHasBackdrop; // float: 4 bytes at offset 104 (1 when the host bound a backdrop, else 0)
 
     // The window's rule-resolved opacity on the compositor; the daemon has
     // no rule opacity (qt_Opacity carries host opacity) so this pins to 1.

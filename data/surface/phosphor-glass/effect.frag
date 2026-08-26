@@ -13,9 +13,9 @@
 // other blur pack: move a bright window behind this glass and the glow
 // follows it.
 //
-// DAEMON FALLBACK: daemon-hosted surfaces (OSDs / popups) have no scene
-// behind them (uHasBackdrop = 0), so the pack renders a translucent navy
-// slab with the same gradient shimmer and recharge sweep.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pack renders a translucent navy slab with the
+// same gradient shimmer and recharge sweep.
 //
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
 // (SetOpacity is layer-backed and custom chains own their alpha). The pack's

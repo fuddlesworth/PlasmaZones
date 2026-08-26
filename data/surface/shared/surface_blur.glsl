@@ -35,7 +35,7 @@ const float kSurfaceGaussW4 = 0.016216;
 
 // Buffer pass 0: HORIZONTAL half over the BACKDROP capture (through
 // backdropTexel(), which clamps into the valid sub-rect and is transparent on
-// the daemon). Rendered at the pack's bufferScale.
+// a host that bound no backdrop). Rendered at the pack's bufferScale.
 vec4 surfaceGaussianBackdropH(vec2 uv) {
     float radiusPx = max(customParams[0].x * uSurfaceScale, 1.0);
     vec2 stepUv = vec2(radiusPx / (4.0 * max(uSurfaceSize.x, 1.0)), 0.0);

@@ -180,9 +180,10 @@ inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 /// captured over the same (padded) canvas as `uTexture0` each frame for
 /// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
 /// with the composite canvas, so a pack samples both with the same uv (via
-/// the `backdropTexel()` helper). The daemon branch declares no such
-/// sampler; packs MUST sample through `backdropTexel()`, which compiles to
-/// transparent there.
+/// the `backdropTexel()` helper). The daemon branch declares this sampler at
+/// the same binding and a host may bind the desktop wallpaper into it as a
+/// stand-in; packs MUST still sample through `backdropTexel()`, which returns
+/// transparent when nothing was bound.
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
 /// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the
@@ -192,9 +193,10 @@ inline constexpr const char* kUBackdrop = "uBackdrop";
 /// windows don't smear the cleared margin into their frost.
 inline constexpr const char* kUBackdropRect = "uBackdropRect";
 
-/// `float uHasBackdrop` — 1.0 when a backdrop capture exists this frame,
-/// else 0.0 (and ALWAYS 0.0 on the daemon, which has no scene behind its
-/// surfaces). A needsBackdrop pack styles an explicit fallback on this
+/// `float uHasBackdrop` — 1.0 when the host bound a backdrop this frame,
+/// else 0.0. On the compositor that is the captured scene; on a daemon or
+/// preview host it is the desktop wallpaper stand-in, when one is bound.
+/// A needsBackdrop pack styles an explicit fallback on this
 /// gate (e.g. a plain translucent tint) instead of assuming the sampler.
 inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 

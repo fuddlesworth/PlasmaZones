@@ -16,8 +16,9 @@
 // own contentOpacity parameter fades the window content so the rain shows on
 // opaque windows; a theme's own translucent pixels reveal it the same way
 // with no parameter involved.
-// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
-// the droplets light a dark glass slab instead of refracting a capture.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the droplets light a dark glass slab instead of
+// refracting a capture.
 //
 // ANIMATED (references iTime): metadata declares "animated": true so the
 // daemon host ticks the item; the compositor detects the linked iTime
@@ -124,7 +125,7 @@ vec4 pSurface(vec2 uv) {
         float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3;
         pane = vec4(fog.rgb + hi * fog.a, fog.a) * mask;
     } else {
-        // Original pseudo look for daemon surfaces: droplets glint over a
+        // Original pseudo look with no backdrop: droplets glint over a
         // dark glass slab.
         vec3 glassSlab = vec3(0.10, 0.11, 0.14) + wet * 0.12;
         pane = vec4(glassSlab, 1.0) * 0.5 * mask;

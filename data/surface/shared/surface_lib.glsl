@@ -154,7 +154,7 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     return s;
 }
 
-// The backdrop-slab family's shared no-backdrop fallback (daemon hosts, where
+// The backdrop-slab family's shared no-backdrop fallback (any host where
 // uHasBackdrop is 0): a faint premultiplied tint slab at 0.35 * tintStrength,
 // clipped to the slab `mask`. Only packs that use exactly this constant (blur /
 // glass / rippled-glass) call it; siblings with a different fallback keep theirs.
@@ -184,10 +184,19 @@ vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
 }
 
-// px-space (top-down) vector -> canvas UV offset. vTexCoord is Y-up on the
-// compositor, so this flips Y; used for backdrop refraction offsets.
+// px-space (top-down) vector -> canvas UV offset, used for backdrop
+// refraction offsets. The flip is per-runtime for the same reason
+// surfacePixel's is: px space is top-down on both hosts, but the compositor
+// reaches it from a Y-up vTexCoord while the daemon's is already Y-down. A
+// vector converted with the wrong sign refracts the backdrop the opposite way
+// vertically, which only became reachable on the daemon once a host could
+// raise uHasBackdrop by binding a stand-in backdrop.
 vec2 pxToUv(vec2 v) {
+#ifdef PLASMAZONES_KWIN
     return vec2(v.x, -v.y) / max(uSurfaceSize, vec2(1.0));
+#else
+    return v / max(uSurfaceSize, vec2(1.0));
+#endif
 }
 
 // Normalized perimeter angle in [-0.5, 0.5) around the frame centre, aspect-

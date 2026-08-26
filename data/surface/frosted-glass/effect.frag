@@ -9,9 +9,9 @@
 // multi-octave crystalline Voronoi grain (slow-drifting on iTime), the
 // tint, the multiplicative vignette, and the rounded-corner SDF clip.
 //
-// DAEMON FALLBACK: daemon-hosted surfaces (OSDs / popups) have no scene
-// behind them (uHasBackdrop = 0), so the pack renders the ORIGINAL pseudo
-// look there — the translucent tint slab with the same grain and vignette.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pack renders the ORIGINAL pseudo look instead,
+// the translucent tint slab with the same grain and vignette.
 //
 // Content dimming: the window sample is dimmed by the pack's own
 // p_contentOpacity parameter, so the pane stays solid and translucency
