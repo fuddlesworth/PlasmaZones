@@ -147,6 +147,11 @@ Item {
         decorationChain: root._chain
         decorationOuterPadding: root._outerPad
         audioSpectrum: root.audioSpectrum
+        // The same toggle that styles the stand-in card, so the pack and the
+        // card it decorates agree about which state is being shown. Without
+        // this the toggle only restyled the card's title bar and the pack
+        // stayed permanently focused.
+        surfaceFocused: root.focusedLook
         // Only decoded for a pack that actually samples it. Every other pack
         // ignores the backdrop, and handing one over regardless would upload a
         // wallpaper-sized texture per card for nothing.

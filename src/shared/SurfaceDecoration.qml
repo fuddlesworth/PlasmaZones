@@ -114,6 +114,22 @@ Item {
     /// sampler uses. Null (the default) leaves uHasBackdrop at 0 and every
     /// pack on its documented fallback appearance.
     property var backdropTexture: null
+
+    /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
+    /// active from an inactive appearance keys on it — the border family mixes
+    /// its two colours on it, and focus-fade washes the whole surface out when
+    /// it is false.
+    ///
+    /// True by default, which is what the daemon's overlay surfaces want: an
+    /// OSD or a transient popup is only ever shown for the active context, so
+    /// the focused look is the intended one and no daemon host sets this.
+    ///
+    /// It exists for hosts that need to show BOTH states — the settings
+    /// preview, which offers a focus toggle. It was previously a literal
+    /// `true` on the stage, which meant such a host could restyle its own
+    /// stand-in card but never actually reach the shader, so a focus-reactive
+    /// pack looked inert no matter what the host did.
+    property bool surfaceFocused: true
     property real decorationOuterPadding: 0
 
     /// Sanitised device-independent margin. The capture's sourceRect and every
@@ -415,10 +431,7 @@ Item {
                 // Identical for every stage, mirroring the compositor's fold
                 // where each pack sees the same canvas.
                 surfaceScale: root.surfaceScale
-                // These overlays (OSD + transient popups) are always shown for
-                // the active context — the focused colour params are the
-                // intended look. A literal true is correct here.
-                surfaceFocused: true
+                surfaceFocused: root.surfaceFocused
                 surfaceSize: root.shaderAnchorItem ? Qt.size((root.shaderAnchorItem.width + root.outerPad * 2) * root.surfaceScale, (root.shaderAnchorItem.height + root.outerPad * 2) * root.surfaceScale) : Qt.size(0, 0)
                 // Inset by the SAME outerPad the capture applied: with a centred
                 // capture the anchor content sits outerPad into the canvas, so

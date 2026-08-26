@@ -101,10 +101,10 @@ Item {
 
                 checked: true
                 text: i18nc("@option:check decoration preview", "Focused")
-                // Packs without an active/inactive split ignore uSurfaceFocused
-                // entirely, so offering the toggle there would be a control that
-                // visibly does nothing.
-                enabled: true
+                // Drives uSurfaceFocused on the chain AND the stand-in card's
+                // own styling. A pack with no active/inactive split simply
+                // ignores the uniform, so the toggle then moves only the card —
+                // which is honest, since that is all a real window would do.
             }
 
             Item {
