@@ -74,6 +74,13 @@ Item {
     /// reaches Ready, so hiding to wait for this waits forever.
     readonly property bool ready: decoration.chainReady && _groundReady
 
+    /// A stage in the chain failed to compile.
+    ///
+    /// `ready` goes true either way — a failed stage has nothing left to wait
+    /// for — so a host that lifts its cover on `ready` alone cannot tell a
+    /// broken pack from a working one. Read this alongside it to say which.
+    readonly property bool hasError: decoration.chainHasError
+
     /// The ground has settled: either a wallpaper decoded, or there is no
     /// wallpaper to wait for. An unresolvable one must not hold the preview
     /// back for ever.
@@ -138,9 +145,17 @@ Item {
     /// Nothing is saved by deferring it. This is one call returning a double —
     /// no chain composed, no capture started, no shader item instantiated — so
     /// an inactive preview can afford to know how big its card will be.
+    ///
+    /// Sanitised the same way SurfaceDecoration sanitises the number it is
+    /// handed, because both halves of this preview reserve the margin from the
+    /// same value and must agree about it. `_cardSize` subtracts it twice, so
+    /// an unusable value propagates into a NaN width and the stand-in card
+    /// vanishes, while the decoration host beside it silently clamps to 0 and
+    /// carries on drawing.
     readonly property real _outerPad: {
         void root._rev;
-        return (previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0;
+        const requested = (previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0;
+        return isFinite(requested) ? Math.max(0, requested) : 0;
     }
 
     /// Window-ish aspect the stand-in card always keeps, so the same pack reads
@@ -174,7 +189,15 @@ Item {
     /// the ground the stand-in card sits on, which every pack needs, not the
     /// texture only a needsBackdrop pack samples. Empty when it cannot be
     /// resolved (no provider, unreadable file).
-    readonly property string _wallpaper: (active && previewController) ? (previewController.wallpaperPath() || "") : ""
+    ///
+    /// Reads `_rev` like every other controller call here: wallpaperPath() is
+    /// a Q_INVOKABLE with no notifier AND its answer is cached with a short
+    /// TTL, so without the dependency a wallpaper change would leave an open
+    /// preview standing on the old one until the card was rebuilt.
+    readonly property string _wallpaper: {
+        void root._rev;
+        return (active && previewController) ? (previewController.wallpaperPath() || "") : "";
+    }
 
     /// Whether the browsed pack samples the scene behind the window.
     readonly property bool _needsBackdrop: {
@@ -185,7 +208,15 @@ Item {
     /// The wallpaper decoded for the backdrop sampler. Only fetched for a pack
     /// that samples it — decoding a wallpaper per card otherwise would be pure
     /// waste, since nothing else in the chain looks at it.
-    readonly property var _backdrop: (active && _needsBackdrop && previewController) ? previewController.wallpaperImage() : null
+    ///
+    /// Reads `_rev` for the same reason `_wallpaper` does. It would re-evaluate
+    /// transitively through `_needsBackdrop` today, but that is an accident of
+    /// which properties this expression happens to touch, not a dependency on
+    /// the wallpaper changing.
+    readonly property var _backdrop: {
+        void root._rev;
+        return (active && _needsBackdrop && previewController) ? previewController.wallpaperImage() : null;
+    }
 
     // Ground the card sits on. The desktop wallpaper where we can resolve it:
     // a decoration is judged by how it looks ON a desktop, and flat grey
@@ -243,7 +274,7 @@ Item {
         // ignores the backdrop, and handing one over regardless would upload a
         // wallpaper-sized texture per card for nothing.
         backdropTexture: root._needsBackdrop ? root._backdrop : null
-        // The ground Image below fills this same item with the very wallpaper
+        // The ground Image above fills this same item with the very wallpaper
         // bound above, so the card refracts the part of it that is genuinely
         // behind it and the pane reads as one continuous surface. Without this
         // the card would sample the whole desktop shrunk into itself while the

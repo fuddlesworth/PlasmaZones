@@ -220,7 +220,8 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
-//                        setIsReversed, and the surface-contract setters
+//                        setIsReversed, setWallpaperTexture, setUseWallpaper,
+//                        setBackdropRect, and the surface-contract setters
 //                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
 //                        setSurfaceSize, setSurfaceFrameTopLeft,
 //                        setSurfaceFrameSize)
@@ -701,6 +702,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedForeignRhi = false; // re-warn (once) after device reset
     m_warnedAudioTruncated = false;
     m_warnedAudioCreateFailed = false;
+    m_warnedWallpaperBindingOmitted = false;
+    m_depthMultiBufferWarned = false;
     m_transparentFallbackTexture.reset();
     m_transparentFallbackTextureNeedsUpload = false;
 

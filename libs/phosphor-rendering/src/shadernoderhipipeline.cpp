@@ -491,11 +491,10 @@ bool ShaderNodeRhi::ensurePipeline()
 
     auto createImageSrbSingle = [rhi,
                                  this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
+        // No dummy substitution here: the loop below already falls back to the
+        // dummy pair for a null channel-0 texture or sampler, so pre-filling
+        // them produced identical bindings by a second route.
         QRhiSampler* channel0Sampler = (channel0Texture && m_bufferSamplers[0]) ? m_bufferSamplers[0].get() : nullptr;
-        if (!channel0Texture && !m_bufferPath.isEmpty()) {
-            channel0Texture = m_dummyChannelTexture.get();
-            channel0Sampler = m_dummyChannelSampler.get();
-        }
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
         appendUboAndExtraBindings(bindings);

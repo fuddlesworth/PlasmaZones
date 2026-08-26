@@ -364,6 +364,23 @@ ColumnLayout {
             if (param.default !== undefined)
                 next[param.id] = param.default;
         }
+        // Carry the `<id>_svgSize` companion, exactly as computeRandomized
+        // does and for the same reason: this is a full-map replace, the key is
+        // not part of the parameter schema so no branch above can reproduce
+        // it, and every host assigns the result wholesale over its values map.
+        // Without this a reset silently reverts an SVG image param's render
+        // size — which the preset-load path already takes care to preserve.
+        if (root.currentValues) {
+            for (var c = 0; c < root.parameters.length; c++) {
+                var cp = root.parameters[c];
+                if (!cp || cp.id === undefined || cp.type !== "image")
+                    continue;
+
+                var svgKey = cp.id + "_svgSize";
+                if (root.currentValues[svgKey] !== undefined)
+                    next[svgKey] = root.currentValues[svgKey];
+            }
+        }
         return next;
     }
 
@@ -387,6 +404,8 @@ ColumnLayout {
             icon.name: "edit-reset"
             display: ToolButton.IconOnly
             ToolTip.text: i18nc("@info:tooltip", "Reset all parameters to their defaults")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: i18nc("@action:button", "Reset to Defaults")
             Accessible.description: ToolTip.text
             onClicked: root.resetRequested()
@@ -397,6 +416,8 @@ ColumnLayout {
             icon.name: root._hasAnyLocked ? "object-unlocked" : "object-locked"
             display: ToolButton.IconOnly
             ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Unlock all parameters") : i18nc("@info:tooltip", "Lock all parameters")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: root._hasAnyLocked ? i18nc("@action:button", "Unlock All") : i18nc("@action:button", "Lock All")
             Accessible.description: ToolTip.text
             onClicked: root.lockAllRequested(!root._hasAnyLocked)
@@ -407,6 +428,8 @@ ColumnLayout {
             icon.name: "roll"
             display: ToolButton.IconOnly
             ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Randomize unlocked parameters") : i18nc("@info:tooltip", "Randomize all parameters")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: i18nc("@action:button", "Random")
             Accessible.description: ToolTip.text
             onClicked: root.randomizeRequested()

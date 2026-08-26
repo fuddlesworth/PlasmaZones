@@ -169,9 +169,12 @@ Item {
     /// A host whose root item IS the full screen can simply bind
     /// `Qt.rect(0, 0, width, height)`.
     ///
-    /// Must CONTAIN the decorated stage, which is the anchor grown by
-    /// `outerPad` on every side. A stage hanging over the edge falls back to
-    /// sampling the backdrop whole rather than being handed a stretched slice.
+    /// Should CONTAIN the decorated stage, which is the anchor grown by
+    /// `outerPad` on every side. A stage hanging over the edge is not
+    /// corrected: the slice is computed from the raw rect either way, so the
+    /// overhanging part addresses the backdrop outside [0,1] and the sampler's
+    /// edge clamp decides what it gets. That degrades to a smear of the
+    /// backdrop's border rather than to a stretched or wrapped image.
     property rect backdropSourceArea: Qt.rect(0, 0, 0, 0)
 
     /// Whether any decoration is active. Gates the capture + shader items so an
@@ -194,10 +197,23 @@ Item {
     /// forever.
     readonly property bool chainReady: decorationActive && _readyStageCount >= (decorationChain ? decorationChain.length : 0)
 
-    /// Stages whose shader has compiled. Maintained by the delegates rather
-    /// than derived, because Repeater.itemAt is not notifiable — a binding over
-    /// it would not re-evaluate when a stage's status changed.
+    /// At least one stage's shader failed to compile.
+    ///
+    /// Separate from chainReady on purpose. A failed stage SETTLES the chain
+    /// (there is nothing further to wait for) but does not make it correct, so
+    /// a host that only lifts its cover on chainReady would show a silently
+    /// wrong picture with no way to tell it apart from a working one. Read
+    /// this to say so.
+    readonly property bool chainHasError: _erroredStageCount > 0
+
+    /// Stages that have SETTLED — compiled, or failed to. Maintained by the
+    /// delegates rather than derived, because Repeater.itemAt is not notifiable
+    /// — a binding over it would not re-evaluate when a stage's status changed.
     property int _readyStageCount: 0
+
+    /// Stages whose shader failed to compile. Same delegate-maintained
+    /// treatment as _readyStageCount, for the same reason.
+    property int _erroredStageCount: 0
 
     /// The shaderAnchor capture item inside (or equal to) the loaded content.
     /// Re-resolved whenever the content swaps (Loader re-instantiation on each
@@ -372,15 +388,27 @@ Item {
             /// edges are handled: a stage that errors and later recompiles
             /// leaves and re-enters the count, and a delegate released on a
             /// chain change takes its contribution with it.
-            readonly property bool stageReady: stageItem.status === SurfaceShaderItem.Ready
-            onStageReadyChanged: root._readyStageCount += stage.stageReady ? 1 : -1
+            /// SETTLED, not succeeded: Error counts. A stage whose shader will
+            /// not compile is never going to reach Ready, so counting only
+            /// Ready leaves the chain permanently unsettled and a host that
+            /// covers until then covers for ever — over a chain whose other
+            /// stages are drawing fine. `chainHasError` is what tells a host
+            /// something is actually wrong.
+            readonly property bool stageSettled: stageItem.status === SurfaceShaderItem.Ready || stageItem.status === SurfaceShaderItem.Error
+            readonly property bool stageErrored: stageItem.status === SurfaceShaderItem.Error
+            onStageSettledChanged: root._readyStageCount += stage.stageSettled ? 1 : -1
+            onStageErroredChanged: root._erroredStageCount += stage.stageErrored ? 1 : -1
             Component.onCompleted: {
-                if (stage.stageReady)
+                if (stage.stageSettled)
                     root._readyStageCount += 1;
+                if (stage.stageErrored)
+                    root._erroredStageCount += 1;
             }
             Component.onDestruction: {
-                if (stage.stageReady)
+                if (stage.stageSettled)
                     root._readyStageCount -= 1;
+                if (stage.stageErrored)
+                    root._erroredStageCount -= 1;
             }
 
             // Called by the Repeater's onItemRemoved when this delegate is

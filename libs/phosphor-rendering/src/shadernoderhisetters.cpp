@@ -361,6 +361,13 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     m_userTextureWraps[slot] = use;
     m_userTextureSamplers[slot].reset();
     resetAllBindingsAndPipelines();
+    // Schedule the frame that rebuilds them. Dropping the sampler and the
+    // bindings changes what the next paint would produce but does not by
+    // itself ask for a next paint, so on a static pack (a plain border, a
+    // non-animated glass config) the new wrap mode would not appear until some
+    // unrelated repaint happened to come along. setUseWallpaper and
+    // setUseDepthBuffer mark dirty for exactly this reason.
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
@@ -624,6 +631,8 @@ void ShaderNodeRhi::setBufferWrap(const QString& wrap)
         m_bufferSamplers[i].reset();
     }
     resetAllBindingsAndPipelines();
+    // Ask for the frame that rebuilds them — see setUserTextureWrap.
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
@@ -639,6 +648,7 @@ void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
     }
     if (changed) {
         resetAllBindingsAndPipelines();
+        markDirty(QSGNode::DirtyMaterial);
     }
 }
 
@@ -654,6 +664,7 @@ void ShaderNodeRhi::setBufferFilter(const QString& filter)
         m_bufferSamplers[i].reset();
     }
     resetAllBindingsAndPipelines();
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
@@ -669,6 +680,7 @@ void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
     }
     if (changed) {
         resetAllBindingsAndPipelines();
+        markDirty(QSGNode::DirtyMaterial);
     }
 }
 
@@ -819,7 +831,16 @@ void ShaderNodeRhi::invalidateUniforms()
 
 void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 {
+    if (m_shaderIncludePaths == paths) {
+        return;
+    }
     m_shaderIncludePaths = paths;
+    // Same reasoning as setParamPreamble below: these paths are consumed while
+    // the source is expanded, and they are folded into the include fingerprint
+    // the bake cache keys on. Without forcing a reload the node keeps serving
+    // the source expanded against the OLD search path, so a pack that moved its
+    // shared includes would render from stale text.
+    m_shaderDirty = true;
 }
 
 void ShaderNodeRhi::setParamPreamble(const QString& preamble)

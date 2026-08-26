@@ -155,8 +155,8 @@ private Q_SLOTS:
         loadType(QStringLiteral("DecorationPreviewCard"));
     }
     /// SurfaceDecoration's readiness gate compares a stage against
-    /// `SurfaceShaderItem.Ready`, an enum it reaches through the registered
-    /// type rather than declaring itself.
+    /// `SurfaceShaderItem.Ready` and `SurfaceShaderItem.Error`, enums it
+    /// reaches through the registered type rather than declaring itself.
     ///
     /// Worth pinning because the failure is silent and inverted: an
     /// unresolvable enum yields `undefined`, every `status === undefined`
@@ -170,6 +170,7 @@ private Q_SLOTS:
                                        "Item {\n"
                                        "    property int ready: SurfaceShaderItem.Ready\n"
                                        "    property int loading: SurfaceShaderItem.Loading\n"
+                                       "    property int failed: SurfaceShaderItem.Error\n"
                                        "}\n"),
                      QUrl(QStringLiteral("inline://surfacestatus.qml")));
         QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
@@ -183,6 +184,12 @@ private Q_SLOTS:
         // enumerators rather than both collapsing to a default-constructed int.
         QVERIFY(obj->property("ready").toInt() >= 0);
         QVERIFY(obj->property("ready").toInt() != obj->property("loading").toInt());
+        // Error too: it is what settles a chain whose shader will not compile,
+        // so an unresolvable one leaves that chain permanently unsettled — the
+        // same silent inversion, reached by a different route.
+        QVERIFY(obj->property("failed").toInt() >= 0);
+        QVERIFY(obj->property("failed").toInt() != obj->property("ready").toInt());
+        QVERIFY(obj->property("failed").toInt() != obj->property("loading").toInt());
     }
 
     void singletonResolves()

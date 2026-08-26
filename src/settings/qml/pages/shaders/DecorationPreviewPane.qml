@@ -107,7 +107,11 @@ Item {
             PZCommon.ShaderPreviewPlaceholder {
                 anchors.fill: parent
                 anchors.margins: 1
-                visible: !chainPreview.ready
+                // Shown while the preview is still arriving, and kept up when a
+                // stage failed to compile — that settles the chain, so `ready`
+                // goes true with nothing worth showing underneath.
+                visible: !chainPreview.ready || chainPreview.hasError
+                text: chainPreview.hasError ? i18nc("@info:placeholder decoration preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 // Opaque, unlike the zone pane's: the preview underneath has to
                 // keep RENDERING to reach `ready` at all, so this conceals it
                 // rather than replacing it. Slot colour and rounding, so it

@@ -41,6 +41,11 @@ Control {
     property color backgroundColor: "transparent"
     /// Corner rounding, so a cover can match the slot it fills.
     property real radius: 0
+    /// What the stand-in says. Defaults to the not-arrived-yet wording every
+    /// host shares. A host that can tell WHY a preview is missing overrides it,
+    /// so a pack that will never render is not left looking like one that is
+    /// merely slow.
+    property string text: i18nc("@info:placeholder shader preview", "Preview unavailable")
 
     padding: Kirigami.Units.largeSpacing
 
@@ -55,6 +60,6 @@ Control {
         wrapMode: Text.WordWrap
         elide: Text.ElideRight
         color: Kirigami.Theme.disabledTextColor
-        text: i18nc("@info:placeholder shader preview", "Preview unavailable")
+        text: root.text
     }
 }

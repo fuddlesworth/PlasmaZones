@@ -5,6 +5,7 @@
     "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (providesBorder, providesOpacityTint, needsBackdrop, interiorOpaque, multipass, bufferShaders, bufferScale, bufferFeedback, bufferWrap, bufferWraps, bufferFilter, bufferFilters, depthBuffer, animated, audio, paddingParam, vertexShader, textures, and the retired handlesOpacity) and descriptive metadata (description, author, version, category, preview) are allowed through.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
+    "additionalProperties": false,
     "properties": {
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -49,6 +50,7 @@
         "paddingParam": { "type": "string" },
         "textures": {
             "type": "array",
+            "maxItems": 3,
             "items": {
                 "type": "object",
                 "required": ["path"],
@@ -60,6 +62,7 @@
         },
         "parameters": {
             "type": "array",
+            "maxItems": 48,
             "items": { "$ref": "#/definitions/parameter" }
         }
     },

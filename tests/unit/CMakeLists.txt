@@ -1666,6 +1666,7 @@ target_link_libraries(test_decorationpagecontroller
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1690,6 +1691,7 @@ target_link_libraries(test_decorationpreviewcontroller
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
         PhosphorAudio::PhosphorAudio
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         plasmazones_core
 )
 # P_SOURCE_DIR: the QML-contract slot scrapes the decoration preview QML for
@@ -1715,6 +1717,7 @@ target_link_libraries(test_decoration_sets
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1734,6 +1737,7 @@ target_link_libraries(test_decoration_sets_validation
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
         PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
