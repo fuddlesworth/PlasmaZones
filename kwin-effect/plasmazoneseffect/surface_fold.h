@@ -297,7 +297,9 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
 ///   state moves, and the state itself is the cache key:
 ///       uSurfaceFocused  focus (and the cross-fade ramp between the two states,
 ///                        which CLAMPS to exactly 0.0 / 1.0 at rest)
-///       uSurfaceOpacity  the rule-resolved window opacity
+///       uSurfaceOpacity  LEGACY, a constant 1.0 — it no longer carries the
+///                        rule-resolved window opacity, so it never varies and
+///                        never contributes to this classification
 ///       iMouse           the cursor. STATE, not per-frame: it is constant between
 ///                        cursor MOVES, and a hover pack classed per-frame re-folded its
 ///                        whole chain at vsync forever with the pointer sitting still on

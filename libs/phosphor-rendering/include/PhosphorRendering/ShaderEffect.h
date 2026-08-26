@@ -940,7 +940,7 @@ private:
     // whether a wrap actually changed, so a null default made the first
     // assignment of the effective default ("clamp") look like a change.
     std::array<QString, kMaxUserTextureSlots> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                                    QStringLiteral("clamp")};
+                                                                    QStringLiteral("clamp"), QStringLiteral("clamp")};
     /// Last-resolved file path per user-texture slot. Tracked here so
     /// `setShaderParams` can detect path changes (load on transition,
     /// not re-load on every params write) and so the SVG rasterise size

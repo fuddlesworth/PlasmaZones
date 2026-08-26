@@ -144,7 +144,7 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec2 uSurfaceFrameTopLeft;   // offset 88  (8)
     vec2 uSurfaceFrameSize;      // offset 96  (8)
     float uHasBackdrop;          // offset 104 (4) — 1 when the host bound a backdrop (scene or wallpaper stand-in), else 0
-    float uSurfaceOpacity;       // offset 108 (4) — always 1 on the daemon (qt_Opacity carries host opacity)
+    float uSurfaceOpacity;       // offset 108 (4) — LEGACY: a constant 1.0 on both runtimes, nothing to read
     vec4 customParams[8];        // offset 112 (128)
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
