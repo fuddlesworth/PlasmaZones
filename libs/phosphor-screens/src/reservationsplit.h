@@ -5,8 +5,6 @@
 
 #include <QtGlobal>
 
-#include <cmath>
-
 namespace PhosphorScreens::Detail {
 
 /// Per-axis split of a reserved strut across the axis' two edges.
@@ -21,8 +19,9 @@ struct EdgeSplit
 /// one axis) across that axis' two edges, using the panel source's per-edge
 /// claims for direction.
 ///
-/// The claims are thicknesses of every Plasma panel on that edge, whether or
-/// not the panel currently reserves space: an auto-hidden or floating panel
+/// A claim is the thickness of the thickest Plasma panel on that edge
+/// (PlasmaPanelSource keeps the per-edge maximum), reported whether or not
+/// that panel currently reserves space: an auto-hidden or floating panel
 /// still reports a thickness but contributes nothing to the sensor total. A
 /// straight proportional split therefore smears a non-reserving panel's
 /// thickness onto the edge that does reserve, and both edges come out wrong.
@@ -82,7 +81,7 @@ inline EdgeSplit splitReservation(int reserved, int claimFirst, int claimSecond)
         if (c.sum <= 0) {
             continue;
         }
-        const int error = std::abs(c.sum - reserved);
+        const int error = qAbs(c.sum - reserved);
         if (error > kSlack) {
             continue;
         }

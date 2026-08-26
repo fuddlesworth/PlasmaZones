@@ -1589,6 +1589,12 @@ private:
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;
     bool m_geometryUpdatePending = false;
+    /// Runs while processPendingGeometryUpdates is holding a pass back for a
+    /// live drag session. Invalid whenever no hold is in progress, so
+    /// isValid() doubles as "are we currently deferring". Bounds the hold —
+    /// see the deferral block in autotile.cpp for why an unbounded one is not
+    /// safe.
+    QElapsedTimer m_geometryDeferralClock;
     void processPendingGeometryUpdates();
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)

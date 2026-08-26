@@ -390,9 +390,9 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
         if (dbusVert > 0 || dbusHoriz > 0) {
             source = QStringLiteral("sensor+D-Bus");
             if (dbusVert > vertReserved || dbusHoriz > horizReserved) {
-                qCDebug(lcPhosphorScreens)
-                    << "D-Bus over-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
-                    << "sensor vert=" << vertReserved << "— scaling down (likely floating/autohide panels)";
+                qCDebug(lcPhosphorScreens) << "D-Bus over-reports reservation on" << screenKey
+                                           << "— D-Bus vert=" << dbusVert << "sensor vert=" << vertReserved
+                                           << "— attributing the sensor total (likely floating/autohide panels)";
             } else if (dbusVert < vertReserved || dbusHoriz < horizReserved) {
                 qCDebug(lcPhosphorScreens)
                     << "D-Bus under-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
