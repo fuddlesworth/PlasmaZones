@@ -99,6 +99,7 @@ set(phosphorsurface_SRCS
     src/decorationprofiletree.cpp
     src/surface_contract_pins.cpp
     src/surfacethemeresolve.cpp
+    src/surfacechaincompose.cpp
 )
 
 # ===============================================================================

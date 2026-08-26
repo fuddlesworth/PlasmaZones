@@ -25,6 +25,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
@@ -534,20 +535,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved
         // per-surface override wins, else the param's declared default. The
         // chain's largest request pads the capture canvas (composite path).
-        if (!eff.paddingParam.isEmpty()) {
-            double request = 0.0;
-            if (packOverrides.contains(eff.paddingParam)) {
-                request = packOverrides.value(eff.paddingParam).toDouble();
-            } else {
-                for (const auto& param : eff.parameters) {
-                    if (param.id == eff.paddingParam) {
-                        request = param.defaultValue.toDouble();
-                        break;
-                    }
-                }
-            }
-            outerPadding = qMax(outerPadding, qCeil(request));
-        }
+        outerPadding = qMax(outerPadding, qCeil(PhosphorSurfaceShaders::paddingRequest(eff, packOverrides)));
     }
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);

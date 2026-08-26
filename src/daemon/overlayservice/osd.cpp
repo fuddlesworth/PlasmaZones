@@ -30,13 +30,12 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include "core/interfaces/isettings.h"
-
-#include <QUrl>
 
 namespace PlasmaZones {
 
@@ -576,20 +575,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // The QML host inflates the capture + shader items by this logical-px
         // margin so an outer effect gets real transparent room; 0 (a
         // margin-less chain) keeps the classic 1:1 geometry.
-        if (!effect.paddingParam.isEmpty()) {
-            double request = 0.0;
-            if (friendlyParams.contains(effect.paddingParam)) {
-                request = friendlyParams.value(effect.paddingParam).toDouble();
-            } else {
-                for (const auto& param : effect.parameters) {
-                    if (param.id == effect.paddingParam) {
-                        request = param.defaultValue.toDouble();
-                        break;
-                    }
-                }
-            }
-            outerPadding = qMax(outerPadding, request);
-        }
+        outerPadding = qMax(outerPadding, PhosphorSurfaceShaders::paddingRequest(effect, friendlyParams));
 
         // Theme colour resolution: packs that opt into theme-derived colours
         // (border useThemeNeutral/useSystemAccent, glow/shadow useThemeTint) have
@@ -620,40 +606,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
         }
 
-        QVariantMap stageMap;
-        stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
-        stageMap.insert(QStringLiteral("vertexSource"),
-                        effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
-        stageMap.insert(QStringLiteral("preamble"),
-                        PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect));
-        stageMap.insert(QStringLiteral("params"),
-                        m_surfaceShaderRegistry->translateSurfaceParams(packId, resolvedParams));
-        // Animated packs declare it in metadata; the QML host gates that
-        // stage's per-frame iTime tick (playing) on this so static packs pay
-        // nothing.
-        stageMap.insert(QStringLiteral("animated"), effect.animated);
-        // Multipass buffer passes. SurfaceShaderItem inherits the full
-        // multipass property set from PhosphorRendering::ShaderEffect, so a
-        // surface pack's declared buffer passes run on this host exactly as an
-        // overlay pack's do — the fields just have to reach the item. Only a
-        // pack that BOTH opts into multipass and resolved at least one buffer
-        // path is forwarded; everything else leaves the item's single-pass
-        // defaults untouched. The QML host additionally layers a multipass
-        // stage (see SurfaceDecoration.qml), which the render node requires to
-        // keep its own passes isolated from the scene graph's batch renderer.
-        const bool stageMultipass = effect.isMultipass && !effect.bufferShaderPaths.isEmpty();
-        stageMap.insert(QStringLiteral("multipass"), stageMultipass);
-        if (stageMultipass) {
-            stageMap.insert(QStringLiteral("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
-            stageMap.insert(QStringLiteral("bufferFeedback"), effect.bufferFeedback);
-            stageMap.insert(QStringLiteral("bufferScale"), effect.bufferScale);
-            stageMap.insert(QStringLiteral("bufferWrap"), effect.bufferWrap);
-            stageMap.insert(QStringLiteral("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
-            stageMap.insert(QStringLiteral("bufferFilter"), effect.bufferFilter);
-            stageMap.insert(QStringLiteral("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
-            stageMap.insert(QStringLiteral("useDepthBuffer"), effect.useDepthBuffer);
-        }
-        stages.append(stageMap);
+        // Stage map (source / preamble / translated params / animated /
+        // multipass set) is composed by the shared builder, so this host and
+        // the settings app's decoration preview cannot describe a stage
+        // differently — a preview that composed its own stage would stop
+        // predicting what the daemon draws.
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams));
     }
     if (stages.isEmpty()) {
         clearDecoration();
