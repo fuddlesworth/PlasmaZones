@@ -130,7 +130,7 @@ private:
 // Minimal replica of SurfaceDecoration.qml's capture + stage fold: gradient
 // card -> hideSource snapshot -> stage 0 (border) -> tap -> stage 1 (shadow).
 // Kept in-source so the test is self-contained; the structural contract it
-// mirrors is documented in src/ui/SurfaceDecoration.qml.
+// mirrors is documented in src/shared/SurfaceDecoration.qml.
 constexpr auto kSceneQml = R"(
 import PlasmaZones 1.0
 import QtQuick
