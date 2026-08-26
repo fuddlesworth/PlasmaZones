@@ -54,6 +54,9 @@ ps_add_test(ps_test_manager_lifecycle test_manager_lifecycle.cpp)
 ps_add_test(ps_test_screenmanager_geometry test_screenmanager_geometry.cpp FakeScreenProvider.cpp FakeScreenProvider.h)
 ps_add_test(ps_test_manager_virtualscreens test_manager_virtualscreens.cpp)
 ps_add_test(ps_test_resolver test_resolver.cpp)
+ps_add_test(ps_test_reservationsplit test_reservationsplit.cpp)
+# Header-only helper that lives in the library's private src/ dir.
+target_include_directories(ps_test_reservationsplit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
 ps_add_test(ps_test_dbusscreenadaptor test_dbusscreenadaptor.cpp)
 

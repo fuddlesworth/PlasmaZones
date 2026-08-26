@@ -18,6 +18,7 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -42,6 +43,10 @@ namespace {
 // Conceptually distinct from GEOMETRY_UPDATE_DEBOUNCE_MS in daemon.cpp (which coalesces
 // rapid geometry change events into a single update).
 constexpr int DELAYED_PANEL_REQUERY_MS = 400;
+// Upper bound (ms) on how long processPendingGeometryUpdates holds a pass back for a live
+// drag. Far longer than any real drag, so the deferral is never cut short in practice; it
+// only stops a stranded drag flag freezing zone geometry for the session.
+constexpr int GEOMETRY_DRAG_DEFERRAL_CAP_MS = 30000;
 // Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
 constexpr int REAPPLY_DELAY_MS = 0;
 // Watchdog for the geometry-recalc completion barrier: a screen removed
@@ -1305,6 +1310,42 @@ void Daemon::processPendingGeometryUpdates()
     if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
         return;
     }
+
+    // Hold the whole pass while a drag session is live. Plasma's floating
+    // panels dock themselves the moment a dragged window touches them and
+    // float again when it moves away — stock Plasma behaviour, unrelated to
+    // our overlay, and not ours to suppress. Every toggle changes the panel's
+    // exclusive zone, our sensor reflows, and the work area moves. Running
+    // the recompute on that pulls the zone rects out from under the cursor
+    // mid-drag, and the drop then resolves against a rect that moved after
+    // the user aimed at it.
+    //
+    // Re-arm rather than wire this to drop: the debounce then flushes one
+    // interval after the drag ends, which also lets the panel settle back to
+    // whichever state it lands in.
+    //
+    // BOUNDED, because the polled flag can strand: beginDrag's own note in
+    // drag_protocol.cpp records that a drag which never got an endDrag stays
+    // set until the NEXT beginDrag resets it, and every other clear
+    // (handleWindowClosed, clearForCompositorReconnect, cancelSnap) needs an
+    // external event too. Unbounded, an effect that died without
+    // re-registering would freeze every zone recompute for the session. Past
+    // the cap the pass runs anyway — one recompute during a "drag" longer
+    // than any real gesture is the old behaviour, a permanently stale work
+    // area is worse.
+    if (m_windowDragAdaptor && m_windowDragAdaptor->isDragSessionActive()) {
+        if (!m_geometryDeferralClock.isValid()) {
+            m_geometryDeferralClock.start();
+        }
+        if (m_geometryDeferralClock.elapsed() < GEOMETRY_DRAG_DEFERRAL_CAP_MS) {
+            m_geometryUpdateTimer.start();
+            return;
+        }
+        qCWarning(lcDaemon) << "Geometry update held" << m_geometryDeferralClock.elapsed()
+                            << "ms for a drag session that is still reported active — running it anyway;"
+                            << "the drag state is most likely stale";
+    }
+    m_geometryDeferralClock.invalidate();
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.

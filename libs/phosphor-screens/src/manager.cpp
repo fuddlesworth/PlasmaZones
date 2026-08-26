@@ -7,6 +7,7 @@
 #include "PhosphorScreens/IPanelSource.h"
 #include "PhosphorScreens/IScreenProvider.h"
 #include "PhosphorScreens/QtScreenProvider.h"
+#include "reservationsplit.h"
 #include "screenslogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -331,11 +332,12 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
     //     space, and the scripting API's `panel.geometry` is undefined in
     //     recent versions. This source contributes directional ratios only.
     //
-    // Reconciliation: the sensor tells us the total reserved in each axis;
-    // D-Bus ratios distribute that total across the two edges on that axis.
-    // Truly-floating or hidden-autohide panels self-correct — the sensor
-    // shows zero reservation, the scale factor collapses to zero, and their
-    // D-Bus offsets have no effect.
+    // Reconciliation: the sensor tells us the total reserved on each axis and
+    // D-Bus tells us which edges have panels; splitReservation() attributes
+    // the total to those edges. When only some of an axis' panels actually
+    // reserve (a hidden auto-hide dock opposite a normal panel), the edge
+    // whose claim matches the sensor total takes all of it rather than the
+    // two edges sharing it out — see reservationsplit.h.
 
     IPanelSource::Offsets panel =
         m_cfg.panelSource ? m_cfg.panelSource->currentOffsets(screen.qscreen) : IPanelSource::Offsets{};
@@ -361,9 +363,10 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
         const int dbusHoriz = panel.left + panel.right;
 
         if (dbusVert > 0) {
-            // Split vertReserved in the ratio D-Bus claims for top:bottom.
-            effTop = qRound(panel.top * double(vertReserved) / dbusVert);
-            effBottom = vertReserved - effTop;
+            // Attribute vertReserved to the top/bottom edges D-Bus claims.
+            const auto split = Detail::splitReservation(vertReserved, panel.top, panel.bottom);
+            effTop = split.first;
+            effBottom = split.second;
         } else if (vertReserved > 0) {
             // Sensor shows vertical reservation but D-Bus has no panels on
             // the top/bottom edges (panel source stale, absent, or non-
@@ -376,8 +379,9 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
             effBottom = vertReserved;
         }
         if (dbusHoriz > 0) {
-            effLeft = qRound(panel.left * double(horizReserved) / dbusHoriz);
-            effRight = horizReserved - effLeft;
+            const auto split = Detail::splitReservation(horizReserved, panel.left, panel.right);
+            effLeft = split.first;
+            effRight = split.second;
         } else if (horizReserved > 0) {
             effLeft = 0;
             effRight = horizReserved;
@@ -386,9 +390,9 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
         if (dbusVert > 0 || dbusHoriz > 0) {
             source = QStringLiteral("sensor+D-Bus");
             if (dbusVert > vertReserved || dbusHoriz > horizReserved) {
-                qCDebug(lcPhosphorScreens)
-                    << "D-Bus over-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
-                    << "sensor vert=" << vertReserved << "— scaling down (likely floating/autohide panels)";
+                qCDebug(lcPhosphorScreens) << "D-Bus over-reports reservation on" << screenKey
+                                           << "— D-Bus vert=" << dbusVert << "sensor vert=" << vertReserved
+                                           << "— attributing the sensor total (likely floating/autohide panels)";
             } else if (dbusVert < vertReserved || dbusHoriz < horizReserved) {
                 qCDebug(lcPhosphorScreens)
                     << "D-Bus under-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
