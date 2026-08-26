@@ -250,6 +250,16 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // defence in depth rather than a live path. It is here because the two sites
         // must not disagree about what "the exact window" means, and they did.
         KWin::EffectWindow* const target = resolveDecorationTarget(windowId, w);
+        // releaseDecorationGl carries the padded-band damage, so skipping it
+        // when we never owned the shader slot looks like it could strand a glow
+        // outside the window rect. It cannot. There are exactly two ways an
+        // entry with padding reaches here with shaderApplied false: a live
+        // transition took the slot (renderSurfaceChain clears the flag and
+        // returns), in which case the transition is still painting the window
+        // and drives its own damage, and releaseSurfaceState below deliberately
+        // preserves the composite it is sampling; or the present shader failed
+        // to compile, and THAT path already called releaseDecorationGl itself
+        // before clearing the flag.
         if (priorShaderApplied) {
             releaseDecorationGl(target, priorOuterPadding);
         }
