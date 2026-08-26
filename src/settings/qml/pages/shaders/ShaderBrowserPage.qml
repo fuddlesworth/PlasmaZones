@@ -613,6 +613,8 @@ SettingsFlickable {
             model: root._displayGroups
 
             delegate: SettingsCard {
+                id: groupCard
+
                 required property var modelData
 
                 Layout.fillWidth: true
@@ -667,6 +669,12 @@ SettingsFlickable {
                                 // preview off every off-screen delegate — the
                                 // Flow/Repeater layout instantiates them all.
                                 viewport: root
+                                // A collapsed section clips its body to zero
+                                // height and fades it out without unloading it,
+                                // so the cards inside still map into the
+                                // viewport. _bodyLive is what actually tracks
+                                // whether the body is worth rendering.
+                                previewLive: groupCard._bodyLive
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
                                 typeBadgeFn: function (e) {

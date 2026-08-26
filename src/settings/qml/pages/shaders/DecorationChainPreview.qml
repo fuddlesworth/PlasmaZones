@@ -88,8 +88,11 @@ Item {
         return (availW / availH > _cardAspect) ? Qt.size(availH * _cardAspect, availH) : Qt.size(availW, availW / _cardAspect);
     }
 
-    /// The user's desktop wallpaper, resolved once per pack rather than per
-    /// frame. Empty when it cannot be resolved (no provider, unreadable file).
+    /// The user's desktop wallpaper, resolved once per preview instance
+    /// rather than per frame. Unlike `_backdrop` this is unconditional: it is
+    /// the ground the stand-in card sits on, which every pack needs, not the
+    /// texture only a needsBackdrop pack samples. Empty when it cannot be
+    /// resolved (no provider, unreadable file).
     readonly property string _wallpaper: previewController ? (previewController.wallpaperPath() || "") : ""
 
     /// Whether the browsed pack samples the scene behind the window.

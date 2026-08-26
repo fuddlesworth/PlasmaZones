@@ -26,9 +26,10 @@ import QtQuick
  *
  * ## Why it lives in the shared module
  *
- * Two consumers must show the SAME subject or the browser's static thumbnail
- * stops matching its own live preview: the settings decoration preview pane,
- * and the offline thumbnail renderer that bakes `preview.png` per pack.
+ * Lives in the shared module so every host that previews a decoration shows
+ * the SAME subject. Today that is the settings decoration preview pane, in
+ * both the browser card and the detail dialog; a headless thumbnail renderer
+ * would be the other, and would have to reuse this rather than draw its own.
  *
  * ## Content
  *

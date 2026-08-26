@@ -8,6 +8,7 @@
 #include "core/types/cavaoptions.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
@@ -26,6 +27,27 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
     , m_registry(registry)
     , m_settings(settings)
 {
+    if (m_settings) {
+        // Follow the setting for as long as a host wants capture. Without this
+        // a user who turns the visualizer off mid-preview leaves the external
+        // CAVA process running until the dialog closes, because the only stop
+        // calls are the dialog's own close and focus-loss handlers.
+        //
+        // The resume side is gated on m_captureRequested rather than on the
+        // setting alone: this controller outlives any one dialog, so reacting
+        // to the setting turning on while nothing is previewing would spawn
+        // CAVA for a preview nobody is looking at.
+        connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
+            if (!m_captureRequested) {
+                return;
+            }
+            if (audioVisualizerEnabled()) {
+                startAudioCapture();
+            } else {
+                stopCapture();
+            }
+        });
+    }
 }
 
 DecorationPreviewController::~DecorationPreviewController()
@@ -73,6 +95,13 @@ double DecorationPreviewController::previewOuterPadding(const QString& packId, c
         return 0.0;
     }
     const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+    // Same validity gate previewChain applies, so the two agree on what a
+    // usable pack is. Without it a registered pack with no resolvable fragment
+    // shader yields an empty chain but a non-zero margin, and the stand-in
+    // card shrinks to reserve room for an effect that never draws.
+    if (!effect.isValid()) {
+        return 0.0;
+    }
     // Same clamp the daemon and compositor apply — a typo'd or hostile pack
     // must not be able to demand an absurd preview canvas either.
     return qBound(0.0, PhosphorSurfaceShaders::paddingRequest(effect, friendlyParams),
@@ -92,9 +121,10 @@ QVariantMap DecorationPreviewController::packInfo(const QString& packId) const
     info.insert(QStringLiteral("id"), effect.id);
     info.insert(QStringLiteral("name"), effect.name);
     // Surfaced by the pane: an audio pack drives CAVA capture, and a
-    // needsBackdrop pack gets a note that the preview cannot show its backdrop
-    // (there is no scene behind a settings-app card to sample, the same limit
-    // the daemon overlay path has).
+    // needsBackdrop pack gets a note explaining that the backdrop it samples
+    // is the desktop wallpaper standing in for the real windows (there is no
+    // scene behind a settings-app card, the same limit the daemon overlay path
+    // works around the same way).
     info.insert(QStringLiteral("audio"), effect.audio);
     info.insert(QStringLiteral("needsBackdrop"), effect.needsBackdrop);
 
@@ -143,6 +173,10 @@ QVariant DecorationPreviewController::audioSpectrumVariant() const
 
 void DecorationPreviewController::startAudioCapture()
 {
+    // A host asking for capture is remembered even when the request cannot be
+    // honoured right now (visualizer off, CAVA missing), so the setting
+    // becoming true later resumes for a preview that is still open.
+    m_captureRequested = true;
     if (m_audio && m_audio->isRunning()) {
         return;
     }
@@ -168,6 +202,14 @@ void DecorationPreviewController::startAudioCapture()
 }
 
 void DecorationPreviewController::stopAudioCapture()
+{
+    // The host is done previewing, so drop the standing request too: a later
+    // settings flip must not resurrect capture for a closed dialog.
+    m_captureRequested = false;
+    stopCapture();
+}
+
+void DecorationPreviewController::stopCapture()
 {
     if (m_audio && m_audio->isRunning()) {
         m_audio->stop();

@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <PhosphorAudio/IAudioSpectrumProvider.h>
-
 #include <QImage>
 #include <QObject>
 #include <QVariantList>
@@ -91,15 +89,24 @@ public:
     Q_INVOKABLE QString wallpaperPath() const;
 
     /// The same wallpaper decoded, for feeding a needsBackdrop pack's backdrop
-    /// sampler (the glass / blur family). Null image when it cannot be
-    /// resolved, which leaves those packs on their fallback appearance.
+    /// sampler (the glass / blur family). This is what lets the preview show
+    /// those packs refracting something real rather than their flat fallback:
+    /// there is no scene behind a settings-app card, so the wallpaper stands
+    /// in for one, the same way the daemon overlay path does it. Null image
+    /// when it cannot be resolved, which leaves those packs on their fallback
+    /// appearance.
     /// Separate from wallpaperPath() because the QML background wants a URL to
     /// display and the shader wants pixels to sample.
     Q_INVOKABLE QImage wallpaperImage() const;
 
-    /// Whether the user's audio visualizer setting is on. The pane starts
-    /// capture only for an audio pack AND an enabled visualizer, so a plain
-    /// border preview never spins up CAVA.
+    /// Whether the user's audio visualizer setting is on.
+    ///
+    /// This is the only gate on capture, alongside CAVA being installed:
+    /// the detail dialog starts capture for whatever pack it is showing, so
+    /// an open dialog spins CAVA up even for a pack that reads no spectrum.
+    /// The pane uses this to explain a dead visualizer to the user rather
+    /// than to decide whether to capture. The zone preview controller
+    /// behaves the same way.
     Q_INVOKABLE bool audioVisualizerEnabled() const;
 
     Q_INVOKABLE void startAudioCapture();
@@ -111,9 +118,21 @@ Q_SIGNALS:
     void audioSpectrumChanged();
 
 private:
+    /// Stop the provider without clearing the standing capture request.
+    ///
+    /// Split from stopAudioCapture() so the visualizer-setting handler can
+    /// suspend capture while a preview is still open, and resume it if the
+    /// user turns the setting back on. stopAudioCapture() is the host-facing
+    /// call and additionally retires the request.
+    void stopCapture();
+
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
     std::unique_ptr<PhosphorAudio::CavaSpectrumProvider> m_audio;
+    /// Whether a host currently wants a live spectrum. Distinct from "the
+    /// provider is running": capture can be legitimately suspended while the
+    /// request stands (visualizer off, CAVA absent).
+    bool m_captureRequested = false;
     QVector<float> m_spectrum;
 };
 

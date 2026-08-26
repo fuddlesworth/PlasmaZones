@@ -135,7 +135,10 @@ Item {
     /// Sanitised device-independent margin. The capture's sourceRect and every
     /// geometry binding below read THIS, so a garbage negative value can't
     /// mirror the capture.
-    readonly property real outerPad: Math.max(0, decorationOuterPadding)
+    // isFinite as well as the floor: Math.max(0, NaN) is NaN, and this feeds
+    // the capture rect, the stage offsets and surfaceFrameTopLeft, so one
+    // non-finite value would take the entire placement set with it.
+    readonly property real outerPad: isFinite(decorationOuterPadding) ? Math.max(0, decorationOuterPadding) : 0
 
     /// Logical→device scale for the decorated surface. The OSD shell tracks the
     /// active output's devicePixelRatio; Screen.devicePixelRatio is the live

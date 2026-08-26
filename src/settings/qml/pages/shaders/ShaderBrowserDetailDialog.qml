@@ -52,7 +52,7 @@ Kirigami.Dialog {
         if (!id || id.length === 0 || !bridge)
             return [];
 
-        return bridge.shaderEffectUsages(id);
+        return bridge.shaderEffectUsages(id) || [];
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
 
@@ -316,8 +316,15 @@ Kirigami.Dialog {
 
                                 anchors.centerIn: parent
                                 text: root.effect ? (root.effect.category || "") : ""
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                                font.weight: Font.Medium
+                                // Via FontUtils: a theme small font carries
+                                // either a pixelSize or a pointSize, and the
+                                // other reads -1, so assigning pixelSize
+                                // directly sizes the chip wrong on a
+                                // pointSize theme and desyncs the pill that
+                                // measures this label.
+                                font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                    "weight": Font.Medium
+                                })
                                 color: Kirigami.Theme.highlightedTextColor
                             }
                         }
@@ -599,11 +606,16 @@ Kirigami.Dialog {
                 // Live decoration preview: the stand-in card run through the
                 // real SurfaceDecoration chain host. In a Loader so the whole
                 // capture / shader chain is only instantiated for a decoration
-                // pack, and is torn down with the dialog rather than lingering.
+                // pack, and is torn down when the dialog closes rather than
+                // lingering. The `opened` term is what makes that true: this
+                // dialog is a single reused instance, and _decorationPreview
+                // depends only on the controller and the effect, neither of
+                // which is cleared on close, so without it the pane and its
+                // whole chain would stay instantiated for the app's life.
                 Loader {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
-                    active: root._decorationPreview
+                    active: root.opened && root._decorationPreview
                     visible: active
 
                     sourceComponent: DecorationPreviewPane {
@@ -824,6 +836,11 @@ Kirigami.Dialog {
     Connections {
         target: root.previewController
         enabled: root.previewController !== null
+        // The decoration preview controller declares neither of these signals
+        // (its only signal is audioSpectrumChanged), and `enabled` does not
+        // suppress signal RESOLUTION — without this the decoration route logs
+        // a "not a signal" warning every time the dialog opens.
+        ignoreUnknownSignals: true
         function onShaderPresetSaveFailed(error) {
             root._presetError = error;
         }

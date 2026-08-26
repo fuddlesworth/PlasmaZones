@@ -330,10 +330,16 @@ ColumnLayout {
         }
     }
 
-    /// Every parameter's schema default, keyed by id. Params with no
-    /// declared default are omitted (a reset can't invent one). Hosts feed
-    /// it back through their batch-persist path in the `resetRequested`
-    /// handler, mirroring how `computeRandomized` feeds the randomize path.
+    /// Every parameter's schema default, keyed by id, with LOCKED parameters
+    /// held at their current value. Params with no declared default are
+    /// omitted (a reset can't invent one). Hosts feed it back through their
+    /// batch-persist path in the `resetRequested` handler, mirroring how
+    /// `computeRandomized` feeds the randomize path.
+    ///
+    /// Reset honours locks for the same reason randomize does: a lock is the
+    /// user saying "leave this one alone", and the toolbar presents the two
+    /// actions side by side, so having one respect the lock and the other
+    /// silently overwrite it loses work the user explicitly protected.
     function computeDefaults() {
         var next = {};
         if (!root.parameters)
@@ -341,7 +347,21 @@ ColumnLayout {
 
         for (var i = 0; i < root.parameters.length; i++) {
             var param = root.parameters[i];
-            if (param && param.id !== undefined && param.default !== undefined)
+            if (!param || param.id === undefined)
+                continue;
+
+            if (root.lockedParams && root.lockedParams[param.id] === true) {
+                // Same preserved/undefined guard computeRandomized uses: a
+                // schema with no `default` and a currentValues map missing
+                // this id would otherwise write `undefined` into the result
+                // and a downstream persist would store a malformed entry.
+                var preserved = (root.currentValues && root.currentValues[param.id] !== undefined) ? root.currentValues[param.id] : param.default;
+                if (preserved !== undefined)
+                    next[param.id] = preserved;
+
+                continue;
+            }
+            if (param.default !== undefined)
                 next[param.id] = param.default;
         }
         return next;

@@ -81,19 +81,40 @@ ItemDelegate {
     /// animation and overlay browsers are untouched.
     readonly property bool _liveDecorationPreview: !!(root.bridge && root.bridge.previewController && root.bridge.previewKind === "decoration" && root.effect && !(root.effect.previewPath && root.effect.previewPath.length > 0))
 
+    /// Set false by a host whose section is collapsed. A collapsed
+    /// SettingsCard clips its body to zero height and fades it out, but it
+    /// never sets `visible: false` and never unloads the content, so the cards
+    /// inside keep their own y and still map into the viewport. Scrolling
+    /// alone therefore cannot tell that they are hidden, and every decoration
+    /// pack in a collapsed section would keep a live capture chain and one
+    /// shader item per stage, producing nothing at opacity 0.
+    property bool previewLive: true
+
     /// Whether this card intersects the viewport, with one card-height of slack
     /// either side so a preview is warm by the time it is scrolled into view.
     ///
-    /// mapToItem registers no QML dependency, so contentY and height are read
-    /// FIRST: touching them is what makes this re-evaluate on scroll. Same
-    /// idiom SurfaceDecoration.qml uses for its anchor mapping.
+    /// mapToItem registers no QML dependency, so every input is read FIRST:
+    /// touching them is what makes this re-evaluate. Same idiom
+    /// SurfaceDecoration.qml uses for its anchor mapping.
     readonly property bool _inViewport: {
+        if (!root.previewLive)
+            return false;
         if (!root.viewport)
             return true;
         const contentY = root.viewport.contentY;
         const viewH = root.viewport.height;
         if (viewH <= 0)
             return false;
+        // Read every input FIRST: mapToItem registers no QML dependency, so
+        // this only re-evaluates when something it actually touched changes.
+        // The card's own y and the flow's width matter as much as the scroll
+        // position — a section expanding, the Flow re-wrapping on a resize, or
+        // a filter change all move a card without moving contentY. Same idiom
+        // SurfaceDecoration.qml uses for its anchor mapping.
+        const selfY = root.y;
+        const selfX = root.x;
+        void selfY;
+        void selfX;
         const pos = root.mapToItem(root.viewport.contentItem, 0, 0);
         const slack = root.height;
         return (pos.y + root.height) > (contentY - slack) && pos.y < (contentY + viewH + slack);
@@ -184,8 +205,11 @@ ItemDelegate {
                     // Twin site: ShaderBrowserDetailDialog.qml preset dialogs.
                     source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
                     fillMode: Image.PreserveAspectCrop
-                    sourceSize.width: width * 2
-                    sourceSize.height: height * 2
+                    // Guarded like DecorationChainPreview's twin: the Flow
+                    // hands a card zero width during first layout, and the
+                    // 1px inset would make this negative.
+                    sourceSize.width: Math.max(1, Math.round(width * 2))
+                    sourceSize.height: Math.max(1, Math.round(height * 2))
                     asynchronous: true
                     cache: true
                     visible: status === Image.Ready
@@ -292,7 +316,7 @@ ItemDelegate {
                         if (!id || id.length === 0 || !root.bridge)
                             return [];
 
-                        return root.bridge.shaderEffectUsages(id);
+                        return root.bridge.shaderEffectUsages(id) || [];
                     }
 
                     visible: _usages.length > 0

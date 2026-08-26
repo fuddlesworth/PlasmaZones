@@ -120,7 +120,7 @@ Item {
             Layout.fillWidth: true
             visible: root._needsBackdrop
             type: Kirigami.MessageType.Information
-            text: i18nc("@info decoration preview limitation", "This pack samples whatever sits behind the window. The preview shows your wallpaper, not the windows that will actually be behind it.")
+            text: i18nc("@info decoration preview limitation", "This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.")
         }
 
         Kirigami.InlineMessage {

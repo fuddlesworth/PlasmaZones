@@ -252,7 +252,13 @@ Kirigami.Dialog {
         if (!editorController)
             return;
 
-        pendingParams = extractDefaults(shaderParams);
+        // Delegate so the lock handling lives in one place, beside
+        // computeRandomized's. `extractDefaults` stays a pure schema-default
+        // extractor because its other caller, initializePendingParamsForShader,
+        // runs when the user picks a DIFFERENT shader — preserving "current"
+        // values there would carry the previous shader's settings across on
+        // any id that happens to collide.
+        pendingParams = paramEditor.computeDefaults();
     }
 
     function randomizeParameters() {
@@ -613,6 +619,8 @@ Kirigami.Dialog {
                             return info && info.presets && info.presets.length > 0;
                         }
                         ToolTip.text: i18nc("@info:tooltip", "Apply a built-in preset")
+                        ToolTip.visible: hovered
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         Accessible.name: i18nc("@action:button", "Presets")
                         Accessible.description: ToolTip.text
                         onClicked: metadataPresetMenu.open()
@@ -720,7 +728,7 @@ Kirigami.Dialog {
                 ]
             }
 
-            // ── Footer (Load/Save preset, Defaults, Apply) ────────────
+            // ── Footer (Load/Save preset, Apply) ──────────────────────
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
@@ -729,6 +737,8 @@ Kirigami.Dialog {
                     text: i18nc("@action:button", "Load Preset")
                     icon.name: "document-open"
                     ToolTip.text: i18nc("@info:tooltip", "Load shader settings from a preset file")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     Accessible.name: text
                     Accessible.description: ToolTip.text
                     onClicked: {
@@ -742,6 +752,8 @@ Kirigami.Dialog {
                     icon.name: "document-save-as"
                     enabled: root.hasShaderEffect
                     ToolTip.text: i18nc("@info:tooltip", "Save current shader settings as a preset file")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     Accessible.name: text
                     Accessible.description: ToolTip.text
                     onClicked: {
