@@ -55,6 +55,20 @@ Item {
     property bool focused: false
     /// Master gate. False composes no chain and instantiates no shader item.
     property bool active: false
+    /// Caption on the stand-in card. Exposed so the host supplies it already
+    /// translated — this file stays free of user-facing copy.
+    property string cardTitle: ""
+
+    /// The ground a previewed decoration is composited over, and the fallback
+    /// wherever the wallpaper cannot be resolved or does not cover.
+    ///
+    /// Deliberately a flat neutral rather than a theme colour: the pack
+    /// composites over this, so a tinted ground would misrepresent the colours
+    /// it produces. Mid-grey rather than the zone pane's black so a dark border
+    /// and a bright glow are both legible. Exposed as a constant so the hosts
+    /// that frame this preview paint the same ground instead of keeping their
+    /// own copy of the literal.
+    readonly property color groundColor: "#3a3a3a"
     /// Live CAVA spectrum for audio-reactive packs; the host supplies it only
     /// where audio is actually running.
     property var audioSpectrum: []
@@ -93,7 +107,7 @@ Item {
     /// the ground the stand-in card sits on, which every pack needs, not the
     /// texture only a needsBackdrop pack samples. Empty when it cannot be
     /// resolved (no provider, unreadable file).
-    readonly property string _wallpaper: previewController ? (previewController.wallpaperPath() || "") : ""
+    readonly property string _wallpaper: (active && previewController) ? (previewController.wallpaperPath() || "") : ""
 
     /// Whether the browsed pack samples the scene behind the window.
     readonly property bool _needsBackdrop: (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})).needsBackdrop === true : false
@@ -110,10 +124,7 @@ Item {
     // what shows through.
     Rectangle {
         anchors.fill: parent
-        // Fallback ground, and what shows through wherever the wallpaper does
-        // not cover. Mid-grey rather than a theme colour: the pack composites
-        // over this, and a tinted ground would misrepresent its colours.
-        color: "#3a3a3a"
+        color: root.groundColor
 
         Image {
             anchors.fill: parent
@@ -143,10 +154,6 @@ Item {
         height: root._cardSize.height
         title: root.cardTitle
     }
-
-    /// Caption on the stand-in card. Exposed so the host supplies it already
-    /// translated — this file stays free of user-facing copy.
-    property string cardTitle: ""
 
     PZCommon.SurfaceDecoration {
         anchors.fill: parent

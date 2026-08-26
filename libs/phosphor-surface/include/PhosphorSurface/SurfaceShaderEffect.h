@@ -251,8 +251,12 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     static constexpr int kMaxBufferPasses = 4;
 
     /// Declared shader inputs beyond the standard surface set
-    /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). Each entry maps
-    /// `parameterId → { type, default, min, max, ... }`. Field names
+    /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). An ORDERED list of
+    /// `{ id, type, default, min, max, ... }` entries, not a map: declaration
+    /// order is what assigns the customParams / customColors slots, so the
+    /// sequence is part of the contract. A duplicate id is dropped at parse
+    /// time, because two entries sharing one would redefine the same p_ macro
+    /// and fail the shader compile. Field names
     /// mirror the regular shader pack format
     /// (`AnimationShaderEffect::ParameterInfo` /
     /// `PhosphorRendering::ShaderRegistry::ParameterInfo`) so surface

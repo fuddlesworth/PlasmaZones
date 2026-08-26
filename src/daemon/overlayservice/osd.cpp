@@ -664,6 +664,11 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a
     // change from audio to non-audio may let it wind down.
+    // Every OSD slot is a QQuickItem (the show paths hand one down), so a
+    // failed cast here means the caller passed something this function cannot
+    // decorate at all. Say so rather than silently leaving the slot carrying
+    // whatever audio flag a previous show set, which syncCavaState would then
+    // act on.
     if (auto* item = qobject_cast<QQuickItem*>(slot)) {
         item->setProperty(OverlayQmlPropertyNames::WantsAudioDecoration.data(), chainWantsAudio);
         // Decoration is often applied while the slot is still hidden (popups
@@ -671,6 +676,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // that starts CAVA once an audio surface becomes visible and stops it on
         // hide. UniqueConnection keeps re-decoration from stacking duplicates.
         connect(item, &QQuickItem::visibleChanged, this, &OverlayService::syncCavaState, Qt::UniqueConnection);
+    } else {
+        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath
+                             << "): slot is not a QQuickItem — its audio-reactive flag cannot be updated";
     }
     syncCavaState();
 }

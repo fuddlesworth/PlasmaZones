@@ -65,11 +65,10 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Kirigami.Units.smallSpacing
-            // Deliberately a flat neutral, not a theme colour: the pack
-            // composites over this, and a tinted ground would misrepresent the
-            // colours it produces. Mid-grey rather than the zone pane's black
-            // so that a dark border and a bright glow are both legible.
-            color: "#3a3a3a"
+            // The preview's own ground, so this frame and the card inside it
+            // can never disagree about what a pack is composited over. See
+            // DecorationChainPreview.groundColor for why it is a flat neutral.
+            color: chainPreview.groundColor
             border.width: 1
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             clip: true
@@ -80,6 +79,8 @@ Item {
             // size, shadow spread) grow the transparent room as it is dragged
             // rather than only on reopen.
             DecorationChainPreview {
+                id: chainPreview
+
                 anchors.fill: parent
                 anchors.margins: 1
                 previewController: root.previewController
@@ -125,7 +126,10 @@ Item {
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
-            visible: root._isAudioPack && root.previewController && !root.previewController.audioVisualizerEnabled()
+            // The PROPERTY, not the invokable of the same name: read as a call
+            // this binding would have nothing to react to, and the notice would
+            // stay as it was until the dialog was reopened.
+            visible: root._isAudioPack && root.previewController !== null && !root.previewController.audioVisualizerEnabled
             type: Kirigami.MessageType.Information
             text: i18nc("@info decoration preview limitation", "This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.")
         }

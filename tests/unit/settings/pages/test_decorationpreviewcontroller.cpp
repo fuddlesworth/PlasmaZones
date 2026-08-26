@@ -259,6 +259,38 @@ private Q_SLOTS:
         gated.stopAudioCapture();
     }
 
+    /// The wallpaper stand-in accessors must be total.
+    ///
+    /// These feed the backdrop a needsBackdrop pack samples in the preview, and
+    /// they are the one pair with no fixture behind them: the answer depends on
+    /// the user's desktop, which under the test sandbox is nothing at all. What
+    /// matters is that the no-wallpaper case is a clean empty/null rather than a
+    /// crash or a garbage path, because that is what leaves such a pack on its
+    /// documented fallback appearance instead of sampling nonsense.
+    void wallpaper_accessors_are_total_without_a_desktop()
+    {
+        DecorationPreviewController c(&m_registry, nullptr);
+
+        const QString path = c.wallpaperPath();
+        // Either a real resolved file or nothing; never a path that does not
+        // exist, which the QML background would bind to a broken Image source.
+        if (!path.isEmpty()) {
+            QVERIFY2(QFileInfo::exists(path), qPrintable(QStringLiteral("wallpaperPath returned ") + path));
+        }
+
+        const QImage img = c.wallpaperImage();
+        // A null image is the documented no-wallpaper answer. A non-null one
+        // must have real dimensions, since it is uploaded as a texture.
+        if (!img.isNull()) {
+            QVERIFY(img.width() > 0);
+            QVERIFY(img.height() > 0);
+        }
+        // Repeatable: the decode is cached behind these, and every browser card
+        // calls them, so a second call must agree with the first.
+        QCOMPARE(c.wallpaperPath(), path);
+        QCOMPARE(c.wallpaperImage().isNull(), img.isNull());
+    }
+
     /// The multipass and backdrop flags must carry the pack's real VALUES.
     ///
     /// Asserting only that the keys are present passes for a stage that always

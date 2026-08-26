@@ -117,7 +117,7 @@ public:
 
     /// Installed `SurfaceShaderEffect`s flattened to a QML-friendly list.
     /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / previewPath / parameters (QVariantList of
+    /// isUserEffect / previewPath / parameters / providesBorder / providesOpacityTint (QVariantList of
     /// ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 

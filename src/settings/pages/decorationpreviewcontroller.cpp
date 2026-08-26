@@ -38,6 +38,9 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
         // to the setting turning on while nothing is previewing would spawn
         // CAVA for a preview nobody is looking at.
         connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
+            // Republish first: the pane's "the visualizer is off" notice binds
+            // to this, and it must update whether or not a preview is open.
+            Q_EMIT audioVisualizerEnabledChanged();
             if (!m_captureRequested) {
                 return;
             }
@@ -85,6 +88,15 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
                                                     {highlight, inactive, pal.color(QPalette::Active, QPalette::Window),
                                                      pal.color(QPalette::Active, QPalette::WindowText)});
 
+    // No cornerRadius injection here, deliberately, and this is the one place
+    // the preview departs from OverlayService::applyDecoration on purpose. The
+    // daemon injects its popup slot's cardCornerRadius because that card draws
+    // a rounded body and every pack must round to IT. The preview's stand-in
+    // card wraps PopupFrame with a deliberately square-cornered body so the
+    // pack owns the corner radius (see DecorationPreviewCard), so the pack's
+    // own declared radius is the correct one to preview with. Injecting a card
+    // radius here would show the user a rounding their real windows will not
+    // get.
     chain.append(PhosphorSurfaceShaders::composeStageMap(effect, resolved));
     return chain;
 }

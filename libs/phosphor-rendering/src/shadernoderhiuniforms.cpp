@@ -275,7 +275,8 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // broader-subsumes-narrower behaviour).
                 const PhosphorShaders::UboDirtyFlags flags{m_timeDirty, m_timeHiDirty, m_sceneDataDirty,
                                                            m_appFieldsDirty};
-                for (const auto& r : m_uboProfile->dirtyRegions(flags)) {
+                const auto dirtyRegions = m_uboProfile->dirtyRegions(flags);
+                for (const auto& r : dirtyRegions) {
                     batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
                                                static_cast<const char*>(uboData) + r.offset);
                 }
@@ -301,7 +302,16 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // uploaded above), otherwise an extension-only dirty
                 // in a future revision would land here and silently
                 // miss the upload.
-                if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
+                //
+                // Gated on the regions the profile actually RETURNED rather
+                // than on the flags, which is strictly wider and closes a real
+                // gap: a profile can answer a set flag with no regions at all.
+                // SurfaceUniformProfile does exactly that for an appFields-only
+                // dirty, and gets away with it today only because it inherits
+                // no-op app-field setters — so nothing was lost. A surface
+                // profile that later grows an app field would otherwise upload
+                // nothing here and still clear m_uniformsDirty below.
+                if (dirtyRegions.empty()) {
                     for (const auto& r : m_uboProfile->fullUploadRegions()) {
                         batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
                                                    static_cast<const char*>(uboData) + r.offset);

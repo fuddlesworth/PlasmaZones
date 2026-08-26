@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Bound: the stage Repeater's delegate closes over `root` and `stageRepeater`,
+// and every reference is already explicitly qualified, so this only pins the
+// scoping the file already relies on.
+pragma ComponentBehavior: Bound
+
+// PlasmaZones 1.0 is registered IMPERATIVELY by each host process
+// (qmlRegisterType<SurfaceShaderItem>), not by a QML module, so a host that
+// instantiates this type must do that registration first or every stage
+// fails with "SurfaceShaderItem is not a type". The daemon and the settings
+// app both do; the editor registers only ZoneShaderItem and the KCM neither,
+// so either would need it before using this. See src/settings/main.cpp.
 import PlasmaZones 1.0
 import QtQuick
 import QtQuick.Window

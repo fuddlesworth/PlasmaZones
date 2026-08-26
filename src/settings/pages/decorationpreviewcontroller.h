@@ -53,6 +53,14 @@ class DecorationPreviewController : public QObject
     /// while capture is stopped or the audio visualizer is disabled.
     Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant NOTIFY audioSpectrumChanged)
 
+    /// Whether the user's audio visualizer setting is on.
+    ///
+    /// A PROPERTY rather than only an invokable so the pane's "the visualizer
+    /// is off" notice appears and disappears while the dialog is open. Read as
+    /// a plain function call it would have no change signal to bind to, and the
+    /// notice would go stale until the dialog was reopened.
+    Q_PROPERTY(bool audioVisualizerEnabled READ audioVisualizerEnabled NOTIFY audioVisualizerEnabledChanged)
+
 public:
     explicit DecorationPreviewController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
                                          ISettings* settings = nullptr, QObject* parent = nullptr);
@@ -116,6 +124,7 @@ public:
 
 Q_SIGNALS:
     void audioSpectrumChanged();
+    void audioVisualizerEnabledChanged();
 
 private:
     /// Stop the provider without clearing the standing capture request.
