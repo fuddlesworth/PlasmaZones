@@ -625,9 +625,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                                              // to prevent.
                                              const QRectF padded = paddedBandRect(ew, it->outerPadding);
                                              if (it->lastPaddedGeo.isValid()) {
-                                                 KWin::effects->addRepaint(KWin::RectF(it->lastPaddedGeo));
+                                                 damageBandRect(ew, it->lastPaddedGeo);
                                              }
-                                             KWin::effects->addRepaint(KWin::RectF(padded));
+                                             damageBandRect(ew, padded);
                                              it->lastPaddedGeo = padded;
                                          });
     }

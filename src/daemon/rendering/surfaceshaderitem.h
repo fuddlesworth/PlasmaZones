@@ -42,13 +42,16 @@ namespace PlasmaZones {
  * The surface-state inputs below (scale / focus / geometry) map to the
  * surface-only fields of PhosphorShaders::UboFrameState that
  * SurfaceUniformProfile::fill() reads. They are the binding surface a QML
- * surface host will drive; until that host is wired (Stage d) they hold the
- * UboFrameState defaults (scale 1.0, unfocused, zero geometry), which the
- * profile treats as a safe identity.
+ * surface host will drive. `src/shared/SurfaceDecoration.qml` is that host and
+ * drives all of them per stage; the UboFrameState defaults (scale 1.0,
+ * unfocused, zero geometry) are the safe identity a host that binds nothing
+ * gets.
  *
- * Registered manually via qmlRegisterType in daemon/main.cpp under the
- * "PlasmaZones" module URI (same as ZoneShaderItem) — QML_ELEMENT here would be
- * inert (no qt_add_qml_module target exists) and misleading.
+ * Registered manually via qmlRegisterType under the "PlasmaZones" module URI
+ * (same as ZoneShaderItem), in BOTH daemon/main.cpp and settings/main.cpp, so
+ * the shared SurfaceDecoration.qml host resolves in either process —
+ * QML_ELEMENT here would be inert (no qt_add_qml_module target exists) and
+ * misleading.
  */
 class PLASMAZONES_RENDERING_EXPORT SurfaceShaderItem : public PhosphorRendering::ShaderEffect
 {

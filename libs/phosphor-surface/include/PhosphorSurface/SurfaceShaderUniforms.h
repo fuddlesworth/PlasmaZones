@@ -14,8 +14,9 @@ namespace PhosphorSurfaceShaders {
 /// uploads this struct byte-for-byte to binding 0; the compositor takes the
 /// classic default-block branch instead and never touches this layout.
 ///
-/// This is a DIFFERENT, leaner layout than PhosphorShaders::BaseUniforms
-/// (overlay/animation, 672 bytes): surface decoration needs only geometry +
+/// This is a DIFFERENT layout from PhosphorShaders::BaseUniforms
+/// (overlay/animation), not a smaller one — both are 672 bytes, and the
+/// members do not line up. Surface decoration needs only geometry +
 /// focus + time + the pack parameter slots, and it binds its samplers
 /// differently (uTexture0 at binding 7, iChannel0-3 at bindings 2-5 — none of
 /// which are UBO members; only iChannelResolution sizes live here).

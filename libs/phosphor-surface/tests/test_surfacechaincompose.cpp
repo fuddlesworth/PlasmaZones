@@ -249,6 +249,40 @@ private Q_SLOTS:
         // A numeric string is a legitimate override and still wins.
         QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
     }
+
+    /// A non-finite padding must not escape into a caller's clamp.
+    ///
+    /// NaN and infinity convert cleanly, so the type check above lets them
+    /// through; only the explicit isfinite() test stops them. This matters
+    /// past the aesthetics: the compositor bounds the result and then narrows
+    /// it to an int for the capture canvas, and narrowing a NaN or an
+    /// infinity to an integer is undefined behaviour. A qBound() around the
+    /// value does not save it either, since every comparison against NaN is
+    /// false.
+    void paddingRequest_rejects_a_non_finite_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qQNaN()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qInf()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), -qInf()}}), 16.0);
+    }
+
+    /// The same guard on the DECLARED side, which has its own conversion.
+    ///
+    /// A pack whose own default is non-finite has nothing to fall back to, so
+    /// the request has to come out as no padding at all rather than as a
+    /// value no caller can clamp.
+    void paddingRequest_rejects_a_non_finite_declared_default()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), qQNaN()));
+
+        QCOMPARE(paddingRequest(e, {}), 0.0);
+    }
 };
 
 QTEST_MAIN(TestSurfaceChainCompose)

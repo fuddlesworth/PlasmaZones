@@ -77,6 +77,12 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // never be retried, yet would still pass appendDepthBinding's
             // null check and reach the SRB uncreated.
             m_depthTexture.reset();
+            // The old depth texture was already destroyed by the reset() above,
+            // and the SRBs built against it are still installed holding raw
+            // pointers to it. prepare() bails on this false, but render() only
+            // gates on "is there a pipeline and an srb?" — both non-null here —
+            // so without this the next frame draws against freed GPU objects.
+            resetAllBindingsAndPipelines();
             return false;
         }
         if (!m_depthSampler) {
@@ -89,6 +95,10 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // the TEXTURE's state, so a latched failed sampler would never
                 // be re-created yet still pass appendDepthBinding's null check.
                 m_depthSampler.reset();
+                // The depth TEXTURE was already replaced above, so the SRBs
+                // still installed reference the one it displaced. Same
+                // freed-object draw as the texture failure path.
+                resetAllBindingsAndPipelines();
                 return false;
             }
         }
@@ -133,6 +143,16 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // against an uncreated texture and render target.
         if (!tex->create()) {
             tex.reset();
+            // The caller's old texture is already gone (the reset above
+            // replaced it before create() was attempted), and any SRB or
+            // pipeline built against it is still installed holding a raw
+            // pointer. Every caller propagates this false up through
+            // ensureBufferTarget, where prepare() bails — but render() gates
+            // only on a non-null pipeline and srb, so the frame would draw
+            // against freed GPU objects. Invalidating here makes that gate
+            // catch it. Matters most in the multi-buffer loop below, where a
+            // failure at pass i>0 leaves passes 0..i-1 already swapped.
+            resetAllBindingsAndPipelines();
             return false;
         }
         QRhiTextureRenderTargetDescription desc;
@@ -148,6 +168,9 @@ bool ShaderNodeRhi::ensureBufferTarget()
             tex.reset();
             rt.reset();
             rpd.reset();
+            // Same as the texture failure above: the old texture and render
+            // target are gone, the installed bindings still point at them.
+            resetAllBindingsAndPipelines();
             return false;
         }
         return true;

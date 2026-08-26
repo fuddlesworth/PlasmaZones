@@ -541,10 +541,10 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 if (changed && KWin::effects) {
                     if (!band.isEmpty()) {
                         drawRegion |= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(band));
-                        KWin::effects->addRepaint(KWin::RectF(band));
+                        damageBandRect(w, band);
                     }
                     if (!bit->lastForeignBand.isEmpty()) {
-                        KWin::effects->addRepaint(KWin::RectF(bit->lastForeignBand));
+                        damageBandRect(w, bit->lastForeignBand);
                     }
                     damagePaddedBand(w, bit->outerPadding);
                 }

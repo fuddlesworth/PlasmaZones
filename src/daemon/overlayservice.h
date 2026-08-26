@@ -972,12 +972,17 @@ private:
     /// nulls this borrow before the registry is reset.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
 
-    /// Decoration pack ids already reported as missing from the registry.
+    /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
     ///
-    /// A decoration profile naming an uninstalled pack is a standing
-    /// condition, and the chain resolve runs on every OSD show, so the
-    /// warning is keyed here to fire once per id rather than once per show.
-    QSet<QString> m_warnedMissingDecorationPacks;
+    /// A decoration profile naming an uninstalled or unloadable pack is a
+    /// standing condition, and the chain resolve runs on every OSD show, so
+    /// the warning is keyed here to fire once rather than once per show.
+    /// The reason is part of the key because a pack can be refused for
+    /// different reasons over its lifetime (uninstalled, then reinstalled
+    /// broken), and a bare id would let the first refusal silence the second.
+    /// Cleared whenever the registry is replaced or its contents change, so a
+    /// genuinely new breakage after a reinstall is reported again.
+    QSet<QString> m_warnedDecorationPacks;
 
     /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
     /// every Surface this service creates. Forward-declared to keep the

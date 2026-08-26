@@ -103,8 +103,8 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
     // sentinel; the fixed state uses an in-surface position).
     u.iMouse[0] = s.mouseX;
     u.iMouse[1] = s.mouseY;
-    u.iMouse[2] = s.surfaceSize[0] > 0.0f ? s.mouseX / s.surfaceSize[0] : 0.0f;
-    u.iMouse[3] = s.surfaceSize[1] > 0.0f ? s.mouseY / s.surfaceSize[1] : 0.0f;
+    u.iMouse[2] = s.surfaceSize[0] > 0.0f ? s.mouseX / s.surfaceSize[0] : s.mouseX;
+    u.iMouse[3] = s.surfaceSize[1] > 0.0f ? s.mouseY / s.surfaceSize[1] : s.mouseY;
     for (int i = 0; i < 4; ++i) {
         u.iTextureResolution[i][0] = s.textureResolution[i][0];
         u.iTextureResolution[i][1] = s.textureResolution[i][1];
@@ -215,7 +215,15 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceOpacity)), 108);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, customParams)), 112);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, customColors)), 240);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iChannelResolution)), 496);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iAudioSpectrumSize)), 560);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iMouse)), 576);
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, iTextureResolution)), 592);
+        // The tail member, and so the one a future append or reorder is most
+        // likely to move. Pinned with a literal here rather than left to the
+        // offsetof-derived assertions elsewhere in this file, which cannot
+        // police the struct because they read their expected value from it.
+        QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uBackdropRect)), 656);
     }
 
     /// iMouse.zw on a surface whose size has not been pushed yet.
@@ -237,12 +245,15 @@ private Q_SLOTS:
         profile.fill(state);
         const int base = static_cast<int>(offsetof(SurfaceUniforms, iMouse));
         // The raw pair keeps the off-surface sentinel.
-        QVERIFY(readFloatAt(profile, base) < 0.0f);
-        QVERIFY(readFloatAt(profile, base + 4) < 0.0f);
+        QCOMPARE(readFloatAt(profile, base), -1.0f);
+        QCOMPARE(readFloatAt(profile, base + 4), -1.0f);
         // The normalized pair must agree with it rather than reading as a
-        // hover at the origin: strictly negative, so `iMouse.z < 0.0` holds.
-        QVERIFY(readFloatAt(profile, base + 8) < 0.0f);
-        QVERIFY(readFloatAt(profile, base + 12) < 0.0f);
+        // hover at the origin. Compared against the exact pass-through value
+        // rather than just `< 0.0f`: dividing by a zero surfaceSize yields
+        // -inf, which is also strictly negative, so a `< 0.0f` assertion
+        // passes whether or not the guard this slot exists to pin is there.
+        QCOMPARE(readFloatAt(profile, base + 8), -1.0f);
+        QCOMPARE(readFloatAt(profile, base + 12), -1.0f);
     }
 
     /// The backdrop placement rect reaches the UBO.

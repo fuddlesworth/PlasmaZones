@@ -133,11 +133,6 @@ inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
     return padded.adjusted(-pad, -pad, pad, pad);
 }
 
-/// Damage the whole padded band. A no-op for an unpadded chain, whose composite never
-/// draws outside the window rect and is covered by addRepaintFull alone.
-///
-/// Guards the window too, matching windowSurfaceScale above: this is reached from teardown
-/// paths, where a null window is the natural way for a future edit to arrive here.
 /// Repaint @p band, widened to cover the device-grid overshoot.
 ///
 /// The composite is presented on surfaceCanvasFor's logicalGeometry, which
@@ -148,11 +143,12 @@ inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
 /// while the logical alignment stops at 101, stranding a half-device-pixel
 /// ribbon of stale glow.
 ///
-/// One definition, because the two callers damage the SAME band under different
-/// transforms and a widening applied to only one of them puts them back to
+/// One definition, because every caller damages the SAME band under a different
+/// transform and a widening applied to only some of them puts them back to
 /// disagreeing about what was presented. Callers keep their own rects RAW —
-/// both compare them against a recorded previous value, which has to stay
-/// like-for-like.
+/// they compare them against a recorded previous value, which has to stay
+/// like-for-like. No exact caller count here on purpose, matching
+/// paddedBandRect above: it drifts every time a caller is added.
 inline void damageBandRect(const KWin::EffectWindow* w, const QRectF& band)
 {
     if (band.isEmpty() || !KWin::effects) {
@@ -166,33 +162,17 @@ inline void damageBandRect(const KWin::EffectWindow* w, const QRectF& band)
     KWin::effects->addRepaint(KWin::RectF(band.adjusted(-devicePx, -devicePx, devicePx, devicePx)));
 }
 
+/// Damage the whole padded band. A no-op for an unpadded chain, whose composite never
+/// draws outside the window rect and is covered by addRepaintFull alone.
+///
+/// Guards the window too, matching windowSurfaceScale above: this is reached from teardown
+/// paths, where a null window is the natural way for a future edit to arrive here.
 inline void damagePaddedBand(const KWin::EffectWindow* w, int outerPadding)
 {
-    if (!w || outerPadding <= 0 || !KWin::effects) {
+    if (!w || outerPadding <= 0) {
         return;
     }
-    // Damage the rect the composite is PRESENTED on, which is not quite the raw
-    // padded rect. surfaceCanvasFor snaps the canvas outward to the device grid
-    // and carries the widened rect as its logicalGeometry, so at a fractional
-    // scale the presented quad can reach past the raw rect by up to one device
-    // pixel per side. addRepaint aligns outward too, but in LOGICAL space, and
-    // that does not always swallow the device-grid overshoot: at scale 1.5 a
-    // padded edge at 100.9 presents out to 101.333 while the logical alignment
-    // stops at 101, leaving a half-device-pixel ribbon of stale glow behind on a
-    // move.
-    //
-    // Widening by one device pixel per side before the logical alignment covers
-    // it for any scale, and costs nothing: this runs on teardown and on
-    // geometry changes, not per frame. paddedBandRect itself stays the raw
-    // geometry, because the change tracker records it and must keep comparing
-    // like with like.
-    // windowSurfaceScale, not the window's own screen: it is the scale the
-    // canvas is actually pinned to, so it is the scale whose device grid the
-    // overshoot is measured against. They differ for a window straddling a
-    // mixed-DPI edge, where the canvas takes the higher of the two.
-    const qreal devicePx = 1.0 / qMax(windowSurfaceScale(w), 0.001);
-    KWin::effects->addRepaint(
-        KWin::RectF(paddedBandRect(w, outerPadding).adjusted(-devicePx, -devicePx, devicePx, devicePx)));
+    damageBandRect(w, paddedBandRect(w, outerPadding));
 }
 
 /// Allocate a full-canvas RGBA8 target and the framebuffer that wraps it. False on

@@ -165,25 +165,26 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
-/// `float uSurfaceOpacity` — the host item's own opacity on the DAEMON
-/// runtime, always 1.0 on the compositor runtime. It no longer carries the
-/// window's rule-resolved SetOpacity: that was the retired `handlesOpacity`
-/// contract, SetOpacity is layer-backed now (the plain opacity-tint layer
-/// folds it into its own pack param) and in-pack content dimming is an
-/// ordinary pack parameter (frost/glass `contentOpacity`). What it does
-/// carry is the daemon SurfaceShaderItem's live `opacity()`, wired through
-/// opacityChanged so a host can fade the whole decoration. A pack that
-/// ignores it will not fade with its host.
+/// `float uSurfaceOpacity` — a constant 1.0 on BOTH runtimes. Retained only
+/// so the UBO layout and the pack-facing name survive; there is nothing to
+/// read from it. It no longer carries the window's rule-resolved SetOpacity:
+/// that was the retired `handlesOpacity` contract, SetOpacity is layer-backed
+/// now (the plain opacity-tint layer folds it into its own pack param) and
+/// in-pack content dimming is an ordinary pack parameter (frost/glass
+/// `contentOpacity`). A host that fades a whole decoration does it through
+/// `qt_Opacity`, not this, so a pack has no reason to sample it.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
 /// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
 /// captured over the same (padded) canvas as `uTexture0` each frame for
 /// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
 /// with the composite canvas, so a pack samples both with the same uv (via
-/// the `backdropTexel()` helper). The daemon branch declares this sampler at
-/// the same binding and a host may bind the desktop wallpaper into it as a
-/// stand-in; packs MUST still sample through `backdropTexel()`, which returns
-/// transparent when nothing was bound.
+/// the `backdropTexel()` helper). The two runtimes declare it differently:
+/// the compositor branch is a loose uniform with no binding, while the daemon
+/// branch is `layout(binding = 11)`, sharing that slot with the overlay
+/// category's wallpaper sampler. On the daemon a host may bind the desktop
+/// wallpaper into it as a stand-in. Packs MUST still sample through
+/// `backdropTexel()`, which returns transparent when nothing was bound.
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
 /// `vec4 uBackdropRect` — a sub-rect of the bound backdrop in TOP-DOWN

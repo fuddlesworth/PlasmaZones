@@ -192,7 +192,21 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         e.bufferShaderPaths.append(name);
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    e.bufferScale = qBound(kMinBufferScale, obj.value(QLatin1String("bufferScale")).toDouble(1.0), kMaxBufferScale);
+    // Type-check before converting. QJsonValue::toDouble(fallback) returns the
+    // fallback only for a MISSING value; a present value of the wrong type
+    // answers 0.0, which the clamp below then turns into kMinBufferScale
+    // rather than the 1.0 default — so a quoted "0.5" in a hand-edited
+    // metadata.json would silently give the pack an eighth-resolution buffer
+    // chain. The clamp stays regardless: it is also what keeps a declared 0 or
+    // a negative out of the FBO sizing.
+    const QJsonValue bufferScaleValue = obj.value(QLatin1String("bufferScale"));
+    if (bufferScaleValue.isUndefined() || bufferScaleValue.isDouble()) {
+        e.bufferScale = qBound(kMinBufferScale, bufferScaleValue.toDouble(1.0), kMaxBufferScale);
+    } else {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id
+                                   << "declares a non-numeric bufferScale; using the default 1.0";
+        e.bufferScale = 1.0;
+    }
     // Buffer wrap/filter share the texture-slot `wrap` guard's rationale:
     // an unknown token is a typo or foreign vocabulary that the runtime
     // would silently coerce to its default anyway, and keeping it in the

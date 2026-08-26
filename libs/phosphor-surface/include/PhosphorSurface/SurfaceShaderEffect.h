@@ -194,8 +194,10 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     bool audio = false;
 
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
-    /// and `isMultipass` is true, the daemon's surface-layer runtime runs
-    /// these as intermediate passes before the main fragment shader.
+    /// and `isMultipass` is true, the host runs these as intermediate passes
+    /// before the main fragment shader: `src/shared/SurfaceDecoration.qml` on
+    /// the daemon (via `OverlayService::applyDecoration`) and the KWin effect
+    /// on the compositor. `composeStageMap()` is what forwards them.
     QStringList bufferShaderPaths;
 
     /// Enable per-pass feedback (last frame's buffer is sampleable as

@@ -481,7 +481,28 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
 
 void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry)
 {
+    if (m_surfaceShaderRegistry == registry) {
+        return;
+    }
+    // Disconnect from the outgoing registry before the borrow is overwritten,
+    // or a re-set would leave a second connection behind. Daemon::stop() nulls
+    // this borrow before resetting the registry, so the old pointer is still
+    // alive here.
+    if (m_surfaceShaderRegistry) {
+        disconnect(m_surfaceShaderRegistry, nullptr, this, nullptr);
+    }
     m_surfaceShaderRegistry = registry;
+    // Re-arm the refusal warnings: the pack set has changed, so a pack that
+    // was reported missing may now be present (or newly broken). effectsChanged
+    // fires only on a real content or discovery change, never on a plain
+    // rescan, so this cannot put the warnings back to once-per-show.
+    m_warnedDecorationPacks.clear();
+    if (m_surfaceShaderRegistry) {
+        connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                [this]() {
+                    m_warnedDecorationPacks.clear();
+                });
+    }
 }
 
 void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
@@ -559,13 +580,21 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
-            // One warning per pack id, not one per show: a profile naming a
-            // pack the user uninstalled is a standing condition, and this runs
-            // on every OSD show. The sibling diagnostics in this path
-            // (translateSurfaceParams' overflow summaries, parseEffect's
-            // texture drops) are one-shot for the same reason.
-            if (!m_warnedMissingDecorationPacks.contains(packId)) {
-                m_warnedMissingDecorationPacks.insert(packId);
+            // One warning per pack id per REASON, not one per show: a profile
+            // naming a pack the user uninstalled is a standing condition, and
+            // this runs on every OSD show. parseEffect's texture drops are
+            // one-shot for the same reason, though only per registry parse.
+            // (translateSurfaceParams' overflow summaries are NOT — they are
+            // one summary per call, and composeStageMap calls it for every
+            // pack on every show.)
+            //
+            // Keyed per reason rather than per pack: the missing and invalid
+            // branches are mutually exclusive within one iteration but not
+            // over time, so a bare pack id would let "uninstalled" swallow the
+            // later, different "reinstalled but broken" warning for good.
+            const QString missingKey = packId + QLatin1String("|missing");
+            if (!m_warnedDecorationPacks.contains(missingKey)) {
+                m_warnedDecorationPacks.insert(missingKey);
                 qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
                                      << "is not present in the surface-shader registry — skipping this chain stage";
             }
@@ -574,8 +603,16 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
         // isValid() already requires a non-empty fragmentShaderPath.
         if (!effect.isValid()) {
-            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
-                                 << "has no valid fragment shader — skipping this chain stage";
+            // Standing condition too, and on the same every-show path: an
+            // installed pack whose fragment shader will not resolve stays
+            // broken until the user reinstalls it. Same per-reason keying as
+            // the missing branch above.
+            const QString invalidKey = packId + QLatin1String("|invalid");
+            if (!m_warnedDecorationPacks.contains(invalidKey)) {
+                m_warnedDecorationPacks.insert(invalidKey);
+                qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
+                                     << "has no valid fragment shader — skipping this chain stage";
+            }
             continue;
         }
         // Audio-reactive pack in the chain -> this decoration slot wants the

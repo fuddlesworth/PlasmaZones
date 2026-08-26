@@ -77,7 +77,16 @@ Item {
     /// The ground has settled: either a wallpaper decoded, or there is no
     /// wallpaper to wait for. An unresolvable one must not hold the preview
     /// back for ever.
-    readonly property bool _groundReady: root._wallpaper.length === 0 || groundImage.status === Image.Ready
+    ///
+    /// Error counts as settled, and that arm is load-bearing rather than
+    /// defensive. wallpaperPath() only checks that the file EXISTS, so a path
+    /// that resolves but will not decode — an unsupported format, a wallpaper
+    /// package directory, a broken symlink, a file the user cannot read —
+    /// reaches Image.Error and stays there. Waiting only for Ready would leave
+    /// the host's cover over a preview that is drawing perfectly well
+    /// underneath it, for ever. The ground is just a backdrop; not having one
+    /// is a worse picture, not a broken one.
+    readonly property bool _groundReady: root._wallpaper.length === 0 || groundImage.status === Image.Ready || groundImage.status === Image.Error
 
     /// The ground a previewed decoration is composited over.
     ///
