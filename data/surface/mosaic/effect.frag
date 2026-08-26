@@ -5,7 +5,9 @@
 // blurred — privacy glass. SINGLE PASS: unlike the rest of the Blur
 // family this pack needs no Gaussian buffers, it samples the RAW
 // backdrop once per fragment at the cell centre via backdropTexel()
-// (which clamps into the valid capture rect on its own). Same slab
+// (which keeps a cell centre that lands outside the surface's own slice
+// in range on either runtime: the compositor clamps into the captured
+// rect, the daemon leans on the sampler's clamp-to-edge). Same slab
 // composite as the blur family: the pane shows through wherever the
 // window itself is translucent.
 //

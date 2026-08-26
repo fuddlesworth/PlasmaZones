@@ -26,9 +26,13 @@
  * lives in its own TU, test_decoration_sets.cpp, mirroring the motion side's
  * test_animations_motion_sets.cpp.
  *
- * The controller is constructed with a null SurfaceShaderRegistry — every
- * path exercised here is registry-independent (the registry only feeds the
- * available-packs listing, which is out of scope). Settings is a
+ * The controller is constructed with a null SurfaceShaderRegistry for most of
+ * this file, because the paths exercised here are registry-independent (the
+ * registry only feeds the available-packs listing, which is out of scope). The
+ * previewKind slot is the exception: it passes a real registry, since the
+ * controller now builds a DecorationPreviewController in its constructor. That
+ * preview controller is parented, so it goes away with each stack-allocated
+ * controller and takes its application event filter with it. Settings is a
  * TreeStubSettings: a StubSettings that actually stores the tree and emits
  * decorationProfileTreeChanged, so the controller's read-mutate-write loop
  * round-trips without the real PhosphorConfig::Store.

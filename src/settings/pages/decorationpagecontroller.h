@@ -85,8 +85,14 @@ class DecorationPageController : public PhosphorControl::PageController
     Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
 
     /// Which preview pane the detail dialog should load for this bridge.
-    /// "decoration" here; the zone/overlay bridges report "zone". A bridge
-    /// with no previewController reports an empty string and shows no pane.
+    /// "decoration" here.
+    ///
+    /// This is the only bridge that declares the property. The zone/overlay
+    /// bridge exposes a previewController and no previewKind, so it reads as
+    /// undefined; the dialog's own fallback is what maps that to "zone", and
+    /// a bridge with neither to an empty string and no pane. Adding the
+    /// property to another bridge is therefore a change to that fallback, not
+    /// a convention it already follows.
     Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
 
 public:
@@ -120,8 +126,8 @@ public:
 
     /// Installed `SurfaceShaderEffect`s flattened to a QML-friendly list.
     /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / previewPath / parameters / providesBorder / providesOpacityTint (QVariantList of
-    /// ParameterInfo maps).
+    /// isUserEffect / previewPath / providesBorder / providesOpacityTint /
+    /// parameters (a QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────

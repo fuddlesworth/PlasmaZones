@@ -562,7 +562,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     wb.chainInteriorOpaque = chainInteriorOpaque;
-    if (chainInteriorOpaque) {
+    // Non-empty, because chainInteriorOpaque is an AND over the drawing packs
+    // and so is vacuously true for a chain with none. Logging that would
+    // attribute a declaration to a chain that declared nothing.
+    if (chainInteriorOpaque && !chain.isEmpty()) {
         // interiorOpaque comes verbatim from installable pack metadata (an
         // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
         // third-party pack that declares it while thinning interior texels

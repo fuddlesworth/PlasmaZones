@@ -34,8 +34,15 @@ const float kSurfaceGaussW3 = 0.054054;
 const float kSurfaceGaussW4 = 0.016216;
 
 // Buffer pass 0: HORIZONTAL half over the BACKDROP capture (through
-// backdropTexel(), which clamps into the valid sub-rect and is transparent on
-// a host that bound no backdrop). Rendered at the pack's bufferScale.
+// backdropTexel(), which is transparent on a host that bound no backdrop).
+// Rendered at the pack's bufferScale.
+//
+// The outermost taps reach up to 4 steps past uv, which near an edge lands
+// outside this surface's slice of the backdrop. The two runtimes answer that
+// differently, and both are right for what they hold: the compositor clamps
+// into the captured rect, because it has no scene data outside it, while the
+// daemon lets the sampler's clamp-to-edge handle it, because its backdrop is
+// the whole desktop wallpaper and the neighbouring pixels are real.
 vec4 surfaceGaussianBackdropH(vec2 uv) {
     float radiusPx = max(customParams[0].x * uSurfaceScale, 1.0);
     vec2 stepUv = vec2(radiusPx / (4.0 * max(uSurfaceSize.x, 1.0)), 0.0);

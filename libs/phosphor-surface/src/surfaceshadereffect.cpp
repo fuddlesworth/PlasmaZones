@@ -7,8 +7,8 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
-#include <QSet>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PhosphorSurfaceShaders {
 

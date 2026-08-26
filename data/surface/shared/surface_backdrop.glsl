@@ -50,9 +50,21 @@ layout(binding = 11) uniform sampler2D uBackdrop;
 #endif
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
-// takes), clamped into the capture's valid sub-rect so edge windows never smear
-// the cleared off-output margin. On a host that bound no backdrop this returns
-// transparent, so gate styling on uHasBackdrop for an explicit fallback.
+// takes). On a host that bound no backdrop this returns transparent, so gate
+// styling on uHasBackdrop for an explicit fallback.
+//
+// A uv outside the surface's own slice is handled differently per runtime, and
+// each is right for the data it holds. The compositor CLAMPS into the capture's
+// valid sub-rect, because the canvas parts that fall off the output were never
+// blitted and clamping is what stops an edge window smearing that cleared
+// margin. The daemon does not, because its backdrop is a slice of the whole
+// desktop wallpaper: the texels just outside the slice are the real wallpaper
+// behind the neighbouring pixels, which is exactly what belongs there, and past
+// the wallpaper's own border the sampler is ClampToEdge anyway.
+//
+// The two also guarantee the transparent-when-unbound result in different
+// places: the daemon branch tests uHasBackdrop here, while the compositor
+// relies on its host binding a 1x1 transparent fallback to the sampler.
 vec4 backdropTexel(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
     vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel

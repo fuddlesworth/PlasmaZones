@@ -544,8 +544,9 @@ private Q_SLOTS:
     /// The Animations → Shaders page routes AnimationsPageController through
     /// ShaderBrowserPage as `bridge`, so names the browser tree calls on
     /// `bridge.` must resolve on the controller — except the documented
-    /// optional surface (`previewController`), which the detail dialog
-    /// null-checks and treats as "no preview pane" (its docstring says so).
+    /// optional surface (`previewController` and `previewKind`), which the
+    /// detail dialog guards and treats as "no preview pane" / "the zone pane"
+    /// respectively (see the set built at the top of the slot).
     void everyBridgeCallFromTheShaderBrowserIsReachable()
     {
         // `previewKind` joins `previewController` as documented-optional: the
@@ -589,7 +590,17 @@ private Q_SLOTS:
                 if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {
                     continue;
                 }
-                QVERIFY2(!readFile(path).contains(bridgeUseRe),
+                // Comments stripped first, matching the scrape below: a file
+                // that merely MENTIONS bridge. in a doc comment is not a route
+                // file, and failing it here would send whoever hits it looking
+                // for a call that does not exist.
+                static const QRegularExpression sweepLineCommentRe(QStringLiteral("//[^\\n]*"));
+                static const QRegularExpression sweepBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                                    QRegularExpression::DotMatchesEverythingOption);
+                QString swept = readFile(path);
+                swept.remove(sweepBlockCommentRe);
+                swept.remove(sweepLineCommentRe);
+                QVERIFY2(!swept.contains(bridgeUseRe),
                          qPrintable(QStringLiteral("%1 uses bridge.* but is not in routeFiles — add it or exclude it "
                                                    "like the ShaderSetsPage route")
                                         .arg(QFileInfo(path).fileName())));

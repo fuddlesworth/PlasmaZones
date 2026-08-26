@@ -599,8 +599,14 @@ Item {
                 // changes where the item renders, not whether it renders, so
                 // the hide-source fold is unaffected.
                 layer.enabled: stage.stageData.multipass === true && root.decorationActive
-                // Qt's DEFAULT mirroring (MirrorVertically) — deliberately NOT
-                // the NoMirroring that ZoneShaderRenderer.qml uses.
+                // Qt's DEFAULT mirroring (MirrorVertically), which differs from
+                // the NoMirroring ZoneShaderRenderer.qml sets. That difference
+                // is NOT a designed distinction between the two hosts: the zone
+                // renderer's line predates the commit that made the NDC flip a
+                // per-render-target decision and was not revisited by it, so it
+                // may well need the same treatment. Do not "harmonise" the two
+                // by copying NoMirroring here — check the zone side instead,
+                // under QSG_RHI_BACKEND=opengl, where the flip actually exists.
                 //
                 // ShaderNodeRhi skips the OpenGL NDC flip whenever it renders
                 // into a texture (`yUpInNDC = isYUpInNDC() && !renderingIntoTexture()`),

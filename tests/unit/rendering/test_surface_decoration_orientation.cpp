@@ -243,8 +243,28 @@ private:
 
 private Q_SLOTS:
 
-    void testTwoStageChainRendersUprightOnOpenGL()
+    /// Chain lengths, because this guard is PARITY-SENSITIVE.
+    ///
+    /// The regression it exists for is the direct-to-window flip being applied
+    /// on the tap/texture passes too. Each tap render contributes one erroneous
+    /// flip, so what reaches the screen is flipped only when their count is
+    /// ODD. A two-pack chain is one tap plus one direct draw, so the bug shows;
+    /// a THREE-pack chain is two taps, the two erroneous flips cancel, and the
+    /// frame arrives upright with the bug fully present. Fixing the length at
+    /// two therefore left every even-tap-count chain unguarded, and a user
+    /// chaining three packs is ordinary rather than exotic.
+    void testChainRendersUprightOnOpenGL_data()
     {
+        QTest::addColumn<int>("stageCount");
+        QTest::newRow("one stage (direct draw only)") << 1;
+        QTest::newRow("two stages (one tap, odd parity)") << 2;
+        QTest::newRow("three stages (two taps, even parity)") << 3;
+    }
+
+    void testChainRendersUprightOnOpenGL()
+    {
+        QFETCH(int, stageCount);
+
         // GPU gate: probe a real GL context before any QQuickView exists — a
         // scene-graph init failure is fatal inside Qt, so this is the only
         // safe skip point for headless/software environments.
@@ -269,8 +289,10 @@ private Q_SLOTS:
         SurfaceShaderRegistry registry;
         registry.addSearchPath(QStringLiteral(PLASMAZONES_SOURCE_ROOT "/data/surface"),
                                PhosphorFsLoader::LiveReload::Off);
-        QTRY_VERIFY_WITH_TIMEOUT(
-            registry.hasEffect(QStringLiteral("border")) && registry.hasEffect(QStringLiteral("shadow")), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(registry.hasEffect(QStringLiteral("border"))
+                                     && registry.hasEffect(QStringLiteral("shadow"))
+                                     && registry.hasEffect(QStringLiteral("glow")),
+                                 5000);
 
         const auto makeStage = [&registry](const QString& id, const QVariantMap& friendly) {
             const auto effect = registry.effect(id);
@@ -287,8 +309,21 @@ private Q_SLOTS:
         shadowParams.insert(QStringLiteral("shadowSize"), 20);
         shadowParams.insert(QStringLiteral("offsetY"), 10);
         shadowParams.insert(QStringLiteral("cornerRadius"), 24);
-        const QVariantList chain{makeStage(QStringLiteral("border"), borderParams),
-                                 makeStage(QStringLiteral("shadow"), shadowParams)};
+        QVariantMap glowParams;
+        glowParams.insert(QStringLiteral("glowSize"), 16);
+        glowParams.insert(QStringLiteral("cornerRadius"), 24);
+
+        // Ordered so every row is a PREFIX of the longest: the border stage is
+        // what paints the red/blue gradient's frame, and it must stay first so
+        // the sampled points mean the same thing at every length.
+        QVariantList chain{makeStage(QStringLiteral("border"), borderParams)};
+        if (stageCount >= 2) {
+            chain.append(makeStage(QStringLiteral("shadow"), shadowParams));
+        }
+        if (stageCount >= 3) {
+            chain.append(makeStage(QStringLiteral("glow"), glowParams));
+        }
+        QCOMPARE(chain.size(), stageCount);
 
         // QQuickView loads from a URL only; stage the scene in a tmpdir.
         QTemporaryDir dir;

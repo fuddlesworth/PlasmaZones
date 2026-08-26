@@ -28,8 +28,10 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 }
 
 // True before a host has wired a real frame rect (uSurfaceFrameSize == 0). The
-// SDF would otherwise collapse to "edge everywhere"; packs pass content through
-// untouched in this state.
+// SDF would otherwise collapse to "edge everywhere", so the border and glow
+// family test this and pass content through untouched. The backdrop-slab packs
+// do NOT: they fall through to a zero-extent frame, whose mask collapses to
+// nothing, so the pane simply does not draw.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }
@@ -170,7 +172,11 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
-    float t = max(d, 0.0) / reach;
+    // reach is caller-supplied and a zero would make this inf, then NaN through
+    // exp(), and a NaN propagates through the whole composite rather than
+    // showing up as one bad pixel. Every other division in this file carries
+    // the same guard.
+    float t = max(d, 0.0) / max(reach, 1e-3);
     float halo = exp(-4.0 * t * t);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);

@@ -701,7 +701,13 @@ private:
     std::array<QImage, kMaxUserTextures> m_userTextureImages;
     std::array<std::unique_ptr<QRhiTexture>, kMaxUserTextures> m_userTextures;
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
-    std::array<QString, kMaxUserTextures> m_userTextureWraps;
+    // Spelled out rather than default-constructed, matching m_bufferWraps
+    // above. The only reader normalises an unknown token to ClampToEdge, so a
+    // null QString behaves identically today, but leaving the two arrays with
+    // different defaults means a future reader that string-compares gets a
+    // different answer for a user texture than for a buffer.
+    std::array<QString, kMaxUserTextures> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
+                                                                QStringLiteral("clamp"), QStringLiteral("clamp")};
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
 
     // ── Source texture override (slot 0 / binding 7) ───────────────────

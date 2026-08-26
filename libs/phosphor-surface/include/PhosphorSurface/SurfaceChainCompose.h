@@ -27,9 +27,11 @@ struct SurfaceShaderEffect;
  * This is deliberately the RAW request: callers clamp it themselves, because
  * they need different types. The compositor's capture canvas is integer
  * device pixels (`qCeil` then an int clamp); the daemon's QML host works in
- * fractional logical px. Both bound the result by
- * `kMaxDecorationOuterPaddingPx` so a typo'd or hostile pack cannot demand an
- * absurd canvas.
+ * fractional logical px. Both bound the result to
+ * `[0, kMaxDecorationOuterPaddingPx]` so a typo'd or hostile pack cannot demand
+ * an absurd canvas. The ZERO floor is a caller's job too: a declared default or
+ * a stored override may be negative, and this returns such a value verbatim
+ * rather than guessing which way a caller wants to interpret it.
  *
  * Extracted because the identical resolution ran in three places and had
  * already drifted in type between two of them.
