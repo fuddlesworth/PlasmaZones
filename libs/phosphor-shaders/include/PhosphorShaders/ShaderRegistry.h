@@ -22,6 +22,7 @@
 #include <QVariant>
 #include <array>
 #include <memory>
+#include <optional>
 
 namespace PhosphorShaders {
 
@@ -293,6 +294,27 @@ public:
     /// if @p subGeom fully covers @p physGeom (caller should use the full
     /// image in that case). Exposed for unit testing.
     static QRect computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom);
+
+    /// The same placement as computeWallpaperCropRect, but NORMALIZED and
+    /// UNCLAMPED: the slice of the wallpaper corresponding to @p subGeom, in
+    /// [0,1] texture coords, allowed to run outside that range when @p subGeom
+    /// hangs over @p physGeom.
+    ///
+    /// For a caller that maps the result across a whole quad rather than
+    /// cropping an image out of it. computeWallpaperCropRect intersects
+    /// @p subGeom with @p physGeom, which is right for producing an image but
+    /// wrong here: the shader spreads uv over the FULL surface regardless, so a
+    /// clamped slice would be stretched to cover an overhanging one, shifting
+    /// and mis-scaling the result. Letting the rect run out of range instead
+    /// lets the sampler's edge clamp handle the overhang, which is what an
+    /// outer glow reaching past the screen should look like.
+    ///
+    /// Returns a null optional only for degenerate inputs. A surface exactly
+    /// covering the screen is NOT degenerate here — it legitimately maps to the
+    /// whole cover region — which is the other reason this cannot reuse
+    /// computeWallpaperCropRect, whose contract treats that as "use the full
+    /// image".
+    static std::optional<QRectF> wallpaperSliceNormalized(QSize wpSize, const QRect& physGeom, const QRect& subGeom);
 
     static void invalidateWallpaperCache();
 

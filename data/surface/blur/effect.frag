@@ -10,8 +10,8 @@
 // the content is opaque the blur is fully hidden and this pass is a
 // passthrough.
 //
-// DAEMON FALLBACK: daemon hosts have no scene behind a surface, so
-// uHasBackdrop is 0 there (and backdropTexel() is transparent). The pane
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface,
+// uHasBackdrop is 0 (and backdropTexel() is transparent). The pane
 // degrades to a faint premultiplied tint slab at the same corner rounding,
 // so previews still communicate the pack's shape.
 
@@ -36,7 +36,7 @@ vec4 pSurface(vec2 uv) {
         vec4 blurred = texture(iChannel1, uv);
         frost = vec4(mix(blurred.rgb, tint * blurred.a, tintStrength), blurred.a) * slab.mask;
     } else {
-        // No scene behind this surface (daemon hosts): a faint tint slab.
+        // Nothing bound behind this surface: a faint tint slab.
         frost = faintTintSlab(tint, tintStrength, slab.mask);
     }
 

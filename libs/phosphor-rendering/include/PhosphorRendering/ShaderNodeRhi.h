@@ -232,6 +232,14 @@ public:
     void setSurfaceScale(float scale);
     void setSurfaceFocused(bool focused);
     void setSurfaceSize(float width, float height);
+    /// The slice of the bound backdrop this surface samples, normalized
+    /// texture coords (xy = min, zw = size). Defaults to the whole texture.
+    ///
+    /// Only a host that binds ONE shared image across many surfaces needs this
+    /// — a daemon or preview host handing every surface the same desktop
+    /// wallpaper. The compositor's capture already covers the window's own
+    /// canvas, so it leaves the default alone.
+    void setBackdropRect(float x, float y, float w, float h);
     void setSurfaceFrameTopLeft(float x, float y);
     void setSurfaceFrameSize(float width, float height);
 
@@ -418,6 +426,23 @@ private:
     void uploadExtensionToUbo(QRhiResourceUpdateBatch* batch);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// Whether binding 11 carries a real wallpaper rather than the dummy.
+    ///
+    /// The single source of truth for two things that must never disagree:
+    /// which texture appendWallpaperBinding() puts at binding 11, and what
+    /// syncBaseUniforms() reports in uHasBackdrop. A pack branches on that
+    /// uniform to decide whether to sample uBackdrop at all, so a gate that
+    /// outran the binding would have it sampling the 1x1 dummy (or a
+    /// transparent fallback) while believing it had a real backdrop, instead
+    /// of taking its documented no-backdrop appearance.
+    ///
+    /// The image must be non-null as well as the GPU objects: the upload path
+    /// deliberately writes a transparent fallback for a null image, so
+    /// "a texture exists" alone is not "there is something to show".
+    bool wallpaperBindingLive() const
+    {
+        return m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler && !m_wallpaperImage.isNull();
+    }
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// How the pass an SRB belongs to touches the depth texture.
     ///
@@ -642,6 +667,7 @@ private:
     float m_surfaceScale = 1.0f;
     bool m_surfaceFocused = false;
     float m_surfaceSize[2] = {0.0f, 0.0f};
+    float m_backdropRect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
     float m_surfaceFrameTopLeft[2] = {0.0f, 0.0f};
     float m_surfaceFrameSize[2] = {0.0f, 0.0f};
 
@@ -675,7 +701,13 @@ private:
     std::array<QImage, kMaxUserTextures> m_userTextureImages;
     std::array<std::unique_ptr<QRhiTexture>, kMaxUserTextures> m_userTextures;
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
-    std::array<QString, kMaxUserTextures> m_userTextureWraps;
+    // Spelled out rather than default-constructed, matching m_bufferWraps
+    // above. The only reader normalises an unknown token to ClampToEdge, so a
+    // null QString behaves identically today, but leaving the two arrays with
+    // different defaults means a future reader that string-compares gets a
+    // different answer for a user texture than for a buffer.
+    std::array<QString, kMaxUserTextures> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
+                                                                QStringLiteral("clamp"), QStringLiteral("clamp")};
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
 
     // ── Source texture override (slot 0 / binding 7) ───────────────────
@@ -710,6 +742,11 @@ private:
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
+    /// One-shot: binding 11 had neither a wallpaper nor a dummy substitute.
+    /// Mutable because appendWallpaperBinding() is const — it only reads state
+    /// to build the binding list, and this is a diagnostic latch, not state the
+    /// binding depends on.
+    mutable bool m_warnedWallpaperBindingOmitted = false;
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at

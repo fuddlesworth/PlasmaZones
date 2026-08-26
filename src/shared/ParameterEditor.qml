@@ -330,10 +330,16 @@ ColumnLayout {
         }
     }
 
-    /// Every parameter's schema default, keyed by id. Params with no
-    /// declared default are omitted (a reset can't invent one). Hosts feed
-    /// it back through their batch-persist path in the `resetRequested`
-    /// handler, mirroring how `computeRandomized` feeds the randomize path.
+    /// Every parameter's schema default, keyed by id, with LOCKED parameters
+    /// held at their current value. Params with no declared default are
+    /// omitted (a reset can't invent one). Hosts feed it back through their
+    /// batch-persist path in the `resetRequested` handler, mirroring how
+    /// `computeRandomized` feeds the randomize path.
+    ///
+    /// Reset honours locks for the same reason randomize does: a lock is the
+    /// user saying "leave this one alone", and the toolbar presents the two
+    /// actions side by side, so having one respect the lock and the other
+    /// silently overwrite it loses work the user explicitly protected.
     function computeDefaults() {
         var next = {};
         if (!root.parameters)
@@ -341,8 +347,51 @@ ColumnLayout {
 
         for (var i = 0; i < root.parameters.length; i++) {
             var param = root.parameters[i];
-            if (param && param.id !== undefined && param.default !== undefined)
+            if (!param || param.id === undefined)
+                continue;
+
+            if (root.lockedParams && root.lockedParams[param.id] === true) {
+                // Same preserved/undefined guard computeRandomized uses: a
+                // schema with no `default` and a currentValues map missing
+                // this id would otherwise write `undefined` into the result
+                // and a downstream persist would store a malformed entry.
+                var preserved = (root.currentValues && root.currentValues[param.id] !== undefined) ? root.currentValues[param.id] : param.default;
+                if (preserved !== undefined)
+                    next[param.id] = preserved;
+
+                continue;
+            }
+            if (param.default !== undefined)
                 next[param.id] = param.default;
+        }
+        // Carry the `<id>_svgSize` companion for LOCKED image params only.
+        //
+        // This is a full-map replace and the key is not in the parameter
+        // schema, so nothing above reproduces it and a host assigning the
+        // result wholesale would drop it. But the carry is only correct where
+        // the IMAGE is preserved too: a locked param keeps its path (the
+        // preserved branch above), so its render size still belongs to it.
+        //
+        // An unlocked image param is reset to its default path, and pairing
+        // that with the previous image's size would leave "reset to defaults"
+        // holding a value that is not a default. Dropping the key is the
+        // reset: ParameterRow falls back to 1024 when it is absent.
+        //
+        // This is where computeDefaults DIVERGES from computeRandomized, which
+        // carries unconditionally — randomize preserves image params verbatim,
+        // so there the pair always stays matched.
+        if (root.currentValues && root.lockedParams) {
+            for (var c = 0; c < root.parameters.length; c++) {
+                var cp = root.parameters[c];
+                if (!cp || cp.id === undefined || cp.type !== "image")
+                    continue;
+                if (root.lockedParams[cp.id] !== true)
+                    continue;
+
+                var svgKey = cp.id + "_svgSize";
+                if (root.currentValues[svgKey] !== undefined)
+                    next[svgKey] = root.currentValues[svgKey];
+            }
         }
         return next;
     }
@@ -367,6 +416,8 @@ ColumnLayout {
             icon.name: "edit-reset"
             display: ToolButton.IconOnly
             ToolTip.text: i18nc("@info:tooltip", "Reset all parameters to their defaults")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: i18nc("@action:button", "Reset to Defaults")
             Accessible.description: ToolTip.text
             onClicked: root.resetRequested()
@@ -377,6 +428,8 @@ ColumnLayout {
             icon.name: root._hasAnyLocked ? "object-unlocked" : "object-locked"
             display: ToolButton.IconOnly
             ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Unlock all parameters") : i18nc("@info:tooltip", "Lock all parameters")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: root._hasAnyLocked ? i18nc("@action:button", "Unlock All") : i18nc("@action:button", "Lock All")
             Accessible.description: ToolTip.text
             onClicked: root.lockAllRequested(!root._hasAnyLocked)
@@ -387,6 +440,8 @@ ColumnLayout {
             icon.name: "roll"
             display: ToolButton.IconOnly
             ToolTip.text: root._hasAnyLocked ? i18nc("@info:tooltip", "Randomize unlocked parameters") : i18nc("@info:tooltip", "Randomize all parameters")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             Accessible.name: i18nc("@action:button", "Random")
             Accessible.description: ToolTip.text
             onClicked: root.randomizeRequested()

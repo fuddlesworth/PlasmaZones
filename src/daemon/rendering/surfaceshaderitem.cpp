@@ -8,6 +8,7 @@
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
+#include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceUniformProfile.h>
 
@@ -17,6 +18,7 @@
 #include <QStandardPaths>
 
 #include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -88,7 +90,7 @@ SurfaceShaderItem::~SurfaceShaderItem()
 PhosphorRendering::ShaderNodeRhi* SurfaceShaderItem::createShaderNode()
 {
     // The surface UBO profile is the ONLY thing that differs from the base/
-    // overlay render path — a stock ShaderNodeRhi driven by the 656-byte
+    // overlay render path — a stock ShaderNodeRhi driven by the 672-byte
     // SurfaceUniformProfile rather than a SurfaceShaderItem-specific subclass.
     return new PhosphorRendering::ShaderNodeRhi(this,
                                                 std::make_unique<PhosphorSurfaceShaders::SurfaceUniformProfile>());
@@ -152,6 +154,61 @@ void SurfaceShaderItem::setSurfaceFrameSize(const QSizeF& size)
     m_surfaceFrameSize = size;
     Q_EMIT surfaceFrameSizeChanged();
     update();
+}
+
+void SurfaceShaderItem::setBackdropScreenRect(const QRectF& rect)
+{
+    if (m_backdropScreenRect == rect) {
+        return;
+    }
+    m_backdropScreenRect = rect;
+    Q_EMIT backdropScreenRectChanged();
+    update();
+}
+
+void SurfaceShaderItem::setBackdropSurfaceRect(const QRectF& rect)
+{
+    if (m_backdropSurfaceRect == rect) {
+        return;
+    }
+    m_backdropSurfaceRect = rect;
+    Q_EMIT backdropSurfaceRectChanged();
+    update();
+}
+
+void SurfaceShaderItem::syncBackdropRect(PhosphorRendering::ShaderNodeRhi* node) const
+{
+    // The whole texture, which is both the correct answer for a host with no
+    // placement to offer and the behaviour every host had before this existed.
+    constexpr float kWholeTexture[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+
+    const QImage wallpaper = wallpaperTexture();
+    if (wallpaper.isNull() || !m_backdropScreenRect.isValid() || !m_backdropSurfaceRect.isValid()) {
+        node->setBackdropRect(kWholeTexture[0], kWholeTexture[1], kWholeTexture[2], kWholeTexture[3]);
+        return;
+    }
+
+    // The UNCLAMPED slice. The wallpaper is placed over the screen
+    // aspect-correct and centred with the overflow cropped, exactly as
+    // wallpaper.glsl::wallpaperUv does, and the surface's rect is mapped into
+    // that placement. Doing the fit here rather than in the shader is what
+    // keeps a 16:9 wallpaper from being stretched into a 4:3 surface.
+    //
+    // Unclamped matters: a padded stage is the anchor grown by outerPad on
+    // every side, so a glow or shadow near the screen edge legitimately reaches
+    // past it. The shader spreads uv across that whole padded quad, so a slice
+    // clamped to the screen would be stretched to cover it and shift the
+    // backdrop by the overhang. Out-of-range coordinates instead let the
+    // sampler's edge clamp handle it, which is what a halo running off the
+    // screen should look like.
+    const std::optional<QRectF> slice = PhosphorShaders::ShaderRegistry::wallpaperSliceNormalized(
+        wallpaper.size(), m_backdropScreenRect.toAlignedRect(), m_backdropSurfaceRect.toAlignedRect());
+    if (!slice) {
+        node->setBackdropRect(kWholeTexture[0], kWholeTexture[1], kWholeTexture[2], kWholeTexture[3]);
+        return;
+    }
+    node->setBackdropRect(static_cast<float>(slice->x()), static_cast<float>(slice->y()),
+                          static_cast<float>(slice->width()), static_cast<float>(slice->height()));
 }
 
 // ============================================================================
@@ -230,6 +287,10 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                                  static_cast<float>(m_surfaceFrameTopLeft.y()));
     node->setSurfaceFrameSize(static_cast<float>(m_surfaceFrameSize.width()),
                               static_cast<float>(m_surfaceFrameSize.height()));
+    // After the base sync above, which is what installs the wallpaper image
+    // this reads. Resolved here rather than in the setters because it depends
+    // on that image as much as on the two rects.
+    syncBackdropRect(node);
 
     // NB: the audio spectrum (CAVA, binding 6 + the UBO's iAudioSpectrumSize) is
     // pushed by syncBasePropertiesToNode above — the daemon writes the inherited

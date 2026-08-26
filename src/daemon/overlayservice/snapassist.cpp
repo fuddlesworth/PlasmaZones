@@ -687,6 +687,10 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     }
     it->snapAssistSlot()->setVisible(false);
     writeQmlProperty(it->snapAssistSlot(), QStringLiteral("loaded"), false);
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
+    // slot draws none of it, the image is wallpaper-sized, and every show runs
+    // applyDecoration again, which rewrites it.
+    writeQmlProperty(it->snapAssistSlot(), QStringLiteral("backdropTexture"), QVariant());
     // Symmetric restore: showSnapAssist hid the zone-selector slot on
     // this screen via hideZoneSelectorSlotOnScreen. Owns BOTH the
     // user-dismiss path (hideSnapAssist routes here) and the
@@ -929,6 +933,10 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     }
     it->layoutPickerSlot()->setVisible(false);
     writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("loaded"), false);
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
+    // slot draws none of it, the image is wallpaper-sized, and every show runs
+    // applyDecoration again, which rewrites it.
+    writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("backdropTexture"), QVariant());
     // Symmetric restore - see onSnapAssistSlotHideCompleted /
     // onOsdSlotHideCompleted. The picker hid the zone-selector slot
     // on show; restore it once the picker has finished its hide.

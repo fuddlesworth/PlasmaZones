@@ -24,6 +24,7 @@ class SurfaceShaderRegistry;
 
 namespace PlasmaZones {
 
+class DecorationPreviewController;
 class ISettings;
 
 /// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
@@ -75,12 +76,34 @@ class DecorationPageController : public PhosphorControl::PageController
     /// The decoration-set store, bound by DecorationSetsPage as its `bridge`.
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
+    /// Live-preview data source for the shader browser's detail dialog. The
+    /// pack-agnostic ShaderBrowserDetailDialog reads `bridge.previewController`
+    /// and shows a preview pane when it is non-null — the animation browser
+    /// leaves it null and shows none. Typed as QObject* because the dialog is
+    /// shared with the zone/overlay browser, whose controller is an unrelated
+    /// class; `previewKind` below is what tells the dialog which pane to load.
+    Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
+
+    /// Which preview pane the detail dialog should load for this bridge.
+    /// "decoration" here.
+    ///
+    /// This is the only bridge that declares the property. The zone/overlay
+    /// bridge exposes a previewController and no previewKind, so it reads as
+    /// undefined; the dialog's own fallback is what maps that to "zone", and
+    /// a bridge with neither to an empty string and no pane. Adding the
+    /// property to another bridge is therefore a change to that fallback, not
+    /// a convention it already follows.
+    Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
+
 public:
     /// @param registry Optional — when null, the `*ShaderEffects()`
     ///        Q_INVOKABLEs return empty results so unit tests can construct
     ///        the controller without a surface bootstrap.
-    /// @param settings Optional — when null, profile getters return empty
-    ///        results and mutators are no-ops.
+    /// @param settings Optional — when null the controller reads an empty
+    ///        profile tree and every mutator is a no-op. Note that "empty tree"
+    ///        is not the same as "empty result": a RESOLVED read still returns a
+    ///        fully populated map, because resolution fills the library defaults
+    ///        in. Only the raw reads come back empty.
     explicit DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
                                       ISettings* settings = nullptr, QObject* parent = nullptr);
     ~DecorationPageController() override;
@@ -102,9 +125,10 @@ public:
     // ── Available packs ───────────────────────────────────────────────────
 
     /// Installed `SurfaceShaderEffect`s flattened to a QML-friendly list.
-    /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / previewPath / parameters (QVariantList of
-    /// ParameterInfo maps).
+    /// Each row, in the order effectToMap inserts them: id / name /
+    /// description / author / version / category / isUserEffect /
+    /// providesBorder / providesOpacityTint / previewPath / parameters (a
+    /// QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────
@@ -238,6 +262,10 @@ public:
         return m_sets;
     }
 
+    QObject* previewController() const;
+
+    QString previewKind() const;
+
     /// Test hook: redirect the sets directory to @p dir instead of the XDG
     /// default. Pass an empty string to restore the default. Mirrors
     /// AnimationsPageController::setUserProfilesDirOverride, and exists for the
@@ -270,6 +298,11 @@ private:
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+
+    /// Owned via QObject parenting (this). Constructed eagerly: it is cheap
+    /// until the pane actually asks for a chain, and CONSTANT Q_PROPERTYs must
+    /// not change identity after first read.
+    DecorationPreviewController* m_preview = nullptr;
 
     QString m_setsDirOverride; ///< Empty = use the XDG default
 

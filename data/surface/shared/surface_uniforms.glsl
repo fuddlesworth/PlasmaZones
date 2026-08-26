@@ -88,9 +88,12 @@ uniform vec4 customColors[16];
 // pinned std140 UBO member on the daemon.
 uniform vec4 iChannelResolution[4];
 
-// Backdrop capture GATE: 1.0 when the compositor captured the scene behind the
-// window this frame (packs that declare `"needsBackdrop": true`), else 0.0, and
-// always 0.0 on the daemon (no scene behind a surface). The capture sampler +
+// Backdrop capture GATE: 1.0 when the host bound something behind the surface
+// this frame (packs that declare `"needsBackdrop": true`), else 0.0. On the
+// compositor that is the captured scene under the window's canvas. A daemon or
+// preview host has no scene to capture, but MAY bind the desktop wallpaper as a
+// stand-in, so this reads 1.0 there too whenever one is bound and 0.0 when
+// nothing is. Branch on the gate, never on the runtime. The capture sampler +
 // backdropTexel() live in the opt-in surface_backdrop.glsl module; this gate
 // stays here so a pack can branch on it without pulling in the sampler.
 uniform float uHasBackdrop;
@@ -140,8 +143,10 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec2 uSurfaceSize;           // offset 80  (8)
     vec2 uSurfaceFrameTopLeft;   // offset 88  (8)
     vec2 uSurfaceFrameSize;      // offset 96  (8)
-    float uHasBackdrop;          // offset 104 (4) — always 0 (no scene behind daemon surfaces)
-    float uSurfaceOpacity;       // offset 108 (4) — always 1 on the daemon (qt_Opacity carries host opacity)
+    float uHasBackdrop;          // offset 104 (4) — 1 when the host bound a backdrop (scene or wallpaper stand-in), else 0
+    float uSurfaceOpacity;       // offset 108 (4) — LEGACY: a constant 1.0 on both runtimes, nothing to read.
+                                 //   NOT the blur/glass family's `contentOpacity`, which is a pack
+                                 //   PARAMETER reaching the shader as p_contentOpacity via customParams.
     vec4 customParams[8];        // offset 112 (128)
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
@@ -153,7 +158,12 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
                                  //   normalized by uSurfaceSize
     vec4 iTextureResolution[4];  // offset 592 (64) — user texture sizes (.xy;
                                  //   slot N feeds uTexture<N+1>)
-};                               // total 656 bytes, no trailing pad
+    vec4 uBackdropRect;          // offset 656 (16) — the sub-rect of the bound
+                                 //   backdrop this surface should sample, in
+                                 //   normalized texture coords (xy = min,
+                                 //   zw = size). (0,0,1,1) means the whole
+                                 //   texture. See surface_backdrop.glsl.
+};                               // total 672 bytes, no trailing pad
 
 layout(binding = 7) uniform sampler2D uTexture0;
 // User-declared image textures (metadata `textures`), bindings 8-10 — the

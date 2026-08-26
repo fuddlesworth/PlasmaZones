@@ -9,6 +9,7 @@
 
 #include <QtPlugin>
 
+#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneshaderitem.h"
 
 Q_IMPORT_PLUGIN(org_plasmazones_commonPlugin)
@@ -65,6 +66,11 @@ private Q_SLOTS:
         // composition roots register imperatively — mirror that here so the
         // shared component's `import PlasmaZones` resolves.
         qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
+        // SurfaceDecoration instantiates one SurfaceShaderItem per chain stage
+        // and reaches it through the same imperative `import PlasmaZones`, so
+        // without this the decoration types below fail with "SurfaceShaderItem
+        // is not a type" rather than telling us anything about the module.
+        qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
     }
     void loadsLayoutCard()
     {
@@ -93,6 +99,10 @@ private Q_SLOTS:
     void loadsShaderCompileErrorBanner()
     {
         loadType(QStringLiteral("ShaderCompileErrorBanner"));
+    }
+    void loadsShaderPreviewPlaceholder()
+    {
+        loadType(QStringLiteral("ShaderPreviewPlaceholder"));
     }
     void loadsStripEmptyState()
     {
@@ -130,6 +140,58 @@ private Q_SLOTS:
         // config is nullable by design (safeConfig falls back to {}).
         loadType(QStringLiteral("ZoneShaderRenderer"), QStringLiteral("config: null"));
     }
+    void loadsSurfaceDecoration()
+    {
+        // The daemon overlays and the settings decoration preview both reach
+        // this through the module rather than through a same-directory import,
+        // which is exactly what broke when the file moved here: the hosts kept
+        // instantiating it unqualified under a namespaced import. An undecorated
+        // instance is the interesting case — every host starts here and only
+        // then writes a chain.
+        loadType(QStringLiteral("SurfaceDecoration"), QStringLiteral("decorationChain: []; decorationOuterPadding: 0"));
+    }
+    void loadsDecorationPreviewCard()
+    {
+        loadType(QStringLiteral("DecorationPreviewCard"));
+    }
+    /// SurfaceDecoration's readiness gate compares a stage against
+    /// `SurfaceShaderItem.Ready` and `SurfaceShaderItem.Error`, enums it
+    /// reaches through the registered type rather than declaring itself.
+    ///
+    /// Worth pinning because the failure is silent and inverted: an
+    /// unresolvable enum yields `undefined`, every `status === undefined`
+    /// comparison is false, so `chainReady` never goes true and a host that
+    /// covers its preview until then covers it forever. A permanent "Preview
+    /// unavailable" over a preview that is in fact rendering perfectly.
+    void surfaceShaderItemStatusEnumResolves()
+    {
+        QQmlComponent comp(&m_engine);
+        comp.setData(QByteArrayLiteral("import QtQuick\nimport PlasmaZones 1.0\n"
+                                       "Item {\n"
+                                       "    property int ready: SurfaceShaderItem.Ready\n"
+                                       "    property int loading: SurfaceShaderItem.Loading\n"
+                                       "    property int failed: SurfaceShaderItem.Error\n"
+                                       "}\n"),
+                     QUrl(QStringLiteral("inline://surfacestatus.qml")));
+        QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
+        if (comp.status() != QQmlComponent::Ready) {
+            qWarning() << "status enum:" << comp.status() << "errors:" << comp.errorString();
+        }
+        QVERIFY(!comp.isError());
+        std::unique_ptr<QObject> obj(comp.create());
+        QVERIFY(obj != nullptr);
+        // Distinct and non-negative: proves they resolved to the real
+        // enumerators rather than both collapsing to a default-constructed int.
+        QVERIFY(obj->property("ready").toInt() >= 0);
+        QVERIFY(obj->property("ready").toInt() != obj->property("loading").toInt());
+        // Error too: it is what settles a chain whose shader will not compile,
+        // so an unresolvable one leaves that chain permanently unsettled — the
+        // same silent inversion, reached by a different route.
+        QVERIFY(obj->property("failed").toInt() >= 0);
+        QVERIFY(obj->property("failed").toInt() != obj->property("ready").toInt());
+        QVERIFY(obj->property("failed").toInt() != obj->property("loading").toInt());
+    }
+
     void singletonResolves()
     {
         QQmlComponent comp(&m_engine);

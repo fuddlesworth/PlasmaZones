@@ -52,7 +52,7 @@ Kirigami.Dialog {
         if (!id || id.length === 0 || !bridge)
             return [];
 
-        return bridge.shaderEffectUsages(id);
+        return bridge.shaderEffectUsages(id) || [];
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
 
@@ -71,6 +71,19 @@ Kirigami.Dialog {
     // column an editable editor only here.
     readonly property var previewController: bridge && bridge.previewController ? bridge.previewController : null
     readonly property bool _livePreview: previewController !== null && effect !== null
+    // Which preview pane this bridge wants. The decoration bridge reports
+    // "decoration"; the zone/overlay bridges predate the property and report
+    // nothing, so a controller with no declared kind falls back to "zone" —
+    // that fallback is what keeps the snapping and overlay browsers unchanged.
+    readonly property string _previewKind: (bridge && bridge.previewKind) ? bridge.previewKind : (previewController ? "zone" : "")
+    // The two panes need different halves of this dialog. A zone preview drives
+    // the shader-info / translated-param / preset machinery below; a decoration
+    // preview drives none of it (its controller composes a whole chain instead,
+    // and exposes no preset API), so those calls are gated on the zone kind
+    // rather than on _livePreview alone — calling getShaderInfo on the
+    // decoration controller would be a hard "not a function" at open time.
+    readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
+    readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -82,6 +95,10 @@ Kirigami.Dialog {
     // a fresh item has no inherited Error/errorLog, so the placeholder covers the
     // load and the compile-error banner can only reflect the shader in view.
     property bool _rendererActive: false
+    // Drives the decoration pane's Loader, the same way _rendererActive drives
+    // the zone renderer's. Written ONLY by _teardownPanes / _armPanes — see
+    // the shared-lifecycle contract below.
+    property bool _decorationArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -119,7 +136,10 @@ Kirigami.Dialog {
         _previewTimeDelta = 0;
         _previewFrame = 0;
         _previewLastTime = Date.now() / 1000;
-        _shaderInfo = previewController.getShaderInfo(effect.id) || ({});
+        // Zone-only: the decoration controller has no getShaderInfo, and its
+        // pane reads what it needs (parameters, audio / backdrop flags) from
+        // packInfo itself.
+        _shaderInfo = _zonePreview ? (previewController.getShaderInfo(effect.id) || ({})) : ({});
         var p = {};
         var params = effect.parameters || [];
         for (var i = 0; i < params.length; i++) {
@@ -129,18 +149,86 @@ Kirigami.Dialog {
         _liveParams = p;
         _lockedParams = {};
         _recompute();
-        // Destroy + recreate the renderer so it starts fresh on the new shader
-        // (no previous shader's stale Error). Deactivate now, reactivate next
-        // tick — _shaderInfo is already set above, so the new item loads it.
-        _rendererActive = false;
+        // Both panes now rebuild through the shared lifecycle below, and only
+        // through it. Neither pane may manage its own lifetime: every regression
+        // this dialog has had came from one pane's teardown or arm living
+        // somewhere the other pane's didn't.
+        _teardownPanes();
+        _armPanes();
+    }
+
+    // ── The ONE preview lifecycle, shared by both panes ────────────────────
+    //
+    // One reused dialog serves two preview panes, and three regressions in a
+    // row came from arming or tearing one of them down in a place the other
+    // did not know about. So the lifecycle now lives here, in one pair of
+    // functions, and the panes' Loaders gate on flags that ONLY these
+    // functions write.
+    //
+    // The contract:
+    //
+    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It
+    //     cannot rely on `visible` dropping: a QQC2 Popup keeps `visible`
+    //     true until its EXIT transition finishes, so reopening on another
+    //     pack while the close animation still runs never deactivated a
+    //     `visible`-gated Loader — the old pack's pane survived into the new
+    //     open and its stale composition showed until the recompose caught
+    //     up. That was the stale / unavailable / preview flicker.
+    //
+    //   - ARM is per pane, because the two build differently and that
+    //     difference is exactly what kept breaking:
+    //
+    //       decoration — armed a TICK after teardown (Qt.callLater, so the
+    //       Loader actually destroys the old item first). Its chain composes
+    //       asynchronously and its pane covers itself until ready, so it can
+    //       and should build during the enter transition: deferring it to
+    //       `opened` is what made the card arrive bare and decorate late.
+    //
+    //       zone — armed from onOpened, after the enter transition. Creating
+    //       a ZoneShaderItem compiles and links a shader synchronously, so
+    //       arming it before the popup is on screen spends the compile on a
+    //       window nobody can see: the dialog appeared only once the preview
+    //       was finished and the placeholder phase never happened.
+    //
+    // Net effect, identical for both browsers: popup appears, "Preview
+    // unavailable" covers, preview reveals when ready. If you are about to
+    // move one of these lines, the contract test in
+    // test_animations_qml_contracts.cpp names the symptom you are about to
+    // reintroduce.
+    function _teardownPanes() {
+        _rendererActive = false; // zone
+        _decorationArmed = false; // decoration
+    }
+    function _armPanes() {
         Qt.callLater(function () {
-            // Guard on `opened` too: if the dialog was closed between the
-            // deferral and this call, don't re-arm the renderer.
-            root._rendererActive = root.opened && root._livePreview;
+            root._decorationArmed = root.visible && root._decorationPreview;
         });
+        // The zone arm normally waits for onOpened. A reset while ALREADY
+        // open (a mid-session caller, or a fast pack switch on a dialog whose
+        // `opened` never dropped) re-arms here instead, since onOpened will
+        // not fire again.
+        if (opened)
+            Qt.callLater(_armZoneRenderer);
+    }
+    function _armZoneRenderer() {
+        root._rendererActive = root.opened && root._zonePreview;
+    }
+
+    // A pack switch on a still-visible dialog (open B while A's exit
+    // transition runs — `visible` has not dropped, and aboutToShow is not
+    // guaranteed to re-fire on a popup that never finished closing). Without
+    // this, the previous pack's pane lives on under the new effect until its
+    // bindings recompose: the stale frame at the front of the flicker.
+    onEffectChanged: {
+        if (visible && _livePreview)
+            _resetPreview();
     }
     function _recompute() {
-        if (!_livePreview)
+        // Zone-only. A decoration pack's params reach its shader inside the
+        // composed chain (previewChain translates them through the SAME builder
+        // the daemon uses), so there is no separate translated-param map here
+        // and no translateShaderParams on that controller to call.
+        if (!_zonePreview)
             return;
         _translatedParams = previewController.translateShaderParams(effect.id, _liveParams) || ({});
     }
@@ -151,24 +239,40 @@ Kirigami.Dialog {
         _recompute();
     }
 
-    onOpened: {
+    // BEFORE the panes are built, not after. `opened` does not fire until the
+    // enter transition has finished, but the preview Loaders activate on
+    // `visible`, which is set at the START of it — so resetting there handed the
+    // decoration pane the PREVIOUS pack's parameters, let it compose and show
+    // that, and then changed them out from under it. The chain recomposed, the
+    // placeholder came back, and the preview arrived a second time: the
+    // preview / unavailable / preview flicker on every open.
+    //
+    // aboutToShow runs before the popup becomes visible, so the panes are built
+    // once, with the right parameters, and compose once.
+    onAboutToShow: {
         // The dialog instance is reused per shader, so clear any preset error
         // left over from the previous shader's session before showing this one.
         _presetError = "";
-        if (_livePreview) {
+        if (_livePreview)
             _resetPreview();
-            // Gate on _appActive: opening the dialog while the settings app
-            // is backgrounded must not start CAVA — the on_AppActiveChanged
-            // handler starts it when the app comes to the front.
-            if (_appActive)
-                previewController.startAudioCapture();
-        }
+    }
+    onOpened: {
+        // AFTER the popup is on screen, so the placeholder covers the compile
+        // rather than the compile delaying the popup — see _armZoneRenderer.
+        if (_livePreview)
+            _armZoneRenderer();
+        // Gate on _appActive: opening the dialog while the settings app
+        // is backgrounded must not start CAVA — the on_AppActiveChanged
+        // handler starts it when the app comes to the front.
+        if (_livePreview && _appActive)
+            previewController.startAudioCapture();
     }
     onClosed: {
-        // Tear the renderer down on close so its (possibly Error) state can't
-        // survive on the reused dialog and flash on the next shader's open —
-        // the next _resetPreview rebuilds it fresh.
-        _rendererActive = false;
+        // Tear BOTH panes down on close so no (possibly Error) state survives
+        // on the reused dialog and flashes on the next shader's open — the
+        // next _resetPreview rebuilds them fresh. Through the shared lifecycle,
+        // not by writing one pane's flag here and forgetting the other's.
+        _teardownPanes();
         if (previewController)
             previewController.stopAudioCapture();
     }
@@ -191,14 +295,18 @@ Kirigami.Dialog {
     standardButtons: Kirigami.Dialog.Close
     padding: Kirigami.Units.largeSpacing
 
-    // Preset controls on the footer's left (Close stays on the right) — live
-    // preview only. Order: Load · Save · gap · Default.
+    // Preset controls on the footer's left (Close stays on the right) — zone
+    // preview only. Order: Load · Save.
     footerLeadingComponent: Component {
         // Span the full params column (left ScrollView) so Load · Save sit at
-        // its left and Default anchors to its right edge — lining up under the
-        // params/preview split and the per-row lock column above.
+        // its left, lining up under the params/preview split.
         Item {
-            visible: root._livePreview && root._hasParameters
+            // Presets only, and those are zone-only: shaderPresetDirectory /
+            // saveShaderPreset / loadShaderPreset live on the zone preview
+            // controller and would be a hard "not a function" on the decoration
+            // one. Reset is NOT here any more — it belongs to the shared
+            // parameter editor's header, so every host gets it without wiring.
+            visible: root._zonePreview && root._hasParameters
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
@@ -238,15 +346,6 @@ Kirigami.Dialog {
                         shaderPresetSaveDialog.open();
                     }
                 }
-            }
-
-            Button {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: i18nc("@action:button reset shader parameters", "Default")
-                icon.name: "edit-reset"
-                Accessible.name: text
-                onClicked: root._resetPreview()
             }
         }
     }
@@ -301,8 +400,15 @@ Kirigami.Dialog {
 
                                 anchors.centerIn: parent
                                 text: root.effect ? (root.effect.category || "") : ""
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                                font.weight: Font.Medium
+                                // Via FontUtils: a theme small font carries
+                                // either a pixelSize or a pointSize, and the
+                                // other reads -1, so assigning pixelSize
+                                // directly sizes the chip wrong on a
+                                // pointSize theme and desyncs the pill that
+                                // measures this label.
+                                font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                    "weight": Font.Medium
+                                })
                                 color: Kirigami.Theme.highlightedTextColor
                             }
                         }
@@ -460,10 +566,15 @@ Kirigami.Dialog {
                             compact: false
                             enableLocking: true
                             enableRandomize: true
-                            // This dialog has its own "Default" reset button in
-                            // its footer, so suppress the editor's header reset
-                            // to avoid a duplicate affordance.
-                            enableReset: false
+                            // Reset lives in the shared editor's own header,
+                            // beside lock-all and randomize, exactly as it does
+                            // everywhere else ParameterEditor is used. This
+                            // dialog used to suppress it and hand-roll a
+                            // "Default" button into its footer instead, which
+                            // put the same action somewhere different from the
+                            // rest of the app and made it something each host
+                            // had to remember to provide.
+                            enableReset: true
                             enableGroups: true
                             enableImage: true
                             parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
@@ -480,6 +591,18 @@ Kirigami.Dialog {
                             }
                             onRandomizeRequested: {
                                 root._liveParams = paramEditor.computeRandomized();
+                                root._recompute();
+                            }
+                            // Parameters only. The old footer button called
+                            // _resetPreview(), which also restarted the preview
+                            // clock, cleared every lock and rebuilt the
+                            // renderer — reasonable for a button labelled
+                            // "Default" sitting apart from the editor, but not
+                            // what a reset beside lock-all and randomize should
+                            // do. Locks survive, matching randomize, which
+                            // leaves locked parameters alone.
+                            onResetRequested: {
+                                root._liveParams = paramEditor.computeDefaults();
                                 root._recompute();
                             }
                             onRequestColorPicker: function (id, name, current) {
@@ -554,14 +677,64 @@ Kirigami.Dialog {
             }
 
             // ── RIGHT: pinned preview (fills the column) ────────────────
-            // Only the zone/overlay browser has a live preview — hidden (and so
-            // excluded from the row, letting the params fill width) for the
-            // animation browser.
+            // Hidden (and so excluded from the row, letting the params fill
+            // width) for the animation browser, which has no previewController.
+            // The zone/overlay and decoration browsers each get their own pane
+            // below, selected by _previewKind.
             Item {
                 visible: root._livePreview
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 24
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 20
                 Layout.fillHeight: true
+
+                // Live decoration preview: the stand-in card run through the
+                // real SurfaceDecoration chain host. In a Loader so the whole
+                // capture / shader chain is only instantiated for a decoration
+                // pack, and is torn down when the dialog closes rather than
+                // lingering: this dialog is a single reused instance, and
+                // _decorationPreview depends only on the controller and the
+                // effect, neither of which is cleared on close, so an ungated
+                // Loader would keep the pane and its whole chain alive for the
+                // app's life.
+                //
+                // `visible`, NOT `opened`. Popup.opened only goes true once the
+                // ENTER TRANSITION has finished, so gating on it composed the
+                // chain after the dialog had already animated in — you watched
+                // the card arrive bare and then turn decorated. `visible` is
+                // true for the whole shown state including both transitions, so
+                // the chain is ready as the dialog appears, and the pane still
+                // tears down on close. It also stops the pane emptying on the
+                // first frame of the CLOSE animation, which gating on `opened`
+                // did at the other end.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    // _decorationArmed, not bare `visible`: `visible` alone
+                    // cannot tear this down on a fast pack switch, because a
+                    // Popup keeps it true until the exit transition ends — the
+                    // previous pack's pane survived into the next open and its
+                    // stale composition led the flicker. The armed flag drops
+                    // synchronously in _resetPreview and comes back a tick
+                    // later, so every open gets a FRESH pane that starts
+                    // covered. See the shared-lifecycle contract up top.
+                    active: root.visible && root._decorationPreview && root._decorationArmed
+                    visible: active
+
+                    sourceComponent: DecorationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        // Same `visible` rather than `opened`, and for the same
+                        // reason: this gates the chain composition, not just the
+                        // ticking, so deferring it to the end of the open
+                        // transition is what produced the pop. _appActive is
+                        // deliberately NOT here — focus loss must freeze, not
+                        // tear down, the same split the zone pane gets from its
+                        // clock's `running` gate.
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
 
                 // Live ZoneShaderItem preview (zone/overlay browser).
                 Rectangle {
@@ -569,7 +742,7 @@ Kirigami.Dialog {
 
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
-                    visible: root._livePreview
+                    visible: root._zonePreview
                     radius: Kirigami.Units.smallSpacing
                     // Intentionally a true-black backdrop (not a theme color): the
                     // shader renders over this, and a tinted background would
@@ -583,7 +756,7 @@ Kirigami.Dialog {
                     // the label texture, and the hover hit-test. Recomputed on
                     // resize; the settings backend supplies a 2-zone sample so
                     // multi-zone + per-zone-highlight effects are visible.
-                    readonly property var _zones: (root._livePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
+                    readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
                     // Mouse position within the pane (preview pixels); -1,-1 when
                     // not hovering. Drives iMouse + the hovered-zone highlight.
                     property point _mouse: Qt.point(-1, -1)
@@ -634,9 +807,9 @@ Kirigami.Dialog {
                     // Expensive feeds cached as properties so the per-frame
                     // config rebuild below (iTime) doesn't re-run C++ calls —
                     // these recompute only when zones / size / shader change.
-                    readonly property string _preamble: (root._livePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
-                    readonly property var _labelsTex: (root._livePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
-                    readonly property var _wallpaperTex: (root._livePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
+                    readonly property string _preamble: (root._zonePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
+                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
+                    readonly property var _wallpaperTex: (root._zonePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
                     // Cached so the per-frame config rebuild below doesn't read it
                     // off the controller every frame (a QVariant vector copy) and
                     // doesn't hand the renderer a new container reference each tick;
@@ -689,13 +862,11 @@ Kirigami.Dialog {
 
                     // Neutral placeholder while the freshly-created renderer is
                     // still loading / compiling the new shader (the "round trip").
-                    Label {
+                    // No fill needed: this pane HIDES its renderer until Ready,
+                    // so there is nothing underneath to conceal.
+                    PZCommon.ShaderPreviewPlaceholder {
                         anchors.centerIn: parent
                         width: parent.width - Kirigami.Units.largeSpacing * 2
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        color: Kirigami.Theme.disabledTextColor
-                        text: i18nc("@info:placeholder shader preview", "Preview unavailable")
                         // Shown until the new shader is Ready (or has errored, when
                         // the banner takes over) — also covers the recreate tick
                         // when the Loader item is briefly null. The enclosing pane
@@ -771,6 +942,11 @@ Kirigami.Dialog {
     Connections {
         target: root.previewController
         enabled: root.previewController !== null
+        // The decoration preview controller declares neither of these signals
+        // (its only signal is audioSpectrumChanged), and `enabled` does not
+        // suppress signal RESOLUTION — without this the decoration route logs
+        // a "not a signal" warning every time the dialog opens.
+        ignoreUnknownSignals: true
         function onShaderPresetSaveFailed(error) {
             root._presetError = error;
         }

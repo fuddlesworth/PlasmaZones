@@ -12,9 +12,9 @@
 // own contentOpacity parameter fades the window content so the duotone
 // backdrop shows on opaque windows; a theme's own translucent pixels reveal
 // it the same way with no parameter involved.
-// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
-// the pack renders a still shadow-to-highlight gradient slab with the
-// same corner rounding.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pack renders a still shadow-to-highlight gradient
+// slab with the same corner rounding.
 
 #include <surface_multipass.glsl>
 #include <surface_color.glsl>
@@ -36,7 +36,7 @@ vec4 pSurface(vec2 uv) {
         vec3 mapped = mix(p_colorA.rgb, p_colorB.rgb, luma);
         pane = vec4(mapped * blurred.a, blurred.a) * slab.mask;
     } else {
-        // Original pseudo look for daemon surfaces: a vertical
+        // Original pseudo look with no backdrop: a vertical
         // shadow-to-highlight gradient slab at modest alpha.
         vec2 fuv = frameUv(slab.px);
         vec3 grad = mix(p_colorA.rgb, p_colorB.rgb, smoothstep(0.0, 1.0, 1.0 - fuv.y));

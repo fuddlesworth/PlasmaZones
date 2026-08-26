@@ -165,36 +165,48 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
-/// `float uSurfaceOpacity` — the host item's own opacity on the DAEMON
-/// runtime, always 1.0 on the compositor runtime. It no longer carries the
-/// window's rule-resolved SetOpacity: that was the retired `handlesOpacity`
-/// contract, SetOpacity is layer-backed now (the plain opacity-tint layer
-/// folds it into its own pack param) and in-pack content dimming is an
-/// ordinary pack parameter (frost/glass `contentOpacity`). What it does
-/// carry is the daemon SurfaceShaderItem's live `opacity()`, wired through
-/// opacityChanged so a host can fade the whole decoration. A pack that
-/// ignores it will not fade with its host.
+/// `float uSurfaceOpacity` — a constant 1.0 on BOTH runtimes. Retained only
+/// so the UBO layout and the pack-facing name survive; there is nothing to
+/// read from it. It no longer carries the window's rule-resolved SetOpacity:
+/// that was the retired `handlesOpacity` contract, SetOpacity is layer-backed
+/// now (the plain opacity-tint layer folds it into its own pack param) and
+/// in-pack content dimming is an ordinary pack parameter (frost/glass
+/// `contentOpacity`). A host that fades a whole decoration does it through
+/// `qt_Opacity`, not this, so a pack has no reason to sample it.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
 /// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
 /// captured over the same (padded) canvas as `uTexture0` each frame for
 /// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
 /// with the composite canvas, so a pack samples both with the same uv (via
-/// the `backdropTexel()` helper). The daemon branch declares no such
-/// sampler; packs MUST sample through `backdropTexel()`, which compiles to
-/// transparent there.
+/// the `backdropTexel()` helper). The two runtimes declare it differently:
+/// the compositor branch is a loose uniform with no binding, while the daemon
+/// branch is `layout(binding = 11)`, sharing that slot with the overlay
+/// category's wallpaper sampler. On the daemon a host may bind the desktop
+/// wallpaper into it as a stand-in. Packs MUST still sample through
+/// `backdropTexel()`, which returns transparent when nothing was bound.
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
-/// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the
-/// backdrop capture in TOP-DOWN normalized coords (xy = min, zw = size).
-/// Canvas parts that hang off the output are never blitted (they stay
-/// cleared); `backdropTexel()` clamps samples into this rect so edge
-/// windows don't smear the cleared margin into their frost.
+/// `vec4 uBackdropRect` — a sub-rect of the bound backdrop in TOP-DOWN
+/// normalized coords (xy = min, zw = size). BOTH runtimes have one, and they
+/// answer DIFFERENT questions.
+///
+/// The compositor's answers "which texels of this window's own capture are
+/// valid": canvas parts hanging off the output are never blitted, so
+/// `backdropTexel()` clamps into this rect and an edge window does not smear
+/// the cleared margin into its frost. It is a loose uniform, and this constant
+/// is its name.
+///
+/// The daemon's answers "which slice of the shared image lies behind THIS
+/// surface", because a daemon or preview host binds one desktop-sized wallpaper
+/// to every surface it decorates. It is a UBO member rather than a loose
+/// uniform (see SurfaceShaderUniforms), so this constant does not name it.
 inline constexpr const char* kUBackdropRect = "uBackdropRect";
 
-/// `float uHasBackdrop` — 1.0 when a backdrop capture exists this frame,
-/// else 0.0 (and ALWAYS 0.0 on the daemon, which has no scene behind its
-/// surfaces). A needsBackdrop pack styles an explicit fallback on this
+/// `float uHasBackdrop` — 1.0 when the host bound a backdrop this frame,
+/// else 0.0. On the compositor that is the captured scene; on a daemon or
+/// preview host it is the desktop wallpaper stand-in, when one is bound.
+/// A needsBackdrop pack styles an explicit fallback on this
 /// gate (e.g. a plain translucent tint) instead of assuming the sampler.
 inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 

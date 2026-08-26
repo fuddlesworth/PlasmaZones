@@ -25,6 +25,7 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
@@ -150,7 +151,13 @@ void PlasmaZonesEffect::deferDecorationTeardownWhileAnimated(const QString& wind
     // `this` as context cancels the poll on effect teardown (clearAllDecorations
     // handles the windows themselves there).
     QTimer::singleShot(kAnimatedTeardownPollMs, this, [this, windowId] {
-        m_animatedDecoTeardownPending.remove(windowId);
+        // A bulk teardown between arming and firing (clearAllDecorations, on
+        // daemon loss) clears the set. Treat that as a cancellation: without
+        // this the poll would refresh a decoration the teardown just released,
+        // because the effect and its resolve tree are still alive there.
+        if (!m_animatedDecoTeardownPending.remove(windowId)) {
+            return;
+        }
         // Exact-id re-check, same discipline as the windowDecorationRestored
         // handler: findWindowById's fuzzy appId fallback must not resolve a
         // same-app sibling and refresh IT under the dead window's id.
@@ -243,6 +250,16 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // defence in depth rather than a live path. It is here because the two sites
         // must not disagree about what "the exact window" means, and they did.
         KWin::EffectWindow* const target = resolveDecorationTarget(windowId, w);
+        // releaseDecorationGl carries the padded-band damage, so skipping it
+        // when we never owned the shader slot looks like it could strand a glow
+        // outside the window rect. It cannot. There are exactly two ways an
+        // entry with padding reaches here with shaderApplied false: a live
+        // transition took the slot (reconcileDecorationShader clears the flag
+        // and returns), in which case the transition is still painting the window
+        // and drives its own damage, and releaseSurfaceState below deliberately
+        // preserves the composite it is sampling; or the present shader failed
+        // to compile, and THAT path already called releaseDecorationGl itself
+        // before clearing the flag.
         if (priorShaderApplied) {
             releaseDecorationGl(target, priorOuterPadding);
         }
@@ -499,6 +516,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // client's content — interior-opaque by construction, so `true` is the
     // right answer there too.
     bool chainInteriorOpaque = true;
+    // Whether any pack in the chain actually contributed to the AND above.
+    // Only used to keep the diagnostic below off the vacuous case; the VALUE
+    // is deliberately true there, for the reason just given.
+    bool sawDrawingPack = false;
     // Theme colours for the pack flag resolver (below). Accent / inactive come
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
@@ -524,6 +545,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
         chainInteriorOpaque = chainInteriorOpaque && eff.interiorOpaque;
+        sawDrawingPack = true;
         QVariantMap packOverrides = allPackParams.value(packId).toMap();
         // Honour the pack's host-consumed theme flags (border useThemeNeutral /
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
@@ -534,26 +556,22 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved
         // per-surface override wins, else the param's declared default. The
         // chain's largest request pads the capture canvas (composite path).
-        if (!eff.paddingParam.isEmpty()) {
-            double request = 0.0;
-            if (packOverrides.contains(eff.paddingParam)) {
-                request = packOverrides.value(eff.paddingParam).toDouble();
-            } else {
-                for (const auto& param : eff.parameters) {
-                    if (param.id == eff.paddingParam) {
-                        request = param.defaultValue.toDouble();
-                        break;
-                    }
-                }
-            }
-            outerPadding = qMax(outerPadding, qCeil(request));
-        }
+        // Bound in DOUBLE space before narrowing: the request comes from
+        // installed pack metadata, and converting an out-of-range double to
+        // int is undefined, so the int clamp below would never see it.
+        const double request = qBound(0.0, PhosphorSurfaceShaders::paddingRequest(eff, packOverrides),
+                                      static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+        outerPadding = qMax(outerPadding, qCeil(request));
     }
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     wb.chainInteriorOpaque = chainInteriorOpaque;
-    if (chainInteriorOpaque && !chain.isEmpty()) {
+    // Gated on a pack having actually contributed. The VALUE is deliberately
+    // true for a chain whose packs are all registry-unknown (see where it is
+    // initialised); it is only the LOG that is uninformative there, because it
+    // would name a chain that declared nothing.
+    if (chainInteriorOpaque && sawDrawingPack) {
         // interiorOpaque comes verbatim from installable pack metadata (an
         // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
         // third-party pack that declares it while thinning interior texels
@@ -616,9 +634,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                                              // to prevent.
                                              const QRectF padded = paddedBandRect(ew, it->outerPadding);
                                              if (it->lastPaddedGeo.isValid()) {
-                                                 KWin::effects->addRepaint(KWin::RectF(it->lastPaddedGeo));
+                                                 damageBandRect(ew, it->lastPaddedGeo);
                                              }
-                                             KWin::effects->addRepaint(KWin::RectF(padded));
+                                             damageBandRect(ew, padded);
                                              it->lastPaddedGeo = padded;
                                          });
     }

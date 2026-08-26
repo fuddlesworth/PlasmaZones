@@ -133,6 +133,35 @@ inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
     return padded.adjusted(-pad, -pad, pad, pad);
 }
 
+/// Repaint @p band, widened to cover the device-grid overshoot.
+///
+/// The composite is presented on surfaceCanvasFor's logicalGeometry, which
+/// snapped OUTWARD to the device grid, so at a fractional scale the presented
+/// quad can reach past the rect a caller derived by up to one device pixel per
+/// side. addRepaint aligns outward too, but in LOGICAL space, and that does not
+/// always swallow it: at scale 1.5 an edge at 100.9 presents out to 101.333
+/// while the logical alignment stops at 101, stranding a half-device-pixel
+/// ribbon of stale glow.
+///
+/// One definition, because every caller damages the SAME band under a different
+/// transform and a widening applied to only some of them puts them back to
+/// disagreeing about what was presented. Callers keep their own rects RAW —
+/// they compare them against a recorded previous value, which has to stay
+/// like-for-like. No exact caller count here on purpose, matching
+/// paddedBandRect above: it drifts every time a caller is added.
+inline void damageBandRect(const KWin::EffectWindow* w, const QRectF& band)
+{
+    if (band.isEmpty() || !KWin::effects) {
+        return;
+    }
+    // windowSurfaceScale, not the window's own screen: it is the scale the
+    // canvas is pinned to, so it is the device grid the overshoot is measured
+    // against. The two differ for a window straddling a mixed-DPI edge, where
+    // the canvas takes the higher of them.
+    const qreal devicePx = 1.0 / qMax(windowSurfaceScale(w), 0.001);
+    KWin::effects->addRepaint(KWin::RectF(band.adjusted(-devicePx, -devicePx, devicePx, devicePx)));
+}
+
 /// Damage the whole padded band. A no-op for an unpadded chain, whose composite never
 /// draws outside the window rect and is covered by addRepaintFull alone.
 ///
@@ -140,10 +169,10 @@ inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
 /// paths, where a null window is the natural way for a future edit to arrive here.
 inline void damagePaddedBand(const KWin::EffectWindow* w, int outerPadding)
 {
-    if (!w || outerPadding <= 0 || !KWin::effects) {
+    if (!w || outerPadding <= 0) {
         return;
     }
-    KWin::effects->addRepaint(KWin::RectF(paddedBandRect(w, outerPadding)));
+    damageBandRect(w, paddedBandRect(w, outerPadding));
 }
 
 /// Allocate a full-canvas RGBA8 target and the framebuffer that wraps it. False on
@@ -268,7 +297,9 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
 ///   state moves, and the state itself is the cache key:
 ///       uSurfaceFocused  focus (and the cross-fade ramp between the two states,
 ///                        which CLAMPS to exactly 0.0 / 1.0 at rest)
-///       uSurfaceOpacity  the rule-resolved window opacity
+///       uSurfaceOpacity  LEGACY, a constant 1.0 — it no longer carries the
+///                        rule-resolved window opacity, so it never varies and
+///                        never contributes to this classification
 ///       iMouse           the cursor. STATE, not per-frame: it is constant between
 ///                        cursor MOVES, and a hover pack classed per-frame re-folded its
 ///                        whole chain at vsync forever with the pointer sitting still on

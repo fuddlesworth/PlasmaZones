@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
+#include <QImage>
 #include <QPalette>
 
 #include <optional>
@@ -28,15 +29,15 @@
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
+#include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include "core/interfaces/isettings.h"
-
-#include <QUrl>
 
 namespace PlasmaZones {
 
@@ -481,7 +482,28 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
 
 void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry)
 {
+    if (m_surfaceShaderRegistry == registry) {
+        return;
+    }
+    // Disconnect from the outgoing registry before the borrow is overwritten,
+    // or a re-set would leave a second connection behind. Daemon::stop() nulls
+    // this borrow before resetting the registry, so the old pointer is still
+    // alive here.
+    if (m_surfaceShaderRegistry) {
+        disconnect(m_surfaceShaderRegistry, nullptr, this, nullptr);
+    }
     m_surfaceShaderRegistry = registry;
+    // Re-arm the refusal warnings: the pack set has changed, so a pack that
+    // was reported missing may now be present (or newly broken). effectsChanged
+    // fires only on a real content or discovery change, never on a plain
+    // rescan, so this cannot put the warnings back to once-per-show.
+    m_warnedDecorationPacks.clear();
+    if (m_surfaceShaderRegistry) {
+        connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                [this]() {
+                    m_warnedDecorationPacks.clear();
+                });
+    }
 }
 
 void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
@@ -495,6 +517,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const auto clearDecoration = [this, slot]() {
         writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(QVariantList()));
         writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), 0.0);
+        // Drop the backdrop with the chain: an undecorated slot has nothing to
+        // sample it, and holding the image would keep a wallpaper-sized texture
+        // uploaded for a surface that draws none of it.
+        writeQmlProperty(slot, QStringLiteral("backdropTexture"), QVariant());
         // No decoration -> no audio need on this slot; let CAVA wind down if it
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {
@@ -530,9 +556,11 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // output through an interposed ShaderEffectSource — the QML analogue of
     // the compositor's composite ping-pong (renderSurfaceChainComposite), so
     // a border + glow chain renders both packs here too. Buffer passes
-    // (multipass packs like the blur family) still degrade to single-pass on
-    // this host; needsBackdrop packs have no scene to sample on the daemon
-    // and take their documented uHasBackdrop = 0 fallback regardless.
+    // (multipass packs like the blur family) run here as well — each stage
+    // forwards its pack's declared buffer set below. needsBackdrop packs have
+    // no scene to sample on the daemon, so the desktop wallpaper is bound as a
+    // stand-in below and they take their uHasBackdrop = 0 fallback only when
+    // that cannot be resolved.
     //
     // Per-pack parameter overrides come from the resolved profile (shape
     // { packId -> { paramId -> value } }). p_useSystemAccent is a
@@ -548,24 +576,52 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     QVariantList stages;
     double outerPadding = 0.0;
     bool chainWantsAudio = false;
+    bool chainWantsBackdrop = false;
     // Theme colours for the pack flag resolver, read once for the whole chain.
     const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
-            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
-                                 << "is not present in the surface-shader registry — skipping this chain stage";
+            // One warning per pack id per REASON, not one per show: a profile
+            // naming a pack the user uninstalled is a standing condition, and
+            // this runs on every OSD show. parseEffect's texture drops are
+            // one-shot for the same reason, though only per registry parse.
+            // (translateSurfaceParams' overflow summaries are NOT — they are
+            // one summary per call, and composeStageMap calls it for every
+            // pack on every show.)
+            //
+            // Keyed per reason rather than per pack: the missing and invalid
+            // branches are mutually exclusive within one iteration but not
+            // over time, so a bare pack id would let "uninstalled" swallow the
+            // later, different "reinstalled but broken" warning for good.
+            const QString missingKey = packId + QLatin1String("|missing");
+            if (!m_warnedDecorationPacks.contains(missingKey)) {
+                m_warnedDecorationPacks.insert(missingKey);
+                qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
+                                     << "is not present in the surface-shader registry — skipping this chain stage";
+            }
             continue;
         }
         const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
         // isValid() already requires a non-empty fragmentShaderPath.
         if (!effect.isValid()) {
-            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
-                                 << "has no valid fragment shader — skipping this chain stage";
+            // Standing condition too, and on the same every-show path: an
+            // installed pack whose fragment shader will not resolve stays
+            // broken until the user reinstalls it. Same per-reason keying as
+            // the missing branch above.
+            const QString invalidKey = packId + QLatin1String("|invalid");
+            if (!m_warnedDecorationPacks.contains(invalidKey)) {
+                m_warnedDecorationPacks.insert(invalidKey);
+                qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
+                                     << "has no valid fragment shader — skipping this chain stage";
+            }
             continue;
         }
         // Audio-reactive pack in the chain -> this decoration slot wants the
         // live CAVA spectrum (gated below so a plain border never starts audio).
         chainWantsAudio = chainWantsAudio || effect.audio;
+        // A pack that samples the scene behind the surface gets the desktop
+        // wallpaper as a stand-in for it (see the backdrop write below).
+        chainWantsBackdrop = chainWantsBackdrop || effect.needsBackdrop;
         const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
 
         // Outer-margin request (the pack's declared paddingParam, e.g. glow's
@@ -575,20 +631,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // The QML host inflates the capture + shader items by this logical-px
         // margin so an outer effect gets real transparent room; 0 (a
         // margin-less chain) keeps the classic 1:1 geometry.
-        if (!effect.paddingParam.isEmpty()) {
-            double request = 0.0;
-            if (friendlyParams.contains(effect.paddingParam)) {
-                request = friendlyParams.value(effect.paddingParam).toDouble();
-            } else {
-                for (const auto& param : effect.parameters) {
-                    if (param.id == effect.paddingParam) {
-                        request = param.defaultValue.toDouble();
-                        break;
-                    }
-                }
-            }
-            outerPadding = qMax(outerPadding, request);
-        }
+        outerPadding = qMax(outerPadding, PhosphorSurfaceShaders::paddingRequest(effect, friendlyParams));
 
         // Theme colour resolution: packs that opt into theme-derived colours
         // (border useThemeNeutral/useSystemAccent, glow/shadow useThemeTint) have
@@ -619,19 +662,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
         }
 
-        QVariantMap stageMap;
-        stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
-        stageMap.insert(QStringLiteral("vertexSource"),
-                        effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
-        stageMap.insert(QStringLiteral("preamble"),
-                        PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect));
-        stageMap.insert(QStringLiteral("params"),
-                        m_surfaceShaderRegistry->translateSurfaceParams(packId, resolvedParams));
-        // Animated packs declare it in metadata; the QML host gates that
-        // stage's per-frame iTime tick (playing) on this so static packs pay
-        // nothing.
-        stageMap.insert(QStringLiteral("animated"), effect.animated);
-        stages.append(stageMap);
+        // Stage map (source / preamble / translated params / animated /
+        // multipass set) is composed by the shared builder, so this host and
+        // the settings app's decoration preview cannot describe a stage
+        // differently — a preview that composed its own stage would stop
+        // predicting what the daemon draws.
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams));
     }
     if (stages.isEmpty()) {
         clearDecoration();
@@ -647,11 +683,36 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // per-property protocol needed a clear-first + source-last dance for the
     // same guarantee).
     writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), outerPadding);
+    // Backdrop BEFORE the chain, for the same reason as the padding: the chain
+    // write is the load trigger, so everything a stage reads on its first bake
+    // has to be in place first.
+    //
+    // A daemon surface has no live scene behind it, so a needsBackdrop pack
+    // (the glass / blur family) is handed the desktop wallpaper as a stand-in.
+    // It is an approximation — it shows the wallpaper, not the windows actually
+    // under the card — but it is the difference between a frosted OSD reading
+    // as frosted glass and reading as a flat tint. Only resolved for a chain
+    // that actually samples it; every other chain writes a null image, leaves
+    // uHasBackdrop at 0, and behaves exactly as it did before.
+    //
+    // Loaded once into a local so an unresolvable wallpaper writes the SAME
+    // invalid QVariant the no-backdrop arm and every hide/clear path write. A
+    // valid QVariant holding a null QImage is not the same thing to the QML
+    // side, which gates on the property being null or undefined, so it would
+    // flip useWallpaper true with no pixels behind it.
+    const QImage backdrop = chainWantsBackdrop ? PhosphorShaders::ShaderRegistry::loadWallpaperImage() : QImage();
+    writeQmlProperty(slot, QStringLiteral("backdropTexture"),
+                     backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a
     // change from audio to non-audio may let it wind down.
+    // Every OSD slot is a QQuickItem (the show paths hand one down), so a
+    // failed cast here means the caller passed something this function cannot
+    // decorate at all. Say so rather than silently leaving the slot carrying
+    // whatever audio flag a previous show set, which syncCavaState would then
+    // act on.
     if (auto* item = qobject_cast<QQuickItem*>(slot)) {
         item->setProperty(OverlayQmlPropertyNames::WantsAudioDecoration.data(), chainWantsAudio);
         // Decoration is often applied while the slot is still hidden (popups
@@ -659,6 +720,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // that starts CAVA once an audio surface becomes visible and stops it on
         // hide. UniqueConnection keeps re-decoration from stacking duplicates.
         connect(item, &QQuickItem::visibleChanged, this, &OverlayService::syncCavaState, Qt::UniqueConnection);
+    } else {
+        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath
+                             << "): slot is not a QQuickItem — its audio-reactive flag cannot be updated";
     }
     syncCavaState();
 }
@@ -784,6 +848,12 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     // small between shows and forces a fresh per-show shaderAnchor on
     // the next mode write.
     writeQmlProperty(it->osdSlot(), QStringLiteral("mode"), QString());
+    // Release the backdrop stand-in for the same reason clearDecoration does:
+    // a hidden slot draws none of it, and the image is wallpaper-sized. Every
+    // show runs applyDecoration again, which rewrites this, so nothing is lost
+    // by dropping it for the idle interval between shows. The chain itself is
+    // left alone deliberately: it is rewritten per show and costs a list.
+    writeQmlProperty(it->osdSlot(), QStringLiteral("backdropTexture"), QVariant());
     // Symmetric restore: layout/disabled/navigation OSD show paths
     // hid the zone-selector slot to keep it from peeking through the
     // OSD card. snap-assist's onSnapAssistSlotHideCompleted does the

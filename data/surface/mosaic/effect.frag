@@ -5,7 +5,9 @@
 // blurred — privacy glass. SINGLE PASS: unlike the rest of the Blur
 // family this pack needs no Gaussian buffers, it samples the RAW
 // backdrop once per fragment at the cell centre via backdropTexel()
-// (which clamps into the valid capture rect on its own). Same slab
+// (which keeps a cell centre that lands outside the surface's own slice
+// in range on either runtime: the compositor clamps into the captured
+// rect, the daemon leans on the sampler's clamp-to-edge). Same slab
 // composite as the blur family: the pane shows through wherever the
 // window itself is translucent.
 //
@@ -14,8 +16,9 @@
 // own contentOpacity parameter fades the window content so the mosaic shows
 // on opaque windows; a theme's own translucent pixels reveal it the same way
 // with no parameter involved.
-// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
-// the pack renders a still tint slab with the same corner rounding.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pack renders a still tint slab with the same
+// corner rounding.
 
 #include <surface_backdrop.glsl>
 
@@ -39,7 +42,7 @@ vec4 pSurface(vec2 uv) {
         vec3 rgb = mix(b.rgb, p_tintColor.rgb * b.a, clamp(p_tintStrength, 0.0, 1.0));
         pane = vec4(rgb, b.a) * mask;
     } else {
-        // Original pseudo look for daemon surfaces: a still tint slab.
+        // Original pseudo look with no backdrop: a still tint slab.
         pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
     }
 

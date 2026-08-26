@@ -749,6 +749,10 @@ void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
     }
     it->zoneSelectorSlot()->setVisible(false);
     writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("loaded"), false);
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
+    // slot draws none of it, the image is wallpaper-sized, and every show runs
+    // applyDecoration again, which rewrites it.
+    writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("backdropTexture"), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
 }
 
