@@ -575,10 +575,12 @@ Kirigami.Dialog {
                 lockedParams: root.lockedParams
                 enableLocking: true
                 enableRandomize: true
-                // This dialog has its own "Defaults" button in the footer
-                // button row, so suppress the editor's header reset to avoid a
-                // duplicate (same pattern as ShaderBrowserDetailDialog).
-                enableReset: false
+                // Reset lives in the shared editor's header beside lock-all and
+                // randomize, as it does everywhere else ParameterEditor is
+                // used. This dialog used to suppress it in favour of its own
+                // footer "Defaults" button (same pattern the shader browser had
+                // and has since dropped).
+                enableReset: true
                 enableGroups: true
                 enableImage: true
                 onValueChanged: function (id, value) {
@@ -591,6 +593,7 @@ Kirigami.Dialog {
                     root.toggleAllLocks(lock);
                 }
                 onRandomizeRequested: root.randomizeParameters()
+                onResetRequested: root.resetToDefaults()
                 onRequestColorPicker: function (id, name, current) {
                     root.openColorDialog(id, name, current);
                 }
@@ -749,15 +752,6 @@ Kirigami.Dialog {
 
                 Item {
                     Layout.fillWidth: true
-                }
-
-                Button {
-                    text: i18nc("@action:button", "Defaults")
-                    icon.name: "edit-undo"
-                    visible: root.shaderParams.length > 0
-                    Accessible.name: i18nc("@action:button", "Defaults")
-                    Accessible.description: i18n("Reset every shader parameter to its default value")
-                    onClicked: root.resetToDefaults()
                 }
 
                 Button {

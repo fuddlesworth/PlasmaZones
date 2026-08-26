@@ -211,21 +211,18 @@ Kirigami.Dialog {
     standardButtons: Kirigami.Dialog.Close
     padding: Kirigami.Units.largeSpacing
 
-    // Preset controls on the footer's left (Close stays on the right) — live
-    // preview only. Order: Load · Save · gap · Default.
+    // Preset controls on the footer's left (Close stays on the right) — zone
+    // preview only. Order: Load · Save.
     footerLeadingComponent: Component {
         // Span the full params column (left ScrollView) so Load · Save sit at
-        // its left and Default anchors to its right edge — lining up under the
-        // params/preview split and the per-row lock column above.
+        // its left, lining up under the params/preview split.
         Item {
-            // Any live preview, not just the zone one: the Default button below
-            // resets the transient parameter edits and is meaningful for every
-            // previewable pack. Only the PRESET buttons are zone-only (see
-            // presetRow), because the decoration controller exposes no preset
-            // API — gating the whole footer on the zone kind took Default down
-            // with them and left the decoration dialog with no way back to the
-            // pack's defaults.
-            visible: root._livePreview && root._hasParameters
+            // Presets only, and those are zone-only: shaderPresetDirectory /
+            // saveShaderPreset / loadShaderPreset live on the zone preview
+            // controller and would be a hard "not a function" on the decoration
+            // one. Reset is NOT here any more — it belongs to the shared
+            // parameter editor's header, so every host gets it without wiring.
+            visible: root._zonePreview && root._hasParameters
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
@@ -239,11 +236,6 @@ Kirigami.Dialog {
 
             RowLayout {
                 id: presetRow
-
-                // Zone-only: shaderPresetDirectory / saveShaderPreset /
-                // loadShaderPreset live on the zone preview controller, so
-                // these would be a hard "not a function" on the decoration one.
-                visible: root._zonePreview
 
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -270,15 +262,6 @@ Kirigami.Dialog {
                         shaderPresetSaveDialog.open();
                     }
                 }
-            }
-
-            Button {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: i18nc("@action:button reset shader parameters", "Default")
-                icon.name: "edit-reset"
-                Accessible.name: text
-                onClicked: root._resetPreview()
             }
         }
     }
@@ -492,10 +475,15 @@ Kirigami.Dialog {
                             compact: false
                             enableLocking: true
                             enableRandomize: true
-                            // This dialog has its own "Default" reset button in
-                            // its footer, so suppress the editor's header reset
-                            // to avoid a duplicate affordance.
-                            enableReset: false
+                            // Reset lives in the shared editor's own header,
+                            // beside lock-all and randomize, exactly as it does
+                            // everywhere else ParameterEditor is used. This
+                            // dialog used to suppress it and hand-roll a
+                            // "Default" button into its footer instead, which
+                            // put the same action somewhere different from the
+                            // rest of the app and made it something each host
+                            // had to remember to provide.
+                            enableReset: true
                             enableGroups: true
                             enableImage: true
                             parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
@@ -512,6 +500,18 @@ Kirigami.Dialog {
                             }
                             onRandomizeRequested: {
                                 root._liveParams = paramEditor.computeRandomized();
+                                root._recompute();
+                            }
+                            // Parameters only. The old footer button called
+                            // _resetPreview(), which also restarted the preview
+                            // clock, cleared every lock and rebuilt the
+                            // renderer — reasonable for a button labelled
+                            // "Default" sitting apart from the editor, but not
+                            // what a reset beside lock-all and randomize should
+                            // do. Locks survive, matching randomize, which
+                            // leaves locked parameters alone.
+                            onResetRequested: {
+                                root._liveParams = paramEditor.computeDefaults();
                                 root._recompute();
                             }
                             onRequestColorPicker: function (id, name, current) {
