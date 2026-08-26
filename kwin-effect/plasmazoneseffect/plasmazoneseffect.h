@@ -972,6 +972,14 @@ private:
     /// ScrollVisualPlacement for the case that forced this.
     QPoint scrollVisualTranslationFor(const QString& windowId, const QRectF& frameRect) const;
 
+    /// Same resolve, for a caller that already holds the entry.
+    ///
+    /// The id-keyed form above hashes the window id to find it. On the paint
+    /// path the caller has usually just probed the map to decide whether to
+    /// relocate at all, so passing the entry avoids hashing a composite
+    /// `appId|uuid` string twice per window per output pass.
+    static QPoint scrollVisualTranslationFor(const ScrollVisualPlacement& placement, const QRectF& frameRect);
+
     /**
      * @brief Blit this pass's compositor-drawn tab indicators at the stacking
      *        position the scene walk has reached.
@@ -1212,12 +1220,13 @@ private:
     // Resolve the fully-cascaded motion Profile (curve + duration) for
     // @p profilePath: global animator profile → category "All" → per-node
     // motion-tree overrides → per-window Rule override. This is the single SSOT
-    // for the per-event timing cascade, shared by all four per-event timing
+    // for the per-event timing cascade, shared by all five per-event timing
     // consumers — the animator-driven geometry path (applyWindowGeometry), the
     // time-driven shader path (tryBeginShaderForEvent), the desktop switch (the
-    // desktopChanged handler) and the show-desktop peek (the
-    // showingDesktopChanged handler) — so each honours the same global → All →
-    // node resolution. Pass a windowless @p query (hasWindow() false) + empty
+    // desktopChanged handler), the show-desktop peek (the showingDesktopChanged
+    // handler) and the strip view spring (the tiling handler's ScrollingView
+    // path) — so each honours the same global → All → node resolution. Pass a windowless @p query (hasWindow() false) +
+    // empty
     // @p windowId for events with no per-window rule scope (both desktop legs);
     // the Rule layer is then skipped and only the tree cascade applies.
     //

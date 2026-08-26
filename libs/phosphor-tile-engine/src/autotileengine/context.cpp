@@ -431,11 +431,14 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // computed order BEFORE the effect's windowOpened re-announce lands,
         // so the first retile uses the seeded order; the later windowOpened
         // for an already-present window is a tracked no-op insert).
-        // Advisory entries describe historical positions for windows that aren't open yet —
-        // pre-seeding the state would create ghost entries the user can't
-        // close, and would also override the user's insertPosition preference
-        // when the windows actually do open. Leave the advisory order in
-        // pendingInitialOrders for insertWindow() to consult on arrival.
+        // Advisory entries would describe historical positions for windows that
+        // aren't open yet — pre-seeding the state would create ghost entries the
+        // user can't close, and would also override the user's insertPosition
+        // preference when the windows actually do open, so an advisory order is
+        // left in pendingInitialOrders for insertWindow() to consult on arrival.
+        // No producer of advisory orders exists today (setInitialWindowOrder is
+        // the sole writer and always marks strict); the branch below is a
+        // retained forward contract, which is why it reads as unreachable.
         if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
             const QStringList order = m_pendingInitialOrders.value(screenId);
             if (!m_windowRegistry) {

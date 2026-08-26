@@ -26,7 +26,7 @@ SettingsCard {
     collapsible: true
 
     // Adjust-step bounds, read once from ConfigDefaults via the controller.
-    readonly property var _stepConsts: settingsController.scrollingConstants()
+    readonly property var _scrollConsts: settingsController.scrollingConstants()
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -152,8 +152,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("Column width adjustment step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingColumnWidthStepPercent
                 formatValue: function (v) {
@@ -174,8 +174,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("Window height adjustment step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingWindowHeightStepPercent
                 formatValue: function (v) {
@@ -196,8 +196,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("View scroll step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingViewScrollStepPercent
                 formatValue: function (v) {

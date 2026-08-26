@@ -102,6 +102,11 @@ QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const QString& windowId, co
     if (it == m_scrollVisualDelta.constEnd()) {
         return {};
     }
+    return scrollVisualTranslationFor(*it, frameRect);
+}
+
+QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const ScrollVisualPlacement& placement, const QRectF& frameRect)
+{
     // ALWAYS pass the window's FRAME here, never its expanded band and never a
     // rect that already carries a translation. The centring term below is
     // derived from the rect it is handed, so handing it a band centres by the
@@ -124,12 +129,12 @@ QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const QString& windowId, co
     // keeps the drawn and committed centring identical on a fractional-scale
     // output, where the two differ by a pixel.
     const QRect r = frameRect.toRect();
-    const int offsetX = qMax(0, it->columnSize.width() - r.width()) / 2;
-    const int offsetY = qMax(0, it->columnSize.height() - r.height()) / 2;
+    const int offsetX = qMax(0, placement.columnSize.width() - r.width()) / 2;
+    const int offsetY = qMax(0, placement.columnSize.height() - r.height()) / 2;
     // The translation to APPLY, not the destination: every consumer adds this
     // to a rect it already has, so the shape matches what the stored delta
     // used to hand them.
-    return QPoint(it->stripPos.x() + offsetX - r.x(), it->stripPos.y() + offsetY - r.y());
+    return QPoint(placement.stripPos.x() + offsetX - r.x(), placement.stripPos.y() + offsetY - r.y());
 }
 
 bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const
@@ -196,7 +201,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // relocation applied just above would cancel out and this predicate would
     // judge the window at its destination for the whole leg — exactly the blink
     // the relocation exists to prevent.
-    const QPoint translation = scrollVisualTranslationFor(windowId, frame);
+    const QPoint translation = scrollVisualTranslationFor(*vit, frame);
     visual.translate(translation.x(), translation.y());
     // The clip predicate has to follow the SAME axis the strip is sliding on,
     // or an off-view column is judged against a band ninety degrees from where

@@ -833,7 +833,8 @@ void ScrollEngine::endArrivalBurst()
         // Mode-transition focus restore, consumed here and nowhere else.
         //
         // The order seed positions each arrival with insertWindowAt, which
-        // deliberately takes NO focus and re-anchors nothing — right for
+        // takes focus only for the first column of an empty strip and otherwise
+        // re-clamps the anchor without re-anchoring on the arrival — right for
         // seeding a whole strip, but it leaves the strip pointed at whichever
         // column happened to be adopted first. The window the user was
         // actually on then has no way to pull the view onto itself, and a

@@ -223,6 +223,10 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 
 QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
 {
+    // Same empty-id guard as its focus twin and as stateForScreen.
+    if (screenId.isEmpty()) {
+        return {};
+    }
     const TilingStateKey key = currentKeyForScreen(screenId);
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (!state) {
@@ -248,6 +252,13 @@ QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
 
 QString AutotileEngine::managedFocusedWindow(const QString& screenId) const
 {
+    // Empty-id guard, matching the sibling non-creating accessor stateForScreen,
+    // which opens with the same check on the same body. No caller reaches it
+    // with an empty id today; the guard is here so the two accessors cannot
+    // drift apart on what they accept.
+    if (screenId.isEmpty()) {
+        return QString();
+    }
     // Same non-creating, CURRENT-context lookup capturedWindowOrder uses, so
     // the order and the focus a mode transition captures are read from one
     // state. They share a KEY, not a membership: capturedWindowOrder omits

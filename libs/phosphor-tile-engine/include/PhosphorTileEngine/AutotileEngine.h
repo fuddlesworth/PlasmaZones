@@ -1841,9 +1841,10 @@ private:
     // order is removed (full consumption, per-window purge emptying it,
     // stale-window sweep, timeout reap, screen teardown) — an order retained
     // for a minimized placeholder keeps its strict flag with it. Entries seeded by
-    // setInitialWindowOrder (mode transition) are the strict ones; advisory
-    // entries reconstructed per-window from the placement store are NOT in this
-    // set — for those the saved position is honored only when it appends at the
+    // setInitialWindowOrder (mode transition) are the strict ones, and it is the
+    // only producer in the tree, so every entry is strict today. Advisory
+    // entries reconstructed per-window from the placement store would NOT be in
+    // this set — for those the saved position is honored only when it appends at the
     // current tail, otherwise insertPosition takes over. This is the behaviour
     // users expect from their "After existing" / "After focused" / "As main
     // window" preference for new windows.

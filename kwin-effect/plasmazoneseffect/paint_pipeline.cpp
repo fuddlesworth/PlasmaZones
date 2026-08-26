@@ -1727,9 +1727,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
-                if (m_scrollVisualDelta.contains(windowId)) {
-                    // Resolved against the committed frame, matching the draw.
-                    const QPoint translation = scrollVisualTranslationFor(windowId, w->frameGeometry());
+                if (const auto vit = m_scrollVisualDelta.constFind(windowId); vit != m_scrollVisualDelta.constEnd()) {
+                    // Resolved against the committed frame, matching the draw,
+                    // and off the entry this probe already found.
+                    const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                     animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
@@ -1835,12 +1836,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // never-parked column would be, which is what lets it be seen
             // travelling past during a scroll rather than blinking out the
             // moment it leaves the viewport.
-            if (!m_scrollVisualDelta.isEmpty() && m_scrollVisualDelta.contains(windowId)) {
+            if (const auto vit = m_scrollVisualDelta.constFind(windowId); vit != m_scrollVisualDelta.constEnd()) {
                 // Resolved against the rect being drawn rather than added as a
                 // precomputed delta — see ScrollVisualPlacement for why the
                 // committed position cannot be assumed to sit at the park.
-                const QRectF drawnAt = w->frameGeometry();
-                const QPoint translation = scrollVisualTranslationFor(windowId, drawnAt);
+                // One lookup: the entry found here is handed straight to the
+                // resolver rather than re-hashing the composite window id.
+                const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                 data += QPointF(translation.x(), translation.y());
             }
             const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
