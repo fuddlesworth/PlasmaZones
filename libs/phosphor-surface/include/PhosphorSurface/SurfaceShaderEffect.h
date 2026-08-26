@@ -49,11 +49,17 @@ namespace PhosphorSurfaceShaders {
  * ## Multipass buffer passes
  *
  * Surface shaders support opt-in multipass: when `isMultipass` is set and
- * `bufferShaderPaths` is non-empty, the daemon's surface-layer runtime
- * runs those buffer passes before the main fragment shader. The
- * kwin-effect compositor path is single-pass only; multipass effects
- * degrade to single-pass there with a diagnostic log, matching the
- * overlay / animation packs.
+ * `bufferShaderPaths` is non-empty, the daemon runs those buffer passes
+ * before the main fragment shader. Concretely that is the overlay
+ * decoration host (`src/ui/SurfaceDecoration.qml`), whose per-stage
+ * SurfaceShaderItem inherits the whole multipass property set from
+ * PhosphorRendering::ShaderEffect; `OverlayService::applyDecoration`
+ * forwards the fields below into each stage. A multipass stage is
+ * layered (`layer.enabled`) because the render node drives its own
+ * passes and needs a target isolated from the scene graph's batch
+ * renderer. The kwin-effect compositor path is single-pass only;
+ * multipass effects degrade to single-pass there with a diagnostic log,
+ * matching the overlay / animation packs.
  *
  * ## Trimmed vs AnimationShaderEffect
  *

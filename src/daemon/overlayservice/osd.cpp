@@ -530,9 +530,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // output through an interposed ShaderEffectSource — the QML analogue of
     // the compositor's composite ping-pong (renderSurfaceChainComposite), so
     // a border + glow chain renders both packs here too. Buffer passes
-    // (multipass packs like the blur family) still degrade to single-pass on
-    // this host; needsBackdrop packs have no scene to sample on the daemon
-    // and take their documented uHasBackdrop = 0 fallback regardless.
+    // (multipass packs like the blur family) run here as well — each stage
+    // forwards its pack's declared buffer set below. needsBackdrop packs have
+    // no scene to sample on the daemon and take their documented
+    // uHasBackdrop = 0 fallback regardless.
     //
     // Per-pack parameter overrides come from the resolved profile (shape
     // { packId -> { paramId -> value } }). p_useSystemAccent is a
@@ -631,6 +632,27 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // stage's per-frame iTime tick (playing) on this so static packs pay
         // nothing.
         stageMap.insert(QStringLiteral("animated"), effect.animated);
+        // Multipass buffer passes. SurfaceShaderItem inherits the full
+        // multipass property set from PhosphorRendering::ShaderEffect, so a
+        // surface pack's declared buffer passes run on this host exactly as an
+        // overlay pack's do — the fields just have to reach the item. Only a
+        // pack that BOTH opts into multipass and resolved at least one buffer
+        // path is forwarded; everything else leaves the item's single-pass
+        // defaults untouched. The QML host additionally layers a multipass
+        // stage (see SurfaceDecoration.qml), which the render node requires to
+        // keep its own passes isolated from the scene graph's batch renderer.
+        const bool stageMultipass = effect.isMultipass && !effect.bufferShaderPaths.isEmpty();
+        stageMap.insert(QStringLiteral("multipass"), stageMultipass);
+        if (stageMultipass) {
+            stageMap.insert(QStringLiteral("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
+            stageMap.insert(QStringLiteral("bufferFeedback"), effect.bufferFeedback);
+            stageMap.insert(QStringLiteral("bufferScale"), effect.bufferScale);
+            stageMap.insert(QStringLiteral("bufferWrap"), effect.bufferWrap);
+            stageMap.insert(QStringLiteral("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
+            stageMap.insert(QStringLiteral("bufferFilter"), effect.bufferFilter);
+            stageMap.insert(QStringLiteral("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
+            stageMap.insert(QStringLiteral("useDepthBuffer"), effect.useDepthBuffer);
+        }
         stages.append(stageMap);
     }
     if (stages.isEmpty()) {

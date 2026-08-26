@@ -412,6 +412,34 @@ Item {
                 shaderParams: stage.stageData.params !== undefined ? stage.stageData.params : ({})
                 vertexShaderUrl: stage.stageData.vertexSource !== undefined ? stage.stageData.vertexSource : ""
                 shaderSource: stage.stageData.source !== undefined ? stage.stageData.source : ""
+
+                // Multipass buffer passes, forwarded from the composer's stage
+                // map. Inherited wholesale from ShaderEffect — a surface pack's
+                // buffer passes need no surface-specific handling, only these
+                // bindings. `multipass` is false for every single-pass pack, so
+                // the empty-list / default arms below keep those stages on the
+                // classic single-pass path.
+                bufferShaderPaths: stage.stageData.multipass === true && stage.stageData.bufferShaderPaths !== undefined ? Array.from(stage.stageData.bufferShaderPaths) : []
+                bufferFeedback: stage.stageData.bufferFeedback === true
+                bufferScale: stage.stageData.bufferScale !== undefined ? stage.stageData.bufferScale : 1
+                bufferWrap: stage.stageData.bufferWrap !== undefined && stage.stageData.bufferWrap !== "" ? stage.stageData.bufferWrap : "clamp"
+                bufferWraps: stage.stageData.bufferWraps !== undefined ? Array.from(stage.stageData.bufferWraps) : []
+                bufferFilter: stage.stageData.bufferFilter !== undefined && stage.stageData.bufferFilter !== "" ? stage.stageData.bufferFilter : "linear"
+                bufferFilters: stage.stageData.bufferFilters !== undefined ? Array.from(stage.stageData.bufferFilters) : []
+                useDepthBuffer: stage.stageData.useDepthBuffer === true
+
+                // Multipass REQUIRES a private layer FBO: the render node
+                // drives its own buffer passes, and without an isolated target
+                // the scene graph's batch renderer desynchronizes its internal
+                // pass tracking (the rationale ZoneShaderRenderer.qml documents
+                // for the overlay path — same render node, same constraint).
+                // Gated on the stage actually being multipass so a plain border
+                // or glow stage pays no extra canvas-sized FBO. The intermediate
+                // taps below still capture a layered stage: layer.enabled
+                // changes where the item renders, not whether it renders, so
+                // the hide-source fold is unaffected.
+                layer.enabled: stage.stageData.multipass === true && root.decorationActive
+                layer.textureMirroring: ShaderEffectSource.NoMirroring
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on
