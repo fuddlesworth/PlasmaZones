@@ -447,7 +447,9 @@ bool DecorationPageController::clearOverride(const QString& path)
         return false;
     // Reject unsupported paths for parity with the chain mutators (setChain /
     // setChainParam / setChainLayerEnabled) — an unsupported path has no
-    // override to clear anyway, so this only tightens the contract.
+    // override to clear anyway, so this only tightens the contract. The
+    // descendants variant below needs no such guard: it matches by prefix over
+    // paths that ARE overridden, and an unsupported path is never one of them.
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
     DecorationProfileTree tree = this->tree();
@@ -459,8 +461,10 @@ bool DecorationPageController::clearOverride(const QString& path)
 
 int DecorationPageController::overrideDescendantCount(const QString& path) const
 {
-    if (!m_settings)
-        return 0;
+    // No !m_settings guard: tree() already answers with a default-constructed
+    // tree when settings are null, which has no overrides, so the count is 0
+    // either way. The sibling readers (hasOverride, chainAt, rawProfile) lean on
+    // the same thing rather than each repeating the check.
     return overrideDescendantsOf(tree(), path).size();
 }
 

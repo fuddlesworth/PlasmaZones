@@ -93,8 +93,11 @@ public:
     /// @param registry Optional — when null, the `*ShaderEffects()`
     ///        Q_INVOKABLEs return empty results so unit tests can construct
     ///        the controller without a surface bootstrap.
-    /// @param settings Optional — when null, profile getters return empty
-    ///        results and mutators are no-ops.
+    /// @param settings Optional — when null the controller reads an empty
+    ///        profile tree and every mutator is a no-op. Note that "empty tree"
+    ///        is not the same as "empty result": a RESOLVED read still returns a
+    ///        fully populated map, because resolution fills the library defaults
+    ///        in. Only the raw reads come back empty.
     explicit DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
                                       ISettings* settings = nullptr, QObject* parent = nullptr);
     ~DecorationPageController() override;

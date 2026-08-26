@@ -203,6 +203,12 @@ void DecorationPreviewController::startAudioCapture()
         m_audio = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
         connect(m_audio.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
                 [this](const QVector<float>& spectrum) {
+                    // Emitted unconditionally, unlike the usual only-on-change
+                    // rule: this is a capture-rate stream of float vectors, and
+                    // comparing the whole vector every frame to spare a signal
+                    // the QML side is bound to anyway costs more than it saves.
+                    // A genuinely silent stretch is the only case that repeats,
+                    // and it is cheap to re-publish.
                     m_spectrum = spectrum;
                     Q_EMIT audioSpectrumChanged();
                 });
