@@ -261,6 +261,16 @@ QString AutotileEngine::managedFocusedWindow(const QString& screenId) const
     //
     // stateForKey (not tilingStateForScreen) because the capture must never
     // lazily materialise a state for a screen that has none.
+    //
+    // Reads the state's OWN focus tracker on purpose, and NavigationController's
+    // warning about that tracker being stale does not apply here. Navigation
+    // asks "which window is the user acting on right now" — one global answer,
+    // which is why those overrides take a daemon-supplied id. This asks "which
+    // window was active in THIS screen's state", which is per-screen and
+    // historical, and a state not currently holding compositor focus keeping the
+    // last focus it saw is exactly the answer wanted. Substituting the daemon's
+    // globally-focused window would seed every screen in a multi-screen flip
+    // with one id and lose the per-screen answer.
     PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     return state ? state->focusedWindow() : QString();
 }

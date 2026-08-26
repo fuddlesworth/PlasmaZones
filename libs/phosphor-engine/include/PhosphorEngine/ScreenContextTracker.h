@@ -84,8 +84,19 @@ public:
     {
         return m_activityContextEverSet;
     }
-    /// Effective per-output desktop for a screen: its per-output desktop if set,
-    /// else the global current desktop.
+    /// The screen's PER-OUTPUT desktop: its own entry if set, else the global
+    /// current desktop.
+    ///
+    /// NOT the effective desktop, and the difference matters: this deliberately
+    /// ignores the sticky pin, which currentKeyForScreen ranks ABOVE both of
+    /// these. On a pinned screen the two disagree, and the key the engine
+    /// actually resolves is the one currentKeyForScreen returns. Ask this only
+    /// when you specifically want the per-output value; ask currentKeyForScreen
+    /// when you want the desktop a lookup will use.
+    ///
+    /// Kept excluding the pin on purpose — releaseScreenOwnership's contract is
+    /// written in terms of this falling back to the global value, and the
+    /// tracker's tests pin that behaviour.
     int screenDesktop(const QString& screenId) const
     {
         return m_screenCurrentDesktop.value(screenId, m_currentDesktop);
@@ -94,6 +105,17 @@ public:
     // ── Context mutators ─────────────────────────────────────────────────────
     ContextChange setCurrentDesktop(int desktop);
     ContextChange setCurrentDesktopForScreen(const QString& screenId, int desktop);
+    /// Drop a screen's per-output desktop entry, falling it back to the global.
+    ///
+    /// No production caller, and deliberately so. Turning Plasma's per-output
+    /// desktop setting OFF does not strand these entries: the effect's
+    /// desktopChanged handler fans a global switch out to EVERY output, so the
+    /// pushes keep arriving and simply become uniform. There is no "per-output
+    /// mode ended" event to hook, and none is needed. A screen that genuinely
+    /// goes away is handled by removeScreen / removeScreensIf / pruneDesktop.
+    ///
+    /// Wiring a caller here would drop an entry that currentKeyForScreen's
+    /// contract says must survive while its screen exists.
     void clearCurrentDesktopForScreen(const QString& screenId)
     {
         m_screenCurrentDesktop.remove(screenId);
@@ -105,8 +127,18 @@ public:
     {
         return m_screenDesktopOverride.contains(screenId);
     }
+    /// Pin a screen to a desktop, outranking both the per-output and the global
+    /// value in currentKeyForScreen.
+    ///
+    /// Rejects desktop < 1, symmetric with setCurrentDesktop and
+    /// setCurrentDesktopForScreen — and the guard matters MORE here, because a
+    /// poisoned pin outranks both of the values those two protect. Unreachable
+    /// from the in-tree callers, which pass a desktop off a live state key.
     void setStickyPin(const QString& screenId, int desktop)
     {
+        if (desktop < 1) {
+            return;
+        }
         m_screenDesktopOverride.insert(screenId, desktop);
     }
     /// Remove and return the sticky-pin desktop for a screen (default-constructed
@@ -122,6 +154,12 @@ public:
     /// For an OUTPUT that is going away. A screen that merely leaves this
     /// engine's mode set must use releaseScreenOwnership instead — see its
     /// doc for why dropping the per-output desktop there is a correctness bug.
+    ///
+    /// No production caller today: real output removal goes through
+    /// removeScreensIf, which every engine drives from its own
+    /// pruneStatesForRemovedScreen, and orphaned virtual-screen ids are swept
+    /// the same way. Kept as the single-screen form of that operation and
+    /// exercised by the tracker's tests. Reach for removeScreensIf first.
     void removeScreen(const QString& screenId)
     {
         m_screenDesktopOverride.remove(screenId);
@@ -129,6 +167,11 @@ public:
     }
     /// Drop only the ENGINE-OWNED half for a screen leaving this engine's mode
     /// set, keeping the per-output desktop.
+    ///
+    /// Operationally this clears the sticky pin and nothing else — the name says
+    /// what the CALLER is doing rather than what the call does, because the
+    /// point of it is the half deliberately left alone. Read it as
+    /// clearStickyPin with a mandatory rationale attached.
     ///
     /// The sticky pin is this engine's own bookkeeping and is meaningless once
     /// the engine stops managing the screen. The per-output desktop is not: it
@@ -143,6 +186,20 @@ public:
     /// per-output change: on the scrolling engine that merged every virtual
     /// desktop's strip into one, and windows from other desktops rode along in
     /// its batches.
+    ///
+    /// The pin is NOT rebuilt on re-entry, and the consequence is worth knowing
+    /// before changing either half. Both engines' updateStickyScreenPins iterate
+    /// their OWN managed-screen set, and their only callers are the daemon's two
+    /// context-switch handlers — so an all-sticky screen that leaves the mode and
+    /// returns with no intervening desktop or activity switch comes back
+    /// unpinned, resolves to its per-output desktop, and finds no state there.
+    /// Its pinned-desktop state is orphaned until a prune reaps it.
+    ///
+    /// Preserving the pin here instead would trade that for the mirror case: the
+    /// unpin arm iterates the same managed-screen set, so a pin kept for a screen
+    /// OUTSIDE the mode goes stale if its windows stop being sticky. That case
+    /// needs one extra state change to reach, which is why it is the narrower of
+    /// the two, but the migration path for a stale pin is not traced.
     void releaseScreenOwnership(const QString& screenId)
     {
         m_screenDesktopOverride.remove(screenId);

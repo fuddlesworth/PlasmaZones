@@ -142,6 +142,22 @@ void AutotileEngine::setCurrentDesktopForScreen(const QString& screenId, int des
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Switching autotile context for screen" << screenId << "desktop" << previous << "->" << desktop;
         m_isDesktopContextSwitch |= change.armSwitch;
+        // A pending initial order is keyed by bare SCREEN id but was probed —
+        // and is consumed — against the screen's CONTEXT. A context change
+        // between those two points would apply one desktop's saved order to
+        // another desktop's layout, placing a window at a slot index that means
+        // nothing there. Nothing else invalidates it: the seed survives its own
+        // pass whenever one of its windows is still minimized, and its reaper
+        // re-arms indefinitely for exactly that case, so it is not time-bounded
+        // either.
+        //
+        // Dropped rather than re-keyed: the consumption sites resolve the
+        // context themselves, so re-keying would mean re-deciding screen-vs-
+        // context intent at seven call sites for the same outcome. Safe against
+        // eating a live mode-transition seed, because the daemon seeds inside
+        // updateEngineScreens, which runs strictly after this in the same
+        // handler.
+        clearPendingInitialOrder(screenId);
     }
 }
 
@@ -160,16 +176,21 @@ void AutotileEngine::clearScreenScheduling(const QString& screenId)
     // recreates vs:N ids), its first applyTiling would consume the stale
     // entry and activate a window from the previous session of that screen.
     m_pendingFocusByScreen.remove(screenId);
-    // The initial-order seed trio, for the same reason and one the state
-    // teardown cannot cover. That teardown only visits screens that HAVE a
-    // state at the current key, and a screen seeded before any of its windows
-    // arrived never built one — the seed probe is deliberately non-creating. So
-    // its seed used to outlive its removal, and a strict order is consumed on
-    // re-entry as if it were fresh.
+    // The initial-order seed, for the same reason and one the state teardown
+    // cannot cover. That teardown only visits screens that HAVE a state at the
+    // current key, and a screen seeded before any of its windows arrived never
+    // built one — the seed probe is deliberately non-creating. So its seed used
+    // to outlive its removal, and a strict order is consumed on re-entry as if
+    // it were fresh.
     //
     // The reaper is not a backstop here: it re-arms itself indefinitely while
     // any seeded window still reads as minimized, so a removed screen could
     // hold a live timer chain as well as the stale order.
+    clearPendingInitialOrder(screenId);
+}
+
+void AutotileEngine::clearPendingInitialOrder(const QString& screenId)
+{
     m_pendingInitialOrders.remove(screenId);
     m_pendingOrderGeneration.remove(screenId);
     m_strictInitialOrderScreens.remove(screenId);
@@ -188,6 +209,13 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Switching autotile context: activity" << previous << "->" << activity;
         m_isDesktopContextSwitch |= change.armSwitch;
+        // Every screen's seed, for the reason the per-screen desktop switch
+        // gives: activity is the other half of the context key, so this moves
+        // every screen's context at once.
+        const QStringList seeded = m_pendingInitialOrders.keys();
+        for (const QString& screenId : seeded) {
+            clearPendingInitialOrder(screenId);
+        }
     }
 }
 

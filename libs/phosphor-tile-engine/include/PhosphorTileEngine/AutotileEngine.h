@@ -655,6 +655,14 @@ public:
      */
     void clearScreenScheduling(const QString& screenId);
 
+    /// Drop a screen's initial-order seed: the order, its generation counter and
+    /// its strict marker, which only ever live or die together.
+    ///
+    /// The seed is keyed by bare screen id but probed and consumed against the
+    /// screen's CONTEXT, so anything that moves the context invalidates it —
+    /// otherwise one desktop's saved order is applied to another's layout.
+    void clearPendingInitialOrder(const QString& screenId);
+
     /**
      * @brief Purge @p windowId from every pending initial order, with full
      * bookkeeping: empty orders drop their generation/strict entries, and

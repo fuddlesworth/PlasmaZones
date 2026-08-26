@@ -62,6 +62,16 @@ ContextChange ScreenContextTracker::setCurrentDesktopForScreen(const QString& sc
         // first push equal to the global changes nothing observable);
         // establishing is never a switch, so armSwitch stays false either
         // way.
+        //
+        // Not a missed arm in practice, and arming here would be actively
+        // wrong. The effect pushes a desktop for EVERY output at daemon
+        // (re)registration, bypassing its own dedup, so this branch is consumed
+        // for every screen at startup and every genuine user switch takes the
+        // arming branch below. Arming whenever the context was already
+        // established would make that re-sync report a spurious desktop switch
+        // for every screen on every daemon restart — which bumps the global
+        // stagger generation and flips a screen leaving the set from a
+        // reversible park to a destructive untrack.
         m_desktopContextEverSet = true;
         m_screenCurrentDesktop.insert(screenId, desktop);
         return {desktop != m_currentDesktop, false};

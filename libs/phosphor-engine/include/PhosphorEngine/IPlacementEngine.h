@@ -388,7 +388,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Window ordering (override if engine maintains stacking order)
+    // OPTIONAL: Window ordering and focus (mode-transition capture and seed)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QStringList managedWindowOrder(const QString& screenId) const
@@ -435,9 +435,17 @@ public:
     }
     /// Hand the incoming engine the focus captured from the outgoing one.
     ///
-    /// Advisory, and consumed at the END of the arrival burst rather than per
-    /// arrival: the seeded window is usually not the first to re-announce, so
-    /// applying it eagerly would be overwritten by the arrivals that follow.
+    /// Advisory. WHEN to apply it is the implementor's choice, not part of this
+    /// contract: the seeded window is usually not the LAST to re-announce, so
+    /// an implementor that re-derives focus from arrivals has to defer the seed
+    /// past them or have it overwritten. The scroll engine consumes it at the
+    /// end of its arrival burst for exactly that reason; an implementor with no
+    /// burst concept is free to apply it however it likes.
+    ///
+    /// An empty @p windowId is not a no-op: it means the capturing transition
+    /// found no focus to report, and it must CLEAR any seed an earlier one
+    /// left, or a stale seed outlives the transition that owned it.
+    ///
     /// An engine with no view of its own has nothing to do with this and the
     /// default no-op is the right implementation for it — the focused window
     /// is wherever the compositor already has it.
@@ -780,9 +788,15 @@ public:
     }
 
     /// The window's client-reported minimum size as last known by this
-    /// engine, or 0x0 when unknown / untracked. Read by the cross-engine
+    /// engine, or an UNKNOWN answer when it has none. Read by the cross-engine
     /// handoff dispatcher to seed HandoffContext::minSize; must be queried
     /// before handoffRelease. Default suits engines without a min-size model.
+    ///
+    /// "Unknown" is spelled two ways in the tree and a caller must accept both:
+    /// a default-constructed 0x0, and an INVALID QSize (-1x-1), which the scroll
+    /// engine returns deliberately to distinguish "no entry" from "a real zero".
+    /// Every in-tree consumer clamps with qMax against 0, which treats the two
+    /// identically; a new consumer must do the same rather than assuming either.
     virtual QSize windowMinimumSize(const QString& windowId) const
     {
         Q_UNUSED(windowId)

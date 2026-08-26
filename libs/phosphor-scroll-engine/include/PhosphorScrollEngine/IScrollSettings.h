@@ -42,9 +42,11 @@ public:
     ///
     /// Scrolling's OWN setting, not the tiling one: the gap VALUES above are
     /// shared and forwarded, but smart gaps is a per-mode behaviour and each
-    /// mode keeps its own. Off by default here — a sole column sits at its
-    /// own width rather than filling the screen, so the tiling rationale for
-    /// stripping the gaps does not carry over.
+    /// mode keeps its own. The config default is OFF, unlike tiling's — a sole
+    /// column sits at its own width rather than filling the screen, so the
+    /// tiling rationale for stripping the gaps does not carry over. (Pure
+    /// virtual, so there is no default HERE to speak of; the value lives in
+    /// ConfigDefaults::scrollingSmartGaps.)
     virtual bool scrollingSmartGaps() const = 0;
 
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
