@@ -59,16 +59,25 @@ Item {
     /// translated — this file stays free of user-facing copy.
     property string cardTitle: ""
 
-    /// Whether the decorated card is fully drawn: a chain resolved, an anchor
-    /// found, and every stage's shader compiled.
+    /// Whether EVERYTHING the finished preview is made of has arrived: the
+    /// ground wallpaper decoded, a chain resolved, an anchor found, and every
+    /// stage's shader compiled.
+    ///
+    /// All of it, not just the shaders. The ground is an asynchronous image
+    /// load, so a gate that waited only on the chain lifted while the wallpaper
+    /// was still decoding and the desktop appeared underneath a moment later —
+    /// the same pop, one layer down. Anything added here that loads on its own
+    /// clock belongs in this expression too.
     ///
     /// A host showing this preview to a user should COVER it until this is
-    /// true. The frames before it are the plain undecorated card, then a gap
-    /// once the capture hides that card and the stages take over with nothing
-    /// compiled yet — which is what makes a preview appear to pop into place.
-    /// Cover it, never hide it: a starved capture chain never reaches Ready, so
-    /// hiding to wait for this waits forever.
-    readonly property bool ready: decoration.chainReady
+    /// true, and cover it rather than hide it: a starved capture chain never
+    /// reaches Ready, so hiding to wait for this waits forever.
+    readonly property bool ready: decoration.chainReady && _groundReady
+
+    /// The ground has settled: either a wallpaper decoded, or there is no
+    /// wallpaper to wait for. An unresolvable one must not hold the preview
+    /// back for ever.
+    readonly property bool _groundReady: root._wallpaper.length === 0 || groundImage.status === Image.Ready
 
     /// The ground a previewed decoration is composited over.
     ///
@@ -179,6 +188,8 @@ Item {
         color: root.groundColor
 
         Image {
+            id: groundImage
+
             anchors.fill: parent
             source: root._wallpaper.length > 0 ? "file://" + encodeURI(root._wallpaper).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
             // Crop rather than letterbox: a letterboxed wallpaper would leave

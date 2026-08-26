@@ -224,6 +224,8 @@ ItemDelegate {
                 // keeps that to the handful actually on screen and tears each
                 // one down again on scroll-away.
                 Loader {
+                    id: decorationPreviewLoader
+
                     anchors.fill: parent
                     anchors.margins: 1
                     active: root._liveDecorationPreview && root._inViewport
@@ -239,6 +241,28 @@ ItemDelegate {
                         active: true
                         cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
                     }
+                }
+
+                // Covers the live preview until every part of it has arrived —
+                // the wallpaper ground decoded and every stage compiled — so the
+                // card shows the empty slot and then the finished thing, the way
+                // a pack with a baked preview.png does (its Image is hidden
+                // until Ready for the same reason). Without it a grid of cards
+                // visibly assembles itself: grey, then wallpaper, then
+                // decoration, each on its own clock.
+                //
+                // COVERS rather than hides: the preview underneath has to keep
+                // rendering to reach `ready` at all, because a capture chain
+                // that is not visible is starved and never compiles. No label
+                // here, unlike the detail dialog — at thumbnail size the empty
+                // slot reads better than text, and the baked-preview cards show
+                // none either.
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.ready)
+                    color: Kirigami.Theme.alternateBackgroundColor
+                    radius: Kirigami.Units.smallSpacing
                 }
             }
 
