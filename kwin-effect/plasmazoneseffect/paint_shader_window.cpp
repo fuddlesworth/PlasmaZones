@@ -421,13 +421,33 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // Clamp into the frame instead: the grip slides to the
                 // edge the pointer left through and tracks along it,
                 // which is continuous and is where the grab actually is.
-                const bool held = transition.holdUntilRelease;
+                //
+                // Gated on `heldMove &&`, the IDENTITY flag, exactly like the
+                // drag-start and release handlers in window_connections.cpp.
+                // `holdUntilRelease` alone is not that test: it is the flag
+                // the drag-start path historically set on whatever leg was
+                // live, most reachably the `window.focus` leg the click that
+                // began the drag installed (see ShaderTransition::heldMove).
+                // Gating on it alone would widen this exception past the
+                // `move` class the contract scopes it to.
+                //
+                // The INSIDE arm is left byte-for-byte as it was: it must
+                // stay the raw live position, because that is what the
+                // daemon's ShaderNodeRhi::setMousePosition publishes and
+                // this whole block exists to mirror the daemon's semantics.
+                // Clamping it too would shift the last logical pixel of the
+                // frame on every pack, held or not, for no reason — the
+                // clamp is only meaningful where the sentinel used to fire.
+                const bool held = transition.heldMove && transition.holdUntilRelease;
                 const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
                 float localX = -1.0f;
                 float localY = -1.0f;
                 const bool inside = cursorGlobal.x() >= geo.x() && cursorGlobal.x() < geo.x() + geo.width()
                     && cursorGlobal.y() >= geo.y() && cursorGlobal.y() < geo.y() + geo.height();
-                if (inside || held) {
+                if (inside) {
+                    localX = static_cast<float>(cursorGlobal.x() - geo.x());
+                    localY = static_cast<float>(cursorGlobal.y() - geo.y());
+                } else if (held) {
                     localX = static_cast<float>(qBound(0.0, cursorGlobal.x() - geo.x(), qMax(geo.width() - 1.0, 0.0)));
                     localY = static_cast<float>(qBound(0.0, cursorGlobal.y() - geo.y(), qMax(geo.height() - 1.0, 0.0)));
                 }

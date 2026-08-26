@@ -120,7 +120,8 @@ namespace PhosphorAnimationShaders {
 ///     `(-1, -1)` when off-surface. Daemon: `QQuickHoverHandler` on
 ///     the attached shader item. Kwin: `effects->cursorPos()` minus
 ///     the window's frame-geometry origin, gated on `frameGeometry()`
-///     containment.
+///     containment — except on a held-move leg, which takes no sentinel
+///     and clamps into the frame instead (see `kIMouse` below).
 ///   • `customParams[N]` / `customColors[N]` — per-effect declared
 ///     parameters resolved at transition begin time.
 ///   • `uTexture0` — redirected surface texture. Daemon: live FBO
