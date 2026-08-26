@@ -148,8 +148,8 @@ private Q_SLOTS:
 
         // Theme-reactive pack, the border family's shape: it declares the two
         // colour params the resolver writes and opts into the system accent.
-        // Declaration order is slot order, so activeColor takes customColor0
-        // and inactiveColor customColor1.
+        // Declaration order is slot order and the colour slot keys are 1-based,
+        // so activeColor takes customColor1 and inactiveColor customColor2.
         QVERIFY(
             writePack(root, QStringLiteral("accented"),
                       QJsonObject{{QStringLiteral("parameters"),
@@ -161,6 +161,7 @@ private Q_SLOTS:
         QVERIFY2(m_registry.hasEffect(QStringLiteral("border")), "fixture packs must be discoverable");
         QVERIFY(m_registry.hasEffect(QStringLiteral("glow")));
         QVERIFY(m_registry.hasEffect(QStringLiteral("frost")));
+        QVERIFY(m_registry.hasEffect(QStringLiteral("accented")));
     }
 
     // ── previewChain ─────────────────────────────────────────────────
