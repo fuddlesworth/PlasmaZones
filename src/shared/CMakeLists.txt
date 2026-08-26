@@ -48,6 +48,7 @@ qt_add_qml_module(plasmazones_shared_qml
         LayoutCard.qml
         PopupFrame.qml
         ShaderCompileErrorBanner.qml
+        ShaderPreviewPlaceholder.qml
         SurfaceDecoration.qml
         StripEmptyState.qml
         ParameterEditor.qml

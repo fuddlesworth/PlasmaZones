@@ -100,6 +100,10 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("ShaderCompileErrorBanner"));
     }
+    void loadsShaderPreviewPlaceholder()
+    {
+        loadType(QStringLiteral("ShaderPreviewPlaceholder"));
+    }
     void loadsStripEmptyState()
     {
         loadType(QStringLiteral("StripEmptyState"), QStringLiteral("caption: \"no windows\""));

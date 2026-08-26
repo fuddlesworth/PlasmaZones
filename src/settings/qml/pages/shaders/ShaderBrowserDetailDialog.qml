@@ -766,13 +766,11 @@ Kirigami.Dialog {
 
                     // Neutral placeholder while the freshly-created renderer is
                     // still loading / compiling the new shader (the "round trip").
-                    Label {
+                    // No fill needed: this pane HIDES its renderer until Ready,
+                    // so there is nothing underneath to conceal.
+                    PZCommon.ShaderPreviewPlaceholder {
                         anchors.centerIn: parent
                         width: parent.width - Kirigami.Units.largeSpacing * 2
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        color: Kirigami.Theme.disabledTextColor
-                        text: i18nc("@info:placeholder shader preview", "Preview unavailable")
                         // Shown until the new shader is Ready (or has errored, when
                         // the banner takes over) — also covers the recreate tick
                         // when the Loader item is briefly null. The enclosing pane

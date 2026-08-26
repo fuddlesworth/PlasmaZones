@@ -104,21 +104,16 @@ Item {
             // rendering to reach `ready` at all, because a ShaderEffectSource
             // whose chain is not visible is starved and never compiles. Opaque,
             // and the same colour as this frame, so it reads as the empty slot.
-            Rectangle {
+            PZCommon.ShaderPreviewPlaceholder {
                 anchors.fill: parent
                 anchors.margins: 1
                 visible: !chainPreview.ready
-                color: Kirigami.Theme.alternateBackgroundColor
+                // Opaque, unlike the zone pane's: the preview underneath has to
+                // keep RENDERING to reach `ready` at all, so this conceals it
+                // rather than replacing it. Slot colour and rounding, so it
+                // reads as an empty slot.
+                backgroundColor: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing
-
-                Label {
-                    anchors.centerIn: parent
-                    width: parent.width - Kirigami.Units.largeSpacing * 2
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    color: Kirigami.Theme.disabledTextColor
-                    text: i18nc("@info:placeholder decoration preview", "Preview unavailable")
-                }
             }
         }
 
