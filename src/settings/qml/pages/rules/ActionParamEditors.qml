@@ -640,6 +640,45 @@ QtObject {
         }
     }
 
+    // Named-workspace picker for RouteToWorkspace. Lists the DECLARED names
+    // (Workspaces → Named Workspaces); the wire value is the name itself. A
+    // stored name no longer declared still surfaces as the display text so
+    // the rule's target stays legible — the rule is dormant, not broken.
+    property Component _workspaceNameEditor: Component {
+        WideComboBox {
+            id: workspaceCombo
+
+            readonly property var _param: parent.modelData
+            readonly property var _names: (row.appSettings && row.appSettings.workspaceNames) || []
+
+            model: {
+                var items = [];
+                for (var i = 0; i < workspaceCombo._names.length; ++i)
+                    items.push({
+                        "label": workspaceCombo._names[i],
+                        "value": workspaceCombo._names[i]
+                    });
+                return items;
+            }
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < workspaceCombo.model.length; ++i) {
+                    if (workspaceCombo.model[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] ? ("" + row.action[_param.key]) : i18n("Choose a workspace…"))
+            Accessible.name: _param.label
+            onActivated: function (index) {
+                if (currentValue !== row.action[_param.key])
+                    row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+    }
+
     // The rule wire format stores the BARE algorithm registry id (e.g. "bsp"),
     // but LayoutComboBox keys autotile entries by the "autotile:<id>" prefixed
     // form that `appSettings.layouts` ships (shared with every layout picker).

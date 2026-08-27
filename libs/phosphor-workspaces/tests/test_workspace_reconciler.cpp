@@ -41,6 +41,7 @@ private Q_SLOTS:
     void echo_ledgerSuppressesReactivePolicy();
     void snapBack_singleCorrectionNoLoop();
     void cap_suspendsTrailingEmpty();
+    void capProbe_learnsFromCreateExpiryAndSelfHeals();
     void screenRemoved_sliceReassigned();
     void verbQueries_sliceScopedNoWrap();
     void issueSetCurrent_singleInFlightPerScreen();
@@ -306,6 +307,37 @@ void TestWorkspaceReconciler::cap_suspendsTrailingEmpty()
     // The hint fires once per episode.
     rec.onPopulationChanged(id(1), 2);
     QCOMPARE(capSpy.count(), 1);
+}
+
+void TestWorkspaceReconciler::capProbe_learnsFromCreateExpiryAndSelfHeals()
+{
+    WorkspaceReconciler rec;
+    rec.onScreenOrderChanged({QStringLiteral("A")});
+    QHash<QString, QString> current;
+    current.insert(QStringLiteral("A"), id(1));
+    rec.adoptAll({id(1), id(2)}, current);
+
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    QSignalSpy capSpy(&rec, &WorkspaceReconciler::capReached);
+
+    // Occupying the trailing empty requests a create; KWin refuses SILENTLY
+    // (no echo), so the ledger entry expires and the reconciler learns the
+    // ceiling is the current count (2).
+    rec.onPopulationChanged(id(1), 1);
+    rec.onPopulationChanged(id(2), 1);
+    QCOMPARE(createSpy.count(), 1);
+    QTRY_COMPARE_WITH_TIMEOUT(capSpy.count(), 1, WorkspaceReconciler::LedgerTimeoutMs + 2000);
+
+    // At the learned cap, further trailing-empty wants are suspended.
+    rec.onPopulationChanged(id(1), 2);
+    QCOMPARE(createSpy.count(), 1);
+
+    // Self-heal: an external create pushes the count past the learned cap —
+    // the mislearn is forgotten and appends resume.
+    rec.onKwinDesktopCreated(id(3));
+    rec.onDesktopListSettled({id(1), id(2), id(3)});
+    rec.onPopulationChanged(id(3), 1); // trailing occupied again
+    QCOMPARE(createSpy.count(), 2);
 }
 
 void TestWorkspaceReconciler::screenRemoved_sliceReassigned()

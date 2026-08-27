@@ -363,6 +363,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::RouteToDesktop && key == ActionParam::TargetDesktop) {
         return PhosphorI18n::tr("Desktop");
     }
+    if (type == ActionType::RouteToWorkspace && key == ActionParam::TargetWorkspaceName) {
+        return PhosphorI18n::tr("Workspace");
+    }
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
     }

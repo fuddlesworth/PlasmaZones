@@ -83,6 +83,10 @@ inline constexpr QLatin1StringView ZoneNames{"zoneNames"};
 inline constexpr QLatin1StringView TargetScreenId{"targetScreenId"};
 // RouteToDesktop target-desktop key — wire is a 1-based virtual desktop number.
 inline constexpr QLatin1StringView TargetDesktop{"targetDesktop"};
+// RouteToWorkspace target key — wire is the declared named-workspace name
+// (the identity, stable across renumbering; the daemon resolves it against
+// the live declarations at open time).
+inline constexpr QLatin1StringView TargetWorkspaceName{"targetWorkspaceName"};
 // OverrideDecorationChain pack-list key — wire is a JSON array of surface-pack
 // id strings, ordered as they fold. Empty array = "no decoration" sentinel.
 // The per-pack parameter map rides the shared `Params` key as a nested object

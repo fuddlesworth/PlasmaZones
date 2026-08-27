@@ -210,6 +210,23 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
 void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
                                                         const QString& windowId)
 {
+    // Named-workspace routing outranks the positional desktop number when a
+    // cascade carries both: the name is the stronger identity (it survives
+    // renumbering and monitor moves), and a rule specific enough to name a
+    // workspace beats a broad rule pinning a number. The daemon's workspace
+    // wiring resolves the name against the live declarations and no-ops an
+    // undeclared one — in that case the positional route below still applies.
+    const std::optional<PhosphorRules::RuleAction> workspaceRoute =
+        resolved.slot(QString(PhosphorRules::ActionSlot::RouteWorkspace));
+    if (workspaceRoute && m_workspaceRouteResolver) {
+        const QString name =
+            workspaceRoute->params.value(QString(PhosphorRules::ActionParam::TargetWorkspaceName)).toString();
+        if (!name.isEmpty() && m_workspaceRouteResolver(name, windowId)) {
+            qCInfo(lcDbusWindow) << "open-routing: routed" << windowId << "to named workspace" << name;
+            return;
+        }
+    }
+
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop));
     if (!route) {

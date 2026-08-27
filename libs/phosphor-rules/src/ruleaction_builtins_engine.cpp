@@ -441,6 +441,29 @@ void ActionRegistry::registerBuiltinsEngine()
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 4,
     });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RouteToWorkspace),
+        .slotFor = constantSlot(ActionSlot::RouteWorkspace),
+        .validate =
+            [](const QJsonObject& p) {
+                // A non-empty declared-workspace NAME. Like RouteToScreen's id,
+                // the name is not validated against live state here — a rule
+                // naming a not-currently-declared workspace is legitimate (it
+                // fires once the declaration exists); the daemon no-ops an
+                // unresolvable name at open time.
+                return hasNonEmptyString(p, ActionParam::TargetWorkspaceName);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::TargetWorkspaceName)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::TargetWorkspaceName), .kind = QStringLiteral("workspaceName")}},
+        .category = QStringLiteral("windowManagement"),
+        // displayOrder is unique per category (pinned by
+        // testDisplayOrderUniqueWithinCategory), and windowManagement's slots
+        // span BOTH builtin files (0-5 here, 6-11 in the appearance file), so
+        // the next free ordinal is after the whole category's tail.
+        .displayOrder = 12,
+    });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
     registerAction(ActionDescriptor{

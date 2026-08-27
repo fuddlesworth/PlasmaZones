@@ -219,12 +219,24 @@ QString WorkspaceController::stateFilePath()
     // Runtime state, deliberately NOT config.json and not GenericDataLocation
     // (that tree is user-visible assets). Reconstructible by definition, so a
     // version mismatch or parse failure just falls back to fresh adoption.
-    return QStandardPaths::writableLocation(QStandardPaths::StateLocation)
-        + QStringLiteral("/plasmazones/workspaces.json");
+    // StateLocation is ALREADY app-scoped (~/.local/state/<org>/<app>), so
+    // nothing extra is appended — an earlier build nested a redundant
+    // "/plasmazones" level, relocated below.
+    return QStandardPaths::writableLocation(QStandardPaths::StateLocation) + QStringLiteral("/workspaces.json");
 }
 
 void WorkspaceController::loadStateFile()
 {
+    // One-time relocation from the earlier double-nested path (state files
+    // must move, not drop: the sibling kwin-shortcut backup holds the user's
+    // stolen chords, and this file is what keeps ownership stable across a
+    // restart).
+    const QString legacyPath = QStandardPaths::writableLocation(QStandardPaths::StateLocation)
+        + QStringLiteral("/plasmazones/workspaces.json");
+    if (!QFile::exists(stateFilePath()) && QFile::exists(legacyPath)) {
+        QFile::rename(legacyPath, stateFilePath());
+    }
+
     QFile file(stateFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         return;
@@ -234,6 +246,21 @@ void WorkspaceController::loadStateFile()
         qCWarning(lcWorkspaceCtl) << "workspace state file unreadable or wrong version; re-adopting fresh";
         return;
     }
+
+    // Canonicalize restored home stamps: entries written before the screen-id
+    // fix carry CONNECTOR homes ("DP-2") that can never match a live screen.
+    // A home resolving to the entry's current owner means "not displaced" —
+    // clear it; anything else is normalized into the reported-id space.
+    const QStringList ids = m_reconciler.map().allDesktopIds();
+    for (const QString& id : ids) {
+        const QString home = m_reconciler.map().entryFor(id).homeScreenId;
+        if (home.isEmpty()) {
+            continue;
+        }
+        const QString canonical = canonicalScreenId(home);
+        m_reconciler.map().setHomeScreen(id, canonical == m_reconciler.map().ownerOf(id) ? QString() : canonical);
+    }
+
     qCInfo(lcWorkspaceCtl) << "loaded workspace state candidate:" << m_reconciler.map().allDesktopIds().size()
                            << "desktops," << m_reconciler.map().screenOrder().size() << "screens";
 }

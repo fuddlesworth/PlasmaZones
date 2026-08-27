@@ -1164,6 +1164,19 @@ public:
     void requestReapplyWindowGeometries();
 
     /**
+     * @brief Install the named-workspace open-routing resolver (the daemon's
+     * workspace wiring). Called with (workspaceName, windowId); returns true
+     * when the route was taken (the name resolved to a live named workspace
+     * and the move was issued), false to fall through to positional
+     * RouteToDesktop. Null while dynamic workspaces are off, which makes the
+     * RouteToWorkspace slot an inert no-op.
+     */
+    void setWorkspaceRouteResolver(std::function<bool(const QString&, const QString&)> resolver)
+    {
+        m_workspaceRouteResolver = std::move(resolver);
+    }
+
+    /**
      * @brief Cache + broadcast the dynamic-workspaces ownership map.
      *
      * Called by the daemon's workspace relay with the controller's
@@ -1808,6 +1821,8 @@ private:
     QString m_lastWorkspaceMap;
     /// Effect-probed per-output-desktops mode (unset until the first report).
     std::optional<bool> m_perOutputDesktopsMode;
+    /// Named-workspace open-routing hook (see setWorkspaceRouteResolver).
+    std::function<bool(const QString&, const QString&)> m_workspaceRouteResolver;
 };
 
 } // namespace PlasmaZones

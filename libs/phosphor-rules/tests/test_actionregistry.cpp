@@ -432,6 +432,7 @@ private Q_SLOTS:
             QStringLiteral("curveEditor"),
             QStringLiteral("screenId"),
             QStringLiteral("virtualDesktop"),
+            QStringLiteral("workspaceName"),
             QStringLiteral("decorationChain"),
         };
         const ActionRegistry& reg = ActionRegistry::instance();

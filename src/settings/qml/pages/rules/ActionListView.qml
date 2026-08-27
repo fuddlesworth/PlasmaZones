@@ -330,6 +330,12 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "workspaceName") {
+            // Quote the name like zoneNames so a digit-only workspace name
+            // cannot read as a desktop ordinal; an undeclared name still
+            // renders (the rule is dormant, not broken).
+            return rawStr ? i18nc("a quoted workspace name", "“%1”", rawStr) : rawStr;
+        }
         if (kind === "virtualDesktop") {
             // Render "N: <name>" when KWin reports a name for the 1-based desktop,
             // else just the number.

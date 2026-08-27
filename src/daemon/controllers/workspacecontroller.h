@@ -88,6 +88,10 @@ public:
     /// name's OWNER screen (a named workspace shows where it lives).
     void focusNamedWorkspace(const QString& name);
     void moveWindowToNamedWorkspace(const QString& name, const QString& windowId);
+    /// Whether `name` is realized in the map right now (the RouteToWorkspace
+    /// rule resolver's guard — an unrealized name falls through to the
+    /// positional desktop route).
+    bool hasNamedWorkspace(const QString& name) const;
 
 Q_SIGNALS:
     /// → adaptor setScreenDesktopRequested (effect per-output switch).

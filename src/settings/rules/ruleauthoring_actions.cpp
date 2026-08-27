@@ -588,6 +588,9 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::RouteToDesktop) {
         return PhosphorI18n::tr("Open on desktop");
     }
+    if (type == ActionType::RouteToWorkspace) {
+        return PhosphorI18n::tr("Open on workspace");
+    }
     return RuleModel::actionTypeFallbackLabel(type);
 }
 

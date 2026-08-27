@@ -71,6 +71,24 @@ void WorkspaceReconciler::expireLedger()
         if (m_ledger.at(i).deadline <= now) {
             qCWarning(lcWorkspaceRec) << "pending workspace op expired, kind =" << static_cast<int>(m_ledger.at(i).kind)
                                       << "desktop =" << m_ledger.at(i).desktopId;
+            // Live cap probe: KWin refuses createDesktop past its maximum
+            // SILENTLY (void method, no desktopCreated echo), so a Create
+            // expiry with the list unchanged is the only observable form of
+            // the refusal. Learn the ceiling from it — this replaces the
+            // DefaultDesktopCap guess with the compositor's real answer.
+            // Self-healing against a mislearn from a transient D-Bus stall:
+            // onDesktopListSettled raises the cap back to the default the
+            // moment the count ever exceeds the learned value.
+            if (m_ledger.at(i).kind == PendingOp::Kind::Create && !m_lastIds.isEmpty()
+                && m_lastIds.size() < m_desktopCap) {
+                m_desktopCap = m_lastIds.size();
+                qCWarning(lcWorkspaceRec)
+                    << "createDesktop refused at" << m_desktopCap << "desktops — learned as the compositor's cap";
+                if (!m_capHintShown) {
+                    m_capHintShown = true;
+                    Q_EMIT capReached();
+                }
+            }
             m_ledger.removeAt(i);
             expired = true;
         }
@@ -311,6 +329,17 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
         }
     }
     m_lastIds = ids;
+
+    // Cap self-heal: a learned (probed) ceiling below the default that the
+    // live count now EXCEEDS was a mislearn (transient stall, or the
+    // compositor's cap changed) — forget it. External creates past our
+    // learned value are the proof the ceiling is not where we thought.
+    if (m_desktopCap < DefaultDesktopCap && m_lastIds.size() > m_desktopCap) {
+        qCWarning(lcWorkspaceRec) << "desktop count" << m_lastIds.size() << "exceeds the learned cap" << m_desktopCap
+                                  << "— reverting to the default ceiling";
+        m_desktopCap = DefaultDesktopCap;
+        m_capHintShown = false;
+    }
 
     if (!oldToNew.isEmpty() || !removed.isEmpty()) {
         Q_EMIT renumberComputed(oldToNew, removed);

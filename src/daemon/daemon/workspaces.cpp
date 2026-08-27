@@ -34,6 +34,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QKeySequence>
 #include <QSettings>
@@ -61,8 +62,18 @@ void enableKWinPerOutputDesktops()
 
 QString kwinShortcutBackupPath()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::StateLocation)
+    // StateLocation is already app-scoped; see stateFilePath's relocation
+    // note. The one-time move from the earlier nested path happens here too —
+    // dropping this file would strand the user's stolen KWin chords on
+    // "none" forever.
+    const QString path =
+        QStandardPaths::writableLocation(QStandardPaths::StateLocation) + QStringLiteral("/kwin-shortcut-backup.json");
+    const QString legacyPath = QStandardPaths::writableLocation(QStandardPaths::StateLocation)
         + QStringLiteral("/plasmazones/kwin-shortcut-backup.json");
+    if (!QFile::exists(path) && QFile::exists(legacyPath)) {
+        QFile::rename(legacyPath, path);
+    }
+    return path;
 }
 
 /// Give KWin its stolen desktop-switch chords back (feature or rebind toggle
@@ -99,6 +110,9 @@ void Daemon::initializeWorkspaces()
                 // hand KWin its chords back. The kwinrc write is deliberately
                 // NOT reverted (stated in the UI).
                 m_workspaceController.reset();
+                if (m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->setWorkspaceRouteResolver(nullptr);
+                }
                 restoreKWinShortcutBackup(m_shortcutManager.get());
                 qCInfo(lcDaemon) << "dynamic workspaces disabled at runtime";
             }
@@ -361,6 +375,19 @@ void Daemon::initializeWorkspaces()
             m_overlayService->showDisabledOsd(PhosphorI18n::tr("Workspace limit reached.", "OSD hint"), QString());
         }
     });
+
+    // RouteToWorkspace rule resolver: the rules pipeline calls this on the
+    // open path (rules_placement.cpp). True = routed (positional
+    // RouteToDesktop is skipped); false = name unrealized, fall through.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setWorkspaceRouteResolver([this](const QString& name, const QString& windowId) {
+            if (!m_workspaceController || !m_workspaceController->hasNamedWorkspace(name)) {
+                return false;
+            }
+            m_workspaceController->moveWindowToNamedWorkspace(name, windowId);
+            return true;
+        });
+    }
 
     m_workspaceController->start();
     qCInfo(lcDaemon) << "dynamic workspaces active";

@@ -531,6 +531,9 @@ ColumnLayout {
                     if (modelData.kind === "virtualDesktop")
                         return paramEditors._virtualDesktopEditor;
 
+                    if (modelData.kind === "workspaceName")
+                        return paramEditors._workspaceNameEditor;
+
                     return paramEditors._stringParamEditor;
                 }
             }

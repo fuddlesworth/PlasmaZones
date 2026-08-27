@@ -403,6 +403,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return screenId.isEmpty() ? PhosphorI18n::tr("Open on monitor")
                                   : PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
     }
+    if (action.type == ActionType::RouteToWorkspace) {
+        // The stored NAME renders quoted whether or not it is currently
+        // declared — an undeclared name is a dormant rule, not an error.
+        const QString name = action.params.value(PhosphorRules::ActionParam::TargetWorkspaceName).toString();
+        return name.isEmpty() ? PhosphorI18n::tr("Open on workspace")
+                              : PhosphorI18n::tr("Open on workspace “%1”").arg(name);
+    }
     if (action.type == ActionType::RouteToDesktop) {
         // Both ends of the descriptor's bound, not just the floor: a
         // hand-edited ordinal the loader would have rejected must fall back to

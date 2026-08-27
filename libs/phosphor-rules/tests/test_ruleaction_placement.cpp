@@ -64,6 +64,27 @@ private Q_SLOTS:
         QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteDesktop));
     }
 
+    void testJson_routeToWorkspace()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::RouteToWorkspace));
+        // Missing / empty workspace name is rejected.
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetWorkspaceName), QString());
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // A non-empty name is accepted (not validated against live
+        // declarations — a rule naming a not-yet-declared workspace is
+        // legitimate and dormant) and resolves to its own slot, distinct
+        // from RouteDesktop.
+        o.insert(QString(ActionParam::TargetWorkspaceName), QStringLiteral("chat"));
+        const auto loaded = RuleAction::fromJson(o);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteWorkspace));
+        // Unknown param key is rejected by the strict loader.
+        o.insert(QStringLiteral("bogus"), 1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+    }
+
     void testSnapToZone_fromJson()
     {
         // SnapToZone is a window-domain placement action whose `zones` param is a

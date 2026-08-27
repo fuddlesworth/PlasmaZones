@@ -369,8 +369,9 @@ public:
     /// free-text editors, absent when the kind needs none). `kind` is one of
     /// the descriptor kinds the ActionRow editor dispatches on (enum, number,
     /// percent, bool, color, zoneOrdinals, zoneNames, screenId, virtualDesktop,
-    /// snappingLayout, scrollingTemplate, tilingAlgorithm, animationEvent,
-    /// shaderEffect, overlayShader, decorationChain, curveEditor). Optional
+    /// workspaceName, snappingLayout, scrollingTemplate, tilingAlgorithm,
+    /// animationEvent, shaderEffect, overlayShader, decorationChain,
+    /// curveEditor). Optional
     /// fields are carried whenever the schema declares them: `options` (a list
     /// of `{ value: QString (wire token), label }` maps, for `enum`),
     /// `min`/`max`/`scale`/`defaultDisplay` (display-unit bounds and seed; the

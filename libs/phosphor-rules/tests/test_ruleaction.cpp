@@ -156,6 +156,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // daemon open path, applicable to any matched window.
     ActionType::RouteToScreen,
     ActionType::RouteToDesktop,
+    ActionType::RouteToWorkspace,
     ActionType::OverrideAnimationShader,
     ActionType::OverrideAnimationTiming,
     ActionType::OverrideAnimationCurve,

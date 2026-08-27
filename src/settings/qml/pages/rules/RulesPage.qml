@@ -104,6 +104,16 @@ SettingsFlickable {
         // Backs the RouteToDesktop action's virtual-desktop picker.
         readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
         readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
+        // Backs the RouteToWorkspace action's named-workspace picker: the
+        // DECLARED names from Workspaces → Named Workspaces.
+        readonly property var workspaceNames: {
+            var entries = appSettings.workspacesNamedEntries || [];
+            var names = [];
+            for (var i = 0; i < entries.length; ++i)
+                if (entries[i].name && entries[i].name.length > 0)
+                    names.push(entries[i].name);
+            return names;
+        }
         // `AnimationsPageController` — exposes `eventSections()` and
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.

@@ -219,6 +219,11 @@ void WorkspaceController::applyNamedDeclarations(const QVariantList& entries)
     });
 }
 
+bool WorkspaceController::hasNamedWorkspace(const QString& name) const
+{
+    return !name.isEmpty() && !desktopIdForName(name).isEmpty();
+}
+
 QString WorkspaceController::desktopIdForName(const QString& name) const
 {
     const QStringList ids = m_reconciler.map().allDesktopIds();

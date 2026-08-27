@@ -2404,13 +2404,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="330"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="512"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="519"/>
         <source>Overlay shader</source>
         <translation>Shader da sobreposição</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="333"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="518"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="327"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="114"/>
@@ -2437,22 +2437,22 @@
         <translation>Área de trabalho</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="367"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="370"/>
         <source>Event</source>
         <translation>Evento</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <source>Shader effect</source>
         <translation>Efeito de shader</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="379"/>
         <source>Duration (ms)</source>
         <translation>Duração (ms)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="379"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="382"/>
         <source>Curve</source>
         <translation>Curva</translation>
     </message>
@@ -2782,17 +2782,22 @@
         <translation>Mostrar os números das zonas (desligado = ocultar)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="370"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="367"/>
+        <source>Workspace</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
         <source>Decoration packs</source>
         <translation>Pacotes de decoração</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="394"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="397"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
         <translation>Números de zona como “1, 2”, ou um intervalo como “1-3”. Várias zonas encaixam a janela na área combinada delas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="399"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="402"/>
         <source>Zone names like “Editor, Terminal”, found in whichever layout is active. Give numbers, names, or both.</source>
         <translation>Nomes de zona como “Editor, Terminal”, encontrados no layout que estiver ativo. Informe números, nomes ou os dois.</translation>
     </message>
@@ -2878,7 +2883,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="271"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="646"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="649"/>
         <source>Open in a tabbed column</source>
         <translation>Abrir em uma coluna com abas</translation>
     </message>
@@ -2889,13 +2894,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="280"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Respect minimum window sizes</source>
         <translation>Respeitar os tamanhos mínimos das janelas</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="292"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="675"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="678"/>
         <source>Focus follows the mouse</source>
         <translation>O foco segue o mouse</translation>
     </message>
@@ -2906,7 +2911,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="304"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="651"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Open maximized</source>
         <translation>Abrir maximizada</translation>
     </message>
@@ -2917,13 +2922,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="310"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="686"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="689"/>
         <source>Open in fullscreen</source>
         <translation>Abrir em tela cheia</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="318"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="250"/>
@@ -2945,7 +2950,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="327"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="698"/>
         <source>Hide the tab indicator for a single tab</source>
         <translation>Ocultar o indicador de abas quando houver uma só aba</translation>
     </message>
@@ -3036,7 +3041,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="387"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="717"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="720"/>
         <source>Show the drop indicator</source>
         <translation>Mostrar o indicador de soltura</translation>
     </message>
@@ -3082,7 +3087,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="418"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
         <source>Lock layout</source>
         <translation>Bloquear o layout</translation>
     </message>
@@ -3103,19 +3108,19 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="442"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="599"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
         <source>Restore previous position</source>
         <translation>Restaurar a posição anterior</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="451"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
         <source>Restore to previous zone</source>
         <translation>Restaurar para a zona anterior</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="457"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="608"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="611"/>
         <source>Fall back to a zone on unfloat</source>
         <translation>Recorrer a uma zona ao parar de flutuar</translation>
     </message>
@@ -3150,63 +3155,69 @@
         <translation>Excluir das decorações</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="592"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="410"/>
+        <source>Open on workspace</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
         <source>Don&apos;t restore to previous zone</source>
         <translation>Não restaurar para a zona anterior</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="609"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="612"/>
         <source>Stay floating when no zone is remembered</source>
         <translation>Continuar flutuando quando nenhuma zona for lembrada</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="635"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="638"/>
         <source>Show on-screen displays here</source>
         <translation>Mostrar os avisos na tela aqui</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="635"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="638"/>
         <source>Hide on-screen displays here</source>
         <translation>Ocultar os avisos na tela aqui</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="641"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="644"/>
         <source>Show the drag selector here</source>
         <translation>Mostrar o seletor de arraste aqui</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="641"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="644"/>
         <source>Hide the drag selector here</source>
         <translation>Ocultar o seletor de arraste aqui</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="651"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Open at the default width</source>
         <translation>Abrir na largura padrão</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="658"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
         <source>Leave a lone column where it sits</source>
         <translation>Deixar uma coluna sozinha onde está</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Ignore minimum window sizes</source>
         <translation>Ignorar os tamanhos mínimos das janelas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="665"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep columns whole at the screen edge</source>
         <translation>Manter as colunas inteiras na borda da tela</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Keep focus where it is</source>
         <translation>Manter o foco onde está</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="289"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="674"/>
         <source>Drop the outer gaps for a lone column</source>
         <translation>Dispensar os espaçamentos externos de uma coluna sozinha</translation>
     </message>
@@ -3216,62 +3227,62 @@
         <translation>Definir o máximo de janelas ladrilhadas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="672"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="675"/>
         <source>Keep the outer gaps for a lone column</source>
         <translation>Manter os espaçamentos externos de uma coluna sozinha</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="675"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="678"/>
         <source>Focus stays until you click</source>
         <translation>O foco permanece até você clicar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="680"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="683"/>
         <source>Focus the window when it opens</source>
         <translation>Focalizar a janela quando ela abrir</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="681"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="684"/>
         <source>Keep focus where it was when it opens</source>
         <translation>Manter o foco onde estava quando ela abrir</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="686"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="689"/>
         <source>Block fullscreen at open</source>
         <translation>Bloquear a tela cheia na abertura</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="706"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
         <source>Italic tab labels</source>
         <translation>Rótulos das abas em itálico</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="706"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
         <source>Upright tab labels</source>
         <translation>Rótulos das abas sem itálico</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="712"/>
         <source>Underlined tab labels</source>
         <translation>Rótulos das abas sublinhados</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="712"/>
         <source>Tab labels without an underline</source>
         <translation>Rótulos das abas sem sublinhado</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="712"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="715"/>
         <source>Struck-through tab labels</source>
         <translation>Rótulos das abas riscados</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="716"/>
         <source>Tab labels without a line through them</source>
         <translation>Rótulos das abas sem risco</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="717"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="720"/>
         <source>Hide the drop indicator</source>
         <translation>Ocultar o indicador de soltura</translation>
     </message>
@@ -3352,7 +3363,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="519"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="633"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="392"/>
         <source>Show zone numbers</source>
         <translation>Mostrar os números das zonas</translation>
@@ -3364,7 +3375,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="538"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="612"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="526"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="473"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="479"/>
@@ -3373,7 +3384,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="541"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
         <source>Show border</source>
         <translation>Mostrar a borda</translation>
     </message>
@@ -3399,7 +3410,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="556"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
         <source>Show opacity and tint</source>
         <translation>Mostrar a opacidade e a tonalidade</translation>
     </message>
@@ -3456,37 +3467,37 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="589"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="413"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="420"/>
         <source>Open on desktop</source>
         <translation>Abrir na área de trabalho</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="599"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="602"/>
         <source>Don&apos;t restore previous position</source>
         <translation>Não restaurar a posição anterior</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="646"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="649"/>
         <source>Open in a normal column</source>
         <translation>Abrir em uma coluna normal</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
         <source>Hide the tab indicator</source>
         <translation>Ocultar o indicador de abas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="696"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="699"/>
         <source>Show the tab indicator for a single tab</source>
         <translation>Mostrar o indicador de abas quando houver uma só aba</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="699"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Tab indicator inside the column</source>
         <translation>Indicador de abas dentro da coluna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="700"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="703"/>
         <source>Tab indicator beside the column</source>
         <translation>Indicador de abas ao lado da coluna</translation>
     </message>
@@ -4235,17 +4246,17 @@
         <translation>Abaixo das outras janelas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="608"/>
         <source>Keep zone size on unsnap</source>
         <translation>Manter o tamanho da zona ao desencaixar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
         <source>Hide opacity and tint</source>
         <translation>Ocultar a opacidade e a tonalidade</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="633"/>
         <source>Hide zone numbers</source>
         <translation>Ocultar os números das zonas</translation>
     </message>
@@ -4302,7 +4313,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="369"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
@@ -4315,7 +4326,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="369"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
@@ -4359,12 +4370,12 @@
         <translation>Abrir no monitor: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="412"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="419"/>
         <source>Open on desktop %1</source>
         <translation>Abrir na área de trabalho %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="422"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="429"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="441"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="517"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="395"/>
@@ -4374,135 +4385,135 @@
         <translation>Opacidade</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="426"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="431"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="433"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="438"/>
         <source>Opacity (invalid)</source>
         <translation>Opacidade (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="433"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="440"/>
         <source>Opacity: %1%</source>
         <translation>Opacidade: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="448"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="455"/>
         <source>Block animation shader</source>
         <translation>Bloquear o shader da animação</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="452"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="459"/>
         <source>Shader: %1</source>
         <translation>Shader: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="477"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="484"/>
         <source>Decoration: %1</source>
         <translation>Decoração: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="497"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
         <source>Duration: %1 ms</source>
         <translation>Duração: %1 ms</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="491"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="568"/>
         <source>Animation duration</source>
         <translation>Duração da animação</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="511"/>
         <source>Animation curve</source>
         <translation>Curva da animação</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="507"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="514"/>
         <source>Curve: %1</source>
         <translation>Curva: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="513"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="520"/>
         <source>Overlay shader: %1</source>
         <translation>Shader da sobreposição: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="612"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
         <source>Show title bars</source>
         <translation>Mostrar as barras de título</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
         <source>Don&apos;t lock layout</source>
         <translation>Não bloquear o layout</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="421"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
         <source>Assign default layout</source>
         <translation>Atribuir um layout padrão</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
         <source>Don&apos;t assign default layout</source>
         <translation>Não atribuir um layout padrão</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
         <source>Hide border</source>
         <translation>Ocultar a borda</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="574"/>
         <source>Border width: %1 px</source>
         <translation>Largura da borda: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="578"/>
         <source>Corner radius: %1 px</source>
         <translation>Raio dos cantos: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="580"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="611"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="355"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="587"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="618"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="361"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="400"/>
         <source>Accent</source>
         <translation>Destaque</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="584"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="591"/>
         <source>Focused border: %1</source>
         <translation>Borda focalizada: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="586"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="593"/>
         <source>Unfocused border: %1</source>
         <translation>Borda não focalizada: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="916"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="923"/>
         <source>Scroll speed: %1%</source>
         <translation>Velocidade da rolagem: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="969"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="976"/>
         <source>Gap: %1 px</source>
         <translation>Espaçamento: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="973"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="980"/>
         <source>Outer gap: %1 px</source>
         <translation>Espaçamento externo: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="596"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="108"/>
         <source>Per-side outer gaps</source>
         <translation>Espaçamentos externos por lado</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
         <source>Uniform outer gap</source>
         <translation>Espaçamento externo uniforme</translation>
     </message>
@@ -4555,78 +4566,83 @@
         <translation>“%1”</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="411"/>
+        <source>Open on workspace “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="456"/>
         <source>Block %1 shader</source>
         <translation>Bloquear o shader de %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="453"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="460"/>
         <source>%1 shader: %2</source>
         <translation>Shader de %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="475"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="469"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="482"/>
         <source>Decoration packs: none</source>
         <translation>Pacotes de decoração: nenhum</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="499"/>
         <source>%1 duration</source>
         <translation>Duração de %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="495"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="502"/>
         <source>%1 duration (invalid)</source>
         <translation>Duração de %1 (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="505"/>
         <source>%1 duration: %2 ms</source>
         <translation>Duração de %1: %2 ms</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="511"/>
         <source>%1 curve</source>
         <translation>Curva de %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="515"/>
         <source>%1 curve: %2</source>
         <translation>Curva de %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="532"/>
         <source>Overlay style (invalid)</source>
         <translation>Estilo da sobreposição (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="526"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="533"/>
         <source>Overlay style: %1</source>
         <translation>Estilo da sobreposição: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="532"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="539"/>
         <source>Algorithm parameter</source>
         <translation>Parâmetro do algoritmo</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="533"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="540"/>
         <source>Algorithm: %1</source>
         <translation>Algoritmo: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="574"/>
         <source>Border width (invalid)</source>
         <translation>Largura da borda (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="578"/>
         <source>Corner radius (invalid)</source>
         <translation>Raio dos cantos (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="597"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="604"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="520"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="414"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="419"/>
@@ -4634,283 +4650,283 @@
         <translation>Intensidade da tonalidade</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="603"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="610"/>
         <source>Tint strength (invalid)</source>
         <translation>Intensidade da tonalidade (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="605"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="612"/>
         <source>Tint strength: %1%</source>
         <translation>Intensidade da tonalidade: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="614"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="621"/>
         <source>Tint color: %1</source>
         <translation>Cor da tonalidade: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="619"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="626"/>
         <source>Max tiled windows: %1</source>
         <translation>Máximo de janelas ladrilhadas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="627"/>
         <source>Max tiled windows (invalid)</source>
         <translation>Máximo de janelas ladrilhadas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="631"/>
         <source>Master count: %1</source>
         <translation>Quantidade de mestres: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="631"/>
         <source>Master count (invalid)</source>
         <translation>Quantidade de mestres (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="645"/>
         <source>Split ratio (invalid)</source>
         <translation>Proporção da divisão (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="647"/>
         <source>Split ratio: %1%</source>
         <translation>Proporção da divisão: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
         <source>Insert (invalid)</source>
         <translation>Inserção (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="650"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="657"/>
         <source>Insert: %1</source>
         <translation>Inserção: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="655"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
         <source>Overflow (invalid)</source>
         <translation>Transbordamento (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="663"/>
         <source>Overflow: %1</source>
         <translation>Transbordamento: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="661"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="668"/>
         <source>Drag (invalid)</source>
         <translation>Arraste (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="669"/>
         <source>Drag: %1</source>
         <translation>Arraste: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="680"/>
         <source>Column width (invalid)</source>
         <translation>Largura da coluna (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="680"/>
         <source>Column width</source>
         <translation>Largura da coluna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="681"/>
         <source>Column width: %1%</source>
         <translation>Largura da coluna: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="685"/>
         <source>Open at width (invalid)</source>
         <translation>Abrir na largura (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="685"/>
         <source>Open at width</source>
         <translation>Abrir na largura</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="686"/>
         <source>Open at width: %1%</source>
         <translation>Abrir na largura: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="690"/>
         <source>Window height (invalid)</source>
         <translation>Altura da janela (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="690"/>
         <source>Window height</source>
         <translation>Altura da janela</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="684"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="691"/>
         <source>Window height: %1%</source>
         <translation>Altura da janela: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
         <source>Open at height (invalid)</source>
         <translation>Abrir na altura (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
         <source>Open at height</source>
         <translation>Abrir na altura</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="696"/>
         <source>Open at height: %1%</source>
         <translation>Abrir na altura: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
         <source>Insert new windows (invalid)</source>
         <translation>Inserir as janelas novas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="711"/>
         <source>Insert new windows: %1</source>
         <translation>Inserir as janelas novas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
         <source>Sticky windows (invalid)</source>
         <translation>Janelas fixas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="717"/>
         <source>Sticky windows: %1</source>
         <translation>Janelas fixas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
         <source>Strip direction (invalid)</source>
         <translation>Direção da faixa (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="723"/>
         <source>Strip direction: %1</source>
         <translation>Direção da faixa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="728"/>
         <source>Centering (invalid)</source>
         <translation>Centralização (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="729"/>
         <source>Centering: %1</source>
         <translation>Centralização: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="727"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="734"/>
         <source>New columns (invalid)</source>
         <translation>Novas colunas (inválidas)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="728"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="735"/>
         <source>New columns: %1</source>
         <translation>Novas colunas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="733"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="740"/>
         <source>Open (invalid)</source>
         <translation>Abrir (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="734"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="741"/>
         <source>Open: %1</source>
         <translation>Abrir: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="750"/>
         <source>Tab indicator style (invalid)</source>
         <translation>Estilo do indicador de abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="751"/>
         <source>Tab indicator style: %1</source>
         <translation>Estilo do indicador de abas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="756"/>
         <source>Tab indicator position (invalid)</source>
         <translation>Posição do indicador de abas (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="750"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="757"/>
         <source>Tab indicator position: %1</source>
         <translation>Posição do indicador de abas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="761"/>
         <source>Tab indicator gap: %1 px</source>
         <translation>Espaçamento do indicador de abas: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="755"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="762"/>
         <source>Tab indicator gap (invalid)</source>
         <translation>Espaçamento do indicador de abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
         <source>Tab indicator thickness: %1 px</source>
         <translation>Espessura do indicador de abas: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="767"/>
         <source>Tab indicator thickness (invalid)</source>
         <translation>Espessura do indicador de abas (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="772"/>
         <source>Tab indicator length (invalid)</source>
         <translation>Comprimento do indicador de abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="773"/>
         <source>Tab indicator length: %1%</source>
         <translation>Comprimento do indicador de abas: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="777"/>
         <source>Gap between tabs: %1 px</source>
         <translation>Espaçamento entre as abas: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="771"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="778"/>
         <source>Gap between tabs (invalid)</source>
         <translation>Espaçamento entre as abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="776"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="783"/>
         <source>Tab corner radius (invalid)</source>
         <translation>Raio dos cantos das abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="780"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="787"/>
         <source>Tab corners: fully rounded</source>
         <translation>Cantos das abas: totalmente arredondados</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="781"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="788"/>
         <source>Tab corner radius: %1 px</source>
         <translation>Raio dos cantos das abas: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="582"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="613"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="825"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="867"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="927"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="932"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="937"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="589"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="832"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="874"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="934"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="939"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>(invalid)</source>
         <translation>(valor inválido)</translation>
     </message>
@@ -4920,163 +4936,163 @@
         <translation>%1 %2 %3</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="494"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="501"/>
         <source>Animation duration (invalid)</source>
         <translation>Duração da animação (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="570"/>
         <source>%1 (invalid)</source>
         <translation>%1 (valor inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="694"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="701"/>
         <source>Strip scroll limit</source>
         <translation>Limite de rolagem da faixa</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="702"/>
         <source>Strip scroll limit (invalid)</source>
         <translation>Limite de rolagem da faixa (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="702"/>
         <source>Strip scroll limit: %1%</source>
         <translation>Limite de rolagem da faixa: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="803"/>
         <source>Tab label font</source>
         <translation>Fonte dos rótulos das abas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="799"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="806"/>
         <source>Tab label font (invalid)</source>
         <translation>Fonte dos rótulos das abas (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="802"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="809"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="201"/>
         <source>Tab label font: %1</source>
         <translation>Fonte dos rótulos das abas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="809"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="816"/>
         <source>Tab label weight: %1</source>
         <translation>Peso dos rótulos das abas: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="810"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="817"/>
         <source>Tab label weight (invalid)</source>
         <translation>Peso dos rótulos das abas (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="827"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="834"/>
         <source>Active tab: %1</source>
         <translation>Aba ativa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="830"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="837"/>
         <source>Inactive tab: %1</source>
         <translation>Aba inativa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="833"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="840"/>
         <source>Urgent tab: %1</source>
         <translation>Aba urgente: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="836"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="843"/>
         <source>This window&apos;s active tab: %1</source>
         <translation>Aba ativa desta janela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="839"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="846"/>
         <source>This window&apos;s inactive tab: %1</source>
         <translation>Aba inativa desta janela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="841"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="848"/>
         <source>This window&apos;s urgent tab: %1</source>
         <translation>Aba urgente desta janela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="856"/>
         <source>Drop indicator fill opacity</source>
         <translation>Opacidade do preenchimento do indicador de soltura</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="850"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="857"/>
         <source>Drop indicator fill opacity (invalid)</source>
         <translation>Opacidade do preenchimento do indicador de soltura (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="851"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="858"/>
         <source>Drop indicator fill opacity: %1%</source>
         <translation>Opacidade do preenchimento do indicador de soltura: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="862"/>
         <source>Drop indicator border width: %1 px</source>
         <translation>Largura da borda do indicador de soltura: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="856"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="863"/>
         <source>Drop indicator border width (invalid)</source>
         <translation>Largura da borda do indicador de soltura (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="861"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="868"/>
         <source>Drop indicator corner radius: %1 px</source>
         <translation>Raio dos cantos do indicador de soltura: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="862"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="869"/>
         <source>Drop indicator corner radius (invalid)</source>
         <translation>Raio dos cantos do indicador de soltura (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="869"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="876"/>
         <source>Drop indicator fill: %1</source>
         <translation>Preenchimento do indicador de soltura: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="872"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="879"/>
         <source>Drop indicator border: %1</source>
         <translation>Borda do indicador de soltura: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="879"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="886"/>
         <source>Drop indicator fill when dragging this window: %1</source>
         <translation>Preenchimento do indicador de soltura ao arrastar esta janela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="881"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="888"/>
         <source>Drop indicator border when dragging this window: %1</source>
         <translation>Borda do indicador de soltura ao arrastar esta janela: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="887"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="894"/>
         <source>Window layer</source>
         <translation>Camada da janela</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="895"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="902"/>
         <source>Window layer (invalid)</source>
         <translation>Camada da janela (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="897"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="904"/>
         <source>Layer: %1</source>
         <translation>Camada: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="907"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="914"/>
         <source>Scroll speed (invalid)</source>
         <translation>Velocidade da rolagem (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="989"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="996"/>
         <source>Right gap (invalid)</source>
         <translation>Espaçamento direito (inválido)</translation>
     </message>
@@ -5097,7 +5113,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="926"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="933"/>
         <source>Highlight color: %1</source>
         <translation>Cor de destaque: %1</translation>
     </message>
@@ -5120,97 +5136,97 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="931"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="938"/>
         <source>Inactive zone color: %1</source>
         <translation>Cor da zona inativa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="936"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="943"/>
         <source>Overlay border color: %1</source>
         <translation>Cor da borda da sobreposição: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="950"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
         <source>Active opacity (invalid)</source>
         <translation>Opacidade ativa (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="951"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Inactive opacity (invalid)</source>
         <translation>Opacidade inativa (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="960"/>
         <source>Active opacity: %1%</source>
         <translation>Opacidade ativa: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="954"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="961"/>
         <source>Inactive opacity: %1%</source>
         <translation>Opacidade inativa: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="965"/>
         <source>Overlay border width: %1 px</source>
         <translation>Largura da borda da sobreposição: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="959"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="966"/>
         <source>Overlay border width (invalid)</source>
         <translation>Largura da borda da sobreposição (inválida)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="970"/>
         <source>Overlay corner radius: %1 px</source>
         <translation>Raio dos cantos da sobreposição: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="964"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Overlay corner radius (invalid)</source>
         <translation>Raio dos cantos da sobreposição (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="969"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="976"/>
         <source>Gap (invalid)</source>
         <translation>Espaçamento (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="973"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="980"/>
         <source>Outer gap (invalid)</source>
         <translation>Espaçamento externo (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="977"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="984"/>
         <source>Top gap: %1 px</source>
         <translation>Espaçamento superior: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="977"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="984"/>
         <source>Top gap (invalid)</source>
         <translation>Espaçamento superior (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="981"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="988"/>
         <source>Bottom gap: %1 px</source>
         <translation>Espaçamento inferior: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="981"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="988"/>
         <source>Bottom gap (invalid)</source>
         <translation>Espaçamento inferior (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="985"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="992"/>
         <source>Left gap: %1 px</source>
         <translation>Espaçamento esquerdo: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="985"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="992"/>
         <source>Left gap (invalid)</source>
         <translation>Espaçamento esquerdo (inválido)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="989"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="996"/>
         <source>Right gap: %1 px</source>
         <translation>Espaçamento direito: %1 px</translation>
     </message>
@@ -5489,7 +5505,7 @@
         <translation>(grupo de condições)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="1000"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="1007"/>
         <source>No action</source>
         <translation>Nenhuma ação</translation>
     </message>
@@ -6712,7 +6728,7 @@
         <translation>carregar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="943"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="950"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="464"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="154"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="159"/>
@@ -6726,7 +6742,7 @@
         <translation>alfa</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="943"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="950"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="172"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="177"/>
@@ -8228,7 +8244,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="277"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="658"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="936"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="60"/>
@@ -8485,7 +8501,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="283"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="940"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="138"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="76"/>
@@ -8692,7 +8708,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="454"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="608"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="651"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="71"/>
@@ -8803,7 +8819,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="286"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="669"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="943"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="997"/>
@@ -14353,7 +14369,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="850"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="468"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="478"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
@@ -17526,29 +17542,34 @@
         <translation>Escolha uma área de trabalho…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="775"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="673"/>
+        <source>Choose a workspace…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="814"/>
         <source>This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.</source>
         <translation>Este evento não é controlado por janela, então uma regra não consegue alterá-lo. Ele fica aqui porque esta ação já o menciona.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="782"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="821"/>
         <source>Choose an event…</source>
         <translation>Escolha um evento…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="894"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="933"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>Adicionar um pacote…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1012"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1051"/>
         <source>Choose a shader…</source>
         <translation>Escolha um shader…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1078"/>
         <source>Choose an overlay shader…</source>
         <translation>Escolha um shader de sobreposição…</translation>
     </message>
@@ -17579,12 +17600,12 @@
         <translation>Esta ação roda durante a resolução do contexto, mas a correspondência da regra menciona propriedades de janela, então a ação nunca dispararia do jeito que está escrita.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="542"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="545"/>
         <source>Remove action</source>
         <translation>Remover a ação</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="544"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="547"/>
         <source>Remove this action</source>
         <translation>Remove esta ação</translation>
     </message>
@@ -17601,7 +17622,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="564"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="574"/>
         <source>Add rule</source>
         <translation>Adicionar regra</translation>
     </message>
@@ -18253,123 +18274,123 @@
         <translation>Sobre o que esta regra deve tratar?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="359"/>
         <source>Failed to save rules.</source>
         <translation>Falha ao salvar as regras.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="395"/>
         <source>Choose Color</source>
         <translation>Escolher a cor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="437"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>O serviço do PlasmaZones não está em execução. As regras não podem ser carregadas nem salvas até ele iniciar.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="434"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="444"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>As regras mudaram no disco enquanto você editava. Salvar agora vai sobrescrever essas alterações. Revise as suas edições antes de salvar, ou descarte-as para recarregar.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="445"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="455"/>
         <source>Save anyway</source>
         <translation>Salvar mesmo assim</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="460"/>
         <source>Discard and reload</source>
         <translation>Descartar e recarregar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="472"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>Sobrescrever as alterações do lado do serviço?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>Salvar vai substituir o conjunto de regras que o serviço tem no disco pelas suas edições preparadas. As regras que mudaram lá enquanto você editava serão perdidas.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="483"/>
         <source>Overwrite</source>
         <translation>Sobrescrever</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="527"/>
         <source>Search rules…</source>
         <translation>Pesquisar regras…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="528"/>
         <source>Search rules</source>
         <translation>Pesquisar regras</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="534"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="544"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>Filtrar as regras</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="538"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="548"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Sistema</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="542"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="552"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Criadas pelo usuário</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="554"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="564"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Ativas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="558"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="568"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Desativadas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="566"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="576"/>
         <source>Add a new rule</source>
         <translation>Adicionar uma nova regra</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="594"/>
         <source>No rules yet</source>
         <translation>Ainda não há regras</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="594"/>
         <source>No rules match the current filter</source>
         <translation>Nenhuma regra corresponde ao filtro atual</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="595"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>Adicione uma regra para atribuir layouts a monitores, fazer janelas de aplicativos flutuarem ou substituir animações.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="595"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="604"/>
         <source>Try a different filter or search term.</source>
         <translation>Tente outro filtro ou termo de pesquisa.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="596"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="606"/>
         <source>All rules</source>
         <translation>Todas as regras</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="598"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="608"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="149"/>
         <source>%n rule</source>
         <translation>
@@ -18378,7 +18399,7 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="609"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · arraste para definir a precedência</translation>
@@ -19515,7 +19536,7 @@
         <translation>Tipo de letra e estilo dos rótulos das zonas</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="426"/>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="429"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="190"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="312"/>
@@ -19944,7 +19965,7 @@
         <translation>Janelas mestres ou centrais configuráveis</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="634"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="641"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="425"/>
         <source>Split ratio</source>
         <translation>Proporção da divisão</translation>
@@ -21553,7 +21574,7 @@
         <translation>O quanto da borda da coluna o indicador ocupa, centralizado nela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="771"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="318"/>
         <source>Tab indicator length</source>
         <translation>Comprimento do indicador de abas</translation>
@@ -21826,252 +21847,257 @@
         <translation>Move as janelas correspondentes para uma área de trabalho virtual escolhida quando elas abrem.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="109"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="103"/>
+        <source>Moves matching windows to a named workspace when they open. The name follows the workspace wherever it lives, and the rule waits quietly while no workspace carries it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="114"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
         <translation>Controla se uma janela correspondente volta à zona anterior quando reabre, durante a sessão ou depois de você sair dela. Substitui a configuração Restaurar as janelas à zona anterior, então dá para deixar um aplicativo como o navegador de fora enquanto todas as outras janelas continuam sendo restauradas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="115"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="120"/>
         <source>Controls whether a matching window gets its original size back when unsnapped, overriding the global setting.</source>
         <translation>Controla se uma janela correspondente recupera o tamanho original ao ser desencaixada, substituindo a configuração global.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="120"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="125"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
         <translation>Quando uma janela flutuante correspondente deixa de flutuar sem uma zona lembrada, ela é posicionada em uma zona mesmo assim. Substitui a configuração global de alternativa nesta janela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="125"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="130"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
         <translation>Mantém as janelas correspondentes acima ou abaixo das outras, por exemplo as flutuantes acima das ladrilhadas quando combinada com a condição Flutuante.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="131"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="136"/>
         <source>Sets how much of the strip a matching window&apos;s column takes on a scrolling screen.</source>
         <translation>Define o quanto da faixa a coluna de uma janela correspondente ocupa em uma tela com rolagem.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="134"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="139"/>
         <source>Sets how much of its column a matching window takes when it opens.</source>
         <translation>Define o quanto da coluna uma janela correspondente ocupa quando abre.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="137"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
         <source>Opens a matching window&apos;s column tabbed, or forces it normal where the default is tabbed.</source>
         <translation>Abre a coluna de uma janela correspondente com abas, ou a força para normal onde o padrão é com abas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
         <source>Chooses whether a matching window opens its own column or joins the focused one.</source>
         <translation>Escolhe se uma janela correspondente abre uma coluna própria ou entra na coluna focalizada.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="145"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="150"/>
         <source>Opens matching windows maximized, so their column fills the work area along the strip when they first appear.</source>
         <translation>Abre as janelas correspondentes maximizadas, de modo que a coluna delas preencha a área de trabalho ao longo da faixa assim que aparecem.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="150"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
         <translation>Dá o foco do teclado às janelas correspondentes assim que elas abrem, ou mantém o foco onde estava quando desligado.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="160"/>
         <source>Opens matching windows in fullscreen mode. Off stops apps from starting in fullscreen on their own.</source>
         <translation>Abre as janelas correspondentes em tela cheia. Desligado impede que os aplicativos comecem em tela cheia por conta própria.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="166"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
         <translation>Usa outro shader de animação em um evento das janelas correspondentes. Uma escolha vazia desliga o shader desse evento nelas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="176"/>
         <source>Uses a different animation duration for one event on matching windows.</source>
         <translation>Usa outra duração de animação em um evento das janelas correspondentes.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
         <translation>Usa outra curva de suavização em um evento das janelas correspondentes.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="177"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="182"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
         <translation>Substitui os pacotes de decoração desenhados nas janelas correspondentes. Uma lista vazia remove as decorações delas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="189"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="194"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
         <translation>Liga ou desliga a camada de opacidade e tonalidade nas janelas correspondentes. As regras de definir opacidade e tonalidade precisam desta camada ligada para ter algum efeito.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="194"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="199"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation>Define o quanto a tonalidade colore as janelas correspondentes. Só tem efeito enquanto a camada de opacidade e tonalidade estiver ligada na janela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="199"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="204"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation>Define a cor da tonalidade das janelas correspondentes. Só tem efeito enquanto a camada de opacidade e tonalidade estiver ligada na janela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="205"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
         <source>Hides the title bar on matching windows, or forces it visible where a mode would hide it.</source>
         <translation>Oculta a barra de título das janelas correspondentes, ou a força visível onde um modo a ocultaria.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="215"/>
         <source>Shows or hides the PlasmaZones border on matching windows.</source>
         <translation>Mostra ou oculta a borda do PlasmaZones nas janelas correspondentes.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="213"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="218"/>
         <source>Sets the border thickness on matching windows.</source>
         <translation>Define a espessura da borda nas janelas correspondentes.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="221"/>
         <source>Sets the border corner radius on matching windows.</source>
         <translation>Define o raio dos cantos da borda nas janelas correspondentes.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="224"/>
         <source>Sets the border color for matching windows while they are focused.</source>
         <translation>Define a cor da borda das janelas correspondentes enquanto elas estão focalizadas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="222"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="227"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
         <translation>Define a cor da borda das janelas correspondentes enquanto elas não estão focalizadas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
         <translation>Usa outro shader de sobreposição de zonas na tela, área de trabalho ou atividade correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="229"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
         <translation>Alterna a sobreposição de zonas entre os retângulos das zonas e a visualização do layout no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="239"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
         <translation>Define a cor da zona destacada na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="242"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
         <translation>Define a cor da zona inativa na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="245"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
         <translation>Define a cor da borda das zonas na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="248"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
         <translation>Define a opacidade da zona destacada na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="251"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
         <translation>Define a opacidade da zona inativa na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="254"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
         <translation>Define a espessura da borda das zonas na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="257"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
         <translation>Define o raio dos cantos das zonas na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="255"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="260"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
         <translation>Mostra ou oculta os números das zonas na sobreposição do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="264"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
         <translation>Define o espaçamento entre as zonas na tela, área de trabalho ou atividade correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="267"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
         <translation>Define o espaçamento uniforme junto à borda da tela no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="270"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
         <translation>Alterna o contexto correspondente entre um espaçamento externo uniforme e espaçamentos externos por lado.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="273"/>
         <source>Sets the top outer gap for the matched context.</source>
         <translation>Define o espaçamento externo superior do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="276"/>
         <source>Sets the bottom outer gap for the matched context.</source>
         <translation>Define o espaçamento externo inferior do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="279"/>
         <source>Sets the left outer gap for the matched context.</source>
         <translation>Define o espaçamento externo esquerdo do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="277"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="282"/>
         <source>Sets the right outer gap for the matched context.</source>
         <translation>Define o espaçamento externo direito do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="286"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
         <translation>Limita quantas janelas o algoritmo de ladrilhamento organiza no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="289"/>
         <source>Sets the master area split ratio for the matched context.</source>
         <translation>Define a proporção da divisão da área mestre no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="292"/>
         <source>Sets how many windows the master area holds for the matched context.</source>
         <translation>Define quantas janelas a área mestre comporta no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
         <translation>Escolhe onde as janelas recém-abertas entram na pilha do ladrilhamento no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="309"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="314"/>
         <source>Sets how much of the strip newly opened columns take on the matched scrolling context.</source>
         <translation>Define o quanto da faixa as colunas recém-abertas ocupam no contexto de rolagem correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="318"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
         <source>Chooses whether new columns show their windows divided across the strip or tabbed on the matched context.</source>
         <translation>Escolhe se as colunas novas mostram as janelas divididas ao longo da faixa ou em abas no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Sets how much of their column newly opened windows take for the matched context.</source>
         <translation>Define o quanto da coluna as janelas recém-abertas ocupam no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="334"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="339"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
         <translation>Mantém as colunas do contexto correspondente pelo menos do tamanho que cada janela pede. Desligado, a coluna pode ficar menor, e aí o compositor a limita por conta própria.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="360"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="365"/>
         <source>Caps how far the strip may scroll on the matched context when the pointer moves onto a column that is partly off screen. Past the cap the pointer is ignored and focus stays put. At 100% nothing is ignored.</source>
         <translation>Limita, no contexto correspondente, o quanto a faixa pode rolar quando o ponteiro se move para uma coluna parcialmente fora da tela. Além do limite, o ponteiro é ignorado e o foco permanece onde está. Em 100% nada é ignorado.</translation>
     </message>
@@ -22091,223 +22117,223 @@
         <translation>Encaixa as janelas correspondentes nas zonas indicadas quando elas abrem. Dá para escolher as zonas por número ou por nome, e um nome encontra essa zona no layout que estiver ativo. Várias zonas ocupam a área combinada delas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="103"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="108"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor when it reopens, during the session or after a logout. Overrides the restore-previous-position setting of whichever engine owns the screen.</source>
         <translation>Controla se uma janela flutuante correspondente volta à posição e ao monitor lembrados quando reabre, durante a sessão ou depois de você sair dela. Substitui a configuração de restaurar a posição anterior do mecanismo que controla a tela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="160"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="165"/>
         <source>Scales mouse wheel and touchpad scrolling speed inside matching windows. Below 100% slows it down and above 100% speeds it up.</source>
         <translation>Ajusta a velocidade de rolagem da roda do mouse e do touchpad dentro das janelas correspondentes. Abaixo de 100% fica mais lenta e acima de 100% mais rápida.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="182"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="187"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
         <translation>Escurece as janelas correspondentes até a opacidade indicada. Só tem efeito enquanto a camada de opacidade e tonalidade estiver ligada na janela, seja pela configuração global, seja por uma regra de mostrar a opacidade e a tonalidade. Uma janela com cadeia de decoração própria escurece pelos parâmetros dos pacotes dessa cadeia.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="293"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="298"/>
         <source>Chooses what happens to windows past the cap for the matched context. They can float, or the cap can be ignored.</source>
         <translation>Escolhe o que acontece com as janelas que passam do limite no contexto correspondente. Elas podem flutuar, ou o limite pode ser ignorado.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="298"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="303"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
         <translation>Escolhe se arrastar uma janela ladrilhada a faz flutuar ou a troca dentro da pilha no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="303"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="308"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
         <translation>Substitui os parâmetros do próprio algoritmo de ladrilhamento no contexto correspondente. Só vale enquanto esse algoritmo estiver ativo ali.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="313"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="318"/>
         <source>Chooses when the scrolling view re-centers on the focused column for the matched context.</source>
         <translation>Escolhe quando a visão de rolagem volta a se centralizar na coluna focalizada no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="328"/>
         <source>Chooses where a new window&apos;s column enters the strip for the matched context.</source>
         <translation>Escolhe onde a coluna de uma janela nova entra na faixa no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="329"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="334"/>
         <source>Centers a column on the matched context whenever it is the only one on the strip, whatever the centering policy says.</source>
         <translation>Centraliza uma coluna no contexto correspondente sempre que ela for a única da faixa, não importa o que diga a política de centralização.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="339"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="344"/>
         <source>Clips a column that hangs over the screen edge on the matched context so only the on-screen part is drawn. The column keeps its real size, so scrolling is unchanged.</source>
         <translation>Recorta uma coluna que passa da borda da tela no contexto correspondente, de modo que só a parte visível seja desenhada. A coluna mantém o tamanho real, então a rolagem não muda.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="344"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="349"/>
         <source>Gives windows opening on the matched context keyboard focus. A per-window Focus when opened rule still wins over this.</source>
         <translation>Dá o foco do teclado às janelas que abrem no contexto correspondente. Uma regra por janela de focalizar ao abrir ainda prevalece sobre isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="349"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="354"/>
         <source>Removes the outer gaps on the matched context while a single column is on the strip. The column keeps its own width, so it sits against one screen edge instead of growing to fill the screen.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="354"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="359"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
         <translation>Focaliza a coluna sobre a qual o ponteiro passar no contexto correspondente, sem clique. Vale apenas para telas com rolagem, então as telas de encaixe e de ladrilhamento continuam seguindo a configuração global.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="366"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
         <source>Chooses how the matched context treats windows shown on all desktops. Anything other than treating them as normal keeps them floating instead of in a column.</source>
         <translation>Escolhe como o contexto correspondente trata as janelas mostradas em todas as áreas de trabalho. Qualquer opção diferente de tratá-las como normais as mantém flutuando em vez de dentro de uma coluna.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="376"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
         <translation>Escolhe em qual sentido corre a faixa do contexto correspondente, substituindo a configuração Direção da faixa e qualquer escolha por monitor. Acompanhar o formato da tela se resolve pela área utilizável, então a regra pode devolver a essa opção um monitor com direção fixada, em uma área de trabalho ou atividade.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="380"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="385"/>
         <source>Shows or hides the tab indicator on tabbed columns for the matched context.</source>
         <translation>Mostra ou oculta o indicador de abas nas colunas com abas do contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="383"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="388"/>
         <source>Switches the tab indicator between a segment bar and titled chips for the matched context.</source>
         <translation>Alterna o indicador de abas entre uma barra segmentada e etiquetas com título no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="388"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="393"/>
         <source>Chooses which column edge the tab indicator runs along for the matched context.</source>
         <translation>Escolhe em qual borda da coluna o indicador de abas se estende no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="391"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="396"/>
         <source>Hides the tab indicator when a tabbed column holds only one window, for the matched context.</source>
         <translation>Oculta o indicador de abas quando uma coluna com abas tem uma só janela, no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="396"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="401"/>
         <source>Reserves the tab indicator&apos;s space inside the column instead of drawing beside it, for the matched context.</source>
         <translation>Reserva o espaço do indicador de abas dentro da coluna em vez de desenhá-lo ao lado, no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="401"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
         <translation>Define o espaçamento entre o indicador de abas e a janela no contexto correspondente. Um espaçamento negativo, em vez disso, o desenha sobre a janela.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="411"/>
         <source>Sets the tab indicator&apos;s thickness for the matched context.</source>
         <translation>Define a espessura do indicador de abas no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="414"/>
         <source>Sets how much of the column edge the tab indicator spans for the matched context.</source>
         <translation>Define o quanto da borda da coluna o indicador de abas ocupa no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="417"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
         <translation>Define o espaçamento entre cada aba no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="420"/>
         <source>Sets the corner radius of each tab for the matched context.</source>
         <translation>Define o raio dos cantos de cada aba no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="423"/>
         <source>Sets the active tab color for the matched context.</source>
         <translation>Define a cor da aba ativa no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="421"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="426"/>
         <source>Sets the inactive tab color for the matched context.</source>
         <translation>Define a cor da aba inativa no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="429"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
         <translation>Define a cor da aba cuja janela pede atenção, no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="427"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="432"/>
         <source>Sets the font the tab labels are drawn in for the matched context. Leave it empty to use the system font. A segment bar draws no labels, so it ignores this.</source>
         <translation>Define a fonte em que os rótulos das abas são desenhados no contexto correspondente. Deixe vazio para usar a fonte do sistema. A barra segmentada não desenha rótulos, então ela ignora isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="432"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="437"/>
         <source>Sets how heavy the tab label text is for the matched context, from 100 for the thinnest weight up to 900 for the boldest. A segment bar draws no labels, so it ignores this.</source>
         <translation>Define o peso do texto dos rótulos das abas no contexto correspondente, de 100 para o mais fino até 900 para o mais grosso. A barra segmentada não desenha rótulos, então ela ignora isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="438"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="443"/>
         <source>Draws the tab labels in italic for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>Desenha os rótulos das abas em itálico no contexto correspondente. A barra segmentada não desenha rótulos, então ela ignora isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="443"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="448"/>
         <source>Underlines the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>Sublinha os rótulos das abas no contexto correspondente. A barra segmentada não desenha rótulos, então ela ignora isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="448"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="453"/>
         <source>Draws a line through the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>Risca os rótulos das abas no contexto correspondente. A barra segmentada não desenha rótulos, então ela ignora isto.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="453"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="458"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
         <translation>Recolore a aba de uma janela correspondente enquanto ela é a aba ativa.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="456"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="461"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
         <translation>Recolore a aba de uma janela correspondente enquanto outra aba está ativa.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="459"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="464"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
         <translation>Recolore a aba de uma janela correspondente enquanto ela pede atenção.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="468"/>
         <source>Shows or hides the drop indicator during drag re-inserts for the matched context.</source>
         <translation>Mostra ou oculta o indicador de soltura durante as reinserções por arraste no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="466"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="471"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
         <translation>Define a cor de preenchimento do indicador de soltura no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="469"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="474"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
         <translation>Define a cor da borda do indicador de soltura no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="477"/>
         <source>Sets the drop indicator&apos;s fill opacity for the matched context.</source>
         <translation>Define a opacidade do preenchimento do indicador de soltura no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="480"/>
         <source>Sets the drop indicator&apos;s border thickness for the matched context.</source>
         <translation>Define a espessura da borda do indicador de soltura no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="478"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="483"/>
         <source>Sets the drop indicator&apos;s corner radius for the matched context.</source>
         <translation>Define o raio dos cantos do indicador de soltura no contexto correspondente.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="481"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="486"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
         <translation>Recolore o preenchimento do indicador de soltura enquanto uma janela correspondente está sendo arrastada.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="484"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="489"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
         <translation>Recolore a borda do indicador de soltura enquanto uma janela correspondente está sendo arrastada.</translation>
     </message>
@@ -22343,7 +22369,13 @@
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="337"/>
+        <source>“%1”</source>
+        <comment>a quoted workspace name</comment>
+        <translation type="unfinished">“%1”</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="354"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="618"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
         <source>%1: %2</source>
@@ -23232,31 +23264,31 @@
         <translation>As regras correspondem a janelas, e este evento não pertence a uma janela, então esta ação nunca roda. Este evento não aceita shader em lugar nenhum, então a ação pode ser removida.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/workspaces.cpp" line="211"/>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="225"/>
         <source>That workspace is on another monitor.</source>
         <comment>OSD hint</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/workspaces.cpp" line="243"/>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="257"/>
         <source>Moving a column needs a scrolling screen.</source>
         <comment>OSD hint</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/workspaces.cpp" line="287"/>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="301"/>
         <source>Focus Workspace &quot;%1&quot;</source>
         <comment>named workspace shortcut</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/workspaces.cpp" line="297"/>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="311"/>
         <source>Move Window to Workspace &quot;%1&quot;</source>
         <comment>named workspace shortcut</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/workspaces.cpp" line="361"/>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="375"/>
         <source>Workspace limit reached.</source>
         <comment>OSD hint</comment>
         <translation type="unfinished"></translation>
