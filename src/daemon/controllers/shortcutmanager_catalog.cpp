@@ -71,7 +71,7 @@ struct CatalogMeta
 {
     const char* category;
     // Sort key for the category block, NOT an index: only the relative order
-    // matters, so the values are deliberately sparse (2 and 5-7 are
+    // matters, so the values are deliberately sparse (2 and 6-7 are
     // unallocated) to leave room for a new category between two existing ones
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
@@ -260,6 +260,37 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Forward"));
         add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Backward"));
+        // ── Dynamic workspaces (mode-neutral; the feature gates the grabs,
+        // not the catalog — an off feature shows unbound rows, not a hole).
+        // Short labels drop the "Workspace" the group heading already says.
+        add(kIdWorkspaceFocusUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Above"));
+        add(kIdWorkspaceFocusDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Below"));
+        add(kIdWorkspaceMoveWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Window Above"));
+        add(kIdWorkspaceMoveWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Window Below"));
+        add(kIdWorkspaceMoveColumnUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "scrolling", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Column Above"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the workspace above. Scrolling only."));
+        add(kIdWorkspaceMoveColumnDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "scrolling", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Column Below"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the workspace below. Scrolling only."));
+        add(kIdWorkspaceReorderUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Up"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the current workspace earlier in this monitor's list."));
+        add(kIdWorkspaceReorderDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Down"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the current workspace later in this monitor's list."));
+        add(kIdWorkspaceMoveToMonitorLeft, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Left Monitor"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves the current workspace and its windows to the monitor on the left."));
+        add(kIdWorkspaceMoveToMonitorRight, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Right Monitor"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves the current workspace and its windows to the monitor on the right."));
         add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Left"));
         add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
@@ -461,6 +492,28 @@ CatalogMeta catalogMetaForId(const QString& id)
                 nullptr,
                 nullptr,
                 QT_TRANSLATE_NOOP("plasmazones", "Sends the focused window to the numbered slot on this screen."),
+                nullptr,
+                9000};
+    }
+    if (id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix))) {
+        return {QT_TRANSLATE_NOOP("plasmazones", "Workspaces"),
+                5,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones",
+                                  "Sends the active window to the named workspace assigned to this slot in "
+                                  "Settings under Workspaces."),
+                nullptr,
+                9000};
+    }
+    if (id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix))) {
+        return {QT_TRANSLATE_NOOP("plasmazones", "Workspaces"),
+                5,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Switches this monitor to the numbered workspace of its own list."),
                 nullptr,
                 9000};
     }

@@ -346,6 +346,14 @@ Item {
                     id: rowLoader
 
                     Layout.fillWidth: true
+                    // Top-aligned, never centered: a row SHORTER than the grip
+                    // column would otherwise render vertically centered while
+                    // collapsed and snap to the top the moment its expansion
+                    // makes it the tallest child — an upward jump on expand.
+                    // Rows taller than the grip (every pre-existing consumer)
+                    // are unaffected: the tallest child sits at the top either
+                    // way.
+                    Layout.alignment: Qt.AlignTop
 
                     property var rowModelData: delegateRoot.modelData
                     property int rowIndex: delegateRoot.index
