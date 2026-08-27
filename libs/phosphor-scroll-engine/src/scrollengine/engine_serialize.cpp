@@ -655,6 +655,10 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         // fine here: the write side already deduped windows across the keys
         // of one snapshot.
         stash.sequence = 0;
+        // Open the fuzzy-claim grace: this staging is exactly the moment a
+        // wave of re-announced session-restore windows follows (see the
+        // member's contract).
+        stash.fuzzyClaimWindow.start();
         m_stripStash.insert(key, stash);
         m_stripStashConsumed.remove(key);
         ++restored;
