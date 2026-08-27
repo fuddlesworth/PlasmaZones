@@ -5,8 +5,10 @@
 
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -23,9 +25,29 @@ Q_LOGGING_CATEGORY(lcWorkspaceCtl, "plasmazones.workspaces.controller", QtWarnin
 namespace PlasmaZones {
 
 namespace {
+/// The map, the census, and the reconciler all key screens by the id the
+/// KWin effect REPORTS (the EDID-style "Vendor:Model:Serial" form of
+/// outputScreenId). ScreenManager hands out CONNECTOR names ("DP-2"), so
+/// every ScreenManager-sourced id must pass through here — mixing the two
+/// spaces made every owner check fail, which turned every ordinary desktop
+/// switch into a "foreign" one and looped snap-back against the user (the
+/// desktop churn that crashed plasmashell's Pager).
+QString canonicalScreenId(const QString& connectorOrId)
+{
+    const QString id = PhosphorScreens::ScreenIdentity::idForName(connectorOrId);
+    return id.isEmpty() ? connectorOrId : id;
+}
+
 /// Adoption grace: how long to wait for every screen's per-output desktop
 /// report before adopting with the global-current fallback.
 constexpr int AdoptionTimeoutMs = 3000;
+/// Snap-back cooldown per screen: the ledger already enforces one correction
+/// in flight, but nothing bounded the rate ACROSS corrections — a sustained
+/// disagreement (a bug like the id mismatch above, or an external tool
+/// fighting us) would ping-pong desktop switches at report rate and take
+/// plasmashell down with the churn. One correction per screen per second is
+/// ample for real snap-back and harmless as a ceiling.
+constexpr qint64 SnapBackCooldownMs = 1000;
 /// State-file write debounce: map churn (a create + settle + maintenance
 /// run) coalesces into one atomic write.
 constexpr int StateSaveDebounceMs = 1000;
@@ -71,10 +93,17 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
             [this](const QString& screenId, const QString& desktopId, const QString& ownerScreenId) {
                 qCInfo(lcWorkspaceCtl) << "foreign switch:" << screenId << "showed" << desktopId << "owned by"
                                        << ownerScreenId;
-                // Owner-wins: return the screen to its own slice (single
-                // correction per event; the reconciler's ledger breaks
-                // re-assertion loops). The OSD hint rides the signal.
+                // Owner-wins: return the screen to its own slice. Two guards:
+                // the reconciler's ledger allows one correction in flight, and
+                // the cooldown bounds the rate ACROSS corrections so a
+                // sustained disagreement degrades to a once-a-second nudge
+                // instead of a desktop-switch storm (see SnapBackCooldownMs).
+                const qint64 now = QDateTime::currentMSecsSinceEpoch();
+                if (now - m_lastSnapBackMs.value(screenId, 0) < SnapBackCooldownMs) {
+                    return;
+                }
                 if (m_reconciler.snapBack(screenId)) {
+                    m_lastSnapBackMs.insert(screenId, now);
                     Q_EMIT snapBackOccurred(screenId);
                 }
             });
@@ -150,10 +179,10 @@ void WorkspaceController::wireScreens()
     using SM = PhosphorScreens::ScreenManager;
     connect(m_screens, &SM::screenAdded, this, [this](const PhosphorScreens::PhysicalScreen& screen) {
         refreshScreenOrder();
-        m_reconciler.onScreenAdded(screen.name);
+        m_reconciler.onScreenAdded(canonicalScreenId(screen.name));
     });
     connect(m_screens, &SM::screenRemoved, this, [this](const PhosphorScreens::PhysicalScreen& screen) {
-        m_reconciler.onScreenRemoved(screen.name);
+        m_reconciler.onScreenRemoved(canonicalScreenId(screen.name));
         refreshScreenOrder();
     });
     connect(m_screens, &SM::screenGeometryChanged, this, [this](const PhosphorScreens::PhysicalScreen&) {
@@ -179,7 +208,8 @@ void WorkspaceController::refreshScreenOrder()
     QStringList order;
     order.reserve(screens.size());
     for (const auto& screen : screens) {
-        order.append(screen.name);
+        // Effect-reported id space, not the connector (see canonicalScreenId).
+        order.append(canonicalScreenId(screen.name));
     }
     m_reconciler.onScreenOrderChanged(order);
 }
@@ -255,7 +285,7 @@ void WorkspaceController::start()
     const auto screens = m_screens->screens();
     liveScreens.reserve(screens.size());
     for (const auto& screen : screens) {
-        liveScreens.append(screen.name);
+        liveScreens.append(canonicalScreenId(screen.name));
     }
     for (const QString& stored : storedScreens) {
         if (!liveScreens.contains(stored)) {

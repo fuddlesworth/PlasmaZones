@@ -158,6 +158,8 @@ private:
     /// diagnosis. Arrival confirmation lives in onMetadataChanged.
     void watchWindowMove(const QString& windowId, const QString& targetDesktopId);
     QHash<QString, QString> m_pendingWindowMoves; ///< windowId → expected desktopId
+    /// Per-screen snap-back cooldown stamps (ms since epoch).
+    QHash<QString, qint64> m_lastSnapBackMs;
 
     // ── State persistence (Phase 4) ─────────────────────────────────────────
     static QString stateFilePath();

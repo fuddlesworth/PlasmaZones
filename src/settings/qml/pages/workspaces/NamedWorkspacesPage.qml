@@ -137,7 +137,7 @@ SettingsFlickable {
                         return trimmed.length > 0 && root._names().indexOf(trimmed) === -1;
                     }
                     onClicked: {
-                        var arr = root._entries;
+                        var arr = root._entries.slice();
                         arr.push({
                             "name": addNameField.text.trim(),
                             "output": addOutputCombo.currentValue || "",
@@ -190,7 +190,7 @@ SettingsFlickable {
                         return true;
                     }
                     onMoveRequested: function (fromIndex, toIndex) {
-                        var arr = root._entries;
+                        var arr = root._entries.slice();
                         if (fromIndex < 0 || fromIndex >= arr.length || toIndex < 0 || toIndex >= arr.length)
                             return;
 
@@ -209,7 +209,7 @@ SettingsFlickable {
                             return names;
                         }
                         onFieldEdited: function (index, field, value) {
-                            var arr = root._entries;
+                            var arr = root._entries.slice();
                             if (index < 0 || index >= arr.length)
                                 return;
 
@@ -218,7 +218,7 @@ SettingsFlickable {
                             root._commitEntries();
                         }
                         onRemoveRequested: function (index) {
-                            var arr = root._entries;
+                            var arr = root._entries.slice();
                             arr.splice(index, 1);
                             root._entries = arr;
                             root._commitEntries();
