@@ -702,6 +702,24 @@ public:
     /// already have a stash entry or a live populated state are skipped, so
     /// a second load cannot re-stage stale structure over adopted windows.
     void restoreStripState(const QJsonObject& state);
+    /// TEST SEAM: shorten (or lengthen) the cross-session fuzzy-claim grace
+    /// window — the period after a stash is staged, or its screen re-enters
+    /// scrolling, during which an appId-only claim may take a dead sibling's
+    /// slot. See StashedStrip::fuzzyClaimWindow.
+    ///
+    /// It exists because the grace is measured by a QElapsedTimer against a
+    /// 60 s constant, which leaves the REFUSAL half of the contract — the
+    /// half that stops a stash hijacking every same-app window the user opens
+    /// for the rest of the session — reachable in a test only by sleeping a
+    /// minute. Passing 0 expires the window immediately, so a test can assert
+    /// a late arrival opens fresh instead of adopting a stashed slot.
+    ///
+    /// Production never calls this; the constructor's seed is the shipped
+    /// value.
+    void setFuzzyClaimGraceMsForTesting(qint64 graceMs)
+    {
+        m_fuzzyClaimGraceMs = graceMs;
+    }
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
     void refreshConfigFromSettings() override;
     void retile(const QString& screenId = QString()) override;
@@ -1339,6 +1357,11 @@ private:
     /// ScrollStashTypes.h (hoisted for the file-size ceiling).
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
+    /// How long StashedStrip::fuzzyClaimWindow stays open, in ms. Seeded from
+    /// kFuzzyClaimGraceMs in the constructor (the constant lives in the
+    /// engine-internal enginelimits.h, which this exported header must not
+    /// pull in) and only ever changed by the test seam below.
+    qint64 m_fuzzyClaimGraceMs;
     /// Ever-increasing stamp source for StashedStrip::sequence.
     quint64 m_stashSequence = 0;
     /// Screens with a retile queued this event-loop pass (coalescing).

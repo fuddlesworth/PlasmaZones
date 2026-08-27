@@ -61,6 +61,7 @@ private Q_SLOTS:
     void windowedFullscreenHiddenTabStillEmitsFlag();
     void windowedFullscreenMinimizeDropsModeKeeps();
     void windowedFullscreenFuzzyClaimDoesNotTransfer();
+    void fuzzyClaimHonoursGraceWindow();
     void restoreDropsMalformedKeysAndBoundsAnchor();
     void restoreStagesADuplicateWindowIdOnlyOnce();
     void restoreFocusFallsBackToASurvivingTile();
@@ -994,6 +995,79 @@ void TestScrollEnginePersistence::windowedFullscreenFuzzyClaimDoesNotTransfer()
     ScrollState* state = stateFor(engine2, kS1);
     QVERIFY(state);
     QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|n1")));
+}
+
+void TestScrollEnginePersistence::fuzzyClaimHonoursGraceWindow()
+{
+    // The cross-session appId claim is bounded by a GRACE WINDOW, and this
+    // pins both halves of that gate against ONE fixture — the only shape that
+    // proves the window is what decides, rather than something else about the
+    // two runs.
+    //
+    // The claim exists for an arrival WAVE (session restore, mode round trip),
+    // which lands within seconds of the stash being staged. A same-app window
+    // the USER opens later is not part of that wave, and letting it adopt a
+    // dead sibling's stashed slot put it on the strip WITHOUT FOCUS — seen
+    // live as new firefox/ghostty windows landing at the park row for the rest
+    // of the session, because the restore hands the view back to the stashed
+    // focus instead of the window the user just opened.
+    //
+    // Focus is therefore the assertion, not the column index: both paths can
+    // legitimately land the window in the same column (a claim rebuilds the
+    // stashed slot, a fresh open inserts right of the active one), so the
+    // index does not discriminate. Which window ends up ACTIVE does, and it is
+    // the half the user actually feels.
+    const auto buildBlob = [](QObject* owner) {
+        ScrollEngine* seed = makeProviderEngine(owner, {kS1});
+        seed->setCurrentDesktopForScreen(kS1, 1);
+        seed->windowOpened(QStringLiteral("other|s1"), kS1, 0, 0);
+        seed->windowOpened(QStringLiteral("app|u1"), kS1, 0, 0);
+        // The stashed FOCUS is the non-app window on purpose: it is what a
+        // claim hands the view back to, so a claim and a fresh open disagree
+        // about the active window.
+        seed->windowFocused(QStringLiteral("other|s1"), kS1);
+        return seed->serializeStripState();
+    };
+
+    // ── Grace OPEN: the wave case, claim allowed ────────────────────────────
+    {
+        QObject owner;
+        const QJsonObject blob = buildBlob(&owner);
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->restoreStripState(blob);
+        // Exact id: claims its stashed tile whatever the grace says, and
+        // consuming the stashed focus is what arms the hand-back below.
+        engine->windowOpened(QStringLiteral("other|s1"), kS1, 0, 0);
+        // Same appId, REGENERATED uuid — the cross-session shape.
+        engine->windowOpened(QStringLiteral("app|n9"), kS1, 0, 0);
+        ScrollState* state = stateFor(engine, kS1);
+        QVERIFY(state);
+        QVERIFY(state->strip().containsWindow(QStringLiteral("app|n9")));
+        QCOMPARE(state->strip().activeWindowId(), QStringLiteral("other|s1"));
+    }
+
+    // ── Grace CLOSED: the same arrival, minutes later ───────────────────────
+    {
+        QObject owner;
+        const QJsonObject blob = buildBlob(&owner);
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->restoreStripState(blob);
+        engine->windowOpened(QStringLiteral("other|s1"), kS1, 0, 0);
+        // Expire the window AFTER the wave's own arrival, so the only thing
+        // separating this run from the one above is the grace itself. Set
+        // here rather than before the restore because restoreStripState is
+        // what opens the window.
+        engine->setFuzzyClaimGraceMsForTesting(0);
+        engine->windowOpened(QStringLiteral("app|n9"), kS1, 0, 0);
+        ScrollState* state = stateFor(engine, kS1);
+        QVERIFY(state);
+        QVERIFY(state->strip().containsWindow(QStringLiteral("app|n9")));
+        // Opened through the ordinary path: focused, where the user expects
+        // the window they just launched.
+        QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|n9"));
+    }
 }
 
 void TestScrollEnginePersistence::restoreDropsMalformedKeysAndBoundsAnchor()

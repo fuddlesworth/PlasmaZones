@@ -1985,6 +1985,14 @@ private:
     /// strip first moves, which the gate treats as quiet.
     qint64 m_lastStripMotionMs = -1;
 
+    /// Last StripViewAnimator::viewMotionGeneration() this effect observed.
+    /// The stamp above advances when it CHANGES, which is what covers the two
+    /// kinds of strip motion no spring represents — an animations-off session
+    /// and the drag edge auto-scroll heartbeat. See the stamp site in
+    /// postPaintScreen for why polling the springs alone left the quiet gate
+    /// inert for both.
+    quint64 m_lastSeenStripMotionGeneration = 0;
+
     /// The daemon's audio-viz master toggle + the full CAVA parameter set,
     /// pulled via getSetting in loadCachedSettings exactly like
     /// snapAssistEnabled. The effect's cava run gate ANDs the toggle with an

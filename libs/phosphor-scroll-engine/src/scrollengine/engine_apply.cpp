@@ -502,16 +502,30 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
-            // A tile that STAYS parked keeps the main-axis position it was
-            // parked at. parkRect derives the park x from the live strip x,
-            // which slides with every view step, so without this a parked
-            // column near the clamp bound ping-pongs by a few pixels per
-            // scroll step (seen live: a full-width column oscillating between
-            // x=8 and x=16 on alternating retiles), re-committing a rect the
-            // "already at target" skip should have absorbed. Re-clamped to the
-            // screen span because the screen (or the tile's width) can change
-            // while it sits parked; the park-entry commit itself still uses
-            // the strip-derived x.
+            // A tile that STAYS parked keeps the x it was parked at.
+            //
+            // PHYSICAL x, deliberately, and it is NOT transposed on a vertical
+            // strip — because parkRect is not either. That helper clamps
+            // rect.left() into the screen's horizontal span and moves the top
+            // to parkTop on BOTH axes (its header spells out why, and warns
+            // that it "will read as a missed transposition in review"), so x
+            // is the only park coordinate that varies and this is the exact
+            // clamp it applies. Transposing here would retain a coordinate the
+            // park does not derive.
+            //
+            // On a HORIZONTAL strip that x comes from the live strip x, which
+            // slides with every view step, so without this a parked column
+            // near the clamp bound ping-pongs by a few pixels per scroll step
+            // (seen live: a full-width column oscillating between x=8 and
+            // x=16 on alternating retiles), re-committing a rect the "already
+            // at target" skip should have absorbed. On a VERTICAL strip the
+            // view slides y, which the park overwrites with parkTop anyway, so
+            // x does not drift and this is a no-op — correct on both axes
+            // rather than only on the one that had the bug.
+            //
+            // Re-clamped to the screen span because the screen (or the tile's
+            // width) can change while it sits parked; the park-entry commit
+            // itself still uses the strip-derived x.
             if (parkedNow && wasParked(tile.windowId)) {
                 const int prevLeft = m_lastAppliedRect.value(tile.windowId).left();
                 const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());

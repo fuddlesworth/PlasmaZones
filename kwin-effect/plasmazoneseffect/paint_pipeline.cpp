@@ -809,7 +809,26 @@ void PlasmaZonesEffect::postPaintScreen()
     qint64 nextParkReapInMs = -1;
     // Strip-activity stamp for the reap's quiet gate below. Read here, once
     // per pass, off the same pinned clock as every other consumer.
-    if (m_stripViewAnimator->hasActiveAnimations()) {
+    //
+    // TWO terms, and the generation one is load-bearing rather than a
+    // belt. hasActiveAnimations() answers "is a spring in flight", which is
+    // NOT the same as "is the user driving the strip": StripViewAnimator
+    // declines to start a leg at all when the master animation toggle is off
+    // or the output has no clock, and the drag edge auto-scroll heartbeat
+    // (applyImmediateDelta) cancels any leg and never starts one because its
+    // ~60 Hz commits ARE the motion. On the spring term alone this stamp
+    // would stay -1 for the whole session for an animations-off user, the
+    // gate would read every moment as quiet, and the mid-navigation reap this
+    // gate exists to hold would fire exactly as before — for the population
+    // most likely to be on hardware where the cold refold is felt.
+    //
+    // The generation counter is bumped by both apply entry points ahead of
+    // either decline, so a change since the last pass means a view delta
+    // landed. The spring term stays because a leg spans many passes while
+    // bumping the counter only once, and "in flight" is motion too.
+    const quint64 stripMotionGeneration = m_stripViewAnimator->viewMotionGeneration();
+    if (stripMotionGeneration != m_lastSeenStripMotionGeneration || m_stripViewAnimator->hasActiveAnimations()) {
+        m_lastSeenStripMotionGeneration = stripMotionGeneration;
         m_lastStripMotionMs = frameClockMs;
     }
     if (!m_windowDecorations.isEmpty()) {

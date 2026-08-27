@@ -31,6 +31,11 @@ ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker
     : PhosphorEngine::PlacementEngineBase(parent)
     , m_windowTracker(windowTracker)
     , m_screenManager(screenManager)
+    // Seeded here rather than in-class: kFuzzyClaimGraceMs lives in the
+    // engine-internal enginelimits.h, which the exported header cannot
+    // include, and mirroring the literal there would be exactly the drift the
+    // shared-constant convention exists to prevent.
+    , m_fuzzyClaimGraceMs(kFuzzyClaimGraceMs)
 {
 }
 
@@ -528,13 +533,22 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // without focus — seen live as new firefox/ghostty windows landing at
         // the park row for the whole session. Exact-id claims above are
         // untouched: the id match is its own evidence.
+        // Half-open [0, grace): elapsed() < grace, deliberately NOT
+        // hasExpired(grace). hasExpired compares STRICTLY GREATER, so it
+        // holds a zero-length window OPEN for its whole first millisecond.
+        // At the shipped 60 s grace that difference is unobservable, but it
+        // makes a grace of 0 read as "still open" rather than "already
+        // closed" — and 0 is the one value that lets a test reach the refusal
+        // arm at all, since a test elapses well under a millisecond.
+        //
+        // isValid() still gates: an unstarted timer's elapsed() is
+        // meaningless, and an entry whose grace was never opened is closed.
         const bool fuzzyGraceOpen =
-            stashStrip.fuzzyClaimWindow.isValid() && !stashStrip.fuzzyClaimWindow.hasExpired(kFuzzyClaimGraceMs);
+            stashStrip.fuzzyClaimWindow.isValid() && stashStrip.fuzzyClaimWindow.elapsed() < m_fuzzyClaimGraceMs;
         if (!appPrefix.isEmpty() && !fuzzyGraceOpen) {
             qCDebug(lcScrollEngine) << "restoreFromStripStash: fuzzy-claim grace closed for" << windowId
                                     << "— treating as a fresh open";
-        }
-        if (!appPrefix.isEmpty() && fuzzyGraceOpen) {
+        } else if (!appPrefix.isEmpty()) {
             // DELIBERATE: this appId claim is not gated on
             // stagedFromPersistence, so it also fires against an IN-SESSION
             // mode-exit stash — a new same-app window opened before a stashed
