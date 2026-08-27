@@ -97,10 +97,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              QStringLiteral("niri")});
     addSection(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesBehavior"),
                PhosphorI18n::tr("Behavior"));
-    addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesDynamicLists"),
-               PhosphorI18n::tr("Dynamic workspace lists"),
-               {PhosphorI18n::tr("dynamic"), PhosphorI18n::tr("per monitor"), PhosphorI18n::tr("workspace list"),
-                PhosphorI18n::tr("automatic")});
     addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesSnapBackOsdHint"),
                PhosphorI18n::tr("Workspace hint"),
                {PhosphorI18n::tr("osd"), PhosphorI18n::tr("hint"), PhosphorI18n::tr("snap back"),

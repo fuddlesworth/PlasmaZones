@@ -8,10 +8,10 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Dynamic workspaces — Behavior leaf.
  *
- * Card order: the permanent explainer first (what the feature does), then the
- * KWin consent warning (only while the feature is on without per-output
- * desktops and without the recorded consent — the one state where the daemon
- * sits dormant), then the Behavior card. The feature's master enable is the
+ * Card order: the KWin consent warning first (only while the feature is on
+ * without per-output desktops and without the recorded consent — the one
+ * state where the daemon sits dormant), then the cap warning, then the
+ * Behavior card. The feature's master enable is the
  * sidebar toggle on the Workspaces parent row (the placement-mode pattern),
  * so this page deliberately carries no duplicate enable switch; like the mode
  * pages, its rows stay editable while the feature is off.
@@ -83,16 +83,6 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Dynamic workspace lists")
-                    searchAnchor: "workspacesDynamicLists"
-                    description: i18n("Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears.")
-                    // Informational row: the behavior itself IS the feature
-                    // (toggled from the sidebar), so there is no control here.
-                }
-
-                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Workspace hint")
