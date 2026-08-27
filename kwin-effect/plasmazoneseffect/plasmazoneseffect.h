@@ -1977,6 +1977,14 @@ private:
     /// folding every audio border forever. -1 until the first spectrum arrives.
     qint64 m_audioSpectrumLastChangeMs = -1;
 
+    /// Pinned-clock ms of the last postPaintScreen pass on which the strip
+    /// view animator had a leg in flight. The park reap's quiet gate reads
+    /// it: a DUE reap holds (short-retry re-arm) until the strip has been
+    /// still for its quiet window, so fast column stepping does not pay a
+    /// cold refold for every column reaped mid-navigation. -1 until the
+    /// strip first moves, which the gate treats as quiet.
+    qint64 m_lastStripMotionMs = -1;
+
     /// The daemon's audio-viz master toggle + the full CAVA parameter set,
     /// pulled via getSetting in loadCachedSettings exactly like
     /// snapAssistEnabled. The effect's cava run gate ANDs the toggle with an
