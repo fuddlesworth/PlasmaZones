@@ -73,6 +73,24 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
                   Detail::physicalTokenForMain(1, params.axis));
 }
 
+QStringList ScrollEngine::focusedColumnWindows(const QString& screenId) const
+{
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    if (!state) {
+        return {};
+    }
+    const Column* column = state->strip().activeColumn();
+    if (!column) {
+        return {};
+    }
+    QStringList windows;
+    windows.reserve(column->tiles.size());
+    for (const Tile& tile : column->tiles) {
+        windows.append(tile.windowId);
+    }
+    return windows;
+}
+
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
 // `state`, and `params` into the caller's scope and embed an early return.
 // A helper struct + lambda was considered and rejected: every verb would

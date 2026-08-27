@@ -94,6 +94,27 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
 }
 
+void PlasmaZonesEffect::slotSetScreenDesktopRequested(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    KWin::LogicalOutput* output = outputForScreenId(screenId);
+    if (!output) {
+        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: unknown screen" << screenId;
+        return;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    if (desktop > all.size()) {
+        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: desktop" << desktop << "out of range, have" << all.size();
+        return;
+    }
+    // Per-output switch (Plasma 6.7): only THIS output changes desktop. The
+    // resulting desktopChanged report is the daemon's confirmation (its
+    // reconciler retires the matching SetCurrent ledger entry on it).
+    KWin::effects->setCurrentDesktop(all.at(desktop - 1), output);
+}
+
 void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
                                                      const QString& sourceScreenId)
 {

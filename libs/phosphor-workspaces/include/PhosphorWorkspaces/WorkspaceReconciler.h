@@ -74,10 +74,36 @@ public:
     /// content is kept where consistent (restore path passes a pre-loaded map).
     void adoptAll(const QStringList& ids, const QHash<QString, QString>& currentDesktopIdByScreen);
 
-    // ── Verb-support queries (Phase 2 uses these; harmless now) ─────────────
+    // ── Verb support ────────────────────────────────────────────────────────
     /// True while any structural op (create/remove) is open — verb execution
     /// defers until the ledger is quiet (renumbering window, plan §4.5).
     bool hasPendingStructuralOps() const;
+    /// The desktop id a screen currently shows, resolved from the last report
+    /// against the settled id list; empty when unknown.
+    QString currentDesktopIdOf(const QString& screenId) const;
+    /// The id `delta` slots up (-1) / down (+1) from the screen's current
+    /// desktop WITHIN ITS OWN SLICE (foreign desktops are skipped by
+    /// construction); empty at the slice edge (no wrap) or when unresolved.
+    QString desktopIdAtOffset(const QString& screenId, int delta) const;
+    /// The id at 0-based position `sliceIndex` of the screen's slice, or empty.
+    QString desktopIdAtSliceIndex(const QString& screenId, int sliceIndex) const;
+
+    /// Issue a ledgered per-screen switch (focus verbs and snap-back).
+    /// Refused (returns false) while a SetCurrent for the screen is already
+    /// open — the single-correction rule that breaks re-assertion loops.
+    bool issueSetCurrent(const QString& screenId, const QString& desktopId);
+    /// Owner-wins correction: return `screenId` to its last-shown owned
+    /// desktop (fallback: its slice head). No-op when the screen already
+    /// shows an owned desktop. Returns true when a correction was issued.
+    bool snapBack(const QString& screenId);
+    /// Reorder the screen's CURRENT workspace within its slice by delta
+    /// (map order only — KWin's global order self-repairs opportunistically).
+    bool reorderCurrentWorkspace(const QString& screenId, int delta);
+    /// Re-own the screen's current workspace to `targetScreenId`, inserted
+    /// before that screen's trailing empty. Window relocation is the
+    /// controller's job (§4.2); this is the map half. Returns the moved
+    /// desktop id (empty on failure).
+    QString transferCurrentWorkspace(const QString& screenId, const QString& targetScreenId);
 
 Q_SIGNALS:
     // Outputs → KWin (via VirtualDesktopManager), ledgered before emit.
@@ -133,6 +159,8 @@ private:
     QStringList m_lastIds; ///< id list as of the last settled reply
     QHash<QString, int> m_population; ///< desktopId → window count
     QHash<QString, int> m_currentByScreen; ///< screenId → 1-based global int
+    /// screenId → last OWNED desktop id it showed (the snap-back target).
+    QHash<QString, QString> m_lastOwnedByScreen;
     QString m_focusedScreen;
     int m_desktopCap = 20;
     bool m_capHintShown = false;

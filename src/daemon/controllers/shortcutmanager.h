@@ -211,6 +211,14 @@ Q_SIGNALS:
      */
     void cheatsheetModelChanged();
 
+    // Dynamic per-monitor workspaces (delta -1 = up, +1 = down; the daemon
+    // resolves the acting screen and forwards to the WorkspaceController).
+    void workspaceFocusRequested(int delta);
+    void workspaceMoveWindowRequested(int delta);
+    void workspaceMoveColumnRequested(int delta);
+    void workspaceReorderRequested(int delta);
+    void workspaceMoveToMonitorRequested(const QString& direction);
+
     void openEditorRequested();
     void openSettingsRequested();
     void toggleCheatsheetRequested();

@@ -5,7 +5,10 @@
 
 #include <PhosphorWorkspaces/WorkspaceReconciler.h>
 
+#include <functional>
+
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -53,7 +56,35 @@ public:
     /// Current wire payload (for the adaptor's replay query).
     QString currentMapJson() const;
 
+    // ── Verbs (Phase 2). screenId is the PHYSICAL id of the acting screen;
+    // windowId (move verbs) is the daemon-resolved active window. All walk
+    // the screen's OWN slice (no wrap at the edges, niri semantics) and defer
+    // behind the reconciler's ledger during structural churn. ─────────────────
+    /// delta -1 = up, +1 = down.
+    void focusWorkspace(const QString& screenId, int delta);
+    /// 0-based slice index (indexed shortcuts pass index-1).
+    void focusWorkspaceAt(const QString& screenId, int sliceIndex);
+    void moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta);
+    void moveWindowToWorkspaceAt(const QString& screenId, const QString& windowId, int sliceIndex);
+    /// The scrolling column variant: every window of the focused column moves
+    /// together. `columnWindows` is enumerated by the daemon from the scroll
+    /// engine (empty → OSD-level no-op, the screen is not scrolling).
+    void moveColumnToWorkspace(const QString& screenId, const QStringList& columnWindows, int delta);
+    /// Reorder the current workspace within its slice.
+    void moveWorkspace(const QString& screenId, int delta);
+    /// Re-own the current workspace to the neighbour output in `direction`
+    /// ("left"/"right"), windows riding along; focuses it there.
+    void moveWorkspaceToOutput(const QString& screenId, const QString& direction);
+
 Q_SIGNALS:
+    /// → adaptor setScreenDesktopRequested (effect per-output switch).
+    void screenDesktopSwitchRequested(const QString& screenId, int desktop);
+    /// → adaptor moveWindowToWorkspaceVerb (handoff-based window relocation).
+    void windowWorkspaceMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                      const QString& direction);
+    /// Owner-wins snap-back fired for this screen (OSD hint hook; gated by
+    /// the snapBackOsdHint setting daemon-side).
+    void snapBackOccurred(const QString& screenId);
     /// Change-gated wire payload (plan §3.2) — the daemon relays this to
     /// WindowTrackingAdaptor::workspaceMapChanged.
     void workspaceMapPublished(const QString& mapJson);
@@ -90,6 +121,16 @@ private:
     QHash<QString, QString> m_windowCensusDesktopId;
     QString m_lastPublishedJson;
     bool m_adopted = false;
+
+    // ── Verb support (workspacecontroller_verbs.cpp) ────────────────────────
+    /// Run now if no structural op is in flight, else queue until the ledger
+    /// quiets (plan §4.5: verb translation waits out the renumbering window).
+    void runWhenQuiet(std::function<void()> fn);
+    void drainQuietQueue();
+    /// Issue the per-screen switch for a desktop id (ledgered SetCurrent →
+    /// effect command with the int resolved at emit time).
+    void switchScreenToDesktop(const QString& screenId, const QString& desktopId);
+    QList<std::function<void()>> m_quietQueue;
 };
 
 } // namespace PlasmaZones

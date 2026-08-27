@@ -32,6 +32,67 @@ public:
     {
         return false;
     }
+
+    /// OSD hint when owner-wins snap-back returns a screen to its own slice.
+    static constexpr bool workspacesSnapBackOsdHint()
+    {
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Workspace verb shortcuts (Shortcuts.Global)
+    //
+    // The focus pair deliberately takes over KWin's stock "Switch One Desktop
+    // Down/Up" chords (user decision, 2026-08-26): until Phase 5's stock
+    // rebinding releases them, KGlobalAccel keeps the chord with KWin and our
+    // registration simply stays uncaptured — a conflict, not a breakage. The
+    // Shift/Alt derivatives are unclaimed by both KWin stock and every other
+    // PlasmaZones default (collision-checked against the whole table).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString workspaceFocusUpShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Up");
+    }
+    static QString workspaceFocusDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Down");
+    }
+    static QString workspaceMoveWindowUpShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+Up");
+    }
+    static QString workspaceMoveWindowDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+Down");
+    }
+    static QString workspaceMoveColumnUpShortcut()
+    {
+        // NOT Meta+Ctrl+Alt+Arrow (the plan's first pick): that family is
+        // the swap-window quad. PgUp/PgDown on the same modifier tier is
+        // unclaimed and mirrors the reorder pair's PgUp/PgDown shape.
+        return QStringLiteral("Meta+Ctrl+Alt+PgUp");
+    }
+    static QString workspaceMoveColumnDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+PgDown");
+    }
+    static QString workspaceReorderUpShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+PgUp");
+    }
+    static QString workspaceReorderDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+PgDown");
+    }
+    static QString workspaceMoveToMonitorLeftShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+Left");
+    }
+    static QString workspaceMoveToMonitorRightShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+Right");
+    }
 };
 
 } // namespace PlasmaZones

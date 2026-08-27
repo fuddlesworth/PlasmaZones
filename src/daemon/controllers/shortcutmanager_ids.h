@@ -38,6 +38,17 @@ inline constexpr auto kIdToggleWindowFloat = "toggle_window_float";
 // saved chord (same reasoning as toggle_autotile's label-only rename below —
 // the C++ constant is free to carry the mode-neutral name, the string is not).
 inline constexpr auto kIdSwitchFocusFloatTiling = "scroll_switch_focus_float_tiling";
+// Dynamic per-monitor workspaces (mode-neutral; gated on the feature).
+inline constexpr auto kIdWorkspaceFocusUp = "workspace_focus_up";
+inline constexpr auto kIdWorkspaceFocusDown = "workspace_focus_down";
+inline constexpr auto kIdWorkspaceMoveWindowUp = "workspace_move_window_up";
+inline constexpr auto kIdWorkspaceMoveWindowDown = "workspace_move_window_down";
+inline constexpr auto kIdWorkspaceMoveColumnUp = "workspace_move_column_up";
+inline constexpr auto kIdWorkspaceMoveColumnDown = "workspace_move_column_down";
+inline constexpr auto kIdWorkspaceReorderUp = "workspace_reorder_up";
+inline constexpr auto kIdWorkspaceReorderDown = "workspace_reorder_down";
+inline constexpr auto kIdWorkspaceMoveToMonitorLeft = "workspace_move_to_monitor_left";
+inline constexpr auto kIdWorkspaceMoveToMonitorRight = "workspace_move_to_monitor_right";
 inline constexpr auto kIdSwapWindowLeft = "swap_window_left";
 inline constexpr auto kIdSwapWindowRight = "swap_window_right";
 inline constexpr auto kIdSwapWindowUp = "swap_window_up";

@@ -59,11 +59,28 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
         QMetaObject::invokeMethod(m_vdm, "refreshFromKWin");
     });
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::foreignSwitchDetected, this,
-            [](const QString& screenId, const QString& desktopId, const QString& ownerScreenId) {
-                // Phase 2 wires owner-wins snap-back; Phase 1 records the event.
+            [this](const QString& screenId, const QString& desktopId, const QString& ownerScreenId) {
                 qCInfo(lcWorkspaceCtl) << "foreign switch:" << screenId << "showed" << desktopId << "owned by"
                                        << ownerScreenId;
+                // Owner-wins: return the screen to its own slice (single
+                // correction per event; the reconciler's ledger breaks
+                // re-assertion loops). The OSD hint rides the signal.
+                if (m_reconciler.snapBack(screenId)) {
+                    Q_EMIT snapBackOccurred(screenId);
+                }
             });
+    // The reconciler's per-screen switches surface as effect commands with
+    // the desktop int resolved at emit time (ids renumber-safe until here).
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::requestSetCurrent, this,
+            [this](const QString& screenId, const QString& desktopId) {
+                const int desktop = m_vdm->desktopIndexOf(desktopId);
+                if (desktop > 0) {
+                    Q_EMIT screenDesktopSwitchRequested(screenId, desktop);
+                }
+            });
+    // Deferred verbs resume once the structural churn settles.
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
+            &WorkspaceController::drainQuietQueue);
 }
 
 bool WorkspaceController::kwinPerOutputEnabled()

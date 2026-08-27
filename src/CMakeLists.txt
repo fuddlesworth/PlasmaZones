@@ -579,6 +579,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/unifiedlayoutcontroller.h
     # Dynamic per-monitor workspaces
     daemon/controllers/workspacecontroller.cpp
+    daemon/controllers/workspacecontroller_verbs.cpp
     daemon/controllers/workspacecontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )

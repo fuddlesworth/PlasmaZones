@@ -270,6 +270,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="The current map payload, same shape as workspaceMapChanged."/>
             </arg>
         </method>
+        <signal name="setScreenDesktopRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Ask the KWin effect to switch one screen's current virtual desktop (per-output virtual desktops). KWin's D-Bus VirtualDesktopManager only exposes the global current, so the dynamic-workspaces focus verbs and owner-wins snap-back ride this command."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier to switch."/>
+            </arg>
+            <arg name="desktop" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop, 1-based global index at emit time."/>
+            </arg>
+        </signal>
         <signal name="pendingRestoresAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
         </signal>

@@ -522,6 +522,16 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     QVector<PhosphorConfig::KeyDef> globals;
+    addShortcut(globals, CD::workspaceFocusUpKey(), CD::workspaceFocusUpShortcut());
+    addShortcut(globals, CD::workspaceFocusDownKey(), CD::workspaceFocusDownShortcut());
+    addShortcut(globals, CD::workspaceMoveWindowUpKey(), CD::workspaceMoveWindowUpShortcut());
+    addShortcut(globals, CD::workspaceMoveWindowDownKey(), CD::workspaceMoveWindowDownShortcut());
+    addShortcut(globals, CD::workspaceMoveColumnUpKey(), CD::workspaceMoveColumnUpShortcut());
+    addShortcut(globals, CD::workspaceMoveColumnDownKey(), CD::workspaceMoveColumnDownShortcut());
+    addShortcut(globals, CD::workspaceReorderUpKey(), CD::workspaceReorderUpShortcut());
+    addShortcut(globals, CD::workspaceReorderDownKey(), CD::workspaceReorderDownShortcut());
+    addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut());
+    addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut());
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
@@ -1089,6 +1099,7 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::workspacesBehaviorGroup()] = {
         {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool},
         {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
+        {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool},
     };
 }
 

@@ -399,6 +399,8 @@ public:
     Q_PROPERTY(bool workspacesEnabled READ workspacesEnabled WRITE setWorkspacesEnabled NOTIFY workspacesEnabledChanged)
     Q_PROPERTY(bool workspacesManageKWinPerOutput READ workspacesManageKWinPerOutput WRITE
                    setWorkspacesManageKWinPerOutput NOTIFY workspacesManageKWinPerOutputChanged)
+    Q_PROPERTY(bool workspacesSnapBackOsdHint READ workspacesSnapBackOsdHint WRITE setWorkspacesSnapBackOsdHint NOTIFY
+                   workspacesSnapBackOsdHintChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -1373,6 +1375,28 @@ public:
     void setWorkspacesEnabled(bool enabled);
     bool workspacesManageKWinPerOutput() const;
     void setWorkspacesManageKWinPerOutput(bool enabled);
+    bool workspacesSnapBackOsdHint() const;
+    void setWorkspacesSnapBackOsdHint(bool enabled);
+    QString workspaceFocusUpShortcut() const;
+    void setWorkspaceFocusUpShortcut(const QString& shortcut);
+    QString workspaceFocusDownShortcut() const;
+    void setWorkspaceFocusDownShortcut(const QString& shortcut);
+    QString workspaceMoveWindowUpShortcut() const;
+    void setWorkspaceMoveWindowUpShortcut(const QString& shortcut);
+    QString workspaceMoveWindowDownShortcut() const;
+    void setWorkspaceMoveWindowDownShortcut(const QString& shortcut);
+    QString workspaceMoveColumnUpShortcut() const;
+    void setWorkspaceMoveColumnUpShortcut(const QString& shortcut);
+    QString workspaceMoveColumnDownShortcut() const;
+    void setWorkspaceMoveColumnDownShortcut(const QString& shortcut);
+    QString workspaceReorderUpShortcut() const;
+    void setWorkspaceReorderUpShortcut(const QString& shortcut);
+    QString workspaceReorderDownShortcut() const;
+    void setWorkspaceReorderDownShortcut(const QString& shortcut);
+    QString workspaceMoveToMonitorLeftShortcut() const;
+    void setWorkspaceMoveToMonitorLeftShortcut(const QString& shortcut);
+    QString workspaceMoveToMonitorRightShortcut() const;
+    void setWorkspaceMoveToMonitorRightShortcut(const QString& shortcut);
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;

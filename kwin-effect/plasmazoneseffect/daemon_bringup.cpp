@@ -769,6 +769,12 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("workspaceMapChanged"), this,
                                           SLOT(slotWorkspaceMapChanged(QString)));
 
+    // Per-output desktop switch command (workspace focus verbs + snap-back).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("setScreenDesktopRequested"), this,
+                                          SLOT(slotSetScreenDesktopRequested(QString, int)));
+
     // Daemon-initiated cross-output move: the daemon already migrated its
     // tiling state and reflowed both outputs; record the window so the
     // autotile handler's reactive outputChanged path updates bookkeeping only

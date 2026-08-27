@@ -58,9 +58,32 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
                       targetDesktop, direction);
 }
 
+void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& windowId, const QString& targetScreenId,
+                                                      int targetDesktop, const QString& direction)
+{
+    if (windowId.isEmpty() || targetDesktop < 1) {
+        return;
+    }
+    PhosphorEngine::PlacementEngineBase* sourceEngine = nullptr;
+    for (PhosphorEngine::PlacementEngineBase* engine :
+         {m_scrollEngine.data(), m_autotileEngine.data(), m_snapEngine.data()}) {
+        if (engine && engine->isWindowTracked(windowId)) {
+            sourceEngine = engine;
+            break;
+        }
+    }
+    if (!sourceEngine) {
+        // Untracked (floating / excluded) windows still change desktops; no
+        // engine state exists to hand over.
+        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        return;
+    }
+    crossModeMoveImpl(sourceEngine, windowId, targetScreenId, targetDesktop, direction, /*allowSameEngine=*/true);
+}
+
 void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine,
                                               const QString& windowId, const QString& targetScreenId, int targetDesktop,
-                                              const QString& direction)
+                                              const QString& direction, bool allowSameEngine)
 {
     if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
         return;
@@ -76,8 +99,12 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity);
     const bool targetIsAutotile = targetMode == PhosphorZones::AssignmentEntry::Autotile;
     PhosphorEngine::PlacementEngineBase* targetEngine = engineForMode(targetMode);
-    if (!targetEngine || targetEngine == sourceEngine) {
-        return; // target engine unavailable, or not actually cross-mode
+    if (!targetEngine || (targetEngine == sourceEngine && !allowSameEngine)) {
+        // Target engine unavailable, or not actually cross-mode. The
+        // workspace move verb passes allowSameEngine: a same-engine handoff
+        // (release + receive with toDesktop) IS the same-mode cross-desktop
+        // re-key, and the reactive autotile branch below is same-engine-safe.
+        return;
     }
     // Deliberately NO isActiveOnScreen pre-gate here (or in the swap twin),
     // unlike handleCrossModeFocus: a focus toward a disabled-context screen

@@ -15,12 +15,19 @@
 
 #include "config/settings.h"
 #include "core/platform/logging.h"
+#include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/workspacecontroller.h"
+#include "daemon/daemon/helpers.h"
+#include "daemon/overlayservice.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+
+#include "phosphor_i18n.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 namespace PlasmaZones {
@@ -101,6 +108,75 @@ void Daemon::initializeWorkspaces()
                 if (m_windowTrackingAdaptor) {
                     m_windowTrackingAdaptor->setWorkspaceMapPayload(mapJson);
                 }
+            });
+
+    // ── Verb execution channels ────────────────────────────────────────────
+    // Per-screen switch: reconciler-ledgered SetCurrent → effect command
+    // (effects->setCurrentDesktop(desktop, output)); the answering
+    // desktopChanged report retires the ledger entry.
+    connect(m_workspaceController.get(), &WorkspaceController::screenDesktopSwitchRequested, this,
+            [this](const QString& screenId, int desktop) {
+                if (m_windowTrackingAdaptor) {
+                    Q_EMIT m_windowTrackingAdaptor->setScreenDesktopRequested(screenId, desktop);
+                }
+            });
+    // Window relocation: the same handoff machinery the cross-mode
+    // directional moves use, same-engine allowed (plan §4.2 reuse).
+    connect(
+        m_workspaceController.get(), &WorkspaceController::windowWorkspaceMoveRequested, this,
+        [this](const QString& windowId, const QString& targetScreenId, int targetDesktop, const QString& direction) {
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->moveWindowToWorkspaceVerb(windowId, targetScreenId, targetDesktop, direction);
+            }
+        });
+    // Owner-wins snap-back hint (plain prose; toggleable).
+    connect(m_workspaceController.get(), &WorkspaceController::snapBackOccurred, this, [this](const QString& screenId) {
+        if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService) {
+            m_overlayService->showDisabledOsd(PhosphorI18n::tr("That workspace is on another monitor.", "OSD hint"),
+                                              screenId);
+        }
+    });
+
+    // ── Shortcut verbs ─────────────────────────────────────────────────────
+    // The acting screen is the shortcut screen's PHYSICAL output (the map and
+    // the per-output desktops both key physical ids); the acting window is
+    // the daemon's tracked active window.
+    const auto actingScreen = [this]() {
+        return PhosphorIdentity::VirtualScreenId::extractPhysicalId(
+            resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor));
+    };
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceFocusRequested, this, [this, actingScreen](int delta) {
+        m_workspaceController->focusWorkspace(actingScreen(), delta);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveWindowRequested, this,
+            [this, actingScreen](int delta) {
+                const QString windowId =
+                    m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
+                m_workspaceController->moveWindowToWorkspace(actingScreen(), windowId, delta);
+            });
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveColumnRequested, this,
+            [this, actingScreen](int delta) {
+                const QString screenId = actingScreen();
+                auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+                const QStringList column = scroll ? scroll->focusedColumnWindows(screenId) : QStringList();
+                if (column.isEmpty()) {
+                    // Not a scrolling screen (or empty strip): the verb is
+                    // scrolling-scoped by definition; hint instead of no-op.
+                    if (m_overlayService) {
+                        m_overlayService->showDisabledOsd(
+                            PhosphorI18n::tr("Moving a column needs a scrolling screen.", "OSD hint"), screenId);
+                    }
+                    return;
+                }
+                m_workspaceController->moveColumnToWorkspace(screenId, column, delta);
+            });
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceReorderRequested, this,
+            [this, actingScreen](int delta) {
+                m_workspaceController->moveWorkspace(actingScreen(), delta);
+            });
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveToMonitorRequested, this,
+            [this, actingScreen](const QString& direction) {
+                m_workspaceController->moveWorkspaceToOutput(actingScreen(), direction);
             });
 
     // Authoritative gate arm: the effect probes the running compositor's mode

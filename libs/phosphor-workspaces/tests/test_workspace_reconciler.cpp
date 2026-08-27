@@ -42,6 +42,11 @@ private Q_SLOTS:
     void snapBack_singleCorrectionNoLoop();
     void cap_suspendsTrailingEmpty();
     void screenRemoved_sliceReassigned();
+    void verbQueries_sliceScopedNoWrap();
+    void issueSetCurrent_singleInFlightPerScreen();
+    void snapBack_correctsAndBreaksLoop();
+    void reorderCurrentWorkspace_withinSlice();
+    void transferCurrentWorkspace_reownsAndRepairs();
 
 private:
     /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
@@ -311,6 +316,101 @@ void TestWorkspaceReconciler::screenRemoved_sliceReassigned()
     const auto slice = rec.map().slice(QStringLiteral("A"));
     QCOMPARE(slice.size(), 4);
     QCOMPARE(slice.last().desktopId, id(3)); // trailing empty stayed last
+}
+
+void TestWorkspaceReconciler::verbQueries_sliceScopedNoWrap()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // list: {d1} {d3} {d2} {d4}; A shows d1 (index 1)
+    rec.onScreenDesktopReport(QStringLiteral("A"), 1);
+
+    QCOMPARE(rec.currentDesktopIdOf(QStringLiteral("A")), id(1));
+    QCOMPARE(rec.desktopIdAtOffset(QStringLiteral("A"), 1), id(3));
+    QVERIFY(rec.desktopIdAtOffset(QStringLiteral("A"), -1).isEmpty()); // top edge, no wrap
+    QCOMPARE(rec.desktopIdAtSliceIndex(QStringLiteral("A"), 1), id(3));
+    QVERIFY(rec.desktopIdAtSliceIndex(QStringLiteral("A"), 2).isEmpty());
+    // A screen showing a FOREIGN desktop resolves no offsets.
+    rec.onScreenDesktopReport(QStringLiteral("A"), 3); // {d2}, B's
+    QVERIFY(rec.desktopIdAtOffset(QStringLiteral("A"), 1).isEmpty());
+}
+
+void TestWorkspaceReconciler::issueSetCurrent_singleInFlightPerScreen()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    QSignalSpy setCurrentSpy(&rec, &WorkspaceReconciler::requestSetCurrent);
+
+    QVERIFY(rec.issueSetCurrent(QStringLiteral("A"), id(3)));
+    QVERIFY(!rec.issueSetCurrent(QStringLiteral("A"), id(1))); // one in flight
+    QVERIFY(rec.issueSetCurrent(QStringLiteral("B"), id(4))); // other screens unaffected
+    QCOMPARE(setCurrentSpy.count(), 2);
+
+    // The echo (A now reports d3 = global index 2) retires the entry and
+    // frees the screen for the next switch.
+    QVERIFY(rec.onScreenDesktopReport(QStringLiteral("A"), 2));
+    QVERIFY(rec.issueSetCurrent(QStringLiteral("A"), id(1)));
+}
+
+void TestWorkspaceReconciler::snapBack_correctsAndBreaksLoop()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // list: {d1} {d3} {d2} {d4}
+    rec.onScreenDesktopReport(QStringLiteral("A"), 1); // remembers d1 as owned
+
+    QSignalSpy setCurrentSpy(&rec, &WorkspaceReconciler::requestSetCurrent);
+
+    // A lands on B's {d2} (index 3): snap-back targets the last owned d1.
+    rec.onScreenDesktopReport(QStringLiteral("A"), 3);
+    QVERIFY(rec.snapBack(QStringLiteral("A")));
+    QCOMPARE(setCurrentSpy.count(), 1);
+    QCOMPARE(setCurrentSpy.first().at(1).toString(), id(1));
+
+    // The Pager re-asserts the foreign desktop while the correction is in
+    // flight: snapBack refuses (single correction), no loop.
+    rec.onScreenDesktopReport(QStringLiteral("A"), 3);
+    QVERIFY(!rec.snapBack(QStringLiteral("A")));
+    QCOMPARE(setCurrentSpy.count(), 1);
+
+    // The correction's echo retires the ledger entry; A is home, snapBack is
+    // a no-op (not a fresh correction).
+    QVERIFY(rec.onScreenDesktopReport(QStringLiteral("A"), 1));
+    QVERIFY(!rec.snapBack(QStringLiteral("A")));
+    QCOMPARE(setCurrentSpy.count(), 1);
+}
+
+void TestWorkspaceReconciler::reorderCurrentWorkspace_withinSlice()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3(empty)}
+    rec.onScreenDesktopReport(QStringLiteral("A"), 1);
+
+    QVERIFY(rec.reorderCurrentWorkspace(QStringLiteral("A"), 1));
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).last().desktopId, id(1));
+    QVERIFY(!rec.reorderCurrentWorkspace(QStringLiteral("A"), 1)); // edge
+    QVERIFY(rec.reorderCurrentWorkspace(QStringLiteral("A"), -1));
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).first().desktopId, id(1));
+}
+
+void TestWorkspaceReconciler::transferCurrentWorkspace_reownsAndRepairs()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3}, B: {d2(occ), d4}
+    rec.onScreenDesktopReport(QStringLiteral("A"), 1);
+
+    QSignalSpy setCurrentSpy(&rec, &WorkspaceReconciler::requestSetCurrent);
+    const QString moved = rec.transferCurrentWorkspace(QStringLiteral("A"), QStringLiteral("B"));
+    QCOMPARE(moved, id(1));
+    QCOMPARE(rec.map().ownerOf(id(1)), QStringLiteral("B"));
+    // Inserted before B's trailing empty.
+    QCOMPARE(rec.map().sliceIndexOf(id(1)), 1);
+    // The source snapped back onto its own slice (d3, its only remaining).
+    QCOMPARE(setCurrentSpy.count(), 1);
+    QCOMPARE(setCurrentSpy.first().at(0).toString(), QStringLiteral("A"));
+    QCOMPARE(setCurrentSpy.first().at(1).toString(), id(3));
+
+    // A screen never gives up its last desktop.
+    rec.onScreenDesktopReport(QStringLiteral("A"), 2); // A now shows d3
+    QVERIFY(rec.transferCurrentWorkspace(QStringLiteral("A"), QStringLiteral("B")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)

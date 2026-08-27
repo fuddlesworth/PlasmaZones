@@ -1009,6 +1009,17 @@ Q_SIGNALS:
     // Workspaces settings (dynamic per-monitor workspaces)
     void workspacesEnabledChanged();
     void workspacesManageKWinPerOutputChanged();
+    void workspacesSnapBackOsdHintChanged();
+    void workspaceFocusUpShortcutChanged();
+    void workspaceFocusDownShortcutChanged();
+    void workspaceMoveWindowUpShortcutChanged();
+    void workspaceMoveWindowDownShortcutChanged();
+    void workspaceMoveColumnUpShortcutChanged();
+    void workspaceMoveColumnDownShortcutChanged();
+    void workspaceReorderUpShortcutChanged();
+    void workspaceReorderDownShortcutChanged();
+    void workspaceMoveToMonitorLeftShortcutChanged();
+    void workspaceMoveToMonitorRightShortcutChanged();
 
     // Scrolling settings
     void scrollingEnabledChanged();

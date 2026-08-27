@@ -48,6 +48,59 @@ struct StaticEntry
 
 const StaticEntry kStaticEntries[] = {
     // ─── Core ──────────────────────────────────────────────────────────────
+    // ─── Dynamic workspaces ────────────────────────────────────────────────
+    {kIdWorkspaceFocusUp, &ConfigDefaults::workspaceFocusUpShortcut, &Settings::workspaceFocusUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Workspace Above"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceFocusRequested(-1);
+     }},
+    {kIdWorkspaceFocusDown, &ConfigDefaults::workspaceFocusDownShortcut, &Settings::workspaceFocusDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Workspace Below"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceFocusRequested(1);
+     }},
+    {kIdWorkspaceMoveWindowUp, &ConfigDefaults::workspaceMoveWindowUpShortcut, &Settings::workspaceMoveWindowUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window to Workspace Above"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveWindowRequested(-1);
+     }},
+    {kIdWorkspaceMoveWindowDown, &ConfigDefaults::workspaceMoveWindowDownShortcut,
+     &Settings::workspaceMoveWindowDownShortcut, QT_TRANSLATE_NOOP("plasmazones", "Move Window to Workspace Below"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveWindowRequested(1);
+     }},
+    {kIdWorkspaceMoveColumnUp, &ConfigDefaults::workspaceMoveColumnUpShortcut, &Settings::workspaceMoveColumnUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Column to Workspace Above"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveColumnRequested(-1);
+     }},
+    {kIdWorkspaceMoveColumnDown, &ConfigDefaults::workspaceMoveColumnDownShortcut,
+     &Settings::workspaceMoveColumnDownShortcut, QT_TRANSLATE_NOOP("plasmazones", "Move Column to Workspace Below"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveColumnRequested(1);
+     }},
+    {kIdWorkspaceReorderUp, &ConfigDefaults::workspaceReorderUpShortcut, &Settings::workspaceReorderUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Workspace Up"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceReorderRequested(-1);
+     }},
+    {kIdWorkspaceReorderDown, &ConfigDefaults::workspaceReorderDownShortcut, &Settings::workspaceReorderDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Workspace Down"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceReorderRequested(1);
+     }},
+    {kIdWorkspaceMoveToMonitorLeft, &ConfigDefaults::workspaceMoveToMonitorLeftShortcut,
+     &Settings::workspaceMoveToMonitorLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Workspace to Monitor on the Left"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveToMonitorRequested(QStringLiteral("left"));
+     }},
+    {kIdWorkspaceMoveToMonitorRight, &ConfigDefaults::workspaceMoveToMonitorRightShortcut,
+     &Settings::workspaceMoveToMonitorRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Workspace to Monitor on the Right"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->workspaceMoveToMonitorRequested(QStringLiteral("right"));
+     }},
     {kIdOpenEditor, &ConfigDefaults::openEditorShortcut, &Settings::openEditorShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Open Zone Editor"),
      [](ShortcutManager* sm) {

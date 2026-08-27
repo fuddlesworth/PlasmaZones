@@ -211,6 +211,11 @@ public:
     void focusColumnLast(const QString& screenId);
     void moveColumnToFirst(const QString& screenId);
     void moveColumnToLast(const QString& screenId);
+    /// The focused column's window ids on this screen's current strip, in
+    /// tile order (empty when the screen has no state or no active column).
+    /// Read-only; the dynamic-workspaces move-column-to-workspace verb
+    /// enumerates the group it relocates through this.
+    QStringList focusedColumnWindows(const QString& screenId) const;
     void consumeWindowIntoColumn(const QString& screenId);
     void expelWindowFromColumn(const QString& screenId);
     /// delta -1 = towards the strip's start, +1 = towards its end (niri

@@ -284,6 +284,20 @@ public:
     // Consent latch for writing KWin's PerOutputVirtualDesktops kwinrc key on
     // the user's behalf (dynamic workspaces enable flow).
     P_CONFIG_KEY(manageKWinPerOutputKey, "ManageKWinPerOutputSetting")
+    // Owner-wins snap-back OSD hint toggle.
+    P_CONFIG_KEY(snapBackOsdHintKey, "SnapBackOsdHint")
+
+    // Workspace verb shortcuts (Shortcuts.Global leaves).
+    P_CONFIG_KEY(workspaceFocusUpKey, "WorkspaceFocusUp")
+    P_CONFIG_KEY(workspaceFocusDownKey, "WorkspaceFocusDown")
+    P_CONFIG_KEY(workspaceMoveWindowUpKey, "WorkspaceMoveWindowUp")
+    P_CONFIG_KEY(workspaceMoveWindowDownKey, "WorkspaceMoveWindowDown")
+    P_CONFIG_KEY(workspaceMoveColumnUpKey, "WorkspaceMoveColumnUp")
+    P_CONFIG_KEY(workspaceMoveColumnDownKey, "WorkspaceMoveColumnDown")
+    P_CONFIG_KEY(workspaceReorderUpKey, "WorkspaceReorderUp")
+    P_CONFIG_KEY(workspaceReorderDownKey, "WorkspaceReorderDown")
+    P_CONFIG_KEY(workspaceMoveToMonitorLeftKey, "WorkspaceMoveToMonitorLeft")
+    P_CONFIG_KEY(workspaceMoveToMonitorRightKey, "WorkspaceMoveToMonitorRight")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Behavior

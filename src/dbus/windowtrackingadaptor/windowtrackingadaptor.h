@@ -1189,6 +1189,15 @@ Q_SIGNALS:
     void workspaceMapChanged(const QString& mapJson);
 
     /**
+     * @brief Ask the KWin effect to switch ONE screen's current virtual
+     * desktop (effects->setCurrentDesktop(desktop, output)). KWin's own D-Bus
+     * VirtualDesktopManager only carries the global current, so per-screen
+     * switching — the workspace focus verbs and owner-wins snap-back — rides
+     * this command. Emitted by the daemon's WorkspaceController relay.
+     */
+    void setScreenDesktopRequested(const QString& screenId, int desktop);
+
+    /**
      * @brief In-process relay of reportPerOutputDesktopsMode (the effect's
      * authoritative probe of KWin's per-output-desktops mode). Emitted on
      * every report, change-gated by the cache.
@@ -1449,8 +1458,22 @@ private:
      * slot call where sender() happens to survive.
      */
     void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
-                           const QString& targetScreenId, int targetDesktop, const QString& direction);
+                           const QString& targetScreenId, int targetDesktop, const QString& direction,
+                           bool allowSameEngine = false);
 
+public:
+    /**
+     * @brief Dynamic-workspaces move verb: relocate a window to a target
+     * (screen, desktop) through the SAME handoff machinery the cross-mode
+     * directional moves use — source engine resolved by tracking, same-engine
+     * handoffs allowed (release + receive with toDesktop; autotile targets
+     * take the reactive catch-scan branch). An untracked (floating) window
+     * degrades to a bare compositor desktop move. Not a D-Bus method.
+     */
+    void moveWindowToWorkspaceVerb(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                   const QString& direction);
+
+private:
     /**
      * @brief The engine owning @p mode, or null when that engine is absent.
      *

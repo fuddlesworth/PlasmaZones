@@ -303,6 +303,9 @@ private Q_SLOTS:
     /// Consumer stub: the future overview renders from this; nothing else
     /// reads it yet.
     void slotWorkspaceMapChanged(const QString& mapJson);
+    /// Per-output desktop switch (dynamic workspaces focus verbs and
+    /// owner-wins snap-back): effects->setCurrentDesktop(desktop, output).
+    void slotSetScreenDesktopRequested(const QString& screenId, int desktop);
     void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
                                       const QString& sourceScreenId);
 

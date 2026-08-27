@@ -153,6 +153,9 @@ bool WorkspaceReconciler::onScreenDesktopReport(const QString& screenId, int des
 
     if (!desktopId.isEmpty()) {
         const QString owner = m_map.ownerOf(desktopId);
+        if (owner == screenId) {
+            m_lastOwnedByScreen.insert(screenId, desktopId); // snap-back target
+        }
         if (!owner.isEmpty() && owner != screenId) {
             // One correction per external event: while a SetCurrent for this
             // screen is open, further foreign reports queue (are ignored here);
@@ -166,6 +169,123 @@ bool WorkspaceReconciler::onScreenDesktopReport(const QString& screenId, int des
         }
     }
     return false;
+}
+
+// ── Verb support ────────────────────────────────────────────────────────────
+
+QString WorkspaceReconciler::currentDesktopIdOf(const QString& screenId) const
+{
+    const int current = m_currentByScreen.value(screenId, 0);
+    if (current < 1 || current > m_lastIds.size()) {
+        return QString();
+    }
+    return m_lastIds.at(current - 1);
+}
+
+QString WorkspaceReconciler::desktopIdAtOffset(const QString& screenId, int delta) const
+{
+    const QString currentId = currentDesktopIdOf(screenId);
+    if (currentId.isEmpty()) {
+        return QString();
+    }
+    // Resolve within the screen's OWN slice; a screen currently showing a
+    // foreign desktop (pre-snap-back window) resolves nothing.
+    if (m_map.ownerOf(currentId) != screenId) {
+        return QString();
+    }
+    const int index = m_map.sliceIndexOf(currentId) + delta;
+    return desktopIdAtSliceIndex(screenId, index);
+}
+
+QString WorkspaceReconciler::desktopIdAtSliceIndex(const QString& screenId, int sliceIndex) const
+{
+    const auto entries = m_map.slice(screenId);
+    if (sliceIndex < 0 || sliceIndex >= entries.size()) {
+        return QString(); // slice edge: no wrap (niri semantics)
+    }
+    return entries.at(sliceIndex).desktopId;
+}
+
+bool WorkspaceReconciler::issueSetCurrent(const QString& screenId, const QString& desktopId)
+{
+    if (screenId.isEmpty() || desktopId.isEmpty()) {
+        return false;
+    }
+    for (const auto& op : m_ledger) {
+        if (op.kind == PendingOp::Kind::SetCurrent && op.screenId == screenId) {
+            return false; // one correction per screen in flight
+        }
+    }
+    PendingOp op;
+    op.kind = PendingOp::Kind::SetCurrent;
+    op.screenId = screenId;
+    op.desktopId = desktopId;
+    ledgerAdd(op);
+    Q_EMIT requestSetCurrent(screenId, desktopId);
+    return true;
+}
+
+bool WorkspaceReconciler::snapBack(const QString& screenId)
+{
+    const QString currentId = currentDesktopIdOf(screenId);
+    if (!currentId.isEmpty() && m_map.ownerOf(currentId) == screenId) {
+        return false; // already home
+    }
+    QString target = m_lastOwnedByScreen.value(screenId);
+    if (target.isEmpty() || m_map.ownerOf(target) != screenId) {
+        target = desktopIdAtSliceIndex(screenId, 0);
+    }
+    if (target.isEmpty()) {
+        return false;
+    }
+    return issueSetCurrent(screenId, target);
+}
+
+bool WorkspaceReconciler::reorderCurrentWorkspace(const QString& screenId, int delta)
+{
+    const QString currentId = currentDesktopIdOf(screenId);
+    if (currentId.isEmpty() || m_map.ownerOf(currentId) != screenId) {
+        return false;
+    }
+    const int index = m_map.sliceIndexOf(currentId);
+    const int target = index + delta;
+    if (target < 0 || target >= m_map.sliceSize(screenId)) {
+        return false;
+    }
+    if (!m_map.reorderWithinSlice(currentId, target)) {
+        return false;
+    }
+    maintainScreen(screenId); // the trailing empty may no longer be trailing
+    bumpGeneration();
+    return true;
+}
+
+QString WorkspaceReconciler::transferCurrentWorkspace(const QString& screenId, const QString& targetScreenId)
+{
+    if (targetScreenId.isEmpty() || targetScreenId == screenId || !m_map.hasScreen(targetScreenId)) {
+        return QString();
+    }
+    const QString currentId = currentDesktopIdOf(screenId);
+    if (currentId.isEmpty() || m_map.ownerOf(currentId) != screenId) {
+        return QString();
+    }
+    if (m_map.sliceSize(screenId) <= 1) {
+        return QString(); // a screen never gives up its last desktop
+    }
+    int index = m_map.sliceSize(targetScreenId);
+    if (!trailingEmptyOf(targetScreenId).isEmpty()) {
+        index = qMax(0, index - 1);
+    }
+    if (!m_map.transfer(currentId, targetScreenId, index)) {
+        return QString();
+    }
+    // The source screen must land on one of its own desktops; the target's
+    // slice may need trailing-empty repair.
+    snapBack(screenId);
+    maintainScreen(screenId);
+    maintainScreen(targetScreenId);
+    bumpGeneration();
+    return currentId;
 }
 
 // ── Settled list reply ──────────────────────────────────────────────────────
