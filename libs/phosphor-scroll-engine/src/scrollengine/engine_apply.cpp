@@ -502,6 +502,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
+            // A tile that STAYS parked keeps the main-axis position it was
+            // parked at. parkRect derives the park x from the live strip x,
+            // which slides with every view step, so without this a parked
+            // column near the clamp bound ping-pongs by a few pixels per
+            // scroll step (seen live: a full-width column oscillating between
+            // x=8 and x=16 on alternating retiles), re-committing a rect the
+            // "already at target" skip should have absorbed. Re-clamped to the
+            // screen span because the screen (or the tile's width) can change
+            // while it sits parked; the park-entry commit itself still uses
+            // the strip-derived x.
+            if (parkedNow && wasParked(tile.windowId)) {
+                const int prevLeft = m_lastAppliedRect.value(tile.windowId).left();
+                const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
+                rect.moveLeft(qBound(screenRect.left(), prevLeft, maxLeft));
+            }
             anyEmittedUnparked = anyEmittedUnparked || !parkedNow;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is
