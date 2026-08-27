@@ -53,6 +53,10 @@ private Q_SLOTS:
     void named_createdPinnedAndExempt();
     void named_claimByKWinName();
     void named_unnamedRevertsToDynamic();
+    void removalRace_signalledForPopulationOnDoomedDesktop();
+    void foreign_pausedDuringRemovalThenReevaluatedAtSettle();
+    void adoption_keepsKnownPopulations();
+    void named_createEchoFifoMismatchHealedByKWinNames();
 
 private:
     /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
@@ -569,6 +573,103 @@ void TestWorkspaceReconciler::named_unnamedRevertsToDynamic()
     QCOMPARE(renameSpy.count(), 1);
     QCOMPARE(renameSpy.first().at(0).toString(), id(1));
     QVERIFY(renameSpy.first().at(1).toString().isEmpty());
+}
+
+void TestWorkspaceReconciler::removalRace_signalledForPopulationOnDoomedDesktop()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    // Occupy A's trailing empty {d3}, realize the next one, then empty {d3}
+    // so the destroy debounce issues its Remove.
+    rec.onPopulationChanged(id(3), 1);
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
+    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
+    QSignalSpy raceSpy(&rec, &WorkspaceReconciler::removalRaceDetected);
+    rec.onPopulationChanged(id(3), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
+
+    // A window maps onto {d3} while the Remove is in flight: the race is
+    // surfaced with the owner so the controller can re-route afterwards.
+    rec.onPopulationChanged(id(3), 1);
+    QCOMPARE(raceSpy.count(), 1);
+    QCOMPARE(raceSpy.first().at(0).toString(), id(3));
+    QCOMPARE(raceSpy.first().at(1).toString(), QStringLiteral("A"));
+}
+
+void TestWorkspaceReconciler::foreign_pausedDuringRemovalThenReevaluatedAtSettle()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    rec.onPopulationChanged(id(3), 1);
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
+    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
+    rec.onPopulationChanged(id(3), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
+
+    // While the Remove is open, KWin's renumber/clamp interim reports must
+    // not trigger owner-wins policy (they read as foreign against the
+    // pre-removal map)...
+    QSignalSpy foreignSpy(&rec, &WorkspaceReconciler::foreignSwitchDetected);
+    rec.onScreenDesktopReport(QStringLiteral("B"), 1); // d1 — A's desktop
+    QCOMPARE(foreignSpy.count(), 0);
+
+    // ...and the settled list re-evaluates every screen: B genuinely sits on
+    // A's desktop, so the policy fires now.
+    rec.onKwinDesktopRemoved(id(3));
+    rec.onDesktopListSettled({id(1), id(5), id(2), id(4)});
+    QCOMPARE(foreignSpy.count(), 1);
+    QCOMPARE(foreignSpy.first().at(0).toString(), QStringLiteral("B"));
+    QCOMPARE(foreignSpy.first().at(2).toString(), QStringLiteral("A"));
+}
+
+void TestWorkspaceReconciler::adoption_keepsKnownPopulations()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+
+    // A population report can precede the desktop's adoption (the census is
+    // event-driven); clearing it at settle would make destroy-on-empty
+    // blind to the later 2→0 transition.
+    rec.onPopulationChanged(id(9), 2);
+    rec.onDesktopListSettled({id(1), id(3), id(9), id(2), id(4)});
+
+    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
+    rec.onPopulationChanged(id(9), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
+    QCOMPARE(removeSpy.first().first().toString(), id(9));
+}
+
+void TestWorkspaceReconciler::named_createEchoFifoMismatchHealedByKWinNames()
+{
+    using PhosphorWorkspaces::NamedWorkspace;
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    rec.setFocusedScreen(QStringLiteral("A"));
+
+    QList<NamedWorkspace> declarations;
+    NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    declarations.append(chat);
+    rec.applyNamedWorkspaces(declarations, {QString(), QString(), QString(), QString()});
+
+    // An EXTERNAL creation races our named create and steals the FIFO match:
+    // {d7} is realized under the declared name while OUR desktop {d8} (the
+    // one KWin actually created with the name) adopts as external.
+    rec.onKwinDesktopCreated(id(7));
+    rec.onKwinDesktopCreated(id(8));
+    rec.onDesktopListSettled({id(1), id(3), id(7), id(2), id(4), id(8)});
+    QCOMPARE(rec.map().entryFor(id(7)).name, QStringLiteral("chat"));
+
+    // Re-verifying against KWin's OWN name list (what the controller does
+    // after every settle) moves the identity to the desktop that really
+    // carries the name.
+    const QStringList kwinNames{QStringLiteral("Desktop 1"), QStringLiteral("Desktop 2"), QStringLiteral("Desktop 3"),
+                                QStringLiteral("Desktop 4"), QStringLiteral("Desktop 5"), QStringLiteral("chat")};
+    rec.applyNamedWorkspaces(declarations, kwinNames);
+    QCOMPARE(rec.map().entryFor(id(8)).name, QStringLiteral("chat"));
+    QVERIFY(rec.map().entryFor(id(7)).name.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)

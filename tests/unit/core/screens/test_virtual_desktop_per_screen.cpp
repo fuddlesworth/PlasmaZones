@@ -39,6 +39,24 @@ private Q_SLOTS:
         QVERIFY(!vdm.perScreenModeActive());
     }
 
+    // The first-run adoption gate must not be satisfied by the global
+    // fallback: hasScreenDesktopReport is true only for a REAL report (exact
+    // key, or the parent output of a virtual id), never for the fallback
+    // currentDesktopForScreen would return.
+    void hasScreenDesktopReport_reflectsRealReportsOnly()
+    {
+        VirtualDesktopManager vdm;
+        QVERIFY(!vdm.hasScreenDesktopReport(QStringLiteral("DP-1")));
+        vdm.updateScreenDesktop(QStringLiteral("DP-1"), 3);
+        QVERIFY(vdm.hasScreenDesktopReport(QStringLiteral("DP-1")));
+        // A virtual child resolves through its parent output.
+        QVERIFY(vdm.hasScreenDesktopReport(QStringLiteral("DP-1/vs:1")));
+        // Another screen still has no report even though
+        // currentDesktopForScreen would answer with the global current.
+        QVERIFY(!vdm.hasScreenDesktopReport(QStringLiteral("DP-2")));
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-2")), vdm.currentDesktop());
+    }
+
     // Recorded per-screen desktops resolve independently; unknown screens still
     // fall back to the global desktop.
     void updateScreenDesktop_recordsAndResolves()

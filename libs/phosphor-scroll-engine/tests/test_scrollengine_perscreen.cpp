@@ -115,6 +115,8 @@ private Q_SLOTS:
     void tabIndicatorRectIsNullForAZeroExtentColumn();
     void reapDesktopStateDropsOnlyTheDeadDesktop();
     void renumberDesktopStateShiftsKeysAndKeepsWindows();
+    void renumberDesktopStateMovesTheStripStash();
+    void renumberDesktopStateMovesPerScreenOverrides();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -1192,6 +1194,58 @@ void TestScrollEnginePerScreen::renumberDesktopStateShiftsKeysAndKeepsWindows()
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d4")));
     engine->setCurrentDesktopForScreen(kS1, 2);
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d3")));
+}
+
+void TestScrollEnginePerScreen::renumberDesktopStateMovesTheStripStash()
+{
+    // The AUX maps must renumber with the states: a stash left keyed at the
+    // old desktop int would restore into the wrong (possibly dead) context.
+    // Falsifies dropping the renumberDesktopKeyedHash(m_stripStash, ...)
+    // call from engine_context.cpp.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    // Mode reassignment stashes the strip under S1|3|.
+    engine->setActiveScreens({});
+    QVERIFY(engine->serializeStripState().contains(QStringLiteral("S1|3|")));
+
+    // Desktop 2 died elsewhere: 3→2.
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    engine->renumberDesktopState(mapping);
+
+    const QJsonObject blob = engine->serializeStripState();
+    QVERIFY(blob.contains(QStringLiteral("S1|2|")));
+    QVERIFY(!blob.contains(QStringLiteral("S1|3|")));
+}
+
+void TestScrollEnginePerScreen::renumberDesktopStateMovesPerScreenOverrides()
+{
+    // Same class of guard for m_perScreenOverrides: the override map keys by
+    // full context, the tracker shifts on renumber, and the two must move
+    // together or the screen silently loses its overrides.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    QVariantMap overrides;
+    overrides.insert(QStringLiteral("centerFocusedColumn"), true);
+    engine->applyPerScreenConfig(kS1, overrides);
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    engine->renumberDesktopState(mapping);
+
+    // The tracker now says desktop 2 for kS1; the overrides must have moved
+    // with it (a dropped aux-map renumber leaves them stranded at key 3).
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+    QCOMPARE(engine->perScreenOverrides(kS1).value(QStringLiteral("centerFocusedColumn")).toBool(), true);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

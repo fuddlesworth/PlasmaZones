@@ -60,6 +60,32 @@ private Q_SLOTS:
             QVERIFY(it.value() != 4);
         }
     }
+
+    void globalHolder_survivesDesktopLifecycle()
+    {
+        // The global holder's key (empty screenId, desktop 1) is a sentinel,
+        // not a desktop context: renumbering must not rewrite it and reaping
+        // must not delete it, through the ENGINE entry points (the store-level
+        // skip predicate is covered by the PerScreenStates tests; this locks
+        // the engine's use of it).
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        SnapState* globals = engine.snapState();
+        QVERIFY(globals);
+        globals->recordResidence(QStringLiteral("w"), QStringLiteral("DP-1"), 3);
+
+        QHash<int, int> mapping;
+        mapping.insert(1, 2); // would drag the sentinel key if the exemption dropped
+        mapping.insert(3, 2);
+        engine.renumberDesktopState(mapping);
+        engine.reapDesktopState(1);
+        engine.reapDesktopState(2);
+
+        // Still the same holder, reachable through the engine, its value-side
+        // tags lifecycled (w's desktop followed 3→2, then died with 2).
+        QCOMPARE(engine.snapState(), globals);
+        QVERIFY(!globals->desktopAssignments().contains(QStringLiteral("w")));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSnapEngineWorkspaces)
