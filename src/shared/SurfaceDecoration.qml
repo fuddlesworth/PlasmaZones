@@ -452,8 +452,20 @@ Item {
                 // instead of its dummy, and the node raises uHasBackdrop off
                 // exactly that. Every stage in the chain gets the same
                 // backdrop, mirroring how each sees the same canvas.
-                wallpaperTexture: root.backdropTexture ? root.backdropTexture : undefined
+                // wallpaperTexture is a QImage property, so it only binds
+                // while a texture actually exists — the old
+                // `? ... : undefined` fallback tried to assign undefined to a
+                // QImage and logged an engine warning on every re-evaluation
+                // with no backdrop. useWallpaper is what gates sampling, so
+                // whatever stale image the property holds while unbound is
+                // never read.
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
+
+                Binding on wallpaperTexture {
+                    when: root.backdropTexture !== null && root.backdropTexture !== undefined
+                    value: root.backdropTexture
+                    restoreMode: Binding.RestoreNone
+                }
 
                 // Which slice of that shared backdrop lies behind THIS stage.
                 // Both rects are in the host's coordinate space, so the item
