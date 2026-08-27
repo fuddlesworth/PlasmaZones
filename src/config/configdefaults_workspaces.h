@@ -112,6 +112,48 @@ public:
     {
         return QStringLiteral("Meta+Ctrl+Shift+Right");
     }
+
+    // Move-slot chords (quick-layout model: fixed factory chords, rebindable
+    // in the Shortcuts KCM; the settings app assigns the TARGET workspace).
+    // Meta+Shift+N is niri's own move-to-workspace-N family and is unclaimed
+    // by every other PlasmaZones default (collision-checked in the daemon's
+    // duplicate-defaults test).
+    static QString workspaceMoveSlot1Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+1");
+    }
+    static QString workspaceMoveSlot2Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+2");
+    }
+    static QString workspaceMoveSlot3Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+3");
+    }
+    static QString workspaceMoveSlot4Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+4");
+    }
+    static QString workspaceMoveSlot5Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+5");
+    }
+    static QString workspaceMoveSlot6Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+6");
+    }
+    static QString workspaceMoveSlot7Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+7");
+    }
+    static QString workspaceMoveSlot8Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+8");
+    }
+    static QString workspaceMoveSlot9Shortcut()
+    {
+        return QStringLiteral("Meta+Shift+9");
+    }
 };
 
 } // namespace PlasmaZones

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -9,24 +11,35 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Dynamic workspaces — Quick Shortcuts leaf.
  *
- * The per-mode Quick Shortcuts pattern applied to workspaces: nine fixed
- * slots, each "move the active window to workspace N of the current
- * monitor", with the slot's chord as the only editable control (unset by
- * default — bind the slots you use). The general workspace verbs (focus
- * up/down, move up/down, reorder, move to monitor) are ordinary daemon
- * global shortcuts, edited in KDE's Shortcuts settings like every other
- * PlasmaZones chord — they deliberately have no duplicate editors here.
- * The per-NAMED-workspace chords live on each entry in the Named Workspaces
- * leaf, beside the name they bind.
+ * The quick-layout model applied to workspaces: nine fixed slots, each with
+ * a factory chord (Meta+Shift+N, rebindable in KDE's Shortcuts settings),
+ * and the page assigns WHICH named workspace the slot sends the active
+ * window to. The chord itself is not editable here, exactly like the
+ * snapping/tiling quick shortcuts. Names come from the Named Workspaces
+ * leaf; a slot with no workspace assigned does nothing.
  */
 SettingsFlickable {
     id: root
 
-    // Bumped on workspaceSlotShortcutsChanged so the invokable reads below
-    // re-evaluate (invokables register no property dependency of their own).
+    // Declared names for the combos (the same shim RulesPage uses).
+    readonly property var workspaceNames: {
+        var names = [];
+        var entries = appSettings.workspacesNamedEntries;
+        for (var i = 0; i < entries.length; ++i) {
+            var name = ("" + (entries[i].name || "")).trim();
+            if (name.length > 0)
+                names.push(name);
+        }
+        return names;
+    }
+    // Bumped on target/shortcut changes so the invokable reads re-evaluate.
     property int _slotTick: 0
 
     Connections {
+        function onWorkspaceSlotTargetsChanged() {
+            root._slotTick++;
+        }
+
         function onWorkspaceSlotShortcutsChanged() {
             root._slotTick++;
         }
@@ -59,7 +72,7 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     wrapMode: Text.WordWrap
                     opacity: 0.6
-                    text: i18n("Send the active window to a specific workspace on its monitor with one key. The general workspace shortcuts are in the system Shortcuts settings under PlasmaZones.")
+                    text: i18n("Each slot sends the active window to the workspace you assign here. The keys themselves can be changed in the system Shortcuts settings under PlasmaZones.")
                 }
 
                 Repeater {
@@ -72,6 +85,16 @@ SettingsFlickable {
 
                         required property int index
                         property int slotNumber: index + 1
+                        property string shortcutText: {
+                            void root._slotTick;
+                            return appSettings.workspaceMoveSlotShortcut(slotDelegate.index);
+                        }
+                        property string targetName: {
+                            void root._slotTick;
+                            return appSettings.workspaceSlotTarget(slotDelegate.index);
+                        }
+                        readonly property real _captionOpacity: 0.6
+                        readonly property real _emptyCaptionOpacity: 0.35
 
                         Layout.fillWidth: true
                         spacing: 0
@@ -87,20 +110,79 @@ SettingsFlickable {
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             spacing: Kirigami.Units.largeSpacing
 
-                            Label {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                elide: Text.ElideRight
-                                text: i18n("Move to workspace %1", slotDelegate.slotNumber)
+                                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                                spacing: Kirigami.Units.smallSpacing / 2
+
+                                Label {
+                                    text: i18n("Quick Workspace %1", slotDelegate.slotNumber)
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+
+                                Label {
+                                    text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Shift+1", "Shortcut %1, moves the active window", slotDelegate.shortcutText) : i18n("No shortcut assigned")
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    font: Kirigami.Theme.smallFont
+                                    opacity: slotDelegate.shortcutText !== "" ? slotDelegate._captionOpacity : slotDelegate._emptyCaptionOpacity
+                                }
                             }
 
-                            ShortcutCaptureField {
-                                accessibleName: i18n("Move window to workspace %1", slotDelegate.slotNumber)
-                                keySequence: {
-                                    void root._slotTick; // deliberate dependency registration
-                                    return appSettings.workspaceMoveSlotShortcut(slotDelegate.index);
+                            RowLayout {
+                                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                                spacing: Kirigami.Units.smallSpacing
+
+                                WideComboBox {
+                                    id: slotCombo
+
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                                    model: {
+                                        var items = [
+                                            {
+                                                "label": i18n("None"),
+                                                "value": ""
+                                            }
+                                        ];
+                                        for (var i = 0; i < root.workspaceNames.length; ++i)
+                                            items.push({
+                                                "label": root.workspaceNames[i],
+                                                "value": root.workspaceNames[i]
+                                            });
+                                        return items;
+                                    }
+                                    textRole: "label"
+                                    valueRole: "value"
+                                    currentIndex: {
+                                        for (var i = 0; i < model.length; ++i) {
+                                            if (model[i].value === slotDelegate.targetName)
+                                                return i;
+                                        }
+                                        return -1;
+                                    }
+                                    // An assigned name whose declaration was
+                                    // removed stays legible: the slot is
+                                    // dormant, not broken.
+                                    displayText: currentIndex >= 0 ? currentText : slotDelegate.targetName
+                                    Accessible.name: i18n("Workspace for quick shortcut %1", slotDelegate.slotNumber)
+                                    onActivated: function (index) {
+                                        var entry = model[index];
+                                        var value = entry ? (entry.value || "") : "";
+                                        if (value !== slotDelegate.targetName)
+                                            appSettings.setWorkspaceSlotTarget(slotDelegate.index, value);
+                                    }
                                 }
-                                onKeySequenceModified: seq => {
-                                    appSettings.setWorkspaceMoveSlotShortcut(slotDelegate.index, seq);
+
+                                ToolButton {
+                                    icon.name: "edit-clear"
+                                    enabled: slotDelegate.targetName !== ""
+                                    onClicked: appSettings.setWorkspaceSlotTarget(slotDelegate.index, "")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: i18n("Clear workspace")
+                                    Accessible.name: i18n("Clear workspace for quick shortcut %1", slotDelegate.slotNumber)
                                 }
                             }
                         }

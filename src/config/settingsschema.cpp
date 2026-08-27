@@ -532,11 +532,16 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::workspaceReorderDownKey(), CD::workspaceReorderDownShortcut());
     addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut());
     addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut());
-    // Workspace quick-shortcut slots, unset by default (quick-layout style).
-    // The focus family is daemon-registered only (bound via KDE's Shortcuts
-    // settings, not the app's Quick Shortcuts page — user decision).
+    // Workspace quick-shortcut slots (quick-layout model): fixed factory
+    // chords, rebindable in the Shortcuts KCM; the target workspace is
+    // assigned per slot in the app (Workspaces.Slots below). The focus
+    // family stays unset by default and daemon-registered only.
+    const QString workspaceMoveSlotDefaults[] = {
+        CD::workspaceMoveSlot1Shortcut(), CD::workspaceMoveSlot2Shortcut(), CD::workspaceMoveSlot3Shortcut(),
+        CD::workspaceMoveSlot4Shortcut(), CD::workspaceMoveSlot5Shortcut(), CD::workspaceMoveSlot6Shortcut(),
+        CD::workspaceMoveSlot7Shortcut(), CD::workspaceMoveSlot8Shortcut(), CD::workspaceMoveSlot9Shortcut()};
     for (int slot = 1; slot <= 9; ++slot) {
-        addShortcut(globals, CD::workspaceMoveSlotKey(slot), QString());
+        addShortcut(globals, CD::workspaceMoveSlotKey(slot), workspaceMoveSlotDefaults[slot - 1]);
         addShortcut(globals, CD::workspaceFocusSlotKey(slot), QString());
     }
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
@@ -1112,6 +1117,13 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::workspacesNamedGroup()] = {
         {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList},
     };
+    // Quick-slot targets: the named workspace each move slot sends the
+    // active window to; empty = unassigned (the slot's chord does nothing).
+    auto& slots = schema.groups[CD::workspacesSlotsGroup()];
+    slots.reserve(9);
+    for (int slot = 1; slot <= 9; ++slot) {
+        slots.append({CD::workspaceSlotTargetKey(slot), QString(), QMetaType::QString});
+    }
 }
 
 void appendGapsSchema(PhosphorConfig::Schema& schema)

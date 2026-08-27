@@ -100,6 +100,7 @@ public:
     // group: the feature is a layer below all three placement modes).
     P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
     P_CONFIG_GROUP(workspacesNamedGroup, "Workspaces.Named")
+    P_CONFIG_GROUP(workspacesSlotsGroup, "Workspaces.Slots")
 
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
@@ -310,6 +311,17 @@ public:
             qFatal("workspaceFocusSlotKey: n out of range: %d", n);
         }
         return workspaceFocusSlotKeyPattern().arg(n);
+    }
+    // Quick-slot targets (Workspaces.Slots): the NAMED WORKSPACE each move
+    // slot sends the active window to (quick-layout model: chord fixed per
+    // slot and KCM-rebindable, target assigned in the settings app).
+    P_CONFIG_KEY(workspaceSlotTargetKeyPattern, "Target%1")
+    static QString workspaceSlotTargetKey(int n)
+    {
+        if (n < 1 || n > 9) {
+            qFatal("workspaceSlotTargetKey: n out of range: %d", n);
+        }
+        return workspaceSlotTargetKeyPattern().arg(n);
     }
 
     // Workspace verb shortcuts (Shortcuts.Global leaves).

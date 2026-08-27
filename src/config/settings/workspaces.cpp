@@ -92,6 +92,29 @@ namespace {
 inline constexpr int WorkspaceSlotCount = 9;
 }
 
+QString Settings::workspaceSlotTarget(int index) const
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::workspacesSlotsGroup(),
+                                  ConfigDefaults::workspaceSlotTargetKey(index + 1));
+}
+
+void Settings::setWorkspaceSlotTarget(int index, const QString& workspaceName)
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::workspaceSlotTargetKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::workspacesSlotsGroup(), key) == workspaceName) {
+        return;
+    }
+    m_store->write(ConfigDefaults::workspacesSlotsGroup(), key, workspaceName);
+    Q_EMIT workspaceSlotTargetsChanged();
+    Q_EMIT settingsChanged();
+}
+
 QString Settings::workspaceFocusSlotShortcut(int index) const
 {
     if (index < 0 || index >= WorkspaceSlotCount) {

@@ -577,6 +577,13 @@ constexpr DefaultGetter kQuickLayoutDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::quickLayout4Shortcut, &ConfigDefaults::quickLayout5Shortcut, &ConfigDefaults::quickLayout6Shortcut,
     &ConfigDefaults::quickLayout7Shortcut, &ConfigDefaults::quickLayout8Shortcut, &ConfigDefaults::quickLayout9Shortcut,
 };
+constexpr DefaultGetter kWorkspaceMoveSlotDefaults[kIndexedSlotCount] = {
+    &ConfigDefaults::workspaceMoveSlot1Shortcut, &ConfigDefaults::workspaceMoveSlot2Shortcut,
+    &ConfigDefaults::workspaceMoveSlot3Shortcut, &ConfigDefaults::workspaceMoveSlot4Shortcut,
+    &ConfigDefaults::workspaceMoveSlot5Shortcut, &ConfigDefaults::workspaceMoveSlot6Shortcut,
+    &ConfigDefaults::workspaceMoveSlot7Shortcut, &ConfigDefaults::workspaceMoveSlot8Shortcut,
+    &ConfigDefaults::workspaceMoveSlot9Shortcut,
+};
 constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::snapToZone1Shortcut, &ConfigDefaults::snapToZone2Shortcut, &ConfigDefaults::snapToZone3Shortcut,
     &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
@@ -1159,11 +1166,13 @@ void ShortcutManager::buildEntries()
         m_entries.push_back(std::move(e));
     }
 
-    // Workspace quick-shortcut slots. Same indexed structure as quick-layout,
-    // no defaults (users bind the slots they use).
+    // Workspace quick-shortcut slots. Quick-layout model: fixed factory
+    // chords (KCM-rebindable); the slot's target workspace is assigned in
+    // the settings app.
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = workspaceMoveSlotId(i);
+        e.defaultSeq = parseSequence(kWorkspaceMoveSlotDefaults[i](), e.id);
         e.description = PhosphorI18n::tr("Move Window to Workspace %1").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {

@@ -1417,6 +1417,10 @@ public:
     /// Shortcuts page. Same index contract as the move slots.
     Q_INVOKABLE QString workspaceFocusSlotShortcut(int index) const;
     Q_INVOKABLE void setWorkspaceFocusSlotShortcut(int index, const QString& shortcut);
+    /// Quick-slot targets (Workspaces.Slots): the named workspace slot
+    /// `index`+1 sends the active window to; empty = unassigned.
+    Q_INVOKABLE QString workspaceSlotTarget(int index) const;
+    Q_INVOKABLE void setWorkspaceSlotTarget(int index, const QString& workspaceName);
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;

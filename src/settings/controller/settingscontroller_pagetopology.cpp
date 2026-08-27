@@ -247,13 +247,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("workspaces-shortcuts"),
          [] {
-             // Only the quick-shortcut slots: the page edits nothing else.
-             // The general workspace verb chords are daemon globals edited in
-             // the system Shortcuts settings, like every other PZ chord — no
-             // settings page owns them.
+             // Only the quick-slot TARGETS: the page assigns the workspace
+             // each slot sends the window to. The slot chords themselves
+             // (and the general workspace verb chords) are daemon globals
+             // edited in the system Shortcuts settings, like every other PZ
+             // chord — no settings page owns them.
              Settings::ConfigKeyList keys;
              for (int slot = 1; slot <= 9; ++slot) {
-                 keys.append({CD::shortcutsGlobalGroup(), CD::workspaceMoveSlotKey(slot)});
+                 keys.append({CD::workspacesSlotsGroup(), CD::workspaceSlotTargetKey(slot)});
              }
              return keys;
          }()},

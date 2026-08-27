@@ -331,12 +331,18 @@ void Daemon::initializeWorkspaces()
             [this, actingScreen](const QString& direction) {
                 m_workspaceController->moveWorkspaceToOutput(actingScreen(), direction);
             });
-    connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveSlotRequested, wiring,
-            [this, actingScreen](int slot) {
-                const QString windowId =
-                    m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
-                m_workspaceController->moveWindowToWorkspaceAt(actingScreen(), windowId, slot - 1);
-            });
+    connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveSlotRequested, wiring, [this](int slot) {
+        // Quick-layout model: the slot's chord is fixed; what it moves the
+        // window TO is the named workspace assigned in the settings app. An
+        // unassigned slot does nothing (like a quick-layout slot with no
+        // layout picked).
+        const QString name = m_settings->workspaceSlotTarget(slot - 1);
+        if (name.isEmpty()) {
+            return;
+        }
+        const QString windowId = m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
+        m_workspaceController->moveWindowToNamedWorkspace(name, windowId);
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::workspaceFocusSlotRequested, wiring,
             [this, actingScreen](int slot) {
                 m_workspaceController->focusWorkspaceAt(actingScreen(), slot - 1);

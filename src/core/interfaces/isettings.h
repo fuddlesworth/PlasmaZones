@@ -1023,6 +1023,7 @@ Q_SIGNALS:
     void workspaceMoveToMonitorLeftShortcutChanged();
     void workspaceMoveToMonitorRightShortcutChanged();
     void workspaceSlotShortcutsChanged();
+    void workspaceSlotTargetsChanged();
 
     // Scrolling settings
     void scrollingEnabledChanged();
