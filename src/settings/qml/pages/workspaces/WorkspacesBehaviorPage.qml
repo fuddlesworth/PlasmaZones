@@ -51,14 +51,9 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            text: i18n("Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears. Named workspaces stay even when empty.")
-            // InlineMessage defaults to hidden; this explainer is permanent.
-            visible: true
-        }
-
+        // No page-level info banner — the mode pages carry their explanation
+        // in row descriptions, and this page does the same. The two
+        // InlineMessages below are true WARNINGS, hidden in the normal state.
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
@@ -88,6 +83,16 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Dynamic workspace lists")
+                    searchAnchor: "workspacesDynamicLists"
+                    description: i18n("Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears.")
+                    // Informational row: the behavior itself IS the feature
+                    // (toggled from the sidebar), so there is no control here.
+                }
+
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Workspace hint")

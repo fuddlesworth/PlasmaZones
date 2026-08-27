@@ -43,14 +43,6 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            text: i18n("Send the active window to a specific workspace on its monitor with one key. The general workspace shortcuts are in the system Shortcuts settings under PlasmaZones.")
-            // InlineMessage defaults to hidden; this explainer is permanent.
-            visible: true
-        }
-
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Workspace Quick Shortcuts")
@@ -59,6 +51,16 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: 0
+
+                Label {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    wrapMode: Text.WordWrap
+                    opacity: 0.6
+                    text: i18n("Send the active window to a specific workspace on its monitor with one key. The general workspace shortcuts are in the system Shortcuts settings under PlasmaZones.")
+                }
 
                 Repeater {
                     // Nine slots, matching the quick-layout slot count the

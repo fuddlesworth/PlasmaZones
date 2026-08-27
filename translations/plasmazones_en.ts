@@ -7162,7 +7162,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="101"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="93"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="98"/>
         <source>Workspace hint</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7183,8 +7183,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="105"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="114"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="119"/>
         <source>Replace KWin desktop shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7220,8 +7220,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="112"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="100"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="135"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="92"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="134"/>
         <source>Add named workspace</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10201,7 +10201,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="200"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="99"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="86"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="81"/>
         <source>Behavior</source>
         <translation type="unfinished"></translation>
     </message>
@@ -22399,7 +22399,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="250"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="132"/>
         <source>Add</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23261,37 +23261,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="57"/>
-        <source>Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears. Named workspaces stay even when empty.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="65"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="60"/>
         <source>Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones can turn on KWin&apos;s per-output virtual desktops setting. The change takes effect immediately, and PlasmaZones does not turn it back off.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="65"/>
         <source>Turn On KWin Setting</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="80"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="75"/>
         <source>Workspace limit reached. New workspaces cannot be added until one is removed.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="95"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="88"/>
+        <source>Dynamic workspace lists</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="90"/>
+        <source>Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="100"/>
         <source>Show a hint when a switch lands on a workspace that belongs to another monitor and is sent back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="103"/>
         <source>Show workspace hint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesBehaviorPage.qml.cpp" line="116"/>
         <source>While dynamic workspaces are on, take over the KWin desktop switching shortcuts so they move through this monitor&apos;s workspaces. They are restored when the feature is turned off.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23301,28 +23306,33 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="93"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="104"/>
         <source>A named workspace is created at login, keeps its place while empty, and can be pinned to a monitor. Shortcuts jump to it or send the active window there.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="116"/>
         <source>New workspace name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="159"/>
+        <source>Named workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="171"/>
         <source>No named workspaces</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="172"/>
         <source>Named workspaces you add appear here.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspaceRow.qml.cpp" line="82"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="116"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="115"/>
         <source>Workspace name</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23334,7 +23344,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspaceRow.qml.cpp" line="105"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="125"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="124"/>
         <source>Pinned monitor</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23346,7 +23356,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspaceRow.qml.cpp" line="52"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="179"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/NamedWorkspacesPage.qml.cpp" line="187"/>
         <source>(unnamed)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -23382,30 +23392,25 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="117"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="48"/>
         <source>Workspace Quick Shortcuts</source>
         <oldsource>Focus workspace above</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="49"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="62"/>
         <source>Send the active window to a specific workspace on its monitor with one key. The general workspace shortcuts are in the system Shortcuts settings under PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="93"/>
         <source>Move to workspace %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="95"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="97"/>
         <source>Move window to workspace %1</source>
         <oldsource>Move window to workspace above</oldsource>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/workspaces/WorkspacesShortcutsPage.qml.cpp" line="95"/>
-        <source>Move window to workspace %1</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

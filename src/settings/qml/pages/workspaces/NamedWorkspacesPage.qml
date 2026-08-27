@@ -87,14 +87,6 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            text: i18n("A named workspace is created at login, keeps its place while empty, and can be pinned to a monitor. Shortcuts jump to it or send the active window there.")
-            // InlineMessage defaults to hidden; this explainer is permanent.
-            visible: true
-        }
-
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Add named workspace")
@@ -104,6 +96,13 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.6
+                    text: i18n("A named workspace is created at login, keeps its place while empty, and can be pinned to a monitor. Shortcuts jump to it or send the active window there.")
+                }
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -155,65 +154,76 @@ SettingsFlickable {
             }
         }
 
-        Kirigami.PlaceholderMessage {
+        SettingsCard {
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.gridUnit * 2
-            visible: root._entries.length === 0
-            icon.name: "virtual-desktops"
-            text: i18n("No named workspaces")
-            explanation: i18n("Named workspaces you add appear here.")
-        }
+            headerText: i18n("Named workspaces")
+            headerTrailingText: root._entries.length > 0 ? String(root._entries.length) : ""
+            searchAnchor: "workspacesNamedList"
 
-        ReorderableColumn {
-            id: entryList
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-            Layout.fillWidth: true
-            Layout.preferredHeight: totalHeight
-            visible: root._entries.length > 0
-            items: root._entries
-            anchorPrefix: "namedWorkspace:"
-            idOf: function (item) {
-                return item.name;
-            }
-            accessibleNameOf: function (item) {
-                return item.name || i18n("(unnamed)");
-            }
-            reorderableOf: function (item) {
-                return true;
-            }
-            onMoveRequested: function (fromIndex, toIndex) {
-                var arr = root._entries;
-                if (fromIndex < 0 || fromIndex >= arr.length || toIndex < 0 || toIndex >= arr.length)
-                    return;
-
-                arr.splice(toIndex, 0, arr.splice(fromIndex, 1)[0]);
-                root._entries = arr;
-                root._commitEntries();
-            }
-
-            rowDelegate: NamedWorkspaceRow {
-                entry: parent.rowModelData
-                entryIndex: parent.rowIndex
-                screenOptions: root._screenOptions
-                siblingNames: {
-                    var names = root._names();
-                    names.splice(parent.rowIndex, 1);
-                    return names;
+                Kirigami.PlaceholderMessage {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.gridUnit
+                    visible: root._entries.length === 0
+                    icon.name: "virtual-desktops"
+                    text: i18n("No named workspaces")
+                    explanation: i18n("Named workspaces you add appear here.")
                 }
-                onFieldEdited: function (index, field, value) {
-                    var arr = root._entries;
-                    if (index < 0 || index >= arr.length)
-                        return;
 
-                    arr[index][field] = value;
-                    root._entries = arr;
-                    root._commitEntries();
-                }
-                onRemoveRequested: function (index) {
-                    var arr = root._entries;
-                    arr.splice(index, 1);
-                    root._entries = arr;
-                    root._commitEntries();
+                ReorderableColumn {
+                    id: entryList
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: totalHeight
+                    visible: root._entries.length > 0
+                    items: root._entries
+                    anchorPrefix: "namedWorkspace:"
+                    idOf: function (item) {
+                        return item.name;
+                    }
+                    accessibleNameOf: function (item) {
+                        return item.name || i18n("(unnamed)");
+                    }
+                    reorderableOf: function (item) {
+                        return true;
+                    }
+                    onMoveRequested: function (fromIndex, toIndex) {
+                        var arr = root._entries;
+                        if (fromIndex < 0 || fromIndex >= arr.length || toIndex < 0 || toIndex >= arr.length)
+                            return;
+
+                        arr.splice(toIndex, 0, arr.splice(fromIndex, 1)[0]);
+                        root._entries = arr;
+                        root._commitEntries();
+                    }
+
+                    rowDelegate: NamedWorkspaceRow {
+                        entry: parent.rowModelData
+                        entryIndex: parent.rowIndex
+                        screenOptions: root._screenOptions
+                        siblingNames: {
+                            var names = root._names();
+                            names.splice(parent.rowIndex, 1);
+                            return names;
+                        }
+                        onFieldEdited: function (index, field, value) {
+                            var arr = root._entries;
+                            if (index < 0 || index >= arr.length)
+                                return;
+
+                            arr[index][field] = value;
+                            root._entries = arr;
+                            root._commitEntries();
+                        }
+                        onRemoveRequested: function (index) {
+                            var arr = root._entries;
+                            arr.splice(index, 1);
+                            root._entries = arr;
+                            root._commitEntries();
+                        }
+                    }
                 }
             }
         }
