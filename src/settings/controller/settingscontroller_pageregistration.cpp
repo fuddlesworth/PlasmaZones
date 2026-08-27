@@ -107,6 +107,13 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // Dynamic per-monitor workspaces. Top-level like Virtual Screens (a
+    // mode-neutral layer below the placement modes); the page id avoids the
+    // existing "overview" (monitor dashboard) id.
+    regVirtual(QStringLiteral("workspaces"), QString(), PhosphorI18n::tr("Workspaces"),
+               QStringLiteral("pages/screens/WorkspacesPage.qml"), QStringLiteral("virtual-desktops"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category. Divider after it (i.e.
     // above Appearance) sets the placement categories apart from the

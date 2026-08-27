@@ -23,6 +23,28 @@ P_STORE_GET(bool, workspacesSnapBackOsdHint, workspacesBehaviorGroup, snapBackOs
 P_STORE_SET_BOOL(setWorkspacesSnapBackOsdHint, workspacesBehaviorGroup, snapBackOsdHintKey,
                  workspacesSnapBackOsdHintChanged)
 
+// Named-workspace declarations: whole-replace QVariantList composite, same
+// write shape as the trigger lists (read-back compare so a semantically
+// identical list swallows no signal).
+QVariantList Settings::workspacesNamedEntries() const
+{
+    return m_store->readVariant(ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::entriesKey()).toList();
+}
+
+void Settings::setWorkspacesNamedEntries(const QVariantList& entries)
+{
+    const QVariantList before =
+        m_store->readVariant(ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::entriesKey()).toList();
+    m_store->write(ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::entriesKey(), entries);
+    const QVariantList after =
+        m_store->readVariant(ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::entriesKey()).toList();
+    if (before == after) {
+        return;
+    }
+    Q_EMIT workspacesNamedEntriesChanged();
+    Q_EMIT settingsChanged();
+}
+
 // ── Verb shortcuts (Shortcuts.Global leaves, like every other chord) ────────
 
 P_STORE_GET(QString, workspaceFocusUpShortcut, shortcutsGlobalGroup, workspaceFocusUpKey, QString)

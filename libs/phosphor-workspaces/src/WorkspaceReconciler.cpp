@@ -5,6 +5,7 @@
 
 #include <QDateTime>
 #include <QLoggingCategory>
+#include <QSet>
 
 Q_LOGGING_CATEGORY(lcWorkspaceRec, "plasmazones.workspaces.reconciler", QtWarningMsg)
 
@@ -505,6 +506,109 @@ void WorkspaceReconciler::maintainInvariants()
     const QStringList order = m_map.screenOrder();
     for (const QString& screenId : order) {
         maintainScreen(screenId);
+    }
+}
+
+// ── Named workspaces ────────────────────────────────────────────────────────
+
+void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& declarations, const QStringList& kwinNames)
+{
+    bool changed = false;
+
+    // Pass 1: realize every declaration.
+    QSet<QString> declaredNames;
+    for (const NamedWorkspace& decl : declarations) {
+        if (decl.name.isEmpty() || declaredNames.contains(decl.name)) {
+            continue; // empty/duplicate declarations are UI-invalid; skip
+        }
+        declaredNames.insert(decl.name);
+
+        // Already realized?
+        QString realizedId;
+        const QStringList owned = m_map.allDesktopIds();
+        for (const QString& id : owned) {
+            if (m_map.entryFor(id).name == decl.name) {
+                realizedId = id;
+                break;
+            }
+        }
+
+        // Claim an unnamed desktop whose KWin name matches (restart without a
+        // state file: the name we stamped last session is the identity).
+        if (realizedId.isEmpty()) {
+            for (int i = 0; i < m_lastIds.size() && i < kwinNames.size(); ++i) {
+                const QString& id = m_lastIds.at(i);
+                if (kwinNames.at(i) == decl.name && m_map.entryFor(id).name.isEmpty()) {
+                    realizedId = id;
+                    m_map.setName(id, decl.name);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        const QString pin = (!decl.outputId.isEmpty() && m_map.hasScreen(decl.outputId)) ? decl.outputId : QString();
+
+        if (realizedId.isEmpty()) {
+            // Create it. One create per declaration per pass: an open Create
+            // for this name means the previous request has not settled yet.
+            bool pending = false;
+            for (const auto& op : m_ledger) {
+                if (op.kind == PendingOp::Kind::Create && op.name == decl.name) {
+                    pending = true;
+                    break;
+                }
+            }
+            if (pending) {
+                continue;
+            }
+            QString target = pin;
+            if (target.isEmpty()) {
+                target = m_focusedScreen;
+            }
+            if (target.isEmpty() || !m_map.hasScreen(target)) {
+                const QStringList order = m_map.screenOrder();
+                target = order.isEmpty() ? QString() : order.first();
+            }
+            if (target.isEmpty()) {
+                continue;
+            }
+            int index = decl.position >= 0 ? decl.position : m_map.sliceSize(target);
+            if (decl.position < 0 && !trailingEmptyOf(target).isEmpty()) {
+                index = qMax(0, index - 1);
+            }
+            requestCreateAt(target, index, decl.name); // cap-guarded inside
+            continue;
+        }
+
+        // Pin enforcement for a realized name.
+        if (!pin.isEmpty() && m_map.ownerOf(realizedId) != pin) {
+            int index = decl.position >= 0 ? decl.position : m_map.sliceSize(pin);
+            if (decl.position < 0 && !trailingEmptyOf(pin).isEmpty()) {
+                index = qMax(0, index - 1);
+            }
+            m_map.transfer(realizedId, pin, index);
+            changed = true;
+        }
+    }
+
+    // Pass 2: names with no surviving declaration revert to dynamic.
+    const QStringList owned = m_map.allDesktopIds();
+    for (const QString& id : owned) {
+        const QString name = m_map.entryFor(id).name;
+        if (!name.isEmpty() && !declaredNames.contains(name)) {
+            m_map.setName(id, QString());
+            Q_EMIT requestSetDesktopName(id, QString());
+            changed = true;
+            if (isDesktopEmpty(id)) {
+                scheduleDestroyCheck(id);
+            }
+        }
+    }
+
+    if (changed) {
+        maintainInvariants();
+        bumpGeneration();
     }
 }
 

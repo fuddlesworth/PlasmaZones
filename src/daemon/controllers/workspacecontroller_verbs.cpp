@@ -181,4 +181,71 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
     });
 }
 
+// ── Named workspaces ────────────────────────────────────────────────────────
+
+void WorkspaceController::applyNamedDeclarations(const QVariantList& entries)
+{
+    m_namedEntries = entries;
+    if (!m_adopted) {
+        return; // re-applied by start()/adoption completion
+    }
+    m_namedApplied = true;
+    runWhenQuiet([this]() {
+        QList<PhosphorWorkspaces::NamedWorkspace> declarations;
+        declarations.reserve(m_namedEntries.size());
+        for (const QVariant& value : std::as_const(m_namedEntries)) {
+            const QVariantMap map = value.toMap();
+            PhosphorWorkspaces::NamedWorkspace decl;
+            decl.name = map.value(QStringLiteral("name")).toString().trimmed();
+            decl.outputId = map.value(QStringLiteral("output")).toString();
+            decl.position = map.value(QStringLiteral("position"), -1).toInt();
+            declarations.append(decl);
+        }
+        m_reconciler.applyNamedWorkspaces(declarations, m_vdm->desktopNames());
+    });
+}
+
+QString WorkspaceController::desktopIdForName(const QString& name) const
+{
+    const QStringList ids = m_reconciler.map().allDesktopIds();
+    for (const QString& id : ids) {
+        if (m_reconciler.map().entryFor(id).name == name) {
+            return id;
+        }
+    }
+    return QString();
+}
+
+void WorkspaceController::focusNamedWorkspace(const QString& name)
+{
+    runWhenQuiet([this, name]() {
+        const QString target = desktopIdForName(name);
+        if (target.isEmpty()) {
+            return;
+        }
+        // A named workspace shows where it LIVES: the switch targets its
+        // owner screen, whichever screen the shortcut fired on.
+        switchScreenToDesktop(m_reconciler.map().ownerOf(target), target);
+    });
+}
+
+void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    runWhenQuiet([this, name, windowId]() {
+        const QString target = desktopIdForName(name);
+        if (target.isEmpty()) {
+            return;
+        }
+        const int desktop = m_vdm->desktopIndexOf(target);
+        if (desktop <= 0) {
+            return;
+        }
+        Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop,
+                                            QStringLiteral("down"));
+    });
+}
+
 } // namespace PlasmaZones

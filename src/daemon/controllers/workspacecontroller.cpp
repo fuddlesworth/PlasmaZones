@@ -43,6 +43,8 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
             &PhosphorWorkspaces::VirtualDesktopManager::createDesktop);
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::requestRemoveDesktop, m_vdm,
             &PhosphorWorkspaces::VirtualDesktopManager::removeDesktop);
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::requestSetDesktopName, m_vdm,
+            &PhosphorWorkspaces::VirtualDesktopManager::setDesktopName);
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::renumberComputed, this,
             [this](const QHash<int, int>& oldToNew, const QList<int>& removed) {
                 // Reap by identity first, then shift the survivors — the
@@ -226,6 +228,9 @@ void WorkspaceController::tryFirstAdoption()
     m_adopted = true;
     m_reconciler.adoptAll(ids, currentById);
     qCInfo(lcWorkspaceCtl) << "adopted" << ids.size() << "desktops across" << order.size() << "screens";
+    if (!m_namedApplied && !m_namedEntries.isEmpty()) {
+        applyNamedDeclarations(m_namedEntries);
+    }
 }
 
 int WorkspaceController::censusDesktop(const PhosphorEngine::WindowMetadata& meta)

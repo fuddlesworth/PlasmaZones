@@ -30,17 +30,61 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QKeySequence>
+#include <QSettings>
+#include <QStandardPaths>
+
 namespace PlasmaZones {
+
+namespace {
+/// Consent-gated kwinrc write (plan §7): turn PerOutputVirtualDesktops on and
+/// reconfigure KWin. The setting applies live (verified against KWin 6.7
+/// source); never called without the user's recorded consent, and never the
+/// reverse direction (we do not revert on disable).
+void enableKWinPerOutputDesktops()
+{
+    const QString path =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
+    QSettings kwinrc(path, QSettings::IniFormat);
+    kwinrc.setValue(QStringLiteral("Windows/PerOutputVirtualDesktops"), true);
+    kwinrc.sync();
+    QDBusConnection::sessionBus().asyncCall(
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                                       QStringLiteral("org.kde.KWin"), QStringLiteral("reconfigure")));
+    qCInfo(lcDaemon) << "wrote PerOutputVirtualDesktops=true to kwinrc and asked KWin to reconfigure (user consent)";
+}
+} // namespace
 
 void Daemon::initializeWorkspaces()
 {
-    if (!m_settings || !m_settings->workspacesEnabled()) {
+    if (!m_settings) {
+        return;
+    }
+    // Enabling the feature (or granting consent) at runtime re-enters this
+    // gate without a daemon restart.
+    if (!m_workspaceRearmConnected) {
+        m_workspaceRearmConnected = true;
+        const auto rearm = [this]() {
+            if (!m_workspaceController) {
+                initializeWorkspaces();
+            }
+        };
+        connect(m_settings.get(), &Settings::workspacesEnabledChanged, this, rearm);
+        connect(m_settings.get(), &Settings::workspacesManageKWinPerOutputChanged, this, rearm);
+    }
+    if (!m_settings->workspacesEnabled()) {
         return;
     }
     if (!WorkspaceController::kwinPerOutputEnabled()) {
-        qCWarning(lcDaemon) << "dynamic workspaces enabled but KWin per-output virtual desktops is off; "
-                               "feature stays dormant until the setting is turned on";
-        return;
+        if (m_settings->workspacesManageKWinPerOutput()) {
+            enableKWinPerOutputDesktops();
+        } else {
+            qCWarning(lcDaemon) << "dynamic workspaces enabled but KWin per-output virtual desktops is off and no "
+                                   "consent to manage it; feature stays dormant";
+            return;
+        }
     }
     if (!m_virtualDesktopManager || !m_windowRegistry || !m_screenManager) {
         return;
@@ -178,6 +222,56 @@ void Daemon::initializeWorkspaces()
             [this, actingScreen](const QString& direction) {
                 m_workspaceController->moveWorkspaceToOutput(actingScreen(), direction);
             });
+
+    // ── Named workspaces ───────────────────────────────────────────────────
+    // Declarations flow from config; per-name focus/move chords bind as
+    // adhoc (transient) shortcuts re-bound on every declaration change, the
+    // quick-layout-slot pattern. The shared_ptr carries the currently-bound
+    // id set between rebinds without a daemon member.
+    const auto boundNamedIds = std::make_shared<QStringList>();
+    const auto rebindNamedShortcuts = [this, boundNamedIds]() {
+        for (const QString& id : std::as_const(*boundNamedIds)) {
+            m_shortcutManager->unregisterAdhocShortcut(id);
+        }
+        boundNamedIds->clear();
+        const QVariantList entries = m_settings->workspacesNamedEntries();
+        for (const QVariant& value : entries) {
+            const QVariantMap entry = value.toMap();
+            const QString name = entry.value(QStringLiteral("name")).toString().trimmed();
+            if (name.isEmpty()) {
+                continue;
+            }
+            const QString focusChord = entry.value(QStringLiteral("focusShortcut")).toString();
+            if (!focusChord.isEmpty()) {
+                const QString id = QStringLiteral("workspace_named_focus:") + name;
+                m_shortcutManager->registerAdhocShortcut(
+                    id, QKeySequence(focusChord),
+                    PhosphorI18n::tr("Focus Workspace \"%1\"", "named workspace shortcut").arg(name), [this, name]() {
+                        m_workspaceController->focusNamedWorkspace(name);
+                    });
+                boundNamedIds->append(id);
+            }
+            const QString moveChord = entry.value(QStringLiteral("moveShortcut")).toString();
+            if (!moveChord.isEmpty()) {
+                const QString id = QStringLiteral("workspace_named_move:") + name;
+                m_shortcutManager->registerAdhocShortcut(
+                    id, QKeySequence(moveChord),
+                    PhosphorI18n::tr("Move Window to Workspace \"%1\"", "named workspace shortcut").arg(name),
+                    [this, name]() {
+                        const QString windowId =
+                            m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
+                        m_workspaceController->moveWindowToNamedWorkspace(name, windowId);
+                    });
+                boundNamedIds->append(id);
+            }
+        }
+    };
+    m_workspaceController->applyNamedDeclarations(m_settings->workspacesNamedEntries());
+    rebindNamedShortcuts();
+    connect(m_settings.get(), &Settings::workspacesNamedEntriesChanged, this, [this, rebindNamedShortcuts]() {
+        m_workspaceController->applyNamedDeclarations(m_settings->workspacesNamedEntries());
+        rebindNamedShortcuts();
+    });
 
     // Authoritative gate arm: the effect probes the running compositor's mode
     // at bringup. A divergence from the kwinrc read that admitted us here

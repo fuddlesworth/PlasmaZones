@@ -39,6 +39,15 @@ public:
         return true;
     }
 
+    /// Named-workspace declarations: none by default. Entry shape (all
+    /// QVariantMap fields): name (unique, non-empty), output (screenId, empty
+    /// = unpinned), position (preferred slice index, -1 = before the trailing
+    /// empty), focusShortcut / moveShortcut (chords, empty = unbound).
+    static QVariantList workspacesNamedEntries()
+    {
+        return {};
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Workspace verb shortcuts (Shortcuts.Global)
     //

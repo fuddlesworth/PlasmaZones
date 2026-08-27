@@ -1149,10 +1149,14 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
-    /// Dynamic per-monitor workspaces. Null unless the feature gate passed at
-    /// startup (initializeWorkspaces); its existence IS the runtime gate the
+    /// Dynamic per-monitor workspaces. Null unless the feature gate passed
+    /// (initializeWorkspaces); its existence IS the runtime gate the
     /// desktopCountChanged prune consults.
     std::unique_ptr<WorkspaceController> m_workspaceController;
+    /// One-time guard for the settings connects that re-enter
+    /// initializeWorkspaces on a runtime enable (lambdas cannot use
+    /// Qt::UniqueConnection).
+    bool m_workspaceRearmConnected = false;
 
     // Scripted algorithm loader (file watcher for user-defined Luau algorithms).
     // m_algorithmRegistry is declared up at the top of the member block with

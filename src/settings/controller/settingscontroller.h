@@ -323,6 +323,13 @@ public:
     /// window-scoped layoutOperationFailed fallback in Main.qml keys off it.
     Q_INVOKABLE bool isLibraryPage(const QString& page) const;
 
+    /// Whether KWin runs with per-output virtual desktops on (kwinrc read;
+    /// the Workspaces page's consent flow consults this before enabling).
+    /// Same flat-INI read as the daemon gate's config arm
+    /// (WorkspaceController::kwinPerOutputEnabled) — duplicated because the
+    /// daemon controller is not linked into the settings app.
+    Q_INVOKABLE bool kwinPerOutputDesktopsEnabled() const;
+
     /// The default snapping layout and default scrolling template:
     /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
     /// They are SET from the library pages' card context menus, so the owner

@@ -1101,6 +1101,9 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
         {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
         {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool},
     };
+    schema.groups[CD::workspacesNamedGroup()] = {
+        {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList},
+    };
 }
 
 void appendGapsSchema(PhosphorConfig::Schema& schema)

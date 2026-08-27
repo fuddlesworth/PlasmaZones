@@ -15,6 +15,14 @@
 
 namespace PhosphorWorkspaces {
 
+/// One declared named workspace (config-driven; persistent while empty).
+struct NamedWorkspace
+{
+    QString name; ///< unique, non-empty
+    QString outputId; ///< pinned screen; empty = unpinned
+    int position = -1; ///< preferred slice index; -1 = before the trailing empty
+};
+
 /// The dynamic-workspace lifecycle state machine. Owns the WorkspaceMap and the
 /// pending-op ledger (echo safety). All inputs are plain method calls — no
 /// D-Bus, no daemon types — so unit tests drive it with scripted sequences.
@@ -74,6 +82,17 @@ public:
     /// content is kept where consistent (restore path passes a pre-loaded map).
     void adoptAll(const QStringList& ids, const QHash<QString, QString>& currentDesktopIdByScreen);
 
+    /// Reconcile the declared named workspaces against the map (called after
+    /// adoption and on every declaration change). Per declaration, in order:
+    /// an entry already carrying the name is kept (transferred to its pinned
+    /// output when needed); else an unnamed desktop whose KWin name matches
+    /// (`kwinNames` is aligned with the settled id list) is claimed; else a
+    /// desktop is created with the name (cap-guarded — a refusal logs and
+    /// hints, never crashes). Map names with no surviving declaration revert
+    /// to dynamic (requestSetDesktopName clears the KWin name; destroy-on-
+    /// empty may then reap the desktop).
+    void applyNamedWorkspaces(const QList<NamedWorkspace>& declarations, const QStringList& kwinNames);
+
     // ── Verb support ────────────────────────────────────────────────────────
     /// True while any structural op (create/remove) is open — verb execution
     /// defers until the ledger is quiet (renumbering window, plan §4.5).
@@ -110,6 +129,9 @@ Q_SIGNALS:
     void requestCreateDesktop(uint position, const QString& name);
     void requestRemoveDesktop(const QString& desktopId);
     void requestSetCurrent(const QString& screenId, const QString& desktopId);
+    /// Sync a desktop's KWin name (named-workspace claim / unname). Creates
+    /// carry their name in createDesktop and never ride this.
+    void requestSetDesktopName(const QString& desktopId, const QString& name);
 
     /// Map mutated (any structural or metadata change). The controller streams
     /// (change-gated) and persists on this.

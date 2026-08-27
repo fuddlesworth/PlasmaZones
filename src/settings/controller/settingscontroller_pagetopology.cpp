@@ -228,6 +228,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
+        {QStringLiteral("workspaces"),
+         {
+             {CD::workspacesBehaviorGroup(), CD::enabledKey()},
+             {CD::workspacesBehaviorGroup(), CD::manageKWinPerOutputKey()},
+             {CD::workspacesBehaviorGroup(), CD::snapBackOsdHintKey()},
+             {CD::workspacesNamedGroup(), CD::entriesKey()},
+         }},
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
@@ -748,6 +755,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("workspaces"),
         QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),

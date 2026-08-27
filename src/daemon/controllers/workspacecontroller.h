@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 namespace PhosphorEngine {
 class WindowRegistry;
@@ -76,6 +77,16 @@ public:
     /// ("left"/"right"), windows riding along; focuses it there.
     void moveWorkspaceToOutput(const QString& screenId, const QString& direction);
 
+    // ── Named workspaces (Phase 3) ──────────────────────────────────────────
+    /// Apply the config declarations (QVariantMaps: name/output/position).
+    /// Deferred until adoption; re-run on every declaration change.
+    void applyNamedDeclarations(const QVariantList& entries);
+    /// Focus / move-the-active-window-to the named workspace (the dynamic
+    /// per-name shortcut targets). The acting screen for a focus is the
+    /// name's OWNER screen (a named workspace shows where it lives).
+    void focusNamedWorkspace(const QString& name);
+    void moveWindowToNamedWorkspace(const QString& name, const QString& windowId);
+
 Q_SIGNALS:
     /// → adaptor setScreenDesktopRequested (effect per-output switch).
     void screenDesktopSwitchRequested(const QString& screenId, int desktop);
@@ -131,6 +142,11 @@ private:
     /// effect command with the int resolved at emit time).
     void switchScreenToDesktop(const QString& screenId, const QString& desktopId);
     QList<std::function<void()>> m_quietQueue;
+    /// Last applied named declarations (re-applied after adoption).
+    QVariantList m_namedEntries;
+    bool m_namedApplied = false;
+    /// Map entry id for a declared name, or empty.
+    QString desktopIdForName(const QString& name) const;
 };
 
 } // namespace PlasmaZones

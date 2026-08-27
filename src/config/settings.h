@@ -401,6 +401,8 @@ public:
                    setWorkspacesManageKWinPerOutput NOTIFY workspacesManageKWinPerOutputChanged)
     Q_PROPERTY(bool workspacesSnapBackOsdHint READ workspacesSnapBackOsdHint WRITE setWorkspacesSnapBackOsdHint NOTIFY
                    workspacesSnapBackOsdHintChanged)
+    Q_PROPERTY(QVariantList workspacesNamedEntries READ workspacesNamedEntries WRITE setWorkspacesNamedEntries NOTIFY
+                   workspacesNamedEntriesChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -1377,6 +1379,8 @@ public:
     void setWorkspacesManageKWinPerOutput(bool enabled);
     bool workspacesSnapBackOsdHint() const;
     void setWorkspacesSnapBackOsdHint(bool enabled);
+    QVariantList workspacesNamedEntries() const;
+    void setWorkspacesNamedEntries(const QVariantList& entries);
     QString workspaceFocusUpShortcut() const;
     void setWorkspaceFocusUpShortcut(const QString& shortcut);
     QString workspaceFocusDownShortcut() const;

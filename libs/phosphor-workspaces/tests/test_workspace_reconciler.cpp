@@ -47,6 +47,9 @@ private Q_SLOTS:
     void snapBack_correctsAndBreaksLoop();
     void reorderCurrentWorkspace_withinSlice();
     void transferCurrentWorkspace_reownsAndRepairs();
+    void named_createdPinnedAndExempt();
+    void named_claimByKWinName();
+    void named_unnamedRevertsToDynamic();
 
 private:
     /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
@@ -411,6 +414,72 @@ void TestWorkspaceReconciler::transferCurrentWorkspace_reownsAndRepairs()
     // A screen never gives up its last desktop.
     rec.onScreenDesktopReport(QStringLiteral("A"), 2); // A now shows d3
     QVERIFY(rec.transferCurrentWorkspace(QStringLiteral("A"), QStringLiteral("B")).isEmpty());
+}
+
+void TestWorkspaceReconciler::named_createdPinnedAndExempt()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3}, B: {d2(occ), d4}
+
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    chat.outputId = QStringLiteral("B");
+    rec.applyNamedWorkspaces({chat}, {});
+
+    QCOMPARE(createSpy.count(), 1);
+    QCOMPARE(createSpy.first().at(1).toString(), QStringLiteral("chat"));
+    // A second apply while the create is pending requests nothing extra.
+    rec.applyNamedWorkspaces({chat}, {});
+    QCOMPARE(createSpy.count(), 1);
+
+    // Realize it: lands in B's slice before the trailing empty, named.
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(5), id(4)});
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("B"));
+    QCOMPARE(rec.map().entryFor(id(5)).name, QStringLiteral("chat"));
+
+    // Named + empty: destroy-exempt (it is mid-slice and empty).
+    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
+    rec.onPopulationChanged(id(5), 1);
+    rec.onPopulationChanged(id(5), 0);
+    QTest::qWait(WorkspaceReconciler::DestroyDebounceMs + 150);
+    for (const auto& call : removeSpy) {
+        QVERIFY(call.first().toString() != id(5));
+    }
+}
+
+void TestWorkspaceReconciler::named_claimByKWinName()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // last ids: {d1} {d3} {d2} {d4}
+
+    // Restart-without-state-file shape: KWin still carries the name we
+    // stamped last session on {d1} (a NON-trailing desktop — claiming a
+    // trailing empty would legitimately trigger a trailing-empty repair
+    // create); the declaration claims it, no name-carrying create.
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    rec.applyNamedWorkspaces({chat},
+                             {QStringLiteral("chat"), QStringLiteral("Desktop 2"), QStringLiteral("Desktop 3"),
+                              QStringLiteral("Desktop 4")});
+    QCOMPARE(createSpy.count(), 0);
+    QCOMPARE(rec.map().entryFor(id(1)).name, QStringLiteral("chat"));
+}
+
+void TestWorkspaceReconciler::named_unnamedRevertsToDynamic()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    rec.map().setName(id(1), QStringLiteral("chat"));
+
+    QSignalSpy renameSpy(&rec, &WorkspaceReconciler::requestSetDesktopName);
+    rec.applyNamedWorkspaces({}, {});
+    QCOMPARE(rec.map().entryFor(id(1)).name, QString());
+    QCOMPARE(renameSpy.count(), 1);
+    QCOMPARE(renameSpy.first().at(0).toString(), id(1));
+    QVERIFY(renameSpy.first().at(1).toString().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)

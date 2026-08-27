@@ -99,6 +99,7 @@ public:
     // Workspaces — dynamic per-monitor workspaces (mode-neutral top-level
     // group: the feature is a layer below all three placement modes).
     P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
+    P_CONFIG_GROUP(workspacesNamedGroup, "Workspaces.Named")
 
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
@@ -286,6 +287,9 @@ public:
     P_CONFIG_KEY(manageKWinPerOutputKey, "ManageKWinPerOutputSetting")
     // Owner-wins snap-back OSD hint toggle.
     P_CONFIG_KEY(snapBackOsdHintKey, "SnapBackOsdHint")
+    // Named-workspace declarations (Workspaces.Named): JSON array of
+    // {name, output, position, focusShortcut, moveShortcut} maps.
+    P_CONFIG_KEY(entriesKey, "Entries")
 
     // Workspace verb shortcuts (Shortcuts.Global leaves).
     P_CONFIG_KEY(workspaceFocusUpKey, "WorkspaceFocusUp")

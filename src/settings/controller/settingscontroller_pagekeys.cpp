@@ -18,6 +18,9 @@
 
 #include "config/configdefaults.h"
 
+#include <QSettings>
+#include <QStandardPaths>
+
 namespace PlasmaZones {
 
 // The drag-to-reorder pages. Their state is the staged order optional, not
@@ -58,6 +61,16 @@ bool isLibraryPage(const QString& page)
 bool SettingsController::isLibraryPage(const QString& page) const
 {
     return PlasmaZones::isLibraryPage(page);
+}
+
+bool SettingsController::kwinPerOutputDesktopsEnabled() const
+{
+    // Flat-INI read of KWin's per-output-desktops flag; the daemon's gate
+    // (WorkspaceController::kwinPerOutputEnabled) is the documented twin.
+    const QString path =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
+    const QSettings kwinrc(path, QSettings::IniFormat);
+    return kwinrc.value(QStringLiteral("Windows/PerOutputVirtualDesktops"), false).toBool();
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain
