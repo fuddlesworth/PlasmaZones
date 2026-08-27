@@ -635,6 +635,11 @@ PhosphorUi.SettingsAppWindow {
                 window.sidebar.drillOut();
         }
 
+        function onWorkspacesEnabledChanged() {
+            if (!appSettings.workspacesEnabled && window.sidebar.currentParentId === "workspaces")
+                window.sidebar.drillOut();
+        }
+
         target: appSettings
     }
 
@@ -973,6 +978,9 @@ PhosphorUi.SettingsAppWindow {
             readonly property bool isSnapping: entry && entry.pageId === "snapping"
             readonly property bool isTiling: entry && entry.pageId === "tiling"
             readonly property bool isScrolling: entry && entry.pageId === "scrolling"
+            // The dynamic-workspaces drill parent carries the same inline
+            // enable toggle as the three placement modes.
+            readonly property bool isWorkspaces: entry && entry.pageId === "workspaces"
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -993,7 +1001,7 @@ PhosphorUi.SettingsAppWindow {
             // branch: the three flags are not exhaustive over every row, and
             // an empty id is a visibly inert scope rather than a silent write
             // to scrollingEnabled from a row that is none of the three.
-            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : ""))
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : (isWorkspaces ? "workspaces" : "")))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -1059,8 +1067,8 @@ PhosphorUi.SettingsAppWindow {
             SettingsSwitch {
                 id: sectionToggle
 
-                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
-                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
+                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling || trailingRow.isWorkspaces
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : (trailingRow.isWorkspaces ? appSettings.workspacesEnabled : false)))
                 // "Enable Snapping", not the bare feature name: the row itself
                 // already announces the title (SidebarRow's Accessible.name),
                 // so the switch has to name the ACTION or the two controls are
@@ -1099,6 +1107,8 @@ PhosphorUi.SettingsAppWindow {
                         appSettings.autotileEnabled = newValue;
                     else if (trailingRow.isScrolling)
                         appSettings.scrollingEnabled = newValue;
+                    else if (trailingRow.isWorkspaces)
+                        appSettings.workspacesEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
             }

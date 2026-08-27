@@ -133,7 +133,7 @@ Item {
         // Each arm names its own section rather than letting one of the three
         // be the else branch, so a pendingSection this dialog does not handle
         // cannot show the wrong feature's wording.
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : (pendingSection === "scrolling" ? i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?") : i18n("Disabling this will discard your unsaved changes. Continue?")))
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : (pendingSection === "scrolling" ? i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?") : (pendingSection === "workspaces" ? i18n("Disabling Workspaces will discard your unsaved Workspaces changes. Continue?") : i18n("Disabling this will discard your unsaved changes. Continue?"))))
         standardButtons: Kirigami.Dialog.NoButton
         customFooterActions: [
             Kirigami.Action {
@@ -160,6 +160,8 @@ Item {
                         appSettings.autotileEnabled = value;
                     else if (section === "scrolling")
                         appSettings.scrollingEnabled = value;
+                    else if (section === "workspaces")
+                        appSettings.workspacesEnabled = value;
                     settingsController.endExternalEdit();
                 }
             },

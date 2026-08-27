@@ -87,6 +87,29 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("virtualscreens"),
                             {PhosphorI18n::tr("split"), PhosphorI18n::tr("subdivide"), PhosphorI18n::tr("region"),
                              PhosphorI18n::tr("monitor")});
+
+    // Dynamic per-monitor workspaces (the two leaves under the "workspaces"
+    // drill parent). Multi-word phrases included whole — the ranker matches
+    // the query as one un-split needle. "niri" stays untranslated.
+    search->setPageKeywords(QStringLiteral("workspaces-behavior"),
+                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("virtual desktop"),
+                             PhosphorI18n::tr("dynamic workspaces"), PhosphorI18n::tr("per monitor"),
+                             QStringLiteral("niri")});
+    addSection(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesBehavior"),
+               PhosphorI18n::tr("Behavior"));
+    addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesSnapBackOsdHint"),
+               PhosphorI18n::tr("Workspace hint"),
+               {PhosphorI18n::tr("osd"), PhosphorI18n::tr("hint"), PhosphorI18n::tr("snap back"),
+                PhosphorI18n::tr("another monitor")});
+    addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesRebindKWinShortcuts"),
+               PhosphorI18n::tr("Replace KWin desktop shortcuts"),
+               {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("kwin"), PhosphorI18n::tr("switch desktop"),
+                PhosphorI18n::tr("rebind")});
+    search->setPageKeywords(QStringLiteral("workspaces-named"),
+                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("named workspace"),
+                             PhosphorI18n::tr("pin"), PhosphorI18n::tr("persistent")});
+    addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedAdd"),
+               PhosphorI18n::tr("Add named workspace"));
     // The three per-mode library pages (the old tabbed Layouts page, split).
     // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
     // (import / open folder) carries the manageLayouts anchor on every view.

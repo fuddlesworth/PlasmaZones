@@ -158,7 +158,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kScrollingAllLeaves =
         QSet<QString>{kScrollingSimple, kScrollingColumns, kScrollingTabs, kScrollingWindow, kScrollingZoneSelector}
         + kScrollingConfigChildren;
+    static const QSet<QString> kWorkspacesLeaves{
+        QStringLiteral("workspaces-behavior"),
+        QStringLiteral("workspaces-named"),
+    };
     static const QHash<QString, QSet<QString>> groups{
+        {QStringLiteral("workspaces"), kWorkspacesLeaves},
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
         {QStringLiteral("scrolling"), kScrollingAllLeaves},
@@ -228,11 +233,15 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
-        {QStringLiteral("workspaces"),
+        {QStringLiteral("workspaces-behavior"),
          {
              {CD::workspacesBehaviorGroup(), CD::enabledKey()},
              {CD::workspacesBehaviorGroup(), CD::manageKWinPerOutputKey()},
              {CD::workspacesBehaviorGroup(), CD::snapBackOsdHintKey()},
+             {CD::workspacesBehaviorGroup(), CD::rebindKWinShortcutsKey()},
+         }},
+        {QStringLiteral("workspaces-named"),
+         {
              {CD::workspacesNamedGroup(), CD::entriesKey()},
          }},
         {QStringLiteral("general"),
@@ -755,7 +764,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
-        QStringLiteral("workspaces"),
+        QStringLiteral("workspaces-behavior"),
+        QStringLiteral("workspaces-named"),
         QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),

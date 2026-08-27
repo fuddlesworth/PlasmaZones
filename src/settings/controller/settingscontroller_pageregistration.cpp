@@ -107,11 +107,19 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
-    // Dynamic per-monitor workspaces. Top-level like Virtual Screens (a
-    // mode-neutral layer below the placement modes); the page id avoids the
+    // Dynamic per-monitor workspaces: a top-level DRILL-IN parent like the
+    // placement modes (empty qmlFile + children), carrying the same sidebar
+    // enable toggle (Main.qml trailing delegate). The parent id avoids the
     // existing "overview" (monitor dashboard) id.
-    regVirtual(QStringLiteral("workspaces"), QString(), PhosphorI18n::tr("Workspaces"),
-               QStringLiteral("pages/screens/WorkspacesPage.qml"), QStringLiteral("virtual-desktops"),
+    regVirtual(QStringLiteral("workspaces"), QString(), PhosphorI18n::tr("Workspaces"), QString(),
+               QStringLiteral("virtual-desktops"), /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-behavior"), QStringLiteral("workspaces"), PhosphorI18n::tr("Behavior"),
+               QStringLiteral("pages/workspaces/WorkspacesBehaviorPage.qml"), QStringLiteral("configure"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-named"), QStringLiteral("workspaces"), PhosphorI18n::tr("Named Workspaces"),
+               QStringLiteral("pages/workspaces/NamedWorkspacesPage.qml"), QStringLiteral("bookmark"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
