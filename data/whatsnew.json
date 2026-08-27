@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "3.4.2",
+            "date": "2026-08-27",
+            "highlights": [
+                "Fixed: on a scrolling screen, windows opened long after login land in the strip with focus instead of off screen. The loose match to a remembered slot now only applies right after the strip is restored (#991)",
+                "Fixed: stepping quickly between scrolling columns no longer stutters. A column's drawing resources are freed once the strip has been still for a few seconds rather than while you are still scrolling (#991)",
+                "Fixed: columns parked off screen stop being nudged a few pixels on every scroll step (#991)"
+            ]
+        },
+        {
             "version": "3.4.1",
             "date": "2026-08-26",
             "highlights": [

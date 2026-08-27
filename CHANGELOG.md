@@ -5,6 +5,15 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2] - 2026-08-27
+
+### Fixed
+
+- **Windows opened long after login land in the strip instead of off screen**: a scrolling screen remembers where its windows sat when you logged out, and it matches a returning window to a remembered slot by application when it cannot match it exactly. That loose match had no time limit, so for the rest of the session every new window of an application that was on the strip at logout was pulled into an old slot, opening below the edge of the screen without focus. The loose match is now only used for the first minute after the remembered strip is loaded or its monitor starts scrolling, which is when a restored window actually arrives ([#991](https://github.com/fuddlesworth/PlasmaZones/pull/991)).
+- **Stepping quickly between scrolling columns no longer stutters**: PlasmaZones frees the drawing resources of a column that has been off screen for ten seconds. That happened while you were still scrolling, so moving back to a column you had just left had to rebuild it, which showed as a hitch. The cleanup now waits until the strip has been still for a few seconds ([#991](https://github.com/fuddlesworth/PlasmaZones/pull/991)).
+- **Off-screen scrolling columns stop being repositioned on every scroll step**: a column parked off screen took its position from the sliding strip, so each step of the view nudged it a few pixels and sent a fresh geometry change to the window. Parked columns now sit flush with the edge they left through, which does not move while the strip slides ([#991](https://github.com/fuddlesworth/PlasmaZones/pull/991)).
+- **Shell surfaces stop logging a warning about their backdrop**: the OSD and pop-ups logged an "Unable to assign [undefined] to QImage" warning every time they were drawn with no backdrop bound, dozens of times in a session. The backdrop is only assigned while one exists now ([#991](https://github.com/fuddlesworth/PlasmaZones/pull/991)).
+
 ## [3.4.1] - 2026-08-26
 
 ### Added
@@ -1959,7 +1968,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.2...HEAD
+[3.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.1...v3.4.2
 [3.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.0...v3.4.1
 [3.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.9...v3.4.0
 [3.3.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.8...v3.3.9
