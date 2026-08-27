@@ -43,7 +43,7 @@ SettingsFlickable {
         return options;
     }
 
-    function _loadEntries() {
+    function _normalizedStored() {
         var stored = appSettings.workspacesNamedEntries;
         var copy = [];
         for (var i = 0; i < stored.length; ++i)
@@ -54,6 +54,17 @@ SettingsFlickable {
                 "focusShortcut": stored[i].focusShortcut || "",
                 "moveShortcut": stored[i].moveShortcut || ""
             });
+        return copy;
+    }
+
+    function _loadEntries() {
+        var copy = _normalizedStored();
+        // Skip the reload when the store already matches the staged copy —
+        // every commit from THIS page echoes back through the change signal,
+        // and reassigning the array would rebuild all row delegates and
+        // collapse whichever row the user is editing.
+        if (JSON.stringify(copy) === JSON.stringify(_entries))
+            return;
         _entries = copy;
     }
 
@@ -99,6 +110,9 @@ SettingsFlickable {
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.topMargin: Kirigami.Units.smallSpacing
                     wrapMode: Text.WordWrap
                     opacity: 0.6
                     text: i18n("A named workspace is created at login, keeps its place while empty, and can be pinned to a monitor. Shortcuts jump to it or send the active window there.")
@@ -106,6 +120,8 @@ SettingsFlickable {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.largeSpacing
 
                     TextField {
@@ -129,6 +145,8 @@ SettingsFlickable {
 
                 Button {
                     Layout.alignment: Qt.AlignRight
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
                     text: i18n("Add")
                     icon.name: "list-add"
                     Accessible.name: i18n("Add named workspace")
@@ -176,6 +194,9 @@ SettingsFlickable {
                     id: entryList
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
                     Layout.preferredHeight: totalHeight
                     visible: root._entries.length > 0
                     items: root._entries
@@ -203,18 +224,21 @@ SettingsFlickable {
                         entry: parent.rowModelData
                         entryIndex: parent.rowIndex
                         screenOptions: root._screenOptions
-                        siblingNames: {
+                        siblingNamesOf: function (index) {
                             var names = root._names();
-                            names.splice(parent.rowIndex, 1);
+                            names.splice(index, 1);
                             return names;
                         }
                         onFieldEdited: function (index, field, value) {
-                            var arr = root._entries.slice();
-                            if (index < 0 || index >= arr.length)
+                            // In place, deliberately: reassigning _entries
+                            // would rebuild every row delegate and collapse
+                            // the row mid-edit. The row mirrors the header
+                            // fields itself; structural ops (add / remove /
+                            // reorder) still replace the array.
+                            if (index < 0 || index >= root._entries.length)
                                 return;
 
-                            arr[index][field] = value;
-                            root._entries = arr;
+                            root._entries[index][field] = value;
                             root._commitEntries();
                         }
                         onRemoveRequested: function (index) {

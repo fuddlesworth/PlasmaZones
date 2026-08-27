@@ -9,11 +9,15 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief One named-workspace declaration row (ExpandableRowDelegate).
  *
- * Header: the workspace name, a subtle pinned-monitor label, and the remove
- * button. Expansion: the editable fields — name, pinned monitor, and the two
- * per-name shortcuts. Edits emit whole-field commit signals; the page owns
- * the staged array and the whole-replace write (the declarations are one
- * composite config value), so this row never touches appSettings itself.
+ * Header: icon · name · chevron (the shared expand indicator) · pinned-
+ * monitor label · remove button. Expansion: the editable fields — name,
+ * pinned monitor, position, and the two per-name shortcuts.
+ *
+ * Edits emit whole-field commit signals; the page mutates its staged array
+ * IN PLACE and writes the composite, so this row (and its expansion state)
+ * survives every field edit. Because the entry object mutates in place, the
+ * header mirrors the two fields it shows through local properties updated at
+ * commit time instead of bindings that would never re-evaluate.
  */
 ExpandableRowDelegate {
     id: row
@@ -23,8 +27,14 @@ ExpandableRowDelegate {
     required property int entryIndex
     /// settingsController.screens rows for the monitor combo.
     required property var screenOptions
-    /// Sibling names, for the inline uniqueness refusal.
-    required property var siblingNames
+    /// Called with (entryIndex) → array of the OTHER rows' names, read fresh
+    /// at commit time (a plain array prop would go stale across in-place
+    /// renames of siblings).
+    required property var siblingNamesOf
+
+    // Header mirrors (see the class comment).
+    property string headerName: entry.name
+    property string headerOutput: entry.output
 
     signal fieldEdited(int index, string field, var value)
     signal removeRequested(int index)
@@ -49,12 +59,17 @@ ExpandableRowDelegate {
     Label {
         Layout.fillWidth: true
         elide: Text.ElideRight
-        text: row.entry.name !== "" ? row.entry.name : i18n("(unnamed)")
+        text: row.headerName !== "" ? row.headerName : i18n("(unnamed)")
+    }
+
+    ExpandChevron {
+        expanded: row.expanded
     }
 
     Label {
         opacity: 0.7
-        text: row._monitorLabel(row.entry.output)
+        font: Kirigami.Theme.smallFont
+        text: row._monitorLabel(row.headerOutput)
     }
 
     ToolButton {
@@ -85,12 +100,14 @@ ExpandableRowDelegate {
                 if (trimmed === row.entry.name)
                     return; // unchanged; tabbing through must not dirty the page
 
-                for (var i = 0; i < row.siblingNames.length; ++i) {
-                    if (row.siblingNames[i] === trimmed) {
+                var siblings = row.siblingNamesOf(row.entryIndex);
+                for (var i = 0; i < siblings.length; ++i) {
+                    if (siblings[i] === trimmed) {
                         text = row.entry.name; // names are unique; refuse the duplicate
                         return;
                     }
                 }
+                row.headerName = trimmed;
                 row.fieldEdited(row.entryIndex, "name", trimmed);
             }
         }
@@ -105,7 +122,10 @@ ExpandableRowDelegate {
             Accessible.name: i18n("Pinned monitor")
             model: row.screenOptions
             storedValue: row.entry.output
-            onActivated: row.fieldEdited(row.entryIndex, "output", currentValue)
+            onActivated: {
+                row.headerOutput = currentValue;
+                row.fieldEdited(row.entryIndex, "output", currentValue);
+            }
         }
 
         Label {
@@ -118,6 +138,7 @@ ExpandableRowDelegate {
             from: -1
             to: 19
             value: row.entry.position
+            unitText: ""
             accessibleName: i18n("Preferred position in the monitor's list")
             tooltipText: i18n("Where in the monitor's workspace list this workspace prefers to sit. Automatic places it before the trailing empty workspace.")
             textFromValue: function (value, locale) {
