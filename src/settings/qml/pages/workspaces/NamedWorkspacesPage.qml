@@ -198,10 +198,11 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     Layout.preferredHeight: totalHeight
-                    // The collapsed row is a single header line; the default
-                    // grip-column height (4 gridUnits) would pad every row
-                    // with dead space below it (the ChainEditor precedent).
-                    headerRowHeight: Kirigami.Units.gridUnit * 2
+                    // The collapsed row is a two-line header (name over
+                    // monitor); the default grip-column height (4 gridUnits)
+                    // would pad it with dead space (the ChainEditor
+                    // precedent, same value).
+                    headerRowHeight: Kirigami.Units.gridUnit * 3
                     visible: root._entries.length > 0
                     items: root._entries
                     anchorPrefix: "namedWorkspace:"

@@ -52,28 +52,60 @@ ExpandableRowDelegate {
 
     Kirigami.Icon {
         source: "virtual-desktops"
+        Layout.alignment: Qt.AlignVCenter
         Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
         Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
     }
 
-    Label {
+    // Title column, RuleRow's shape: bold name over a dimmed one-line
+    // summary of where the workspace lives.
+    ColumnLayout {
         Layout.fillWidth: true
-        elide: Text.ElideRight
-        text: row.headerName !== "" ? row.headerName : i18n("(unnamed)")
+        spacing: 0
+
+        Label {
+            Layout.fillWidth: true
+            elide: Text.ElideRight
+            font.bold: true
+            text: row.headerName !== "" ? row.headerName : i18n("(unnamed)")
+        }
+
+        Label {
+            Layout.fillWidth: true
+            elide: Text.ElideRight
+            opacity: 0.7
+            text: row._monitorLabel(row.headerOutput)
+        }
+    }
+
+    // Pinned-monitor badge — only when actually pinned (the subtitle already
+    // says "Any monitor" for the unpinned case). Highlight-tinted like
+    // RuleRow's category badge.
+    Rectangle {
+        visible: row.headerOutput !== ""
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: pinnedBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: pinnedBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+
+        Label {
+            id: pinnedBadgeLabel
+
+            anchors.centerIn: parent
+            text: i18nc("Badge on a named workspace pinned to a monitor", "Pinned")
+            font: Kirigami.Theme.smallFont
+            opacity: 0.85
+        }
     }
 
     ExpandChevron {
         expanded: row.expanded
     }
 
-    Label {
-        opacity: 0.7
-        font: Kirigami.Theme.smallFont
-        text: row._monitorLabel(row.headerOutput)
-    }
-
     ToolButton {
         icon.name: "edit-delete"
+        Layout.alignment: Qt.AlignVCenter
         Accessible.name: i18n("Remove named workspace")
         ToolTip.text: i18n("Remove named workspace")
         ToolTip.visible: hovered
