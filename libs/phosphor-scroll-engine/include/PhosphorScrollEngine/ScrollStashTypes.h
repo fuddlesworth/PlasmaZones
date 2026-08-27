@@ -93,6 +93,17 @@ struct StashedColumn
 struct StashedStrip
 {
     QVector<StashedColumn> columns;
+    /// Monotonic grace window for the cross-session appId FUZZY claim in
+    /// restoreFromStripStash. Started when the entry is staged from
+    /// persistence and re-started whenever the entry's screen (re-)enters
+    /// the scrolling set — the two moments an arrival wave of re-announced
+    /// windows legitimately follows. While invalid or expired, only
+    /// exact-id claims match, so a genuinely NEW same-app window the user
+    /// opens minutes later is inserted through the ordinary open path
+    /// (focused, on view) instead of silently adopting a dead sibling's
+    /// stashed slot off-screen. Exact-id claims are exempt: an id match IS
+    /// the evidence the fuzzy path lacks.
+    QElapsedTimer fuzzyClaimWindow;
     QString focusedWindowId;
     int viewAnchor = 0;
     /// Whether that anchor was an explicit pan rather than a policy-derived

@@ -43,6 +43,10 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn
     if (!output || deltaIn == 0) {
         return false;
     }
+    // Before every decline below (animations off, no clock): the strip IS
+    // moving on this path even when no leg is started. See
+    // viewMotionGeneration().
+    ++m_viewMotionGeneration;
     const qreal delta = qBound(-kMaxViewDeltaPx, deltaIn, kMaxViewDeltaPx);
 
     ViewMotion& motion = m_motions[output];
@@ -139,6 +143,10 @@ void StripViewAnimator::applyImmediateDelta(KWin::LogicalOutput* output, int del
     if (!output || deltaIn == 0) {
         return;
     }
+    // This path never starts a leg at all, so it is the one that most needs
+    // the counter — a whole drag edge auto-scroll is invisible to
+    // hasActiveAnimations(). See viewMotionGeneration().
+    ++m_viewMotionGeneration;
     ViewMotion& motion = m_motions[output];
     if (motion.axis != axis) {
         // Same axis-flip handling as applyBatchDelta, for the same reasons:

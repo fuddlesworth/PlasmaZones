@@ -502,6 +502,24 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
+            // NOTE: a parked tile's committed x is deliberately NOT retained
+            // from the last batch here, though an earlier fix did exactly
+            // that. The instability it was chasing — a parked column
+            // re-committed a few pixels over on every scroll step — is gone at
+            // the source: parkRect now aligns to the END of the screen span
+            // that the tile's DEPARTURE SIDE implies (ParkAlign), which does
+            // not slide with the view, instead of clamping the live strip x,
+            // which does.
+            //
+            // Retaining here on top of that would be strictly worse than
+            // redundant. It keyed on m_lastAppliedRect, which some fifteen
+            // unrelated paths drop for their own reasons — onWindowResized's
+            // refused-ack arm most often, and that fires for exactly the
+            // off-screen hidden tabs this was meant to steady — so the
+            // retention silently lapsed and the ping-pong came back (seen live
+            // as a hidden tab alternating x=1924/1932 while never unparking).
+            // And when it did hold it would pin a stale x across a width
+            // change, fighting the alignment above.
             anyEmittedUnparked = anyEmittedUnparked || !parkedNow;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is

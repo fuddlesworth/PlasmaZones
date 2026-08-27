@@ -152,6 +152,24 @@ public:
     bool hasActiveAnimations() const;
     bool isAnimatingOn(KWin::LogicalOutput* output) const;
 
+    /// Monotonic counter of view deltas this class has been handed, bumped by
+    /// BOTH apply entry points for every non-zero delta on a real output —
+    /// before either can decline to start a leg.
+    ///
+    /// It exists because "the strip is moving" and "a spring is in flight" are
+    /// NOT the same question, and only this counter answers the first one.
+    /// applyBatchDelta returns false without ever animating when the master
+    /// animation toggle is off or the output has no clock, and
+    /// applyImmediateDelta (the drag edge auto-scroll heartbeat) cancels any
+    /// leg and deliberately never starts one — so hasActiveAnimations() reads
+    /// false through an entire fast scroll for those users and those paths. A
+    /// consumer that wants "has the user been driving the strip recently"
+    /// must watch this change and stamp its own clock, not poll the springs.
+    quint64 viewMotionGeneration() const
+    {
+        return m_viewMotionGeneration;
+    }
+
     /// Drop @p output's state entirely — for a disconnect, where the spring
     /// and the accumulated view both stop describing anything real. The next
     /// batch for a re-connected output starts a fresh accumulation.
@@ -202,6 +220,11 @@ private:
     std::unordered_map<KWin::LogicalOutput*, ViewMotion> m_motions;
     OutputClockResolver m_outputClockResolver;
     RepaintRequest m_repaintRequest;
+    /// See viewMotionGeneration(). Never reset — it means "a delta was
+    /// applied", so reset()/forgetOutput()/setEnabled() leave it alone: a
+    /// consumer compares it against its own last-seen value, and rewinding it
+    /// would make a genuine motion read as none.
+    quint64 m_viewMotionGeneration = 0;
     bool m_enabled = true;
 };
 

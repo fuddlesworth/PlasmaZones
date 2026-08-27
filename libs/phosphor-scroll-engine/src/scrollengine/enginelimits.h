@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <QtGlobal>
+
 namespace PhosphorScrollEngine {
 
 /// KEEP cap: how many entries this engine will retain out of ONE
@@ -53,6 +55,18 @@ inline constexpr int kMaxTemplateScan = 256;
 /// (loadState may run more than once; the stash-exists skip covers the
 /// repeat-blob case), and drops are logged, never silent.
 inline constexpr int kMaxRestoredKeys = 512;
+
+/// How long after a stash entry is staged (login restore) or its screen
+/// re-enters scrolling (mode round trip) the cross-session appId FUZZY
+/// claim stays open — see StashedStrip::fuzzyClaimWindow. Re-announce
+/// waves land within seconds of either event; the bound exists for the
+/// windows that are NOT part of a wave: seen live, a stash holding several
+/// firefox/ghostty tiles from a previous session kept hijacking every new
+/// window of those apps for the entire session — inserted off-view at a
+/// dead sibling's position, without focus. Sized generously above any
+/// observed wave (< 2 s) so a slow-launching session-restored app still
+/// reclaims its slot on a cold login.
+inline constexpr qint64 kFuzzyClaimGraceMs = 60'000;
 inline constexpr int kMaxRestoredColumnsPerKey = 64;
 inline constexpr int kMaxRestoredTilesPerColumn = 32;
 
