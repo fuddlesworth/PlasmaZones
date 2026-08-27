@@ -78,17 +78,6 @@ void WorkspaceController::focusWorkspace(const QString& screenId, int delta)
     });
 }
 
-void WorkspaceController::focusWorkspaceAt(const QString& screenId, int sliceIndex)
-{
-    runWhenQuiet([this, screenId, sliceIndex]() {
-        const QString target = m_reconciler.desktopIdAtSliceIndex(screenId, sliceIndex);
-        if (target.isEmpty()) {
-            return;
-        }
-        switchScreenToDesktop(screenId, target);
-    });
-}
-
 void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta)
 {
     if (windowId.isEmpty()) {

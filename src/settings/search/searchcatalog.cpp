@@ -111,16 +111,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedAdd"),
                PhosphorI18n::tr("Add named workspace"));
     search->setPageKeywords(QStringLiteral("workspaces-shortcuts"),
-                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("keyboard"),
-                             PhosphorI18n::tr("binding")});
-    addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspacesShortcutsNavigation"),
-               PhosphorI18n::tr("Navigation"));
-    addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspacesShortcutsMove"),
-               PhosphorI18n::tr("Move windows and columns"));
-    addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspacesShortcutsRearrange"),
-               PhosphorI18n::tr("Rearrange workspaces"));
-    addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspacesShortcutsSlots"),
-               PhosphorI18n::tr("Workspace slots"));
+                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("shortcut"),
+                             PhosphorI18n::tr("quick shortcut"), PhosphorI18n::tr("move window")});
+    addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspaceQuickShortcuts"),
+               PhosphorI18n::tr("Workspace Quick Shortcuts"));
     // The three per-mode library pages (the old tabbed Layouts page, split).
     // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
     // (import / open folder) carries the manageLayouts anchor on every view.

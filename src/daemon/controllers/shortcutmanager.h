@@ -225,9 +225,8 @@ Q_SIGNALS:
     void workspaceMoveColumnRequested(int delta);
     void workspaceReorderRequested(int delta);
     void workspaceMoveToMonitorRequested(const QString& direction);
-    /// Indexed slots (1-based): jump to / send the active window to the Nth
+    /// Quick-shortcut slot (1-based): send the active window to the Nth
     /// workspace of the acting monitor's own list.
-    void workspaceFocusSlotRequested(int slot);
     void workspaceMoveSlotRequested(int slot);
 
     void openEditorRequested();

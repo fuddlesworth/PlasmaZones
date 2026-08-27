@@ -247,20 +247,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("workspaces-shortcuts"),
          [] {
-             Settings::ConfigKeyList keys{
-                 {CD::shortcutsGlobalGroup(), CD::workspaceFocusUpKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceFocusDownKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveWindowUpKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveWindowDownKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveColumnUpKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveColumnDownKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceReorderUpKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceReorderDownKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveToMonitorLeftKey()},
-                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveToMonitorRightKey()},
-             };
+             // Only the quick-shortcut slots: the page edits nothing else.
+             // The general workspace verb chords are daemon globals edited in
+             // the system Shortcuts settings, like every other PZ chord — no
+             // settings page owns them.
+             Settings::ConfigKeyList keys;
              for (int slot = 1; slot <= 9; ++slot) {
-                 keys.append({CD::shortcutsGlobalGroup(), CD::workspaceFocusSlotKey(slot)});
                  keys.append({CD::shortcutsGlobalGroup(), CD::workspaceMoveSlotKey(slot)});
              }
              return keys;

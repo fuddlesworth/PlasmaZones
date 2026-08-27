@@ -254,10 +254,6 @@ void Daemon::initializeWorkspaces()
             [this, actingScreen](const QString& direction) {
                 m_workspaceController->moveWorkspaceToOutput(actingScreen(), direction);
             });
-    connect(m_shortcutManager.get(), &ShortcutManager::workspaceFocusSlotRequested, this,
-            [this, actingScreen](int slot) {
-                m_workspaceController->focusWorkspaceAt(actingScreen(), slot - 1);
-            });
     connect(m_shortcutManager.get(), &ShortcutManager::workspaceMoveSlotRequested, this,
             [this, actingScreen](int slot) {
                 const QString windowId =

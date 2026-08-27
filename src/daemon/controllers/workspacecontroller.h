@@ -66,9 +66,8 @@ public:
     // behind the reconciler's ledger during structural churn. ─────────────────
     /// delta -1 = up, +1 = down.
     void focusWorkspace(const QString& screenId, int delta);
-    /// 0-based slice index (indexed shortcuts pass index-1).
-    void focusWorkspaceAt(const QString& screenId, int sliceIndex);
     void moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta);
+    /// 0-based slice index (the quick-shortcut slots pass slot-1).
     void moveWindowToWorkspaceAt(const QString& screenId, const QString& windowId, int sliceIndex);
     /// The scrolling column variant: every window of the focused column moves
     /// together. `columnWindows` is enumerated by the daemon from the scroll

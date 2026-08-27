@@ -1405,12 +1405,11 @@ public:
     void setWorkspaceMoveToMonitorLeftShortcut(const QString& shortcut);
     QString workspaceMoveToMonitorRightShortcut() const;
     void setWorkspaceMoveToMonitorRightShortcut(const QString& shortcut);
-    /// Indexed workspace slots (0-based index over nine slots, stored as
-    /// WorkspaceFocusSlotN / WorkspaceMoveSlotN; defaults unset). Q_INVOKABLE
-    /// so the shortcuts page reads/writes them without nine Q_PROPERTYs per
-    /// family; any change emits the single workspaceSlotShortcutsChanged.
-    Q_INVOKABLE QString workspaceFocusSlotShortcut(int index) const;
-    Q_INVOKABLE void setWorkspaceFocusSlotShortcut(int index, const QString& shortcut);
+    /// Workspace quick-shortcut slots (0-based index over nine slots, stored
+    /// as WorkspaceMoveSlotN; defaults unset — the quick-layout-slot
+    /// convention). Q_INVOKABLE so the Quick Shortcuts page reads/writes them
+    /// without nine Q_PROPERTYs; any change emits the shared
+    /// workspaceSlotShortcutsChanged.
     Q_INVOKABLE QString workspaceMoveSlotShortcut(int index) const;
     Q_INVOKABLE void setWorkspaceMoveSlotShortcut(int index, const QString& shortcut);
     bool scrollingEnabled() const;

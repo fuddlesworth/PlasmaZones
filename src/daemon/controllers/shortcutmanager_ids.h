@@ -49,14 +49,10 @@ inline constexpr auto kIdWorkspaceReorderUp = "workspace_reorder_up";
 inline constexpr auto kIdWorkspaceReorderDown = "workspace_reorder_down";
 inline constexpr auto kIdWorkspaceMoveToMonitorLeft = "workspace_move_to_monitor_left";
 inline constexpr auto kIdWorkspaceMoveToMonitorRight = "workspace_move_to_monitor_right";
-// Indexed workspace slots (settings-backed, unset by default). The prefixes
-// join the adhoc collision guard like the quick-layout/snap-to-zone families.
-inline constexpr auto kWorkspaceFocusSlotPrefix = "workspace_focus_slot_";
+// Workspace quick-shortcut slots (settings-backed, unset by default). The
+// prefix joins the adhoc collision guard like the quick-layout/snap-to-zone
+// families.
 inline constexpr auto kWorkspaceMoveSlotPrefix = "workspace_move_slot_";
-inline QString workspaceFocusSlotId(int slotZeroBased)
-{
-    return QLatin1String(kWorkspaceFocusSlotPrefix) + QString::number(slotZeroBased + 1);
-}
 inline QString workspaceMoveSlotId(int slotZeroBased)
 {
     return QLatin1String(kWorkspaceMoveSlotPrefix) + QString::number(slotZeroBased + 1);
