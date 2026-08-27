@@ -619,10 +619,30 @@ void WorkspaceReconciler::onScreenAdded(const QString& screenId)
     if (screenId.isEmpty() || m_map.hasScreen(screenId)) {
         return;
     }
-    // Give the new screen a slice; Phase 4 adds migrate-home. The trailing
-    // empty is created by maintenance.
     m_map.setScreenOrder(m_map.screenOrder() << screenId);
+
+    // Migrate displaced workspaces home (hotplug memory): every entry whose
+    // homeScreenId names the returning output moves back, in its current
+    // relative order, ahead of whatever trailing empty maintenance adds.
+    QStringList returning;
+    const QStringList owned = m_map.allDesktopIds();
+    for (const QString& id : owned) {
+        if (m_map.entryFor(id).homeScreenId == screenId) {
+            returning.append(id);
+        }
+    }
+    QSet<QString> touchedScreens;
+    int index = 0;
+    for (const QString& id : returning) {
+        touchedScreens.insert(m_map.ownerOf(id));
+        m_map.transfer(id, screenId, index++);
+        m_map.setHomeScreen(id, QString());
+    }
+
     maintainScreen(screenId);
+    for (const QString& touched : touchedScreens) {
+        maintainScreen(touched); // the foster screen's invariants re-settle
+    }
     bumpGeneration();
 }
 
@@ -648,13 +668,19 @@ void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
         bumpGeneration();
         return;
     }
-    // Append before the fallback's trailing empty, preserving order. Phase 4
-    // will stamp homeScreenId here for migrate-back.
+    // Append before the fallback's trailing empty, preserving order, each
+    // entry stamped with its home output for migrate-back on replug. A
+    // second displacement keeps the ORIGINAL home (the entry already carries
+    // one), so daisy-chained unplugs still return the workspace to where the
+    // user put it.
     int index = m_map.sliceSize(fallback);
     if (!trailingEmptyOf(fallback).isEmpty()) {
         index = qMax(0, index - 1);
     }
-    for (const auto& entry : orphaned) {
+    for (auto entry : orphaned) {
+        if (entry.homeScreenId.isEmpty()) {
+            entry.homeScreenId = screenId;
+        }
         m_map.insert(fallback, index++, entry);
     }
     maintainScreen(fallback);

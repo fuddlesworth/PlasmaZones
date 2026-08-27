@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariant>
 
 namespace PhosphorEngine {
@@ -41,6 +42,8 @@ class WorkspaceController : public QObject
 public:
     WorkspaceController(PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* registry,
                         PhosphorScreens::ScreenManager* screens, QObject* parent = nullptr);
+    /// Final state write (the debounced save may be pending at shutdown).
+    ~WorkspaceController() override;
 
     /// Reads KWin's PerOutputVirtualDesktops from kwinrc. The layered gate's
     /// config arm (plan §7); the daemon refuses to start the controller when
@@ -147,6 +150,13 @@ private:
     bool m_namedApplied = false;
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;
+
+    // ── State persistence (Phase 4) ─────────────────────────────────────────
+    static QString stateFilePath();
+    void loadStateFile();
+    void saveStateFile() const;
+    void scheduleStateSave();
+    QTimer m_stateSaveTimer;
 };
 
 } // namespace PlasmaZones

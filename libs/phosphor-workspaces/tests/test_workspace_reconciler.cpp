@@ -47,6 +47,8 @@ private Q_SLOTS:
     void snapBack_correctsAndBreaksLoop();
     void reorderCurrentWorkspace_withinSlice();
     void transferCurrentWorkspace_reownsAndRepairs();
+    void hotplug_homeStampAndMigrateBack();
+    void restore_candidateReconciledAgainstReality();
     void named_createdPinnedAndExempt();
     void named_claimByKWinName();
     void named_unnamedRevertsToDynamic();
@@ -414,6 +416,61 @@ void TestWorkspaceReconciler::transferCurrentWorkspace_reownsAndRepairs()
     // A screen never gives up its last desktop.
     rec.onScreenDesktopReport(QStringLiteral("A"), 2); // A now shows d3
     QVERIFY(rec.transferCurrentWorkspace(QStringLiteral("A"), QStringLiteral("B")).isEmpty());
+}
+
+void TestWorkspaceReconciler::hotplug_homeStampAndMigrateBack()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3}, B: {d2(occ), d4}
+
+    // Unplug B: its slice fosters onto A, home-stamped.
+    rec.onScreenRemoved(QStringLiteral("B"));
+    QCOMPARE(rec.map().ownerOf(id(2)), QStringLiteral("A"));
+    QCOMPARE(rec.map().entryFor(id(2)).homeScreenId, QStringLiteral("B"));
+    QCOMPARE(rec.map().entryFor(id(4)).homeScreenId, QStringLiteral("B"));
+    // A's own entries carry no home stamp.
+    QVERIFY(rec.map().entryFor(id(1)).homeScreenId.isEmpty());
+
+    // Replug B: the displaced entries migrate home in order, stamps cleared.
+    rec.onScreenAdded(QStringLiteral("B"));
+    QCOMPARE(rec.map().ownerOf(id(2)), QStringLiteral("B"));
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
+    QVERIFY(rec.map().entryFor(id(2)).homeScreenId.isEmpty());
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).first().desktopId, id(2));
+    // A keeps its own slice intact.
+    QCOMPARE(rec.map().ownerOf(id(1)), QStringLiteral("A"));
+}
+
+void TestWorkspaceReconciler::restore_candidateReconciledAgainstReality()
+{
+    // Previous session: A owned {d1(named chat), d2}; B owned {d9}.
+    PhosphorWorkspaces::WorkspaceMap candidate;
+    candidate.setScreenOrder({QStringLiteral("A"), QStringLiteral("B")});
+    PhosphorWorkspaces::WorkspaceEntry chat;
+    chat.desktopId = id(1);
+    chat.name = QStringLiteral("chat");
+    candidate.insert(QStringLiteral("A"), 0, chat);
+    PhosphorWorkspaces::WorkspaceEntry d2;
+    d2.desktopId = id(2);
+    candidate.insert(QStringLiteral("A"), 1, d2);
+    PhosphorWorkspaces::WorkspaceEntry d9;
+    d9.desktopId = id(9);
+    candidate.insert(QStringLiteral("B"), 0, d9);
+
+    WorkspaceReconciler rec;
+    QVERIFY(rec.map().fromJson(candidate.toJson(1, {}, nullptr, /*includeState=*/true)));
+    rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
+
+    // Reality: {d9} vanished while the daemon was down; {d5} is new.
+    QHash<QString, QString> current;
+    current.insert(QStringLiteral("A"), id(1));
+    current.insert(QStringLiteral("B"), id(5));
+    rec.adoptAll({id(1), id(2), id(5)}, current);
+
+    QCOMPARE(rec.map().entryFor(id(1)).name, QStringLiteral("chat")); // kept
+    QCOMPARE(rec.map().ownerOf(id(2)), QStringLiteral("A")); // kept
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("B")); // adopted (B shows it)
+    QVERIFY(rec.map().ownerOf(id(9)).isEmpty()); // vanished id dropped
 }
 
 void TestWorkspaceReconciler::named_createdPinnedAndExempt()

@@ -7,7 +7,11 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QLoggingCategory>
+#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -22,6 +26,9 @@ namespace {
 /// Adoption grace: how long to wait for every screen's per-output desktop
 /// report before adopting with the global-current fallback.
 constexpr int AdoptionTimeoutMs = 3000;
+/// State-file write debounce: map churn (a create + settle + maintenance
+/// run) coalesces into one atomic write.
+constexpr int StateSaveDebounceMs = 1000;
 }
 
 WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManager* vdm,
@@ -83,6 +90,13 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
     // Deferred verbs resume once the structural churn settles.
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
             &WorkspaceController::drainQuietQueue);
+}
+
+WorkspaceController::~WorkspaceController()
+{
+    if (m_adopted) {
+        saveStateFile();
+    }
 }
 
 bool WorkspaceController::kwinPerOutputEnabled()
@@ -170,9 +184,90 @@ void WorkspaceController::refreshScreenOrder()
     m_reconciler.onScreenOrderChanged(order);
 }
 
+QString WorkspaceController::stateFilePath()
+{
+    // Runtime state, deliberately NOT config.json and not GenericDataLocation
+    // (that tree is user-visible assets). Reconstructible by definition, so a
+    // version mismatch or parse failure just falls back to fresh adoption.
+    return QStandardPaths::writableLocation(QStandardPaths::StateLocation)
+        + QStringLiteral("/plasmazones/workspaces.json");
+}
+
+void WorkspaceController::loadStateFile()
+{
+    QFile file(stateFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    const QString json = QString::fromUtf8(file.readAll());
+    if (!m_reconciler.map().fromJson(json)) {
+        qCWarning(lcWorkspaceCtl) << "workspace state file unreadable or wrong version; re-adopting fresh";
+        return;
+    }
+    qCInfo(lcWorkspaceCtl) << "loaded workspace state candidate:" << m_reconciler.map().allDesktopIds().size()
+                           << "desktops," << m_reconciler.map().screenOrder().size() << "screens";
+}
+
+void WorkspaceController::saveStateFile() const
+{
+    const QString path = stateFilePath();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcWorkspaceCtl) << "cannot write workspace state file" << path;
+        return;
+    }
+    QHash<QString, int> currentByScreen;
+    const QStringList order = m_reconciler.map().screenOrder();
+    for (const QString& screenId : order) {
+        currentByScreen.insert(screenId, m_vdm->currentDesktopForScreen(screenId));
+    }
+    const QString json = m_reconciler.map().toJson(
+        m_reconciler.generation(), currentByScreen,
+        [this](const QString& id) {
+            return m_vdm->desktopIndexOf(id);
+        },
+        /*includeState=*/true);
+    file.write(json.toUtf8());
+    file.commit();
+}
+
+void WorkspaceController::scheduleStateSave()
+{
+    m_stateSaveTimer.start();
+}
+
 void WorkspaceController::start()
 {
+    // Candidate map from the previous session; adoption reconciles it against
+    // reality (ids in both keep owner/name/home; vanished ids drop; new ids
+    // adopt). Loaded BEFORE the screen order so a stored slice for a screen
+    // that is gone survives long enough to be migrated with home stamping.
+    loadStateFile();
+    const QStringList storedScreens = m_reconciler.map().screenOrder();
+
     refreshScreenOrder();
+
+    // A stored screen that is not connected right now: its slice migrates to
+    // a surviving screen with homeScreenId stamped, exactly like a live
+    // unplug — replugging it later brings the workspaces home.
+    QStringList liveScreens;
+    const auto screens = m_screens->screens();
+    liveScreens.reserve(screens.size());
+    for (const auto& screen : screens) {
+        liveScreens.append(screen.name);
+    }
+    for (const QString& stored : storedScreens) {
+        if (!liveScreens.contains(stored)) {
+            m_reconciler.onScreenRemoved(stored);
+        }
+    }
+
+    m_stateSaveTimer.setSingleShot(true);
+    m_stateSaveTimer.setInterval(StateSaveDebounceMs);
+    connect(&m_stateSaveTimer, &QTimer::timeout, this, &WorkspaceController::saveStateFile);
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
+            &WorkspaceController::scheduleStateSave);
 
     // Census seed from the registry's current truth (windows that registered
     // before the feature came up).
