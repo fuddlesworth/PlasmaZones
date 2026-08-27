@@ -25,10 +25,23 @@ QString trailingEdge(StripAxis axis)
 
 } // namespace
 
-void parkRect(QRect& rect, const QRect& screenRect, int parkTop)
+void parkRect(QRect& rect, const QRect& screenRect, int parkTop, ParkAlign align)
 {
+    // maxLeft is the rightmost origin that still fits the rect in the span,
+    // and it is qMax'd against the left edge so a tile WIDER than the screen
+    // degrades to left-flush rather than inverting the bound.
     const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
-    rect.moveLeft(qBound(screenRect.left(), rect.left(), maxLeft));
+    switch (align) {
+    case ParkAlign::Leading:
+        rect.moveLeft(screenRect.left());
+        break;
+    case ParkAlign::Trailing:
+        rect.moveLeft(maxLeft);
+        break;
+    case ParkAlign::PreserveClamped:
+        rect.moveLeft(qBound(screenRect.left(), rect.left(), maxLeft));
+        break;
+    }
     rect.moveTop(parkTop);
 }
 
@@ -47,6 +60,24 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
     // position) makes it a fact about whichever side happened to be safe to
     // park on. Empty for a tile that is on screen — nothing to anchor.
     const StripAxis axis = in.axis;
+    // Which end of the screen's horizontal span this tile parks against.
+    //
+    // Only meaningful on a HORIZONTAL strip, where the physical x parkRect
+    // clamps IS the main axis and therefore the coordinate the view slides.
+    // On a vertical strip x is the cross-axis position, which no scroll
+    // moves, so the historical clamp is already stable and is kept —
+    // re-aligning there would shift tiles sideways for nothing.
+    //
+    // An EMPTY edge (a hidden tab of an on-screen column, or a cross-axis
+    // stack-overflow park) has no departure side to align to, and leading is
+    // the stable default. That case is precisely the hidden-tab churn this
+    // exists to stop.
+    const auto alignFor = [&axis](const QString& edge) {
+        if (axis.isVertical()) {
+            return ParkAlign::PreserveClamped;
+        }
+        return edge == trailingEdge(axis) ? ParkAlign::Trailing : ParkAlign::Leading;
+    };
     if (in.hidden) {
         // Non-active tile of a tabbed column: parked off-canvas so it cannot
         // steal input from the visible tab (hit-testing uses real geometry
@@ -61,15 +92,15 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
         } else if (axis.mainLow(in.columnRect) > axis.mainHigh(in.workArea)) {
             out.emittedEdge = trailingEdge(axis);
         }
-        parkRect(rect, in.screenRect, in.parkTop);
+        parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
         out.parked = true;
     } else if (axis.mainHigh(rect) < axis.mainLow(in.workArea)) {
         out.emittedEdge = leadingEdge(axis);
-        parkRect(rect, in.screenRect, in.parkTop);
+        parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
         out.parked = true;
     } else if (axis.mainLow(rect) > axis.mainHigh(in.workArea)) {
         out.emittedEdge = trailingEdge(axis);
-        parkRect(rect, in.screenRect, in.parkTop);
+        parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
         out.parked = true;
     }
 
@@ -166,7 +197,7 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
                 } else {
                     out.emittedEdge = trailingEdge(axis);
                     out.rememberedEdge = out.emittedEdge;
-                    parkRect(rect, in.screenRect, in.parkTop);
+                    parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
                     out.parked = true;
                 }
             }
@@ -177,7 +208,7 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
                 } else {
                     out.emittedEdge = leadingEdge(axis);
                     out.rememberedEdge = out.emittedEdge;
-                    parkRect(rect, in.screenRect, in.parkTop);
+                    parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
                     out.parked = true;
                 }
             }
@@ -201,7 +232,7 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
             out.rememberedEdge = out.emittedEdge;
             out.emittedEdge.clear();
         }
-        parkRect(rect, in.screenRect, in.parkTop);
+        parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
         out.parked = true;
         // The !out.parked below is LOAD-BEARING, not defensive: a tile the
         // off-viewport or main-axis arms already parked sits at parkTop,
@@ -225,7 +256,7 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
                 out.rememberedEdge = out.emittedEdge;
                 out.emittedEdge.clear();
             }
-            parkRect(rect, in.screenRect, in.parkTop);
+            parkRect(rect, in.screenRect, in.parkTop, alignFor(out.emittedEdge));
             out.parked = true;
         }
     }

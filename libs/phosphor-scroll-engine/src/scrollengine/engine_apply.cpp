@@ -502,35 +502,24 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
-            // A tile that STAYS parked keeps the x it was parked at.
+            // NOTE: a parked tile's committed x is deliberately NOT retained
+            // from the last batch here, though an earlier fix did exactly
+            // that. The instability it was chasing — a parked column
+            // re-committed a few pixels over on every scroll step — is gone at
+            // the source: parkRect now aligns to the END of the screen span
+            // that the tile's DEPARTURE SIDE implies (ParkAlign), which does
+            // not slide with the view, instead of clamping the live strip x,
+            // which does.
             //
-            // PHYSICAL x, deliberately, and it is NOT transposed on a vertical
-            // strip — because parkRect is not either. That helper clamps
-            // rect.left() into the screen's horizontal span and moves the top
-            // to parkTop on BOTH axes (its header spells out why, and warns
-            // that it "will read as a missed transposition in review"), so x
-            // is the only park coordinate that varies and this is the exact
-            // clamp it applies. Transposing here would retain a coordinate the
-            // park does not derive.
-            //
-            // On a HORIZONTAL strip that x comes from the live strip x, which
-            // slides with every view step, so without this a parked column
-            // near the clamp bound ping-pongs by a few pixels per scroll step
-            // (seen live: a full-width column oscillating between x=8 and
-            // x=16 on alternating retiles), re-committing a rect the "already
-            // at target" skip should have absorbed. On a VERTICAL strip the
-            // view slides y, which the park overwrites with parkTop anyway, so
-            // x does not drift and this is a no-op — correct on both axes
-            // rather than only on the one that had the bug.
-            //
-            // Re-clamped to the screen span because the screen (or the tile's
-            // width) can change while it sits parked; the park-entry commit
-            // itself still uses the strip-derived x.
-            if (parkedNow && wasParked(tile.windowId)) {
-                const int prevLeft = m_lastAppliedRect.value(tile.windowId).left();
-                const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
-                rect.moveLeft(qBound(screenRect.left(), prevLeft, maxLeft));
-            }
+            // Retaining here on top of that would be strictly worse than
+            // redundant. It keyed on m_lastAppliedRect, which some fifteen
+            // unrelated paths drop for their own reasons — onWindowResized's
+            // refused-ack arm most often, and that fires for exactly the
+            // off-screen hidden tabs this was meant to steady — so the
+            // retention silently lapsed and the ping-pong came back (seen live
+            // as a hidden tab alternating x=1924/1932 while never unparking).
+            // And when it did hold it would pin a stale x across a width
+            // change, fighting the alignment above.
             anyEmittedUnparked = anyEmittedUnparked || !parkedNow;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is
