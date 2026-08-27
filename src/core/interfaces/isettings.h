@@ -1011,6 +1011,7 @@ Q_SIGNALS:
     void workspacesManageKWinPerOutputChanged();
     void workspacesSnapBackOsdHintChanged();
     void workspacesNamedEntriesChanged();
+    void workspacesRebindKWinShortcutsChanged();
     void workspaceFocusUpShortcutChanged();
     void workspaceFocusDownShortcutChanged();
     void workspaceMoveWindowUpShortcutChanged();

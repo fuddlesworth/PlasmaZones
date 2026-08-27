@@ -76,6 +76,14 @@ public:
     void rebind(const QString& id, const QKeySequence& seq);
 
     /**
+     * Rebind / read another component's global shortcut (IBackend foreign
+     * pass-throughs; only the KGlobalAccel backend supports them). The
+     * dynamic-workspaces stock-shortcut takeover is the caller.
+     */
+    bool setForeignShortcut(const QString& componentName, const QString& actionName, const QKeySequence& sequence);
+    QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const;
+
+    /**
      * Drop a binding entirely. Releases any key grab and forgets the
      * callback. Idempotent. Applied immediately — NOT batched until flush()
      * — because the backends' unregister paths all act synchronously or

@@ -1100,6 +1100,7 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
         {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool},
         {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
         {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool},
+        {CD::rebindKWinShortcutsKey(), CD::workspacesRebindKWinShortcuts(), QMetaType::Bool},
     };
     schema.groups[CD::workspacesNamedGroup()] = {
         {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList},

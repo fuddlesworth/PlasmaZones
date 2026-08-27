@@ -911,6 +911,17 @@ bool collidesWithSettingsDrivenId(const QString& id)
 }
 } // namespace
 
+bool ShortcutManager::setForeignShortcut(const QString& componentName, const QString& actionName,
+                                         const QKeySequence& sequence)
+{
+    return m_registry ? m_registry->setForeignShortcut(componentName, actionName, sequence) : false;
+}
+
+QKeySequence ShortcutManager::foreignShortcut(const QString& componentName, const QString& actionName) const
+{
+    return m_registry ? m_registry->foreignShortcut(componentName, actionName) : QKeySequence();
+}
+
 void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                             std::function<void()> callback)
 {

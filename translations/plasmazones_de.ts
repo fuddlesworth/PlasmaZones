@@ -314,413 +314,463 @@
         <translation>Tastenkürzel-Übersicht schließen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="52"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="59"/>
         <source>Open Zone Editor</source>
         <translation>Zonen-Editor öffnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="57"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="110"/>
         <source>Open Settings</source>
         <translation>Einstellungen öffnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="62"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="115"/>
         <source>Previous Layout</source>
         <translation>Vorheriges Layout</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="67"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="120"/>
         <source>Next Layout</source>
         <translation>Nächstes Layout</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="74"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="127"/>
         <source>Move Window Left</source>
         <translation>Fenster nach links verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="79"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="132"/>
         <source>Move Window Right</source>
         <translation>Fenster nach rechts verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="84"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="137"/>
         <source>Move Window Up</source>
         <translation>Fenster nach oben verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="89"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="142"/>
         <source>Move Window Down</source>
         <translation>Fenster nach unten verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="96"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="149"/>
         <source>Span Window Left</source>
         <translation>Fenster nach links übergreifen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="101"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="154"/>
         <source>Span Window Right</source>
         <translation>Fenster nach rechts übergreifen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="106"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="159"/>
         <source>Span Window Up</source>
         <translation>Fenster nach oben übergreifen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="111"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="164"/>
         <source>Span Window Down</source>
         <translation>Fenster nach unten übergreifen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="118"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="171"/>
         <source>Focus Zone Left</source>
         <translation>Zone links fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="123"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="176"/>
         <source>Focus Zone Right</source>
         <translation>Zone rechts fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="181"/>
         <source>Focus Zone Up</source>
         <translation>Zone oben fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="133"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="186"/>
         <source>Focus Zone Down</source>
         <translation>Zone unten fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="140"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="193"/>
         <source>Move Window to Empty Zone</source>
         <translation>Fenster in leere Zone verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="145"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="198"/>
         <source>Restore Window Size</source>
         <translation>Fenstergröße wiederherstellen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="203"/>
         <source>Toggle Window Floating</source>
         <translation>Schwebendes Fenster umschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="209"/>
         <source>Switch Focus Between Floating and Placed Windows</source>
         <translation>Fokus zwischen schwebenden und platzierten Fenstern wechseln</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="163"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="216"/>
         <source>Swap Window Left</source>
         <translation>Mit Fenster links tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="168"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="221"/>
         <source>Swap Window Right</source>
         <translation>Mit Fenster rechts tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="173"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="226"/>
         <source>Swap Window Up</source>
         <translation>Mit Fenster oben tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="178"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="231"/>
         <source>Swap Window Down</source>
         <translation>Mit Fenster unten tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="185"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="238"/>
         <source>Swap Virtual Screen Left</source>
         <translation>Virtuellen Bildschirm nach links tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="190"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="243"/>
         <source>Swap Virtual Screen Right</source>
         <translation>Virtuellen Bildschirm nach rechts tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="195"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="248"/>
         <source>Swap Virtual Screen Up</source>
         <translation>Virtuellen Bildschirm nach oben tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="200"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="253"/>
         <source>Swap Virtual Screen Down</source>
         <translation>Virtuellen Bildschirm nach unten tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="208"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="261"/>
         <source>Rotate Virtual Screens Clockwise</source>
         <translation>Virtuelle Bildschirme im Uhrzeigersinn drehen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="214"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="267"/>
         <source>Rotate Virtual Screens Counterclockwise</source>
         <translation>Virtuelle Bildschirme gegen den Uhrzeigersinn drehen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="221"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="274"/>
         <source>Rotate Windows Clockwise</source>
         <translation>Fenster im Uhrzeigersinn drehen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="227"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="280"/>
         <source>Rotate Windows Counterclockwise</source>
         <translation>Fenster gegen den Uhrzeigersinn drehen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="234"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="287"/>
         <source>Cycle Window Forward in Zone</source>
         <translation>Fenster in der Zone vorwärts durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="239"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="292"/>
         <source>Cycle Window Backward in Zone</source>
         <translation>Fenster in der Zone rückwärts durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="246"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="299"/>
         <source>Reapply Layout to Windows</source>
         <translation>Layout erneut auf Fenster anwenden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="251"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="304"/>
         <source>Snap All Windows to Zones</source>
         <translation>Alle Fenster in Zonen einrasten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="256"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="309"/>
         <source>Open Layout Picker</source>
         <translation>Layout-Auswahl öffnen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="314"/>
         <source>Toggle Layout Lock</source>
         <translation>Layout-Sperre umschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="272"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="325"/>
         <source>Cycle Placement Mode</source>
         <translation>Platzierungsmodus wechseln</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="277"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="330"/>
         <source>Focus Master Window</source>
         <translation>Hauptfenster fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="335"/>
         <source>Swap with Master</source>
         <translation>Mit Hauptfenster tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="287"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="340"/>
         <source>Increase Master Ratio</source>
         <translation>Hauptbereich-Verhältnis erhöhen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="292"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="345"/>
         <source>Decrease Master Ratio</source>
         <translation>Hauptbereich-Verhältnis verringern</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="297"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="350"/>
         <source>Increase Master Count</source>
         <translation>Hauptbereich-Anzahl erhöhen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="302"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="355"/>
         <source>Decrease Master Count</source>
         <translation>Hauptbereich-Anzahl verringern</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="310"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="363"/>
         <source>Retile Windows</source>
         <translation>Fenster neu kacheln</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="317"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Focus First Column</source>
         <translation>Erste Spalte fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="322"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
         <source>Focus Last Column</source>
         <translation>Letzte Spalte fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="327"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="380"/>
         <source>Move Column to Start</source>
         <translation>Spalte an den Anfang verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="332"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="385"/>
         <source>Move Column to End</source>
         <translation>Spalte an das Ende verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="337"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="390"/>
         <source>Consume Window into Column</source>
         <translation>Fenster in Spalte aufnehmen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="342"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="395"/>
         <source>Expel Window from Column</source>
         <translation>Fenster aus Spalte herauslösen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="401"/>
         <source>Consume or Expel Toward the Strip Start</source>
         <translation>Zum Streifenanfang aufnehmen oder ausstoßen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="407"/>
         <source>Consume or Expel Toward the Strip End</source>
         <translation>Zum Streifenende aufnehmen oder ausstoßen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="494"/>
         <source>Focus First Window in Column</source>
         <translation>Erstes Fenster in der Spalte fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="499"/>
         <source>Focus Last Window in Column</source>
         <translation>Letztes Fenster in der Spalte fokussieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="452"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="505"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
         <translation>Vorherige Spalte fokussieren, am Rand anhalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="458"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="511"/>
         <source>Focus Next Column, Stopping at the Edge</source>
         <translation>Nächste Spalte fokussieren, am Rand anhalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="464"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="517"/>
         <source>Focus Previous Column, Wrapping</source>
         <translation>Vorherige Spalte fokussieren, umlaufend</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="470"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="523"/>
         <source>Focus Next Column, Wrapping</source>
         <translation>Nächste Spalte fokussieren, umlaufend</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="412"/>
         <source>Center Column</source>
         <translation>Spalte zentrieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="364"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="53"/>
+        <source>Focus Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="58"/>
+        <source>Focus Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="63"/>
+        <source>Move Window to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="68"/>
+        <source>Move Window to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="73"/>
+        <source>Move Column to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="78"/>
+        <source>Move Column to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="83"/>
+        <source>Move Workspace Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="88"/>
+        <source>Move Workspace Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="94"/>
+        <source>Move Workspace to Monitor on the Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="100"/>
+        <source>Move Workspace to Monitor on the Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="417"/>
         <source>Toggle Tabbed Column</source>
         <translation>Spalte mit Reitern umschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="423"/>
         <source>Toggle Windowed Fullscreen</source>
         <translation>Vollbild im Fenster umschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="428"/>
         <source>Cycle Column Width Preset</source>
         <translation>Spaltenbreiten-Voreinstellung durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="381"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="434"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>Spaltenbreiten-Voreinstellung rückwärts durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="386"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="439"/>
         <source>Increase Column Width</source>
         <translation>Spaltenbreite erhöhen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="444"/>
         <source>Decrease Column Width</source>
         <translation>Spaltenbreite verringern</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="396"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="449"/>
         <source>Maximize Column</source>
         <translation>Spalte maximieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="458"/>
         <source>Grow Column into Empty Space</source>
         <translation>Spalte in freien Raum vergrößern</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="463"/>
         <source>Cycle Window Height Preset</source>
         <translation>Fensterhöhen-Voreinstellung durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="469"/>
         <source>Cycle Window Height Preset Back</source>
         <translation>Höhenvoreinstellung des Fensters rückwärts durchschalten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="474"/>
         <source>Increase Window Height</source>
         <translation>Fensterhöhe erhöhen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="426"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="479"/>
         <source>Decrease Window Height</source>
         <translation>Fensterhöhe verringern</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="431"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="484"/>
         <source>Reset Window Heights</source>
         <translation>Fensterhöhen zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="489"/>
         <source>Center Visible Columns</source>
         <translation>Sichtbare Spalten zentrieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="528"/>
         <source>Move Window to Floating</source>
         <translation>Fenster zu Schwebend verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="533"/>
         <source>Move Window to Tiled</source>
         <translation>Fenster zu Gekachelt verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="491"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="544"/>
         <source>Scroll View Back a Page</source>
         <translation>Ansicht eine Seite zurück verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="549"/>
         <source>Scroll View Forward a Page</source>
         <translation>Ansicht eine Seite vorwärts verschieben</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="554"/>
         <source>Equalize Column Widths</source>
         <translation>Spaltenbreiten angleichen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="559"/>
         <source>Minimize Column Width</source>
         <translation>Spaltenbreite minimieren</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="513"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="566"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>Tastenkürzel-Übersicht öffnen</translation>
@@ -1166,12 +1216,12 @@
         <translation>Bildschirme tauschen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1085"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1149"/>
         <source>Apply Layout %1</source>
         <translation>Layout %1 anwenden</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1103"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1167"/>
         <source>Snap to Zone %1</source>
         <translation>In Zone %1 einrasten</translation>
     </message>
@@ -1249,7 +1299,7 @@
         <translation>Eingerastet</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="508"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="515"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation>Aufklappfenster</translation>
@@ -3017,7 +3067,7 @@
         <translation>Fensterleiste &amp; Umschalter</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="178"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="185"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="295"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="362"/>
@@ -3228,7 +3278,7 @@
         <translation>Ob das Farbschema des Systems hell oder dunkel ist. Damit kann eine Regel andere Abstände, Overlay-Farben oder Layouts wählen, wenn die Arbeitsfläche zwischen Tag- und Nachtdesign wechselt. Die Regeln greifen erneut, sobald sich das Design ändert.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="217"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="182"/>
         <source>Overlay</source>
         <translation>Overlay</translation>
@@ -3240,9 +3290,9 @@
         <translation>Animation</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="241"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="248"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="302"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="360"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="72"/>
         <source>Window</source>
         <translation>Fenster</translation>
@@ -3384,7 +3434,7 @@
         <translation>Overlay-Stil</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="425"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="432"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="364"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
@@ -5026,7 +5076,7 @@
         <translation>Zonennummer ändern</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="302"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="309"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="54"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="646"/>
@@ -5053,8 +5103,8 @@
         <translation>Hauptbereich-Anzahl</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="120"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="226"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="127"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="233"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="191"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="854"/>
         <source>Appearance</source>
@@ -5069,7 +5119,7 @@
         <translation>Farben</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="135"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="461"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="465"/>
         <source>Decorations</source>
@@ -5095,16 +5145,16 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="204"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="271"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="321"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="391"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="490"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="211"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="278"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="328"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="398"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="497"/>
         <source>General</source>
         <translation>Allgemein</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="121"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="114"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="206"/>
         <source>Placement</source>
@@ -5131,14 +5181,14 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="259"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="414"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="501"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="421"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="508"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation>Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="158"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="165"/>
         <source>Rules</source>
         <translation>Regeln</translation>
     </message>
@@ -5154,23 +5204,23 @@
         <translation>Virtuelle Bildschirme</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="222"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="229"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="117"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="200"/>
         <source>Behavior</source>
         <translation>Verhalten</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="233"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="240"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="32"/>
         <source>Zone Selector</source>
         <translation>Zonenauswahl</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="248"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="308"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="374"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="255"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="381"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="85"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="90"/>
@@ -5179,123 +5229,128 @@
         <translation>Priorität</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="253"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="379"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="260"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="320"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="386"/>
         <source>Quick Shortcuts</source>
         <translation>Schnelltasten</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="255"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="474"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="521"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="262"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="481"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="528"/>
         <source>Shaders</source>
         <translation>Shader</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="336"/>
         <source>Templates</source>
         <translation>Vorlagen</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="356"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="78"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="242"/>
         <source>Tabs</source>
         <translation>Reiter</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="363"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="370"/>
         <source>Strip Selector</source>
         <translation>Streifenauswahl</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="406"/>
         <source>Transitions</source>
         <translation>Übergänge</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="408"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="415"/>
         <source>Motion</source>
         <translation>Bewegung</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="447"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="454"/>
         <source>Window Motion</source>
         <translation>Fensterbewegung</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="454"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="461"/>
         <source>Window Dragging</source>
         <translation>Fensterziehen</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="495"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="502"/>
         <source>Surfaces</source>
         <translation>Oberflächen</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="430"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="437"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="519"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
         <source>Shell</source>
         <translation>Shell</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="518"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="525"/>
         <source>Decoration Sets</source>
         <translation>Dekorationssätze</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="287"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="410"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="497"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="294"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="504"/>
         <source>Library</source>
         <translation>Bibliothek</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="182"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="113"/>
+        <source>Workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="189"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="450"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="115"/>
         <source>Scrolling</source>
         <translation>Bildlauf</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="504"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="424"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="511"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation>OSDs</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="422"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="429"/>
         <source>Overlays</source>
         <translation>Overlays</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="457"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="464"/>
         <source>Side Panels</source>
         <translation>Seitenleisten</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="459"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="466"/>
         <source>Widgets</source>
         <translation>Miniprogramme</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="464"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="471"/>
         <source>Layout Editor</source>
         <translation>Layout-Editor</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="467"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="474"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation>Voreinstellungen</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="472"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="479"/>
         <source>Motion Sets</source>
         <translation>Bewegungssätze</translation>
     </message>
@@ -5307,7 +5362,7 @@
         <translation>Abstände</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="176"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="183"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="294"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="356"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="109"/>
@@ -5338,8 +5393,8 @@
         <translation>Mindestabstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="149"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="156"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="395"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="36"/>
         <source>Animations</source>
         <translation>Animationen</translation>
@@ -5455,6 +5510,7 @@
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="73"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="548"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="231"/>
         <source>Monitor</source>
         <translation>Bildschirm</translation>
     </message>
@@ -8823,9 +8879,9 @@
         <translation>niedrig</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="306"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="253"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="378"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1007"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
@@ -9528,17 +9584,17 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="442"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="214"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="221"/>
         <source>Layouts</source>
         <translation>Layouts</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="165"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="172"/>
         <source>Editor</source>
         <translation>Editor</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="167"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="174"/>
         <source>About</source>
         <translation>Über</translation>
     </message>
@@ -9557,22 +9613,22 @@
         <translation>Anzeige</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="294"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="295"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>Das PlasmaZones-KWin-Effekt-Plugin ist nicht an einem Ort installiert, an dem KWin es finden kann. Installieren Sie PlasmaZones erneut.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="333"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="334"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>Der PlasmaZones-KWin-Effekt wurde für KWin %1 erstellt, es läuft jedoch KWin %2, sodass KWin ihn nicht lädt. Erstellen und installieren Sie PlasmaZones erneut passend zum laufenden KWin.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="360"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="361"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>Der PlasmaZones-KWin-Effekt hat sich nicht beim Hintergrunddienst registriert, sodass das Ziehen von Fenstern und Kurzbefehle nicht funktionieren. Stellen Sie sicher, dass er in den Systemeinstellungen unter Arbeitsflächen-Effekte aktiviert ist, und starten Sie dann die Plasma-Sitzung neu.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="379"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="380"/>
         <source>Window manager integration is inactive</source>
         <translation>Die Fenstermanager-Integration ist inaktiv</translation>
     </message>
@@ -13809,6 +13865,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="421"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="193"/>
         <source>Move up</source>
         <translation>Nach oben verschieben</translation>
     </message>
@@ -13819,6 +13876,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="207"/>
         <source>Move down</source>
         <translation>Nach unten verschieben</translation>
     </message>
@@ -14195,6 +14253,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="850"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="468"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="108"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Abbrechen</translation>
@@ -16142,6 +16201,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="85"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="90"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="166"/>
         <source>Name</source>
         <translation>Name</translation>
     </message>
@@ -16718,7 +16778,7 @@
         <translation>Im Editor von Grund auf neu beginnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="341"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="348"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="59"/>
         <source>Columns</source>
         <translation>Spalten</translation>
@@ -23064,6 +23124,126 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
         <translation>Regeln passen auf Fenster, und dieses Ereignis gehört zu keinem Fenster, daher läuft diese Aktion nie. Dieses Ereignis nimmt nirgends einen Shader an, die Aktion kann also entfernt werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="211"/>
+        <source>That workspace is on another monitor.</source>
+        <comment>OSD hint</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="243"/>
+        <source>Moving a column needs a scrolling screen.</source>
+        <comment>OSD hint</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="281"/>
+        <source>Focus Workspace &quot;%1&quot;</source>
+        <comment>named workspace shortcut</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="291"/>
+        <source>Move Window to Workspace &quot;%1&quot;</source>
+        <comment>named workspace shortcut</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/workspaces.cpp" line="357"/>
+        <source>Workspace limit reached.</source>
+        <comment>OSD hint</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="68"/>
+        <source>Each monitor keeps its own list of workspaces. Opening a window on the last empty workspace adds a new one, and an emptied workspace disappears. Named workspaces stay even when empty.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="77"/>
+        <source>Enable dynamic workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="95"/>
+        <source>Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones will turn on KWin&apos;s per-output virtual desktops setting. The change takes effect immediately, and PlasmaZones does not turn it back off.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="99"/>
+        <source>Turn On and Enable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="120"/>
+        <source>Show a hint when a workspace belongs to another monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="129"/>
+        <source>Replace the KWin desktop switching shortcuts while enabled</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="140"/>
+        <source>Named Workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="147"/>
+        <source>A named workspace is created at login, keeps its place while empty, and can be pinned to a monitor. Shortcuts jump to it or send the active window there.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="177"/>
+        <source>chat</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="178"/>
+        <source>Workspace name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="220"/>
+        <source>Remove named workspace</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="240"/>
+        <source>Pinned monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="244"/>
+        <source>Any monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="264"/>
+        <source>Focus shortcut</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="269"/>
+        <source>Focus named workspace shortcut</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="278"/>
+        <source>Move window shortcut</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="283"/>
+        <source>Move window to named workspace shortcut</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/WorkspacesPage.qml.cpp" line="295"/>
+        <source>Add Named Workspace</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

@@ -105,6 +105,13 @@ public:
         const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings) override;
     void unregisterAdhocShortcuts(const QStringList& ids) override;
 
+    /// Foreign-component rebind (Registry pass-through; KGlobalAccel backend
+    /// only). The dynamic-workspaces stock-shortcut takeover uses these;
+    /// false / empty on the other backends, whose callers fall back to
+    /// snap-back-with-hint.
+    bool setForeignShortcut(const QString& componentName, const QString& actionName, const QKeySequence& sequence);
+    QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const;
+
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
      * one QVariantMap per row, sorted by display category, then by authored

@@ -23,6 +23,10 @@ P_STORE_GET(bool, workspacesSnapBackOsdHint, workspacesBehaviorGroup, snapBackOs
 P_STORE_SET_BOOL(setWorkspacesSnapBackOsdHint, workspacesBehaviorGroup, snapBackOsdHintKey,
                  workspacesSnapBackOsdHintChanged)
 
+P_STORE_GET(bool, workspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebindKWinShortcutsKey, bool)
+P_STORE_SET_BOOL(setWorkspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebindKWinShortcutsKey,
+                 workspacesRebindKWinShortcutsChanged)
+
 // Named-workspace declarations: whole-replace QVariantList composite, same
 // write shape as the trigger lists (read-back compare so a semantically
 // identical list swallows no signal).

@@ -403,6 +403,8 @@ public:
                    workspacesSnapBackOsdHintChanged)
     Q_PROPERTY(QVariantList workspacesNamedEntries READ workspacesNamedEntries WRITE setWorkspacesNamedEntries NOTIFY
                    workspacesNamedEntriesChanged)
+    Q_PROPERTY(bool workspacesRebindKWinShortcuts READ workspacesRebindKWinShortcuts WRITE
+                   setWorkspacesRebindKWinShortcuts NOTIFY workspacesRebindKWinShortcutsChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -1381,6 +1383,8 @@ public:
     void setWorkspacesSnapBackOsdHint(bool enabled);
     QVariantList workspacesNamedEntries() const;
     void setWorkspacesNamedEntries(const QVariantList& entries);
+    bool workspacesRebindKWinShortcuts() const;
+    void setWorkspacesRebindKWinShortcuts(bool enabled);
     QString workspaceFocusUpShortcut() const;
     void setWorkspaceFocusUpShortcut(const QString& shortcut);
     QString workspaceFocusDownShortcut() const;

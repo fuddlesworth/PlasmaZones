@@ -39,6 +39,16 @@ public:
         return true;
     }
 
+    /// Neutralize KWin's stock "Switch One Desktop" chords while the feature
+    /// is on (restored on disable). On by default: the stock chords iterate
+    /// the GLOBAL desktop pool and would trip owner-wins snap-back on nearly
+    /// every press, and the focus verbs' defaults deliberately reuse
+    /// Meta+Ctrl+Up/Down (user decision, 2026-08-26).
+    static constexpr bool workspacesRebindKWinShortcuts()
+    {
+        return true;
+    }
+
     /// Named-workspace declarations: none by default. Entry shape (all
     /// QVariantMap fields): name (unique, non-empty), output (screenId, empty
     /// = unpinned), position (preferred slice index, -1 = before the trailing

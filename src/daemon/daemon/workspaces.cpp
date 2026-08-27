@@ -29,9 +29,12 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorWorkspaces/WorkspaceReconciler.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDir>
+#include <QFileInfo>
 #include <QKeySequence>
 #include <QSettings>
 #include <QStandardPaths>
@@ -55,6 +58,26 @@ void enableKWinPerOutputDesktops()
                                        QStringLiteral("org.kde.KWin"), QStringLiteral("reconfigure")));
     qCInfo(lcDaemon) << "wrote PerOutputVirtualDesktops=true to kwinrc and asked KWin to reconfigure (user consent)";
 }
+
+QString kwinShortcutBackupPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::StateLocation)
+        + QStringLiteral("/plasmazones/kwin-shortcut-backup.json");
+}
+
+/// Give KWin its stolen desktop-switch chords back (feature or rebind toggle
+/// turned off). Consumes the backup file entry by entry.
+void restoreKWinShortcutBackup(ShortcutManager* shortcutManager)
+{
+    QSettings backup(kwinShortcutBackupPath(), QSettings::IniFormat);
+    const QStringList backedUp = backup.allKeys();
+    for (const QString& action : backedUp) {
+        shortcutManager->setForeignShortcut(QStringLiteral("kwin"), action,
+                                            QKeySequence(backup.value(action).toString()));
+        backup.remove(action);
+    }
+    backup.sync();
+}
 } // namespace
 
 void Daemon::initializeWorkspaces()
@@ -67,8 +90,17 @@ void Daemon::initializeWorkspaces()
     if (!m_workspaceRearmConnected) {
         m_workspaceRearmConnected = true;
         const auto rearm = [this]() {
-            if (!m_workspaceController) {
+            const bool wantOn = m_settings->workspacesEnabled();
+            if (wantOn && !m_workspaceController) {
                 initializeWorkspaces();
+            } else if (!wantOn && m_workspaceController) {
+                // Runtime disable: tear the controller down (its dtor writes
+                // the final state file; every connection dies with it) and
+                // hand KWin its chords back. The kwinrc write is deliberately
+                // NOT reverted (stated in the UI).
+                m_workspaceController.reset();
+                restoreKWinShortcutBackup(m_shortcutManager.get());
+                qCInfo(lcDaemon) << "dynamic workspaces disabled at runtime";
             }
         };
         connect(m_settings.get(), &Settings::workspacesEnabledChanged, this, rearm);
@@ -281,6 +313,46 @@ void Daemon::initializeWorkspaces()
         if (!enabled) {
             qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic workspaces "
                                    "are active; kwinrc and the running KWin disagree (missing reconfigure?)";
+        }
+    });
+
+    // ── Stock KWin desktop-shortcut takeover (Phase 5) ─────────────────────
+    // The stock "Switch One Desktop" quad iterates the GLOBAL pool, tripping
+    // owner-wins snap-back on nearly every press, and its Down/Up chords are
+    // the focus verbs' defaults. With the rebind toggle on, back each chord
+    // up (state dir, once) and clear it via the KGlobalAccel foreign-rebind
+    // pass-through; restore on toggle-off. If the backend cannot rebind
+    // (portal), nothing is stolen and snap-back-with-hint stays the story.
+    static const QStringList kKWinDesktopActions{
+        QStringLiteral("Switch One Desktop Up"), QStringLiteral("Switch One Desktop Down"),
+        QStringLiteral("Switch One Desktop to the Left"), QStringLiteral("Switch One Desktop to the Right")};
+    const auto applyStockRebind = [this]() {
+        if (!m_settings->workspacesRebindKWinShortcuts()) {
+            restoreKWinShortcutBackup(m_shortcutManager.get());
+            return;
+        }
+        QDir().mkpath(QFileInfo(kwinShortcutBackupPath()).absolutePath());
+        QSettings backup(kwinShortcutBackupPath(), QSettings::IniFormat);
+        for (const QString& action : kKWinDesktopActions) {
+            if (!backup.contains(action)) {
+                const QKeySequence current = m_shortcutManager->foreignShortcut(QStringLiteral("kwin"), action);
+                if (current.isEmpty()) {
+                    continue; // already unbound; nothing to steal or restore
+                }
+                if (m_shortcutManager->setForeignShortcut(QStringLiteral("kwin"), action, QKeySequence())) {
+                    backup.setValue(action, current.toString(QKeySequence::PortableText));
+                }
+            }
+        }
+        backup.sync();
+    };
+    applyStockRebind();
+    connect(m_settings.get(), &Settings::workspacesRebindKWinShortcutsChanged, this, applyStockRebind);
+
+    // Desktop-cap degradation hint (once per episode, reconciler-gated).
+    connect(&m_workspaceController->reconciler(), &PhosphorWorkspaces::WorkspaceReconciler::capReached, this, [this]() {
+        if (m_overlayService) {
+            m_overlayService->showDisabledOsd(PhosphorI18n::tr("Workspace limit reached.", "OSD hint"), QString());
         }
     });
 

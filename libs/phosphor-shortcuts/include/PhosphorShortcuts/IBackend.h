@@ -154,6 +154,34 @@ public:
         return std::nullopt;
     }
 
+    /**
+     * Rebind ANOTHER component's global shortcut (kglobalaccel's
+     * setForeignShortcut, the API the Shortcuts KCM uses). The dynamic-
+     * workspaces feature neutralizes KWin's stock desktop-switch chords with
+     * this while enabled, restoring them on disable. An empty sequence
+     * clears the binding. Only the KGlobalAccel backend can do this; the
+     * default refuses (false) so callers fall back to snap-back-with-hint.
+     */
+    virtual bool setForeignShortcut(const QString& componentName, const QString& actionName,
+                                    const QKeySequence& sequence)
+    {
+        Q_UNUSED(componentName);
+        Q_UNUSED(actionName);
+        Q_UNUSED(sequence);
+        return false;
+    }
+
+    /**
+     * The current binding of another component's action (backup before a
+     * foreign rebind). Empty when unbound or unsupported.
+     */
+    virtual QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const
+    {
+        Q_UNUSED(componentName);
+        Q_UNUSED(actionName);
+        return {};
+    }
+
 Q_SIGNALS:
     /**
      * Emitted when the backend observes the user triggering a registered

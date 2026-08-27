@@ -287,6 +287,8 @@ public:
     P_CONFIG_KEY(manageKWinPerOutputKey, "ManageKWinPerOutputSetting")
     // Owner-wins snap-back OSD hint toggle.
     P_CONFIG_KEY(snapBackOsdHintKey, "SnapBackOsdHint")
+    // Take over KWin's stock desktop-switch chords while the feature is on.
+    P_CONFIG_KEY(rebindKWinShortcutsKey, "RebindKWinDesktopShortcuts")
     // Named-workspace declarations (Workspaces.Named): JSON array of
     // {name, output, position, focusShortcut, moveShortcut} maps.
     P_CONFIG_KEY(entriesKey, "Entries")

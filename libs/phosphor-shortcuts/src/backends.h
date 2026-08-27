@@ -158,6 +158,9 @@ public:
     void unregisterShortcut(const QString& id) override;
     void flush() override;
     std::optional<QStringList> currentTriggers(const QString& id) const override;
+    bool setForeignShortcut(const QString& componentName, const QString& actionName,
+                            const QKeySequence& sequence) override;
+    QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const override;
 
 private:
     // QAction ownership is an implementation detail of this backend —

@@ -92,7 +92,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
             visible: root._consentPending
-            text: i18n("Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones will turn on KWin's per-output virtual desktops setting. The change takes effect immediately.")
+            text: i18n("Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones will turn on KWin's per-output virtual desktops setting. The change takes effect immediately, and PlasmaZones does not turn it back off.")
 
             actions: [
                 Kirigami.Action {
@@ -122,6 +122,15 @@ SettingsFlickable {
             enabled: appSettings.workspacesEnabled
             Accessible.name: text
             onToggled: appSettings.workspacesSnapBackOsdHint = checked
+        }
+
+        Switch {
+            Layout.fillWidth: true
+            text: i18n("Replace the KWin desktop switching shortcuts while enabled")
+            checked: appSettings.workspacesRebindKWinShortcuts
+            enabled: appSettings.workspacesEnabled
+            Accessible.name: text
+            onToggled: appSettings.workspacesRebindKWinShortcuts = checked
         }
 
         // ── Named workspaces ────────────────────────────────────────────
