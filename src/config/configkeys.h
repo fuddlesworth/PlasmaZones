@@ -293,6 +293,25 @@ public:
     // {name, output, position, focusShortcut, moveShortcut} maps.
     P_CONFIG_KEY(entriesKey, "Entries")
 
+    // Indexed workspace slots 1..9 (Shortcuts.Global leaves; defaults unset).
+    // Same builder shape and range contract as quickLayoutKey.
+    P_CONFIG_KEY(workspaceFocusSlotKeyPattern, "WorkspaceFocusSlot%1")
+    static QString workspaceFocusSlotKey(int n)
+    {
+        if (n < 1 || n > 9) {
+            qFatal("workspaceFocusSlotKey: n out of range: %d", n);
+        }
+        return workspaceFocusSlotKeyPattern().arg(n);
+    }
+    P_CONFIG_KEY(workspaceMoveSlotKeyPattern, "WorkspaceMoveSlot%1")
+    static QString workspaceMoveSlotKey(int n)
+    {
+        if (n < 1 || n > 9) {
+            qFatal("workspaceMoveSlotKey: n out of range: %d", n);
+        }
+        return workspaceMoveSlotKeyPattern().arg(n);
+    }
+
     // Workspace verb shortcuts (Shortcuts.Global leaves).
     P_CONFIG_KEY(workspaceFocusUpKey, "WorkspaceFocusUp")
     P_CONFIG_KEY(workspaceFocusDownKey, "WorkspaceFocusDown")

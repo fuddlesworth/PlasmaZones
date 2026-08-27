@@ -58,6 +58,12 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorWorkspaces {
+// Forward-declared for the workspaces-at-cap probe member below; the
+// complete type is needed only in settingscontroller.cpp.
+class VirtualDesktopManager;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -329,6 +335,13 @@ public:
     /// (WorkspaceController::kwinPerOutputEnabled) — duplicated because the
     /// daemon controller is not linked into the settings app.
     Q_INVOKABLE bool kwinPerOutputDesktopsEnabled() const;
+
+    /// True while KWin's desktop count sits at the dynamic-workspaces cap
+    /// (the Workspaces page's badge; the daemon suspends trailing-empty
+    /// appends and refuses named creates at the cap). Fed by this app's own
+    /// VirtualDesktopManager listening to KWin's countChanged.
+    Q_PROPERTY(bool workspacesAtCap READ workspacesAtCap NOTIFY workspacesAtCapChanged)
+    bool workspacesAtCap() const;
 
     /// The default snapping layout and default scrolling template:
     /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
@@ -809,6 +822,7 @@ Q_SIGNALS:
     /// first so a benign refusal during a global async discard never emits.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
+    void workspacesAtCapChanged();
     void scopeScreenNameChanged();
     /// Emitted whenever any per-screen override map changes (set or clear,
     /// any domain). The monitor scope map re-polls hasPerScreen*Settings()
@@ -1032,6 +1046,9 @@ private:
     /// Single Rule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
     std::unique_ptr<PhosphorRules::RuleStore> m_localRuleStore;
+    /// Live KWin desktop count for the workspaces cap badge (this app's own
+    /// read-only VirtualDesktopManager; the daemon owns the writable one).
+    std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_workspaceVdm;
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;

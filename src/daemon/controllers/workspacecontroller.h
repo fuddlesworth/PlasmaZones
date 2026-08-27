@@ -151,6 +151,15 @@ private:
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;
 
+    // ── Move-verb watchdog (plan §4.2) ──────────────────────────────────────
+    /// windowWorkspaceMoveRequested is fire-and-forget over D-Bus; with no
+    /// effect loaded, nothing executes and nothing errors. Record the
+    /// expectation and warn when no census arrival confirms it in time — the
+    /// op itself is already dropped (nothing retries), the log is the
+    /// diagnosis. Arrival confirmation lives in onMetadataChanged.
+    void watchWindowMove(const QString& windowId, const QString& targetDesktopId);
+    QHash<QString, QString> m_pendingWindowMoves; ///< windowId → expected desktopId
+
     // ── State persistence (Phase 4) ─────────────────────────────────────────
     static QString stateFilePath();
     void loadStateFile();

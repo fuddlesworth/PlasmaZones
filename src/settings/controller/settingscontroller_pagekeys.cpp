@@ -18,6 +18,9 @@
 
 #include "config/configdefaults.h"
 
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorWorkspaces/WorkspaceReconciler.h>
+
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -61,6 +64,12 @@ bool isLibraryPage(const QString& page)
 bool SettingsController::isLibraryPage(const QString& page) const
 {
     return PlasmaZones::isLibraryPage(page);
+}
+
+bool SettingsController::workspacesAtCap() const
+{
+    return m_workspaceVdm
+        && m_workspaceVdm->desktopCount() >= PhosphorWorkspaces::WorkspaceReconciler::DefaultDesktopCap;
 }
 
 bool SettingsController::kwinPerOutputDesktopsEnabled() const

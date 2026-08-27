@@ -907,7 +907,8 @@ bool collidesWithSettingsDrivenId(const QString& id)
         return QSet<QString>(ids.cbegin(), ids.cend());
     }();
     return kStaticIdSet.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
-        || id.startsWith(QLatin1String(kSnapToZonePrefix));
+        || id.startsWith(QLatin1String(kSnapToZonePrefix)) || id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix))
+        || id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix));
 }
 } // namespace
 
@@ -1117,7 +1118,7 @@ QStringList ShortcutManager::staticShortcutIds()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 2 * kIndexedSlotCount);
+    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 4 * kIndexedSlotCount);
 
     Settings* s = m_settings;
     ShortcutManager* sm = this;
@@ -1154,6 +1155,37 @@ void ShortcutManager::buildEntries()
         const int slot = i + 1;
         e.fire = [this, slot] {
             Q_EMIT quickLayoutRequested(slot);
+        };
+        m_entries.push_back(std::move(e));
+    }
+
+    // Workspace slots. Same indexed structure as quick-layout, two families,
+    // no defaults (users bind the slots they use).
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
+        Entry e;
+        e.id = workspaceFocusSlotId(i);
+        e.description = PhosphorI18n::tr("Focus Workspace %1").arg(i + 1);
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->workspaceFocusSlotShortcut(i), idCopy);
+        };
+        const int slot = i + 1;
+        e.fire = [this, slot] {
+            Q_EMIT workspaceFocusSlotRequested(slot);
+        };
+        m_entries.push_back(std::move(e));
+    }
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
+        Entry e;
+        e.id = workspaceMoveSlotId(i);
+        e.description = PhosphorI18n::tr("Move Window to Workspace %1").arg(i + 1);
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->workspaceMoveSlotShortcut(i), idCopy);
+        };
+        const int slot = i + 1;
+        e.fire = [this, slot] {
+            Q_EMIT workspaceMoveSlotRequested(slot);
         };
         m_entries.push_back(std::move(e));
     }

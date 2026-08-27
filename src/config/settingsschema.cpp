@@ -532,6 +532,11 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::workspaceReorderDownKey(), CD::workspaceReorderDownShortcut());
     addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut());
     addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut());
+    // Indexed workspace slots, unset by default (quick-layout-slot style).
+    for (int slot = 1; slot <= 9; ++slot) {
+        addShortcut(globals, CD::workspaceFocusSlotKey(slot), QString());
+        addShortcut(globals, CD::workspaceMoveSlotKey(slot), QString());
+    }
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());

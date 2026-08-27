@@ -113,6 +113,8 @@ private Q_SLOTS:
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
     void tabIndicatorRectIsNullForAZeroExtentColumn();
+    void reapDesktopStateDropsOnlyTheDeadDesktop();
+    void renumberDesktopStateShiftsKeysAndKeepsWindows();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -1144,6 +1146,52 @@ void TestScrollEnginePerScreen::tabIndicatorRectIsNullForAZeroExtentColumn()
         params.position = position;
         QVERIFY(params.indicatorRectFor(QRect(0, 0, 0, 0), kTiles).isNull());
     }
+}
+
+void TestScrollEnginePerScreen::reapDesktopStateDropsOnlyTheDeadDesktop()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // One window on desktop 1, one on desktop 2 (same screen, distinct
+    // per-desktop states).
+    engine->windowOpened(QStringLiteral("app|d1"), kS1, 0, 0);
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->windowOpened(QStringLiteral("app|d2"), kS1, 0, 0);
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1, 2}));
+
+    // Identity-based reap of desktop 1 leaves desktop 2 untouched.
+    engine->reapDesktopState(1);
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{2}));
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d2")));
+}
+
+void TestScrollEnginePerScreen::renumberDesktopStateShiftsKeysAndKeepsWindows()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    engine->windowOpened(QStringLiteral("app|d3"), kS1, 0, 0);
+    engine->setCurrentDesktopForScreen(kS1, 4);
+    engine->windowOpened(QStringLiteral("app|d4"), kS1, 0, 0);
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{3, 4}));
+
+    // Desktop 2 died elsewhere: 3→2, 4→3. MUTATION GUARD: after the pass no
+    // stale pre-shift int survives, and the windows stay resolvable under
+    // the screen's shifted current desktop.
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    engine->renumberDesktopState(mapping);
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{2, 3}));
+    // The tracker shifted with the states (the screen sat on old-4 = new-3),
+    // so the current context still resolves the d4 window's column.
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d4")));
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d3")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

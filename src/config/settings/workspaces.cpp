@@ -82,4 +82,60 @@ P_STORE_GET(QString, workspaceMoveToMonitorRightShortcut, shortcutsGlobalGroup, 
 P_STORE_SET_STRING(setWorkspaceMoveToMonitorRightShortcut, shortcutsGlobalGroup, workspaceMoveToMonitorRightKey,
                    workspaceMoveToMonitorRightShortcutChanged)
 
+// ── Indexed workspace slots ─────────────────────────────────────────────────
+// Nine focus + nine move-window slots, unset by default (the user binds the
+// ones they use — the quick-layout-slot convention). One shared NOTIFY for
+// both families: the shortcuts page re-reads all fields on it, and the
+// ShortcutManager's rebind rides settingsChanged regardless.
+
+namespace {
+inline constexpr int WorkspaceSlotCount = 9;
+}
+
+QString Settings::workspaceFocusSlotShortcut(int index) const
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(),
+                                  ConfigDefaults::workspaceFocusSlotKey(index + 1));
+}
+
+void Settings::setWorkspaceFocusSlotShortcut(int index, const QString& shortcut)
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::workspaceFocusSlotKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    Q_EMIT workspaceSlotShortcutsChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::workspaceMoveSlotShortcut(int index) const
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(),
+                                  ConfigDefaults::workspaceMoveSlotKey(index + 1));
+}
+
+void Settings::setWorkspaceMoveSlotShortcut(int index, const QString& shortcut)
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::workspaceMoveSlotKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    Q_EMIT workspaceSlotShortcutsChanged();
+    Q_EMIT settingsChanged();
+}
+
 } // namespace PlasmaZones

@@ -74,6 +74,13 @@ SettingsFlickable {
             ]
         }
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Warning
+            text: i18n("Workspace limit reached. New workspaces cannot be added until one is removed.")
+            visible: appSettings.workspacesEnabled && settingsController.workspacesAtCap
+        }
+
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Behavior")

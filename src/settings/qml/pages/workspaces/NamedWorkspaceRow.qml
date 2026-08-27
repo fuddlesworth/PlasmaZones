@@ -109,6 +109,26 @@ ExpandableRowDelegate {
         }
 
         Label {
+            text: i18n("Position")
+        }
+
+        SettingsSpinBox {
+            id: positionSpin
+
+            from: -1
+            to: 19
+            value: row.entry.position
+            accessibleName: i18n("Preferred position in the monitor's list")
+            tooltipText: i18n("Where in the monitor's workspace list this workspace prefers to sit. Automatic places it before the trailing empty workspace.")
+            textFromValue: function (value, locale) {
+                return value < 0 ? i18n("Automatic") : String(value + 1);
+            }
+            onValueModified: value => {
+                row.fieldEdited(row.entryIndex, "position", value);
+            }
+        }
+
+        Label {
             text: i18n("Focus shortcut")
         }
 

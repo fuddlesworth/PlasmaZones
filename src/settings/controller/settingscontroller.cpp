@@ -47,6 +47,7 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 // std::make_unique<RuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
@@ -365,6 +366,15 @@ SettingsController::SettingsController(QObject* parent)
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
+    // Live KWin desktop count for the workspaces cap badge — this app's own
+    // read-only VirtualDesktopManager (the daemon owns the one that writes).
+    m_workspaceVdm = std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>();
+    m_workspaceVdm->init();
+    m_workspaceVdm->start();
+    connect(m_workspaceVdm.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this, [this](int) {
+        Q_EMIT workspacesAtCapChanged();
+    });
+
     m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
     m_localTemplateStore->loadTemplates();
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),

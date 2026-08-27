@@ -12,10 +12,31 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 #include <QLoggingCategory>
+#include <QTimer>
 
 #include <utility>
 
+Q_DECLARE_LOGGING_CATEGORY(lcWorkspaceCtl)
+
 namespace PlasmaZones {
+
+namespace {
+/// How long a move verb waits for its census arrival before the watchdog
+/// declares it lost (effect unloaded, window gone, refusal upstream).
+constexpr int WindowMoveTimeoutMs = 2000;
+}
+
+void WorkspaceController::watchWindowMove(const QString& windowId, const QString& targetDesktopId)
+{
+    m_pendingWindowMoves.insert(windowId, targetDesktopId);
+    QTimer::singleShot(WindowMoveTimeoutMs, this, [this, windowId, targetDesktopId]() {
+        if (m_pendingWindowMoves.value(windowId) == targetDesktopId) {
+            m_pendingWindowMoves.remove(windowId);
+            qCWarning(lcWorkspaceCtl) << "workspace move for window" << windowId << "to desktop" << targetDesktopId
+                                      << "saw no arrival (effect not loaded, window closed, or handoff refused)";
+        }
+    });
+}
 
 void WorkspaceController::runWhenQuiet(std::function<void()> fn)
 {
@@ -82,6 +103,7 @@ void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const Q
         if (desktop <= 0) {
             return;
         }
+        watchWindowMove(windowId, target);
         Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop,
                                             delta < 0 ? QStringLiteral("up") : QStringLiteral("down"));
     });
@@ -101,6 +123,7 @@ void WorkspaceController::moveWindowToWorkspaceAt(const QString& screenId, const
         if (desktop <= 0) {
             return;
         }
+        watchWindowMove(windowId, target);
         Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, QStringLiteral("down"));
     });
 }
@@ -124,6 +147,7 @@ void WorkspaceController::moveColumnToWorkspace(const QString& screenId, const Q
         // handoffReceive re-forms the column on the target strip in arrival
         // order (same contract the monitor-crossing column moves rely on).
         for (const QString& windowId : columnWindows) {
+            watchWindowMove(windowId, target);
             Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, direction);
         }
     });
@@ -172,6 +196,7 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
             // handoff verb re-homes each one's engine state and geometry on
             // the target screen (same desktop int).
             for (const QString& windowId : riders) {
+                watchWindowMove(windowId, movedId);
                 Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, direction);
             }
             // niri semantics: the moved workspace gains focus on its new
@@ -243,6 +268,7 @@ void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const 
         if (desktop <= 0) {
             return;
         }
+        watchWindowMove(windowId, target);
         Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop,
                                             QStringLiteral("down"));
     });

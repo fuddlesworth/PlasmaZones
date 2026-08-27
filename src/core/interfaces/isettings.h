@@ -1022,6 +1022,7 @@ Q_SIGNALS:
     void workspaceReorderDownShortcutChanged();
     void workspaceMoveToMonitorLeftShortcutChanged();
     void workspaceMoveToMonitorRightShortcutChanged();
+    void workspaceSlotShortcutsChanged();
 
     // Scrolling settings
     void scrollingEnabledChanged();

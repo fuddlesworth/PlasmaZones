@@ -388,6 +388,10 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
     const QString oldId = m_windowCensusDesktopId.take(instanceId);
     const int newDesktop = censusDesktop(newMeta);
     const QString newId = newDesktop > 0 ? m_vdm->desktopIdAt(newDesktop) : QString();
+    // A watched move verb confirmed by its arrival (watchdog, plan §4.2).
+    if (!newId.isEmpty() && m_pendingWindowMoves.value(instanceId) == newId) {
+        m_pendingWindowMoves.remove(instanceId);
+    }
     if (oldId == newId) {
         if (!oldId.isEmpty()) {
             m_windowCensusDesktopId.insert(instanceId, oldId);

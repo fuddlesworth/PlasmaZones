@@ -44,6 +44,10 @@ public:
 
     static constexpr int LedgerTimeoutMs = 2000;
     static constexpr int DestroyDebounceMs = 300;
+    /// KWin's desktop ceiling (VirtualDesktopManager::maximum() in current
+    /// KWin). Shared by the daemon's gate and the settings app's cap badge;
+    /// setDesktopCap adjusts after live probing.
+    static constexpr int DefaultDesktopCap = 20;
 
     WorkspaceMap& map();
     const WorkspaceMap& map() const;
@@ -184,7 +188,7 @@ private:
     /// screenId → last OWNED desktop id it showed (the snap-back target).
     QHash<QString, QString> m_lastOwnedByScreen;
     QString m_focusedScreen;
-    int m_desktopCap = 20;
+    int m_desktopCap = DefaultDesktopCap;
     bool m_capHintShown = false;
     QList<PendingOp> m_ledger;
     QTimer m_ledgerTimer;

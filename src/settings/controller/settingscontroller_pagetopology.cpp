@@ -161,6 +161,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kWorkspacesLeaves{
         QStringLiteral("workspaces-behavior"),
         QStringLiteral("workspaces-named"),
+        QStringLiteral("workspaces-shortcuts"),
     };
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("workspaces"), kWorkspacesLeaves},
@@ -244,6 +245,26 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          {
              {CD::workspacesNamedGroup(), CD::entriesKey()},
          }},
+        {QStringLiteral("workspaces-shortcuts"),
+         [] {
+             Settings::ConfigKeyList keys{
+                 {CD::shortcutsGlobalGroup(), CD::workspaceFocusUpKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceFocusDownKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveWindowUpKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveWindowDownKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveColumnUpKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveColumnDownKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceReorderUpKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceReorderDownKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveToMonitorLeftKey()},
+                 {CD::shortcutsGlobalGroup(), CD::workspaceMoveToMonitorRightKey()},
+             };
+             for (int slot = 1; slot <= 9; ++slot) {
+                 keys.append({CD::shortcutsGlobalGroup(), CD::workspaceFocusSlotKey(slot)});
+                 keys.append({CD::shortcutsGlobalGroup(), CD::workspaceMoveSlotKey(slot)});
+             }
+             return keys;
+         }()},
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
@@ -766,6 +787,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("workspaces-behavior"),
         QStringLiteral("workspaces-named"),
+        QStringLiteral("workspaces-shortcuts"),
         QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
