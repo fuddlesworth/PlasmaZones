@@ -129,6 +129,31 @@ private Q_SLOTS:
         QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
         QCOMPARE(spy.last().at(1).toInt(), 4);
     }
+    // Dynamic-workspaces id translation: without a KWin id list the accessors
+    // answer their documented null values (empty list, empty id, index 0) and
+    // never crash — the WorkspaceController leans on exactly these nulls to
+    // defer adoption until the first settled reply.
+    void desktopIdAccessors_nullWithoutKWin()
+    {
+        VirtualDesktopManager vdm;
+        QVERIFY(vdm.desktopIds().isEmpty());
+        QVERIFY(vdm.desktopIdAt(1).isEmpty());
+        QVERIFY(vdm.desktopIdAt(0).isEmpty());
+        QVERIFY(vdm.desktopIdAt(-3).isEmpty());
+        QCOMPARE(vdm.desktopIndexOf(QStringLiteral("{missing}")), 0);
+    }
+
+    // The create/remove/rename wrappers are safe no-ops without a KWin D-Bus
+    // interface (headless test environment) — no crash, no signal.
+    void kwinWrappers_noOpWithoutKWin()
+    {
+        VirtualDesktopManager vdm;
+        QSignalSpy listSpy(&vdm, &VirtualDesktopManager::desktopListChanged);
+        vdm.createDesktop(0, QStringLiteral("x"));
+        vdm.removeDesktop(QStringLiteral("{id}"));
+        vdm.setDesktopName(QStringLiteral("{id}"), QStringLiteral("y"));
+        QCOMPARE(listSpy.count(), 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualDesktopPerScreen)

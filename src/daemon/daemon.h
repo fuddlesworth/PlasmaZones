@@ -555,6 +555,10 @@ private:
     /// seed-all ordering).
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
+    /// Construct + wire the dynamic-workspaces controller behind its gate
+    /// (workspacesEnabled setting AND KWin per-output mode). No-op otherwise —
+    /// feature off leaves current behavior byte-identical.
+    void initializeWorkspaces();
     void connectLayoutSignals();
     void connectOverlaySignals();
     void finalizeStartup();
@@ -1145,6 +1149,10 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+    /// Dynamic per-monitor workspaces. Null unless the feature gate passed at
+    /// startup (initializeWorkspaces); its existence IS the runtime gate the
+    /// desktopCountChanged prune consults.
+    std::unique_ptr<WorkspaceController> m_workspaceController;
 
     // Scripted algorithm loader (file watcher for user-defined Luau algorithms).
     // m_algorithmRegistry is declared up at the top of the member block with

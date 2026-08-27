@@ -465,15 +465,25 @@ void Daemon::connectDesktopActivity()
                 // holding state — filter for anything past the new count and prune,
                 // avoiding the arbitrary upper bound of the old newCount+20 sweep. All
                 // THREE engines carry their own stores, so prune each.
-                for (PhosphorEngine::PlacementEngineBase* engine :
-                     {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
-                    if (!engine) {
-                        continue;
-                    }
-                    const QSet<int> active = engine->desktopsWithActiveState();
-                    for (int d : active) {
-                        if (d > newCount) {
-                            engine->pruneStatesForDesktop(d);
+                //
+                // NOT when dynamic workspaces are live: the WorkspaceController
+                // reaps by desktop IDENTITY (which desktop actually died) and
+                // renumbers the survivors on the settled id-list reply. This
+                // count sweep only knows numbers, so it would destroy the
+                // highest-numbered desktop's state even when a MIDDLE desktop
+                // was the one removed — exactly the state the identity pass is
+                // about to renumber into place.
+                if (!m_workspaceController) {
+                    for (PhosphorEngine::PlacementEngineBase* engine :
+                         {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+                        if (!engine) {
+                            continue;
+                        }
+                        const QSet<int> active = engine->desktopsWithActiveState();
+                        for (int d : active) {
+                            if (d > newCount) {
+                                engine->pruneStatesForDesktop(d);
+                            }
                         }
                     }
                 }

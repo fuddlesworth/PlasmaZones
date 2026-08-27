@@ -16,6 +16,7 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
 
+#include <QHash>
 #include <QPoint>
 #include <QRect>
 #include <QSize>
@@ -1079,6 +1080,27 @@ public:
     virtual void pruneStatesForActivities(const QStringList& validActivities)
     {
         Q_UNUSED(validActivities)
+    }
+    /// Dynamic-workspaces arm (all three engines): a virtual desktop was
+    /// destroyed — reap every piece of per-desktop state keyed to @p desktop
+    /// (1-based, the OLD number, before any renumbering of survivors).
+    /// Identity-based, unlike pruneStatesForDesktop's count-based sweep: the
+    /// caller knows exactly which desktop died. Engines compose their existing
+    /// desktop prune with the sweeps that prune misses (value-side desktop
+    /// ints, burst flags).
+    virtual void reapDesktopState(int desktop)
+    {
+        Q_UNUSED(desktop)
+    }
+    /// Dynamic-workspaces arm: surviving desktops were renumbered (oldInt →
+    /// newInt, 1-based, absent = unchanged). Engines rewrite every stored
+    /// desktop int — state keys, reverse maps, sticky pins, auxiliary maps —
+    /// via PerScreenStates::renumberDesktops + ScreenContextTracker::
+    /// renumberDesktops + renumberDesktopKeyedHash. Called AFTER
+    /// reapDesktopState for the removed desktops of the same settled change.
+    virtual void renumberDesktopState(const QHash<int, int>& oldToNew)
+    {
+        Q_UNUSED(oldToNew)
     }
     /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
     /// (monitor hot-unplug), matching every virtual sub-screen of the removed

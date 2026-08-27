@@ -76,6 +76,10 @@ private Q_SLOTS:
     void rekeyWindows_rewritesMatching();
     void removeStatesIf_lockstepWithHook();
     void removeWindowsIf_byPredicate();
+    void reapDesktop_sweepsBothMaps();
+    void renumberDesktops_shiftsKeysCollisionFree();
+    void renumberDesktops_skipPredicateExemptsSentinels();
+    void renumberDesktopKeyedHash_auxMaps();
 
 private:
     std::vector<std::unique_ptr<FakeState>> m_owned;
@@ -238,6 +242,94 @@ void TestPerScreenStates::removeWindowsIf_byPredicate()
     });
     QVERIFY(states.hasWindow(QStringLiteral("keep")));
     QVERIFY(!states.hasWindow(QStringLiteral("drop")));
+}
+
+void TestPerScreenStates::reapDesktop_sweepsBothMaps()
+{
+    PerScreenStates<FakeState> states;
+    states.insertState(key(QStringLiteral("S1"), 2), makeState(QStringLiteral("S1")));
+    states.insertState(key(QStringLiteral("S1"), 3), makeState(QStringLiteral("S1")));
+    states.setKeyForWindow(QStringLiteral("w2"), key(QStringLiteral("S1"), 2));
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+
+    QStringList torn;
+    states.reapDesktop(2, [&torn](const PlacementStateKey&, FakeState*) {
+        torn.append(QStringLiteral("torn"));
+    });
+
+    QCOMPARE(torn.size(), 1);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+    QVERIFY(states.containsKey(key(QStringLiteral("S1"), 3)));
+    QVERIFY(!states.hasWindow(QStringLiteral("w2")));
+    QVERIFY(states.hasWindow(QStringLiteral("w3")));
+}
+
+void TestPerScreenStates::renumberDesktops_shiftsKeysCollisionFree()
+{
+    PerScreenStates<FakeState> states;
+    // Remove-desktop-2 shape: 3→2, 4→3 — the classic shift where a naive
+    // in-place rewrite would collide (3 lands on the not-yet-moved 2 slot if
+    // 2 had survived; here 3 and 4 swap through each other's numbers).
+    FakeState* s3 = makeState(QStringLiteral("S1"));
+    FakeState* s4 = makeState(QStringLiteral("S1"));
+    states.insertState(key(QStringLiteral("S1"), 3), s3);
+    states.insertState(key(QStringLiteral("S1"), 4), s4);
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+    states.setKeyForWindow(QStringLiteral("w4"), key(QStringLiteral("S1"), 4));
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    states.renumberDesktops(mapping);
+
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 2)), s3);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 3)), s4);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 4)));
+    QCOMPARE(states.keyForWindow(QStringLiteral("w3")).desktop, 2);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w4")).desktop, 3);
+    // MUTATION GUARD: after the pass, no key carries a stale pre-shift int.
+    for (auto it = states.states().constBegin(); it != states.states().constEnd(); ++it) {
+        QVERIFY(it.key().desktop == 2 || it.key().desktop == 3);
+    }
+}
+
+void TestPerScreenStates::renumberDesktops_skipPredicateExemptsSentinels()
+{
+    PerScreenStates<FakeState> states;
+    // The snap engine's global holder: empty screenId is a sentinel key whose
+    // desktop int is not a desktop context and must not shift.
+    FakeState* global = makeState(QString());
+    FakeState* normal = makeState(QStringLiteral("S1"));
+    states.insertState(key(QString(), 2), global);
+    states.insertState(key(QStringLiteral("S1"), 2), normal);
+
+    QHash<int, int> mapping;
+    mapping.insert(2, 1);
+    states.renumberDesktops(mapping, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+
+    QCOMPARE(states.stateForKey(key(QString(), 2)), global);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 1)), normal);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+}
+
+void TestPerScreenStates::renumberDesktopKeyedHash_auxMaps()
+{
+    QHash<PlacementStateKey, QString> aux;
+    aux.insert(key(QStringLiteral("S1"), 3), QStringLiteral("a"));
+    aux.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
+    aux.insert(key(QStringLiteral("S2"), 1), QStringLiteral("c"));
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    PhosphorEngine::renumberDesktopKeyedHash(aux, mapping);
+
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 2)), QStringLiteral("a"));
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 3)), QStringLiteral("b"));
+    QCOMPARE(aux.value(key(QStringLiteral("S2"), 1)), QStringLiteral("c"));
+    QCOMPARE(aux.size(), 3);
 }
 
 QTEST_MAIN(TestPerScreenStates)

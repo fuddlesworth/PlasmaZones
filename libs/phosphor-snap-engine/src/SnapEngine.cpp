@@ -300,6 +300,35 @@ void SnapEngine::pruneStatesForDesktop(int removedDesktop)
     m_context.pruneDesktop(removedDesktop);
 }
 
+void SnapEngine::reapDesktopState(int desktop)
+{
+    pruneStatesForDesktop(desktop);
+    // The key-level prune cannot reach the desktop VALUES snap keeps per
+    // window inside every surviving state (assignments are desktop-tagged,
+    // and the global holder is deliberately excluded from the prune).
+    const auto& states = m_states.states();
+    for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
+        it.value()->reapDesktopValues(desktop);
+    }
+}
+
+void SnapEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
+{
+    if (oldToNew.isEmpty()) {
+        return;
+    }
+    // The global holder's key (empty screenId) is a sentinel, not a desktop
+    // context — exclude it from the key rewrite, exactly as both prunes do.
+    m_states.renumberDesktops(oldToNew, [](const PhosphorEngine::PlacementStateKey& key) {
+        return key.screenId.isEmpty();
+    });
+    m_context.renumberDesktops(oldToNew);
+    const auto& states = m_states.states();
+    for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
+        it.value()->renumberDesktopValues(oldToNew);
+    }
+}
+
 void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());

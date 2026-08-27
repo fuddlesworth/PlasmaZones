@@ -7,6 +7,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <phosphorengine_export.h>
 
+#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QRect>

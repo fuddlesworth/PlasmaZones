@@ -153,6 +153,11 @@ QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
     return m_appIdIndex.values(appId);
 }
 
+QStringList WindowRegistry::instanceIds() const
+{
+    return m_records.keys();
+}
+
 bool WindowRegistry::contains(const QString& instanceId) const
 {
     return m_records.contains(instanceId);

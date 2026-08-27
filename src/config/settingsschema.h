@@ -77,6 +77,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema);
 void appendScrollingZoneSelectorSchema(PhosphorConfig::Schema& schema);
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema);
 void appendWindowsSchema(PhosphorConfig::Schema& schema);
+void appendWorkspacesSchema(PhosphorConfig::Schema& schema);
 void appendGapsSchema(PhosphorConfig::Schema& schema);
 void appendDecorationsSchema(PhosphorConfig::Schema& schema);
 

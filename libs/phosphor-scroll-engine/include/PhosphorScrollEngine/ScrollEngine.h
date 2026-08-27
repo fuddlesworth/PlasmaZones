@@ -670,6 +670,8 @@ public:
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
+    void reapDesktopState(int desktop) override;
+    void renumberDesktopState(const QHash<int, int>& oldToNew) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════

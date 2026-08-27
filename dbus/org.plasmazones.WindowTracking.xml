@@ -258,6 +258,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier where navigation occurred (for OSD placement)."/>
             </arg>
         </signal>
+        <signal name="workspaceMapChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the dynamic-workspaces ownership map changes (per-monitor workspace slices over KWin's shared desktop pool). Change-gated: only fires on an actual payload difference. The KWin effect caches the payload for the future overview; a late-loading effect replays via workspaceMap()."/>
+            <arg name="mapJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Versioned JSON object: {v, generation, screenOrder, slices: {screenId: [{id, index, name?, current?}]}}. Desktop identity is the KWin UUID string in id; index is the live 1-based global desktop number for effects->desktops() addressing."/>
+            </arg>
+        </signal>
+        <method name="workspaceMap">
+            <annotation name="org.gtk.GDBus.DocString" value="Replay half of workspaceMapChanged for an effect that loads after the map last changed. Empty string when dynamic workspaces are disabled or not yet adopted."/>
+            <arg name="mapJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="The current map payload, same shape as workspaceMapChanged."/>
+            </arg>
+        </method>
         <signal name="pendingRestoresAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
         </signal>
@@ -355,6 +367,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="desktop" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="The screen's current virtual desktop, 1-based (x11DesktopNumber)."/>
+            </arg>
+        </method>
+        <method name="reportPerOutputDesktopsMode">
+            <annotation name="org.gtk.GDBus.DocString" value="Report the compositor's actual per-output-virtual-desktops mode. Called by the KWin effect at bringup; the authoritative arm of the dynamic-workspaces feature gate (a kwinrc read can disagree with the running compositor)."/>
+            <arg name="enabled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True when KWin runs with PerOutputVirtualDesktops on."/>
             </arg>
         </method>
         <method name="setWindowMetadata">

@@ -45,6 +45,26 @@ public:
     void removeScreenDesktop(const QString& screenId);
 
     void setCurrentDesktop(int desktop);
+
+    /// Ask KWin to create a desktop at the given 0-based global position (KWin's
+    /// D-Bus signature; the caller computes the position, this wrapper only
+    /// forwards). Fire-and-forget: the result arrives as a desktopCreated signal
+    /// followed by a settled desktopListChanged.
+    void createDesktop(uint position, const QString& name);
+    /// Ask KWin to remove the desktop with the given UUID string. Result arrives
+    /// as desktopRemoved + desktopListChanged.
+    void removeDesktop(const QString& desktopId);
+    /// Ask KWin to rename the desktop with the given UUID string.
+    void setDesktopName(const QString& desktopId, const QString& name);
+
+    /// Ordered KWin desktop UUID strings (global order, refreshed from the
+    /// `desktops` property). Empty until the first refresh or without KWin.
+    QStringList desktopIds() const;
+    /// UUID at 1-based global index, or empty when out of range.
+    QString desktopIdAt(int desktop) const;
+    /// 1-based global index of the UUID, or 0 when unknown.
+    int desktopIndexOf(const QString& desktopId) const;
+
     int desktopCount() const;
     /// Number of rows in KWin's virtual-desktop grid (>= 1). With the count,
     /// this gives the grid shape that cross-desktop directional navigation
@@ -60,13 +80,22 @@ Q_SIGNALS:
     /// subscribes to; in single-desktop mode it is driven the same for every
     /// screen so downstream has one code path.
     void screenDesktopChanged(const QString& screenId, int desktop);
+    /// A KWin desktopCreated arrived carrying this UUID. Emitted BEFORE the
+    /// async list refresh settles — id-only, positions still stale. The
+    /// reconciler matches its ledger on this, then acts on desktopListChanged.
+    void kwinDesktopCreated(const QString& desktopId);
+    /// A KWin desktopRemoved arrived carrying this UUID (same timing contract).
+    void kwinDesktopRemoved(const QString& desktopId);
+    /// The ordered global id list settled after a refresh (create/remove/rename
+    /// /reorder). Emitted only when the ordered id list actually changed.
+    void desktopListChanged(const QStringList& desktopIds);
 
 private Q_SLOTS:
     void onNumberOfDesktopsChanged(int count);
     void refreshFromKWin();
     void onKWinCurrentChanged(const QString& desktopId);
-    void onKWinDesktopCreated();
-    void onKWinDesktopRemoved();
+    void onKWinDesktopCreated(const QString& desktopId);
+    void onKWinDesktopRemoved(const QString& desktopId);
     void onKWinDesktopRowsChanged();
 
 private:

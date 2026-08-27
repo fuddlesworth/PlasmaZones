@@ -582,6 +582,35 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     }
 }
 
+void ScrollEngine::reapDesktopState(int desktop)
+{
+    // The count-based prune already sweeps everything a destroyed desktop
+    // leaves in this engine except the burst flags, which only had a screen
+    // sweep before dynamic workspaces made identity-based reaps a real path.
+    pruneStatesForDesktop(desktop);
+    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
+        it = it.key().desktop == desktop ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
+}
+
+void ScrollEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
+{
+    if (oldToNew.isEmpty()) {
+        return;
+    }
+    // A drag-insert preview is transient by contract (every prune path cancels
+    // it rather than migrating); a renumber mid-drag is no different.
+    if (m_dragInsertPreview) {
+        cancelDragInsertPreview();
+    }
+    m_states.renumberDesktops(oldToNew);
+    m_context.renumberDesktops(oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_stripStash, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_stripStashConsumed, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_perScreenOverrides, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_burstPendingApplies, oldToNew);
+}
+
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const auto stale = [&validActivities](const QString& activity) {

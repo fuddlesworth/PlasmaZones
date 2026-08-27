@@ -395,6 +395,11 @@ public:
     Q_PROPERTY(int scrollingDragInsertGraceMs READ scrollingDragInsertGraceMs WRITE setScrollingDragInsertGraceMs NOTIFY
                    scrollingDragInsertGraceMsChanged)
 
+    // Workspaces Settings (Workspaces.Behavior) — dynamic per-monitor workspaces
+    Q_PROPERTY(bool workspacesEnabled READ workspacesEnabled WRITE setWorkspacesEnabled NOTIFY workspacesEnabledChanged)
+    Q_PROPERTY(bool workspacesManageKWinPerOutput READ workspacesManageKWinPerOutput WRITE
+                   setWorkspacesManageKWinPerOutput NOTIFY workspacesManageKWinPerOutputChanged)
+
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
@@ -1364,6 +1369,10 @@ public:
     // validators (validIntOr), like every other stored scalar. The width
     // VALUE is the exception: its clamp is kind-aware and lives in the
     // hand-written setter below.
+    bool workspacesEnabled() const;
+    void setWorkspacesEnabled(bool enabled);
+    bool workspacesManageKWinPerOutput() const;
+    void setWorkspacesManageKWinPerOutput(bool enabled);
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;

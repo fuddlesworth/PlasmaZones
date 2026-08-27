@@ -269,6 +269,35 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         qCDebug(lcEffect) << "Re-sent screen desktop:" << screenId << "->" << desktop;
     }
 
+    // Report the compositor's ACTUAL per-output-desktops mode (dynamic
+    // workspaces' authoritative gate arm — the daemon's kwinrc read can
+    // disagree with the running compositor when the file changed without a
+    // reconfigure). VirtualDesktopManager::self() is the same internal the
+    // desktop re-sync above already relies on.
+    if (auto* vdm = KWin::VirtualDesktopManager::self()) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("reportPerOutputDesktopsMode"),
+                                                       {vdm->isPerOutputVirtualDesktops()});
+        qCDebug(lcEffect) << "Reported per-output desktops mode:" << vdm->isPerOutputVirtualDesktops();
+    }
+
+    // Replay the dynamic-workspaces map: an effect that loads after the map
+    // last changed would otherwise wait for the next change-gated push.
+    {
+        QDBusMessage query = QDBusMessage::createMethodCall(
+            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("workspaceMap"));
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(query);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isValid() && !reply.value().isEmpty()) {
+                slotWorkspaceMapChanged(reply.value());
+            }
+            w->deleteLater();
+        });
+    }
+
     // Re-notify active window (gives daemon lastActiveScreenName).
     // Hand KWin's RAW active window to notifyWindowActivated and let ITS
     // filter decide — that filter carries the fullscreen-on-a-scrolling-
@@ -732,6 +761,14 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
 
+    // Dynamic-workspaces ownership map stream (change-gated daemon push; the
+    // workspaceMap() replay query covers an effect that loads after the map
+    // last changed — pulled in the registration path).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("workspaceMapChanged"), this,
+                                          SLOT(slotWorkspaceMapChanged(QString)));
+
     // Daemon-initiated cross-output move: the daemon already migrated its
     // tiling state and reflowed both outputs; record the window so the
     // autotile handler's reactive outputChanged path updates bookkeeping only
@@ -844,6 +881,13 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // here would be a build-order bug, not a runtime condition. Worded as
     // "wired", not "connected", because the returns are not checked.
     qCDebug(lcEffect) << "Navigation D-Bus signal subscriptions wired";
+}
+
+void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
+{
+    // Consumer stub: cached for the future overview. The payload is already
+    // change-gated daemon-side, so no dedup here.
+    m_workspaceMapJson = mapJson;
 }
 
 } // namespace PlasmaZones

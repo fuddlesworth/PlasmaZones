@@ -627,6 +627,53 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
     }
 }
 
+void AutotileEngine::reapDesktopState(int desktop)
+{
+    // The count-based prune covers everything except the drag-insert preview,
+    // which it never cancels (screen removal does; the desktop axis predates
+    // identity-based reaps). A preview anchored in the dying context must not
+    // survive into a renumbered world.
+    if (m_dragInsertPreview
+        && ((m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey.desktop == desktop)
+            || currentDesktop() == desktop)) {
+        cancelDragInsertPreview();
+    }
+    pruneStatesForDesktop(desktop);
+}
+
+void AutotileEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
+{
+    if (oldToNew.isEmpty()) {
+        return;
+    }
+    if (m_dragInsertPreview) {
+        cancelDragInsertPreview();
+    }
+    m_states.renumberDesktops(oldToNew);
+    m_context.renumberDesktops(oldToNew);
+    // Per-key tuned flags and stashed script bags move with their keys.
+    const auto renumberKeySet = [&oldToNew](QSet<TilingStateKey>& set) {
+        QSet<TilingStateKey> next;
+        next.reserve(set.size());
+        for (const TilingStateKey& key : std::as_const(set)) {
+            TilingStateKey moved = key;
+            moved.desktop = oldToNew.value(key.desktop, key.desktop);
+            next.insert(moved);
+        }
+        set = next;
+    };
+    renumberKeySet(m_userTunedSplitRatio);
+    renumberKeySet(m_userTunedMasterCount);
+    std::unordered_map<TilingStateKey, StashedScriptState> movedStash;
+    movedStash.reserve(m_scriptStateStash.size());
+    for (auto& [key, stash] : m_scriptStateStash) {
+        TilingStateKey moved = key;
+        moved.desktop = oldToNew.value(key.desktop, key.desktop);
+        movedStash.emplace(moved, std::move(stash));
+    }
+    m_scriptStateStash = std::move(movedStash);
+}
+
 void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
 {
     if (physicalScreenId.isEmpty()) {

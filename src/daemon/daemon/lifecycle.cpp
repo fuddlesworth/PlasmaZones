@@ -232,6 +232,7 @@ void Daemon::start()
     connectScrollingShortcuts();
     initializeAutotile();
     initializeUnifiedController();
+    initializeWorkspaces();
     connectLayoutSignals();
     connectOverlaySignals();
 

@@ -23,6 +23,7 @@ private Q_SLOTS:
     void releaseScreenOwnership_keepsPerOutputDesktop();
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
+    void renumberDesktops_identityShift();
 };
 
 void TestScreenContextTracker::currentKeyForScreen_precedence()
@@ -205,6 +206,30 @@ void TestScreenContextTracker::pruneDesktop_byValue()
     QVERIFY(!t.hasStickyPin(QStringLiteral("S1"))); // pinned to removed desktop 5
     QVERIFY(t.hasStickyPin(QStringLiteral("S2"))); // desktop 6 survives
     QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1); // per-output 5 gone
+}
+
+void TestScreenContextTracker::renumberDesktops_identityShift()
+{
+    ScreenContextTracker t;
+    t.setCurrentDesktop(4);
+    t.setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
+    t.setCurrentDesktopForScreen(QStringLiteral("S2"), 1);
+    t.setStickyPin(QStringLiteral("S1"), 4);
+
+    // Desktop 2 was destroyed: 3→2, 4→3; 1 untouched (absent = unchanged).
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    t.renumberDesktops(mapping);
+
+    QCOMPARE(t.currentDesktop(), 3);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 2);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S2")), 1);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S1")), 3);
+
+    // Empty mapping is a no-op.
+    t.renumberDesktops({});
+    QCOMPARE(t.currentDesktop(), 3);
 }
 
 QTEST_MAIN(TestScreenContextTracker)

@@ -20,8 +20,12 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorWorkspaces SHARED
     include/PhosphorWorkspaces/VirtualDesktopManager.h
     include/PhosphorWorkspaces/ActivityManager.h
+    include/PhosphorWorkspaces/WorkspaceMap.h
+    include/PhosphorWorkspaces/WorkspaceReconciler.h
     src/VirtualDesktopManager.cpp
     src/ActivityManager.cpp
+    src/WorkspaceMap.cpp
+    src/WorkspaceReconciler.cpp
 )
 add_library(PhosphorWorkspaces::PhosphorWorkspaces ALIAS PhosphorWorkspaces)
 
@@ -67,6 +71,11 @@ if(TARGET Plasma::Activities)
 elseif(TARGET KF6::Activities)
     target_compile_definitions(PhosphorWorkspaces PRIVATE HAVE_KACTIVITIES)
     target_link_libraries(PhosphorWorkspaces PRIVATE KF6::Activities)
+endif()
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorWorkspaces" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════

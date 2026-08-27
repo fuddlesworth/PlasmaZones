@@ -96,6 +96,10 @@ public:
     // top-level group; the gap values are read by both engines.
     P_CONFIG_GROUP(gapsGroup, "Gaps")
 
+    // Workspaces — dynamic per-monitor workspaces (mode-neutral top-level
+    // group: the feature is a layer below all three placement modes).
+    P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
+
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     P_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
@@ -272,6 +276,14 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(enabledKey, "Enabled")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Workspaces.Behavior
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Consent latch for writing KWin's PerOutputVirtualDesktops kwinrc key on
+    // the user's behalf (dynamic workspaces enable flow).
+    P_CONFIG_KEY(manageKWinPerOutputKey, "ManageKWinPerOutputSetting")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Behavior

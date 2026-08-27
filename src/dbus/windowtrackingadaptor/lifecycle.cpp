@@ -917,6 +917,15 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
 }
 
+void WindowTrackingAdaptor::reportPerOutputDesktopsMode(bool enabled)
+{
+    if (m_perOutputDesktopsMode.has_value() && *m_perOutputDesktopsMode == enabled) {
+        return;
+    }
+    m_perOutputDesktopsMode = enabled;
+    Q_EMIT perOutputDesktopsModeReported(enabled);
+}
+
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
     if (windowId.isEmpty() || width <= 0 || height <= 0) {

@@ -164,4 +164,27 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     }
 }
 
+void ScreenContextTracker::renumberDesktops(const QHash<int, int>& oldToNew)
+{
+    // Identity-based semantics, unlike pruneDesktop's count-based ones: the
+    // dynamic-workspaces reconciler computes the mapping from the KWin id-list
+    // delta, so a value here IS the same desktop under a new number. Absent
+    // values are untouched (their desktop did not shift). Runs in lockstep
+    // with the engines' state-map renumber so pins keep naming the desktop
+    // whose state they protect.
+    if (oldToNew.isEmpty()) {
+        return;
+    }
+    const auto remap = [&oldToNew](int desktop) {
+        return oldToNew.value(desktop, desktop);
+    };
+    m_currentDesktop = remap(m_currentDesktop);
+    for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end(); ++it) {
+        it.value() = remap(it.value());
+    }
+    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end(); ++it) {
+        it.value() = remap(it.value());
+    }
+}
+
 } // namespace PhosphorEngine

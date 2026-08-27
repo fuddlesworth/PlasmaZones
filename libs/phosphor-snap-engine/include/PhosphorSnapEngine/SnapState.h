@@ -176,6 +176,59 @@ public:
         Q_EMIT stateChanged();
     }
 
+    /// Dynamic-workspaces arm: drop the per-window desktop tags naming a
+    /// destroyed desktop and reset the last-used memo if it named it. The
+    /// snap assignments are desktop-tagged per window inside EVERY state
+    /// (including the global holder), so a state whose own key survives a
+    /// desktop's death can still hold stale values — the key-level prune
+    /// cannot reach these. 0 (sticky / on-all-desktops) is a sentinel and is
+    /// never touched by either arm.
+    void reapDesktopValues(int desktop)
+    {
+        bool changed = false;
+        for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end();) {
+            if (it.value() == desktop) {
+                it = m_windowDesktopAssignments.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+        if (m_lastUsedDesktop == desktop) {
+            m_lastUsedDesktop = 0;
+            changed = true;
+        }
+        if (changed) {
+            Q_EMIT stateChanged();
+        }
+    }
+
+    /// Dynamic-workspaces arm: rewrite the per-window desktop tags and the
+    /// last-used memo per `oldToNew` (absent = unchanged; 0 sentinel kept).
+    void renumberDesktopValues(const QHash<int, int>& oldToNew)
+    {
+        bool changed = false;
+        for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
+            if (it.value() != 0) {
+                const int mapped = oldToNew.value(it.value(), it.value());
+                if (mapped != it.value()) {
+                    it.value() = mapped;
+                    changed = true;
+                }
+            }
+        }
+        if (m_lastUsedDesktop != 0) {
+            const int mapped = oldToNew.value(m_lastUsedDesktop, m_lastUsedDesktop);
+            if (mapped != m_lastUsedDesktop) {
+                m_lastUsedDesktop = mapped;
+                changed = true;
+            }
+        }
+        if (changed) {
+            Q_EMIT stateChanged();
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating State
     // ═══════════════════════════════════════════════════════════════════════════

@@ -484,6 +484,15 @@ public Q_SLOTS:
     void screenDesktopChanged(const QString& screenId, int desktop);
 
     /**
+     * Report the compositor's ACTUAL per-output-virtual-desktops mode
+     * (dynamic workspaces' authoritative gate arm). Called by the KWin effect
+     * at bringup; cached and re-emitted in-process as
+     * perOutputDesktopsModeReported for the workspace gate to consult.
+     * @param enabled Whether KWin is running with per-output desktops on
+     */
+    void reportPerOutputDesktopsMode(bool enabled);
+
+    /**
      * Report navigation feedback from KWin effect (D-Bus method)
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "swap")
@@ -1154,7 +1163,38 @@ public:
      */
     void requestReapplyWindowGeometries();
 
+    /**
+     * @brief Cache + broadcast the dynamic-workspaces ownership map.
+     *
+     * Called by the daemon's workspace relay with the controller's
+     * change-gated payload; caches it for the workspaceMap() replay query and
+     * emits workspaceMapChanged. Not a D-Bus method.
+     */
+    void setWorkspaceMapPayload(const QString& mapJson);
+
+public Q_SLOTS:
+    /**
+     * @brief The current dynamic-workspaces map payload (replay half of
+     * workspaceMapChanged, same contract as scrollTabStrips on the tiling
+     * interface). Empty string when the feature is off or not yet adopted.
+     * D-Bus method — the effect pulls it at bringup.
+     */
+    QString workspaceMap() const;
+
 Q_SIGNALS:
+    /**
+     * @brief The dynamic-workspaces ownership map changed (see the XML for
+     * the payload shape). Change-gated by the WorkspaceController.
+     */
+    void workspaceMapChanged(const QString& mapJson);
+
+    /**
+     * @brief In-process relay of reportPerOutputDesktopsMode (the effect's
+     * authoritative probe of KWin's per-output-desktops mode). Emitted on
+     * every report, change-gated by the cache.
+     */
+    void perOutputDesktopsModeReported(bool enabled);
+
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
@@ -1739,6 +1779,12 @@ private:
     bool m_hasPendingRestores = false; // True if layout has pending restores waiting
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
     bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
+
+    /// Last dynamic-workspaces map payload, the workspaceMap() replay cache
+    /// (empty until the WorkspaceController publishes after adoption).
+    QString m_lastWorkspaceMap;
+    /// Effect-probed per-output-desktops mode (unset until the first report).
+    std::optional<bool> m_perOutputDesktopsMode;
 };
 
 } // namespace PlasmaZones

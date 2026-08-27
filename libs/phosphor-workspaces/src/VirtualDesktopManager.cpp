@@ -57,11 +57,13 @@ void VirtualDesktopManager::initKWinDBus()
 
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
+                                              QStringLiteral("desktopCreated"), this,
+                                              SLOT(onKWinDesktopCreated(QString)));
 
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
+                                              QStringLiteral("desktopRemoved"), this,
+                                              SLOT(onKWinDesktopRemoved(QString)));
 
         // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
         // the desktop count, so it fires neither countChanged nor created/removed
@@ -78,6 +80,7 @@ void VirtualDesktopManager::initKWinDBus()
 
 void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, const QString& currentId)
 {
+    const QStringList previousIds = m_desktopIds;
     m_desktopNames.clear();
     m_desktopIds.clear();
 
@@ -135,6 +138,10 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, con
 
     while (m_desktopNames.size() < m_desktopCount) {
         m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
+    }
+
+    if (m_desktopIds != previousIds) {
+        Q_EMIT desktopListChanged(m_desktopIds);
     }
 }
 
@@ -210,14 +217,16 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
     Q_EMIT currentDesktopChanged(m_currentDesktop);
 }
 
-void VirtualDesktopManager::onKWinDesktopCreated()
+void VirtualDesktopManager::onKWinDesktopCreated(const QString& desktopId)
 {
+    Q_EMIT kwinDesktopCreated(desktopId);
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
-void VirtualDesktopManager::onKWinDesktopRemoved()
+void VirtualDesktopManager::onKWinDesktopRemoved(const QString& desktopId)
 {
+    Q_EMIT kwinDesktopRemoved(desktopId);
     refreshFromKWin();
     clampScreenDesktopsToCount();
     Q_EMIT desktopCountChanged(m_desktopCount);
@@ -345,6 +354,48 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
             m_kwinVDInterface->setProperty("current", m_desktopIds.at(idx));
         }
     }
+}
+
+void VirtualDesktopManager::createDesktop(uint position, const QString& name)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("createDesktop"), position, name);
+}
+
+void VirtualDesktopManager::removeDesktop(const QString& desktopId)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface || desktopId.isEmpty()) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("removeDesktop"), desktopId);
+}
+
+void VirtualDesktopManager::setDesktopName(const QString& desktopId, const QString& name)
+{
+    if (!m_useKWinDBus || !m_kwinVDInterface || desktopId.isEmpty()) {
+        return;
+    }
+    m_kwinVDInterface->asyncCall(QStringLiteral("setDesktopName"), desktopId, name);
+}
+
+QStringList VirtualDesktopManager::desktopIds() const
+{
+    return m_desktopIds;
+}
+
+QString VirtualDesktopManager::desktopIdAt(int desktop) const
+{
+    if (desktop < 1 || desktop > m_desktopIds.size()) {
+        return QString();
+    }
+    return m_desktopIds.at(desktop - 1);
+}
+
+int VirtualDesktopManager::desktopIndexOf(const QString& desktopId) const
+{
+    return m_desktopIds.indexOf(desktopId) + 1;
 }
 
 void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)

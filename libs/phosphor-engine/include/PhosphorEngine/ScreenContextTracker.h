@@ -218,6 +218,11 @@ public:
     /// Drop entries from both per-screen maps whose DESKTOP value equals
     /// `removedDesktop` (a virtual desktop was destroyed / renumbered).
     void pruneDesktop(int removedDesktop);
+    /// Rewrite every tracked desktop int per `oldToNew` (1-based; absent =
+    /// unchanged): the global current, per-screen currents, and sticky pins.
+    /// The dynamic-workspaces renumber pass drives this alongside the engines'
+    /// state-map rewrite so pins stay keyed to the desktop they meant.
+    void renumberDesktops(const QHash<int, int>& oldToNew);
 
 private:
     /// Current desktop/activity context. `*ContextEverSet` carry "a context was

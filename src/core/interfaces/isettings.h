@@ -1006,6 +1006,10 @@ Q_SIGNALS:
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
 
+    // Workspaces settings (dynamic per-monitor workspaces)
+    void workspacesEnabledChanged();
+    void workspacesManageKWinPerOutputChanged();
+
     // Scrolling settings
     void scrollingEnabledChanged();
     void scrollingCenterFocusedColumnChanged();

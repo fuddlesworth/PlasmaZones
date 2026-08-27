@@ -107,6 +107,7 @@ set(plasmazones_core_SRCS
     config/settings/storescalars.cpp
     config/settings/shortcuts.cpp
     config/settings/scrolling.cpp
+    config/settings/workspaces.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -504,6 +505,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp
+    daemon/daemon/workspaces.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
@@ -575,6 +577,9 @@ set(plasmazones_daemon_SRCS
     # Mode tracking and smart toggle (Unified Layout Model)
     daemon/controllers/unifiedlayoutcontroller.cpp
     daemon/controllers/unifiedlayoutcontroller.h
+    # Dynamic per-monitor workspaces
+    daemon/controllers/workspacecontroller.cpp
+    daemon/controllers/workspacecontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 

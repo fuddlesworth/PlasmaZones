@@ -166,6 +166,10 @@ public:
     /// need a deterministic sequence — anything FIFO-shaped — must sort or
     /// otherwise order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
+    /// Every tracked instance id, unordered. For consumers that must seed
+    /// derived per-window state at attach time (the dynamic-workspaces
+    /// population census) rather than replaying history.
+    QStringList instanceIds() const;
     bool contains(const QString& instanceId) const;
     int size() const;
     /// Remove every record and canonical mapping, firing windowDisappeared

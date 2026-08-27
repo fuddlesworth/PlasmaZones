@@ -258,6 +258,20 @@ void WindowTrackingAdaptor::saveState()
                          << "userSnapped=" << userSnappedArray.size();
 }
 
+void WindowTrackingAdaptor::setWorkspaceMapPayload(const QString& mapJson)
+{
+    if (m_lastWorkspaceMap == mapJson) {
+        return;
+    }
+    m_lastWorkspaceMap = mapJson;
+    Q_EMIT workspaceMapChanged(mapJson);
+}
+
+QString WindowTrackingAdaptor::workspaceMap() const
+{
+    return m_lastWorkspaceMap;
+}
+
 void WindowTrackingAdaptor::requestReapplyWindowGeometries()
 {
     Q_EMIT reapplyWindowGeometriesRequested();

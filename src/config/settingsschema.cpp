@@ -62,6 +62,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendScrollingSchema(s);
     appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
+    appendWorkspacesSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
 
@@ -1079,6 +1080,17 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
 // The single inter-window gap model used by BOTH snapping and tiling. Uniform
 // inner/outer plus the per-side outer overrides (gated by UsePerSide). All ints
 // clamped to the shared gap range.
+
+void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    // Dynamic per-monitor workspaces gate scalars. Named-workspace
+    // declarations join this group in Phase 3.
+    schema.groups[CD::workspacesBehaviorGroup()] = {
+        {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool},
+        {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
+    };
+}
 
 void appendGapsSchema(PhosphorConfig::Schema& schema)
 {
