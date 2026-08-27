@@ -78,6 +78,17 @@ void WorkspaceController::focusWorkspace(const QString& screenId, int delta)
     });
 }
 
+void WorkspaceController::focusWorkspaceAt(const QString& screenId, int sliceIndex)
+{
+    runWhenQuiet([this, screenId, sliceIndex]() {
+        const QString target = m_reconciler.desktopIdAtSliceIndex(screenId, sliceIndex);
+        if (target.isEmpty()) {
+            return; // slot beyond the screen's slice
+        }
+        switchScreenToDesktop(screenId, target);
+    });
+}
+
 void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta)
 {
     if (windowId.isEmpty()) {
@@ -246,6 +257,28 @@ void WorkspaceController::focusNamedWorkspace(const QString& name)
         // owner screen, whichever screen the shortcut fired on.
         switchScreenToDesktop(m_reconciler.map().ownerOf(target), target);
     });
+}
+
+bool WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const QString& windowId)
+{
+    // Rules-pipeline arm: no runWhenQuiet — the caller needs the truth NOW.
+    // During structural churn the slice index a deferred move would resolve
+    // later cannot be promised, so report false and let the positional
+    // desktop route (if the cascade carries one) handle the window instead.
+    if (windowId.isEmpty() || m_reconciler.hasPendingStructuralOps()) {
+        return false;
+    }
+    const QString target = desktopIdForName(name);
+    if (target.isEmpty()) {
+        return false;
+    }
+    const int desktop = m_vdm->desktopIndexOf(target);
+    if (desktop <= 0) {
+        return false;
+    }
+    watchWindowMove(windowId, target);
+    Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"));
+    return true;
 }
 
 void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const QString& windowId)

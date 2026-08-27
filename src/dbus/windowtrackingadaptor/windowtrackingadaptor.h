@@ -1352,6 +1352,10 @@ Q_SIGNALS:
     /// Cross-desktop directional move: KWin should move @p windowId to virtual
     /// desktop @p desktop (1-based). The effect calls windowToDesktops.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
+    /// Move a window to another OUTPUT with no engine handoff (untracked /
+    /// floating windows on the workspace verbs); the effect calls
+    /// windowToScreen. No-op when the window already sits on the target.
+    void windowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
 
     /// Daemon-initiated cross-output move: the daemon has migrated its own
     /// tiling state for @p windowId onto @p targetScreenId and scheduled both

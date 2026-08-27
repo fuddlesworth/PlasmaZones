@@ -632,10 +632,13 @@ void AutotileEngine::reapDesktopState(int desktop)
     // The count-based prune covers everything except the drag-insert preview,
     // which it never cancels (screen removal does; the desktop axis predates
     // identity-based reaps). A preview anchored in the dying context must not
-    // survive into a renumbered world.
+    // survive into a renumbered world. The live anchor is the TARGET SCREEN's
+    // current desktop, not the global one — per-output desktops make those
+    // diverge routinely, and a preview judged against the global current
+    // could survive the reap and lazily recreate state at the dead key.
     if (m_dragInsertPreview
         && ((m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey.desktop == desktop)
-            || currentDesktop() == desktop)) {
+            || m_context.currentKeyForScreen(m_dragInsertPreview->targetScreenId).desktop == desktop)) {
         cancelDragInsertPreview();
     }
     pruneStatesForDesktop(desktop);

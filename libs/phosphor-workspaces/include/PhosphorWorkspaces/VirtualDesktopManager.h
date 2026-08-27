@@ -29,6 +29,11 @@ public:
 
     int currentDesktop() const override;
     int currentDesktopForScreen(const QString& screenId) const override;
+    /// Whether a REAL per-output report exists for this screen (exact key, or
+    /// the parent output of a virtual id). currentDesktopForScreen falls back
+    /// to the global current when this is false — callers that must not act
+    /// on the fallback (first-run adoption) gate on this instead.
+    bool hasScreenDesktopReport(const QString& screenId) const;
     bool perScreenModeActive() const override;
 
     /// Record a screen's current virtual desktop (1-based). This is fed by the

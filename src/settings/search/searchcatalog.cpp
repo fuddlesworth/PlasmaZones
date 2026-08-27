@@ -88,7 +88,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("split"), PhosphorI18n::tr("subdivide"), PhosphorI18n::tr("region"),
                              PhosphorI18n::tr("monitor")});
 
-    // Dynamic per-monitor workspaces (the two leaves under the "workspaces"
+    // Dynamic per-monitor workspaces (the three leaves under the "workspaces"
     // drill parent). Multi-word phrases included whole — the ranker matches
     // the query as one un-split needle. "niri" stays untranslated.
     search->setPageKeywords(QStringLiteral("workspaces-behavior"),
@@ -97,6 +97,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              QStringLiteral("niri")});
     addSection(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesBehavior"),
                PhosphorI18n::tr("Behavior"));
+    addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesDynamicLists"),
+               PhosphorI18n::tr("Dynamic workspace lists"),
+               {PhosphorI18n::tr("dynamic"), PhosphorI18n::tr("per monitor"), PhosphorI18n::tr("workspace list"),
+                PhosphorI18n::tr("automatic")});
     addSetting(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesSnapBackOsdHint"),
                PhosphorI18n::tr("Workspace hint"),
                {PhosphorI18n::tr("osd"), PhosphorI18n::tr("hint"), PhosphorI18n::tr("snap back"),
@@ -110,6 +114,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("pin"), PhosphorI18n::tr("persistent")});
     addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedAdd"),
                PhosphorI18n::tr("Add named workspace"));
+    addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedList"),
+               PhosphorI18n::tr("Named workspaces"));
     search->setPageKeywords(QStringLiteral("workspaces-shortcuts"),
                             {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("shortcut"),
                              PhosphorI18n::tr("quick shortcut"), PhosphorI18n::tr("move window")});

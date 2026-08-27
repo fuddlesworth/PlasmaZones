@@ -80,8 +80,9 @@ public:
      * pass-throughs; only the KGlobalAccel backend supports them). The
      * dynamic-workspaces stock-shortcut takeover is the caller.
      */
-    bool setForeignShortcut(const QString& componentName, const QString& actionName, const QKeySequence& sequence);
-    QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const;
+    bool setForeignShortcuts(const QString& componentName, const QString& actionName,
+                             const QList<QKeySequence>& sequences);
+    QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const;
 
     /**
      * Drop a binding entirely. Releases any key grab and forgets the

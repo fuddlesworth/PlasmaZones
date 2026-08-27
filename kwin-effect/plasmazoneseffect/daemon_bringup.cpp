@@ -761,6 +761,13 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
 
+    // Output move with no engine handoff (untracked/floating windows on the
+    // workspace verbs); windowToScreen, no-op when already there.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowOutputMoveRequested"), this,
+                                          SLOT(slotWindowOutputMoveRequested(QString, QString)));
+
     // Dynamic-workspaces ownership map stream (change-gated daemon push; the
     // workspaceMap() replay query covers an effect that loads after the map
     // last changed — pulled in the registration path).
@@ -892,7 +899,16 @@ void PlasmaZonesEffect::connectNavigationSignals()
 void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
 {
     // Consumer stub: cached for the future overview. The payload is already
-    // change-gated daemon-side, so no dedup here.
+    // change-gated daemon-side, but ORDERING is not guaranteed here: the
+    // bringup replay is an async query whose reply can land after a live
+    // push — the payload's generation counter decides which is newer, and an
+    // older map never overwrites a newer one.
+    const quint64 generation = static_cast<quint64>(
+        QJsonDocument::fromJson(mapJson.toUtf8()).object().value(QLatin1String("generation")).toDouble());
+    if (!m_workspaceMapJson.isEmpty() && generation < m_workspaceMapGeneration) {
+        return;
+    }
+    m_workspaceMapGeneration = generation;
     m_workspaceMapJson = mapJson;
 }
 

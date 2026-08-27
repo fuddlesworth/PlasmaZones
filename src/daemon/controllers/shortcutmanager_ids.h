@@ -57,6 +57,11 @@ inline QString workspaceMoveSlotId(int slotZeroBased)
 {
     return QLatin1String(kWorkspaceMoveSlotPrefix) + QString::number(slotZeroBased + 1);
 }
+inline constexpr auto kWorkspaceFocusSlotPrefix = "workspace_focus_slot_";
+inline QString workspaceFocusSlotId(int slotZeroBased)
+{
+    return QLatin1String(kWorkspaceFocusSlotPrefix) + QString::number(slotZeroBased + 1);
+}
 inline constexpr auto kIdSwapWindowLeft = "swap_window_left";
 inline constexpr auto kIdSwapWindowRight = "swap_window_right";
 inline constexpr auto kIdSwapWindowUp = "swap_window_up";

@@ -4,6 +4,7 @@
 #include "workspacecontroller.h"
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -116,9 +117,28 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
                     Q_EMIT screenDesktopSwitchRequested(screenId, desktop);
                 }
             });
-    // Deferred verbs resume once the structural churn settles.
+    // Deferred verbs resume once the structural churn settles — and also
+    // after a ledger expiry, which clears the structural op WITHOUT a map
+    // change (the cap-refusal probe path); without this hook, verbs queued
+    // behind a refused create would strand until an unrelated map change.
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
             &WorkspaceController::drainQuietQueue);
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::resyncRequested, this,
+            &WorkspaceController::drainQuietQueue);
+    // Destroy race (plan §4.3 step 4): snapshot the census of the doomed
+    // desktop; the removal echo consumes it and re-routes each window to the
+    // owner's current workspace (KWin swept them to an arbitrary neighbour).
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::removalRaceDetected, this,
+            [this](const QString& desktopId, const QString& ownerScreenId) {
+                DisplacedByRemoval& record = m_displacedByRemoval[desktopId];
+                record.ownerScreenId = ownerScreenId;
+                record.windowIds.clear();
+                for (auto it = m_windowCensusDesktopId.constBegin(); it != m_windowCensusDesktopId.constEnd(); ++it) {
+                    if (it.value() == desktopId) {
+                        record.windowIds.append(it.key());
+                    }
+                }
+            });
 }
 
 WorkspaceController::~WorkspaceController()
@@ -148,12 +168,45 @@ void WorkspaceController::wireVirtualDesktops()
             &PhosphorWorkspaces::WorkspaceReconciler::onKwinDesktopCreated);
     connect(m_vdm, &VDM::kwinDesktopRemoved, &m_reconciler,
             &PhosphorWorkspaces::WorkspaceReconciler::onKwinDesktopRemoved);
+    // Removal-race consumption BEFORE the reconciler processes the removal:
+    // the snapshot taken at removalRaceDetected re-routes each swept window
+    // to the owner's current workspace (plan §4.3 step 4).
+    connect(m_vdm, &VDM::kwinDesktopRemoved, this, [this](const QString& desktopId) {
+        const auto it = m_displacedByRemoval.constFind(desktopId);
+        if (it == m_displacedByRemoval.constEnd()) {
+            return;
+        }
+        const DisplacedByRemoval record = it.value();
+        m_displacedByRemoval.erase(it);
+        bool any = false;
+        for (const QString& windowId : record.windowIds) {
+            const QString ownerScreen = record.ownerScreenId;
+            runWhenQuiet([this, windowId, ownerScreen]() {
+                const QString target = m_reconciler.currentDesktopIdOf(ownerScreen);
+                const int desktop = target.isEmpty() ? 0 : m_vdm->desktopIndexOf(target);
+                if (desktop <= 0) {
+                    return;
+                }
+                watchWindowMove(windowId, target);
+                Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"));
+            });
+            any = true;
+        }
+        if (any) {
+            Q_EMIT windowDisplacedByRemoval(record.ownerScreenId);
+        }
+    });
     connect(m_vdm, &VDM::desktopListChanged, this, [this](const QStringList& ids) {
         if (!m_adopted) {
             tryFirstAdoption();
             return;
         }
         m_reconciler.onDesktopListSettled(ids);
+        // Named declarations re-verify against the settled truth (idempotent;
+        // heals a create-echo FIFO mismatch via KWin's own name list).
+        if (m_namedApplied && !m_namedEntries.isEmpty()) {
+            applyNamedDeclarations(m_namedEntries);
+        }
     });
     connect(m_vdm, &VDM::screenDesktopChanged, this, [this](const QString& screenId, int desktop) {
         if (!m_adopted) {
@@ -366,10 +419,17 @@ void WorkspaceController::tryFirstAdoption()
     if (order.isEmpty()) {
         return;
     }
-    // Gate on every known screen having a per-output report (plan §4.3); the
-    // start() timeout falls back to the global current.
+    // Gate on every known screen having a REAL per-output report (plan §4.3).
+    // currentDesktopForScreen falls back to the global current for unknown
+    // screens, which would satisfy this loop before the effect's bringup
+    // re-sync (the §4.6 ordering anchor) and hand nearly everything to the
+    // first screen — so ask for report presence explicitly; the start()
+    // timeout is the only path allowed to adopt on the global fallback.
     QHash<QString, QString> currentById;
     for (const QString& screenId : order) {
+        if (!m_vdm->hasScreenDesktopReport(screenId)) {
+            return;
+        }
         const int current = m_vdm->currentDesktopForScreen(screenId);
         const QString id = m_vdm->desktopIdAt(current);
         if (id.isEmpty()) {
@@ -383,6 +443,53 @@ void WorkspaceController::tryFirstAdoption()
     if (!m_namedApplied && !m_namedEntries.isEmpty()) {
         applyNamedDeclarations(m_namedEntries);
     }
+}
+
+void WorkspaceController::setWindowScreenResolver(std::function<QString(const QString&)> resolver)
+{
+    m_windowScreenResolver = std::move(resolver);
+}
+
+void WorkspaceController::reuniteWindowWithOwner(const QString& instanceId, const QString& desktopId)
+{
+    // Owner-wins, second arm (plan §4.7): the window follows its desktop's
+    // owner screen. A window whose desktop belongs to another output would
+    // otherwise sit invisible (its own output may never show that desktop
+    // again once snap-back holds).
+    if (!m_adopted || !m_windowScreenResolver || desktopId.isEmpty()) {
+        return;
+    }
+    if (m_pendingWindowMoves.contains(instanceId)) {
+        return; // our own move in flight; its arrival re-runs this check
+    }
+    const QString owner = m_reconciler.map().ownerOf(desktopId);
+    if (owner.isEmpty()) {
+        return;
+    }
+    const QString reported = m_windowScreenResolver(instanceId);
+    if (reported.isEmpty()) {
+        return; // screen unknown (untracked window): nothing to vouch for
+    }
+    const QString windowScreen = canonicalScreenId(PhosphorIdentity::VirtualScreenId::extractPhysicalId(reported));
+    if (windowScreen == owner) {
+        return;
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_lastReunionMs.value(instanceId, 0) < SnapBackCooldownMs) {
+        return;
+    }
+    m_lastReunionMs.insert(instanceId, now);
+    runWhenQuiet([this, instanceId, desktopId, owner]() {
+        if (m_reconciler.map().ownerOf(desktopId) != owner) {
+            return; // ownership moved while deferred
+        }
+        const int desktop = m_vdm->desktopIndexOf(desktopId);
+        if (desktop <= 0) {
+            return;
+        }
+        qCInfo(lcWorkspaceCtl) << "reuniting window" << instanceId << "with its workspace's owner screen" << owner;
+        Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, QStringLiteral("down"));
+    });
 }
 
 int WorkspaceController::censusDesktop(const PhosphorEngine::WindowMetadata& meta)
@@ -421,6 +528,7 @@ void WorkspaceController::onWindowAppeared(const QString& instanceId)
         const QString id = m_vdm->desktopIdAt(desktop);
         if (!id.isEmpty()) {
             m_windowCensusDesktopId.insert(instanceId, id);
+            reuniteWindowWithOwner(instanceId, id);
         }
     }
     adjustPopulation(desktop, +1);
@@ -452,6 +560,9 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
     if (oldId == newId) {
         if (!oldId.isEmpty()) {
             m_windowCensusDesktopId.insert(instanceId, oldId);
+            // The desktop did not change, but the window's OUTPUT may have
+            // (an external drag to another monitor): re-check ownership.
+            reuniteWindowWithOwner(instanceId, oldId);
         }
         return;
     }
@@ -465,6 +576,7 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
         const int next = m_populationById.value(newId, 0) + 1;
         m_populationById.insert(newId, next);
         m_reconciler.onPopulationChanged(newId, next);
+        reuniteWindowWithOwner(instanceId, newId);
     }
 }
 

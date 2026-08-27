@@ -92,6 +92,29 @@ namespace {
 inline constexpr int WorkspaceSlotCount = 9;
 }
 
+QString Settings::workspaceFocusSlotShortcut(int index) const
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(),
+                                  ConfigDefaults::workspaceFocusSlotKey(index + 1));
+}
+
+void Settings::setWorkspaceFocusSlotShortcut(int index, const QString& shortcut)
+{
+    if (index < 0 || index >= WorkspaceSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::workspaceFocusSlotKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    Q_EMIT workspaceSlotShortcutsChanged();
+    Q_EMIT settingsChanged();
+}
+
 QString Settings::workspaceMoveSlotShortcut(int index) const
 {
     if (index < 0 || index >= WorkspaceSlotCount) {

@@ -71,14 +71,15 @@ void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QSt
     it->persistent = persistent;
 }
 
-bool Registry::setForeignShortcut(const QString& componentName, const QString& actionName, const QKeySequence& sequence)
+bool Registry::setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                   const QList<QKeySequence>& sequences)
 {
-    return m_backend ? m_backend->setForeignShortcut(componentName, actionName, sequence) : false;
+    return m_backend ? m_backend->setForeignShortcuts(componentName, actionName, sequences) : false;
 }
 
-QKeySequence Registry::foreignShortcut(const QString& componentName, const QString& actionName) const
+QList<QKeySequence> Registry::foreignShortcuts(const QString& componentName, const QString& actionName) const
 {
-    return m_backend ? m_backend->foreignShortcut(componentName, actionName) : QKeySequence();
+    return m_backend ? m_backend->foreignShortcuts(componentName, actionName) : QList<QKeySequence>();
 }
 
 void Registry::rebind(const QString& id, const QKeySequence& seq)

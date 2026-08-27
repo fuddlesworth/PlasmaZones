@@ -94,6 +94,27 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
 }
 
+void PlasmaZonesEffect::slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId)
+{
+    if (windowId.isEmpty() || targetScreenId.isEmpty()) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowOutputMoveRequested: window not found" << windowId;
+        return;
+    }
+    KWin::LogicalOutput* output = outputForScreenId(targetScreenId);
+    if (!output) {
+        qCDebug(lcEffect) << "slotWindowOutputMoveRequested: unknown screen" << targetScreenId;
+        return;
+    }
+    if (w->screen() == output) {
+        return; // already there (the common tracked-window case never gets here)
+    }
+    KWin::effects->windowToScreen(w, output);
+}
+
 void PlasmaZonesEffect::slotSetScreenDesktopRequested(const QString& screenId, int desktop)
 {
     if (screenId.isEmpty() || desktop < 1) {

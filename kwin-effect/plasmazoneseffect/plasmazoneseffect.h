@@ -299,6 +299,7 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
+    void slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
     /// Cache the dynamic-workspaces ownership map (daemon stream + replay).
     /// Consumer stub: the future overview renders from this; nothing else
     /// reads it yet.
@@ -3394,6 +3395,7 @@ private:
     /// Last dynamic-workspaces map payload from the daemon (see
     /// slotWorkspaceMapChanged). Empty until the feature streams.
     QString m_workspaceMapJson;
+    quint64 m_workspaceMapGeneration = 0; ///< ordering guard for the cache above
 
     // Last effective screen ID reported to daemon (physical or virtual).
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual

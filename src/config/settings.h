@@ -1412,6 +1412,11 @@ public:
     /// workspaceSlotShortcutsChanged.
     Q_INVOKABLE QString workspaceMoveSlotShortcut(int index) const;
     Q_INVOKABLE void setWorkspaceMoveSlotShortcut(int index, const QString& shortcut);
+    /// Focus-slot family (WorkspaceFocusSlotN): daemon-registered verbs bound
+    /// via KDE's Shortcuts settings, not surfaced on the app's Quick
+    /// Shortcuts page. Same index contract as the move slots.
+    Q_INVOKABLE QString workspaceFocusSlotShortcut(int index) const;
+    Q_INVOKABLE void setWorkspaceFocusSlotShortcut(int index, const QString& shortcut);
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;

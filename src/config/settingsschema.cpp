@@ -533,8 +533,11 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut());
     addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut());
     // Workspace quick-shortcut slots, unset by default (quick-layout style).
+    // The focus family is daemon-registered only (bound via KDE's Shortcuts
+    // settings, not the app's Quick Shortcuts page — user decision).
     for (int slot = 1; slot <= 9; ++slot) {
         addShortcut(globals, CD::workspaceMoveSlotKey(slot), QString());
+        addShortcut(globals, CD::workspaceFocusSlotKey(slot), QString());
     }
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());

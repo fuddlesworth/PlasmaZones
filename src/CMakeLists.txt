@@ -589,6 +589,12 @@ qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
 
 add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
 
+if(USE_KDE_FRAMEWORKS)
+    # KConfig for the consented kwinrc write in daemon/workspaces.cpp; the
+    # Qt-only build keeps its QSettings arm behind the same #ifdef.
+    target_link_libraries(plasmazonesd PRIVATE KF6::ConfigCore)
+endif()
+
 target_link_libraries(plasmazonesd
     PRIVATE
         plasmazones_core

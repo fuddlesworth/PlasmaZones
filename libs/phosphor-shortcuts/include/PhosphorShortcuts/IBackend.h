@@ -156,26 +156,29 @@ public:
 
     /**
      * Rebind ANOTHER component's global shortcut (kglobalaccel's
-     * setForeignShortcut, the API the Shortcuts KCM uses). The dynamic-
+     * setForeignShortcutKeys, the API the Shortcuts KCM uses). The dynamic-
      * workspaces feature neutralizes KWin's stock desktop-switch chords with
-     * this while enabled, restoring them on disable. An empty sequence
-     * clears the binding. Only the KGlobalAccel backend can do this; the
-     * default refuses (false) so callers fall back to snap-back-with-hint.
+     * this while enabled, restoring them on disable. The list carries the
+     * action's FULL binding — primary plus alternates — so a restore puts
+     * back exactly what foreignShortcuts() reported; an empty list clears
+     * the binding. Only the KGlobalAccel backend can do this; the default
+     * refuses (false) so callers fall back to snap-back-with-hint.
      */
-    virtual bool setForeignShortcut(const QString& componentName, const QString& actionName,
-                                    const QKeySequence& sequence)
+    virtual bool setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                     const QList<QKeySequence>& sequences)
     {
         Q_UNUSED(componentName);
         Q_UNUSED(actionName);
-        Q_UNUSED(sequence);
+        Q_UNUSED(sequences);
         return false;
     }
 
     /**
-     * The current binding of another component's action (backup before a
-     * foreign rebind). Empty when unbound or unsupported.
+     * The current bindings of another component's action (backup before a
+     * foreign rebind) — primary first, alternates after. Empty when unbound
+     * or unsupported.
      */
-    virtual QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const
+    virtual QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const
     {
         Q_UNUSED(componentName);
         Q_UNUSED(actionName);

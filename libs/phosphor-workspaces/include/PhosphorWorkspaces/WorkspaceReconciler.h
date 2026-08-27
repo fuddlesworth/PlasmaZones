@@ -146,6 +146,12 @@ Q_SIGNALS:
     /// An unmatched (external) switch put screenId on a desktop owned by
     /// another screen — Phase 2 wires snap-back; Phase 1 logs only.
     void foreignSwitchDetected(const QString& screenId, const QString& desktopId, const QString& ownerScreenId);
+    /// A window populated `desktopId` while our removeDesktop for it was in
+    /// flight (plan §4.3 destroy step 4): KWin will sweep its windows to an
+    /// arbitrary neighbour when the removal lands. The controller snapshots
+    /// the census and re-routes those windows to the owner's current
+    /// workspace once the desktop is gone.
+    void removalRaceDetected(const QString& desktopId, const QString& ownerScreenId);
     /// The desktop cap stopped a trailing-empty append (once per episode).
     void capReached();
     /// A ledger entry expired; controller should re-pull authoritative state.
@@ -179,6 +185,10 @@ private:
     QString trailingEmptyOf(const QString& screenId) const;
     void adoptExternal(const QString& desktopId);
     void bumpGeneration();
+    /// Owner-wins check for one screen's recorded current desktop; emits
+    /// foreignSwitchDetected when it shows another screen's desktop (and no
+    /// correction is already in flight for it).
+    void evaluateForeign(const QString& screenId);
 
     WorkspaceMap m_map;
     quint64 m_generation = 0;

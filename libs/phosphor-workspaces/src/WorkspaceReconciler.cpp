@@ -176,18 +176,41 @@ bool WorkspaceReconciler::onScreenDesktopReport(const QString& screenId, int des
             m_lastOwnedByScreen.insert(screenId, desktopId); // snap-back target
         }
         if (!owner.isEmpty() && owner != screenId) {
-            // One correction per external event: while a SetCurrent for this
-            // screen is open, further foreign reports queue (are ignored here);
-            // the open op's echo retires it and the next report re-evaluates.
+            // A removal in flight makes reports transient: KWin renumbers on
+            // the removal and clampScreenDesktopsToCount fires interim
+            // switches that read as foreign against the pre-removal map.
+            // Record only; onDesktopListSettled re-evaluates every screen
+            // against the settled truth (plan §4.3 destroy step 5).
             for (const auto& op : m_ledger) {
-                if (op.kind == PendingOp::Kind::SetCurrent && op.screenId == screenId) {
+                if (op.kind == PendingOp::Kind::Remove) {
                     return false;
                 }
             }
-            Q_EMIT foreignSwitchDetected(screenId, desktopId, owner);
+            evaluateForeign(screenId);
         }
     }
     return false;
+}
+
+void WorkspaceReconciler::evaluateForeign(const QString& screenId)
+{
+    const QString desktopId = currentDesktopIdOf(screenId);
+    if (desktopId.isEmpty()) {
+        return;
+    }
+    const QString owner = m_map.ownerOf(desktopId);
+    if (owner.isEmpty() || owner == screenId) {
+        return;
+    }
+    // One correction per external event: while a SetCurrent for this screen
+    // is open, further foreign reports are ignored; the open op's echo
+    // retires it and the next report re-evaluates.
+    for (const auto& op : m_ledger) {
+        if (op.kind == PendingOp::Kind::SetCurrent && op.screenId == screenId) {
+            return;
+        }
+    }
+    Q_EMIT foreignSwitchDetected(screenId, desktopId, owner);
 }
 
 // ── Verb support ────────────────────────────────────────────────────────────
@@ -349,11 +372,21 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
     for (const QString& id : unowned) {
         adoptExternal(id);
     }
-    for (const QString& id : unowned) {
-        m_population.remove(id); // fresh desktops start empty until reported
-    }
+    // Populations are NOT cleared for adopted ids: the controller's census is
+    // the source of truth and a desktop that already carried windows when it
+    // was adopted must keep its count (a genuinely fresh desktop simply has
+    // no entry, which reads as empty).
 
     maintainInvariants();
+
+    // Owner-wins re-check against the settled truth: reports that arrived
+    // during a structural window (removal renumbering, clamp interim values)
+    // were recorded without policy — re-evaluate every screen now.
+    const QStringList screens = m_map.screenOrder();
+    for (const QString& screenId : screens) {
+        evaluateForeign(screenId);
+    }
+
     bumpGeneration();
 }
 
@@ -410,6 +443,20 @@ void WorkspaceReconciler::onPopulationChanged(const QString& desktopId, int wind
     const QString owner = m_map.ownerOf(desktopId);
     if (owner.isEmpty()) {
         return;
+    }
+
+    // Destroy race (plan §4.3 step 4): a window mapped onto this desktop
+    // while our removeDesktop for it is in flight. Too late to cancel — KWin
+    // will sweep the window to an arbitrary neighbour when the removal lands.
+    // Surface it so the controller can snapshot the census and re-route the
+    // displaced windows to the owner's current workspace afterwards.
+    if (windowCount > 0) {
+        for (const auto& op : m_ledger) {
+            if (op.kind == PendingOp::Kind::Remove && op.desktopId == desktopId) {
+                Q_EMIT removalRaceDetected(desktopId, owner);
+                break;
+            }
+        }
     }
 
     if (windowCount > 0 && previous <= 0) {
@@ -572,6 +619,30 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
                     m_map.setName(id, decl.name);
                     changed = true;
                     break;
+                }
+            }
+        }
+
+        // Create-echo FIFO healing: our Create echo matches ledger entries
+        // first-in-first-out (KWin's desktopCreated carries no position), so
+        // an external creation racing ours can be realized under the declared
+        // name while our real desktop adopts elsewhere. KWin's OWN name list
+        // is the tiebreaker: when it disagrees about the realized entry and
+        // some other desktop carries the declared name, the identity followed
+        // the name — move it there.
+        if (!realizedId.isEmpty()) {
+            const int pos = m_lastIds.indexOf(realizedId);
+            const bool kwinAgrees = pos >= 0 && pos < kwinNames.size() && kwinNames.at(pos) == decl.name;
+            if (!kwinAgrees) {
+                for (int i = 0; i < m_lastIds.size() && i < kwinNames.size(); ++i) {
+                    const QString& other = m_lastIds.at(i);
+                    if (other != realizedId && kwinNames.at(i) == decl.name && m_map.entryFor(other).name.isEmpty()) {
+                        m_map.setName(realizedId, QString());
+                        m_map.setName(other, decl.name);
+                        realizedId = other;
+                        changed = true;
+                        break;
+                    }
                 }
             }
         }

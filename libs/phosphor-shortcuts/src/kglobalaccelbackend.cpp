@@ -10,7 +10,33 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QCoreApplication>
+#include <QDBusMetaType>
 #include <QHash>
+
+// Wire type for kglobalaccel's a(ai): each element is a STRUCT wrapping one
+// sequence's chord ints. Registered (not hand-marshalled) so QtDBus derives
+// the exact signature for setForeignShortcutKeys.
+struct PhosphorDBusKeySequence
+{
+    QList<int> keys;
+};
+Q_DECLARE_METATYPE(PhosphorDBusKeySequence)
+
+inline QDBusArgument& operator<<(QDBusArgument& arg, const PhosphorDBusKeySequence& seq)
+{
+    arg.beginStructure();
+    arg << seq.keys;
+    arg.endStructure();
+    return arg;
+}
+
+inline const QDBusArgument& operator>>(const QDBusArgument& arg, PhosphorDBusKeySequence& seq)
+{
+    arg.beginStructure();
+    arg >> seq.keys;
+    arg.endStructure();
+    return arg;
+}
 
 namespace PhosphorShortcuts {
 
@@ -354,35 +380,52 @@ void KGlobalAccelBackend::flush()
     Q_EMIT ready();
 }
 
-bool KGlobalAccelBackend::setForeignShortcut(const QString& componentName, const QString& actionName,
-                                             const QKeySequence& sequence)
+bool KGlobalAccelBackend::setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                              const QList<QKeySequence>& sequences)
 {
-    // kglobalaccel's setForeignShortcut(actionId as, keys ai) — the KCM's
-    // rebind API, spoken raw because the KGlobalAccel client library only
-    // exposes it for the caller's own actions. `ai` carries ONE sequence's
-    // key ints (up to four chords), which is all a rebind needs.
+    // kglobalaccel's setForeignShortcutKeys(actionId as, keys a(ai)) — the
+    // KCM's rebind API, spoken raw because the KGlobalAccel client library
+    // only exposes it for the caller's own actions. Each a(ai) element is
+    // one SEQUENCE (a struct wrapping its up-to-four chord ints); passing
+    // several elements sets primary + alternates, so a restore reinstates
+    // the action's full binding. The legacy setForeignShortcut(ai) variant
+    // is deliberately NOT used: it reads each int as a separate alternate,
+    // which turned a user's multi-chord sequence into bogus alternates.
     const QStringList actionId{componentName, actionName, QString(), QString()};
-    QList<int> keys;
-    for (int i = 0; i < sequence.count(); ++i) {
-        keys.append(sequence[i].toCombined());
+    qDBusRegisterMetaType<PhosphorDBusKeySequence>();
+    qDBusRegisterMetaType<QList<PhosphorDBusKeySequence>>();
+    QList<PhosphorDBusKeySequence> wire;
+    if (sequences.isEmpty()) {
+        // Explicit "unbound": one sequence of a single 0 key.
+        PhosphorDBusKeySequence unbound;
+        unbound.keys.append(0);
+        wire.append(unbound);
+    } else {
+        for (const QKeySequence& sequence : sequences) {
+            PhosphorDBusKeySequence seq;
+            for (int i = 0; i < sequence.count(); ++i) {
+                seq.keys.append(sequence[i].toCombined());
+            }
+            if (seq.keys.isEmpty()) {
+                seq.keys.append(0);
+            }
+            wire.append(seq);
+        }
     }
-    if (keys.isEmpty()) {
-        keys.append(0); // explicit "unbound"
-    }
-    QDBusMessage call =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.kglobalaccel"), QStringLiteral("/kglobalaccel"),
-                                       QStringLiteral("org.kde.KGlobalAccel"), QStringLiteral("setForeignShortcut"));
-    call << actionId << QVariant::fromValue(keys);
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.kglobalaccel"), QStringLiteral("/kglobalaccel"), QStringLiteral("org.kde.KGlobalAccel"),
+        QStringLiteral("setForeignShortcutKeys"));
+    call << actionId << QVariant::fromValue(wire);
     const QDBusMessage reply = QDBusConnection::sessionBus().call(call, QDBus::Block, 1000);
     if (reply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcPhosphorShortcuts) << "setForeignShortcut failed for" << componentName << actionName << ":"
+        qCWarning(lcPhosphorShortcuts) << "setForeignShortcutKeys failed for" << componentName << actionName << ":"
                                        << reply.errorMessage();
         return false;
     }
     return true;
 }
 
-QKeySequence KGlobalAccelBackend::foreignShortcut(const QString& componentName, const QString& actionName) const
+QList<QKeySequence> KGlobalAccelBackend::foreignShortcuts(const QString& componentName, const QString& actionName) const
 {
     const QStringList actionId{componentName, actionName, QString(), QString()};
     QDBusMessage call =
@@ -394,29 +437,22 @@ QKeySequence KGlobalAccelBackend::foreignShortcut(const QString& componentName, 
         return {};
     }
     // Reply is a(ai): a list of sequences, each a struct holding key ints.
+    // ALL entries are read — an action's alternates are part of its binding
+    // and must survive a backup/restore round trip.
     const QDBusArgument arg = reply.arguments().first().value<QDBusArgument>();
-    QList<int> firstKeys;
+    QList<QKeySequence> sequences;
     arg.beginArray();
-    if (!arg.atEnd()) {
-        arg.beginStructure();
-        arg >> firstKeys;
-        arg.endStructure();
-    }
-    // Remaining entries are irrelevant for the backup use; the array must
-    // still be closed for the demarshaller's sake.
     while (!arg.atEnd()) {
-        QList<int> ignored;
+        QList<int> keys;
         arg.beginStructure();
-        arg >> ignored;
+        arg >> keys;
         arg.endStructure();
+        if (!keys.isEmpty() && keys.first() != 0) {
+            sequences.append(QKeySequence(keys.value(0), keys.value(1), keys.value(2), keys.value(3)));
+        }
     }
     arg.endArray();
-
-    QKeySequence sequence;
-    if (!firstKeys.isEmpty() && firstKeys.first() != 0) {
-        sequence = QKeySequence(firstKeys.value(0), firstKeys.value(1), firstKeys.value(2), firstKeys.value(3));
-    }
-    return sequence;
+    return sequences;
 }
 
 } // namespace PhosphorShortcuts

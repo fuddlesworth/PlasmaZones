@@ -109,8 +109,9 @@ public:
     /// only). The dynamic-workspaces stock-shortcut takeover uses these;
     /// false / empty on the other backends, whose callers fall back to
     /// snap-back-with-hint.
-    bool setForeignShortcut(const QString& componentName, const QString& actionName, const QKeySequence& sequence);
-    QKeySequence foreignShortcut(const QString& componentName, const QString& actionName) const;
+    bool setForeignShortcuts(const QString& componentName, const QString& actionName,
+                             const QList<QKeySequence>& sequences);
+    QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const;
 
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
@@ -228,6 +229,9 @@ Q_SIGNALS:
     /// Quick-shortcut slot (1-based): send the active window to the Nth
     /// workspace of the acting monitor's own list.
     void workspaceMoveSlotRequested(int slot);
+    /// Switch the acting monitor to workspace `slot` (1-based) of its own
+    /// list (focus-slot family; KCM-bound only).
+    void workspaceFocusSlotRequested(int slot);
 
     void openEditorRequested();
     void openSettingsRequested();

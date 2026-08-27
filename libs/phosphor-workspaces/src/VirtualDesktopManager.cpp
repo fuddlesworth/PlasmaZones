@@ -287,6 +287,17 @@ int VirtualDesktopManager::currentDesktopForScreen(const QString& screenId) cons
     return currentDesktop();
 }
 
+bool VirtualDesktopManager::hasScreenDesktopReport(const QString& screenId) const
+{
+    if (m_screenDesktops.contains(screenId)) {
+        return true;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return m_screenDesktops.contains(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    }
+    return false;
+}
+
 bool VirtualDesktopManager::perScreenModeActive() const
 {
     if (m_screenDesktops.size() < 2) {

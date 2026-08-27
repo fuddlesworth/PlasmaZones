@@ -57,6 +57,13 @@ public:
 
     PhosphorWorkspaces::WorkspaceReconciler& reconciler();
 
+    /// Inject the window → physical-screen resolver (the daemon backs it with
+    /// the placement store's last managed-context screen). Powers the
+    /// owner-wins reunion arm: a window sitting on a desktop owned by another
+    /// output is moved to that output so it stays visible (plan §4.7's second
+    /// half — the desktop's owner screen is where its windows belong).
+    void setWindowScreenResolver(std::function<QString(const QString& windowId)> resolver);
+
     /// Current wire payload (for the adaptor's replay query).
     QString currentMapJson() const;
 
@@ -66,6 +73,8 @@ public:
     // behind the reconciler's ledger during structural churn. ─────────────────
     /// delta -1 = up, +1 = down.
     void focusWorkspace(const QString& screenId, int delta);
+    /// Switch the screen to the 0-based slice index (focus-slot family).
+    void focusWorkspaceAt(const QString& screenId, int sliceIndex);
     void moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta);
     /// 0-based slice index (the quick-shortcut slots pass slot-1).
     void moveWindowToWorkspaceAt(const QString& screenId, const QString& windowId, int sliceIndex);
@@ -92,6 +101,12 @@ public:
     /// rule resolver's guard — an unrealized name falls through to the
     /// positional desktop route).
     bool hasNamedWorkspace(const QString& name) const;
+    /// The RouteToWorkspace rule arm: issue the move NOW and report whether it
+    /// was actually issued. False (name unrealized, desktop unresolvable, or a
+    /// structural op in flight) tells the rules pipeline to fall back to the
+    /// positional desktop route — a deferred move must not return true, since
+    /// true suppresses that fallback for good.
+    bool routeWindowToNamedWorkspace(const QString& name, const QString& windowId);
 
 Q_SIGNALS:
     /// → adaptor setScreenDesktopRequested (effect per-output switch).
@@ -102,6 +117,10 @@ Q_SIGNALS:
     /// Owner-wins snap-back fired for this screen (OSD hint hook; gated by
     /// the snapBackOsdHint setting daemon-side).
     void snapBackOccurred(const QString& screenId);
+    /// Windows that mapped onto a workspace during its removal window were
+    /// swept by KWin and re-routed to the owner's current workspace (plan
+    /// §4.3 destroy step 4); OSD hint hook, same gating as snap-back.
+    void windowDisplacedByRemoval(const QString& screenId);
     /// Change-gated wire payload (plan §3.2) — the daemon relays this to
     /// WindowTrackingAdaptor::workspaceMapChanged.
     void workspaceMapPublished(const QString& mapJson);
@@ -164,6 +183,24 @@ private:
     QHash<QString, QString> m_pendingWindowMoves; ///< windowId → expected desktopId
     /// Per-screen snap-back cooldown stamps (ms since epoch).
     QHash<QString, qint64> m_lastSnapBackMs;
+
+    // ── Owner-wins reunion + destroy-race displacement (plan §4.3/§4.7) ─────
+    /// If the window's desktop is owned by a screen other than the one the
+    /// window sits on, issue the cross-screen move that reunites them.
+    void reuniteWindowWithOwner(const QString& instanceId, const QString& desktopId);
+    std::function<QString(const QString&)> m_windowScreenResolver;
+    /// Per-window reunion cooldown stamps (ms since epoch): a reunion is an
+    /// output move on an unchanged desktop, so no census arrival clears it —
+    /// the cooldown is what stops a slow effect from drawing repeat issues.
+    QHash<QString, qint64> m_lastReunionMs;
+    struct DisplacedByRemoval
+    {
+        QString ownerScreenId;
+        QStringList windowIds;
+    };
+    /// Census snapshot per doomed desktop (removal-race arm); consumed when
+    /// the removal lands.
+    QHash<QString, DisplacedByRemoval> m_displacedByRemoval;
 
     // ── State persistence (Phase 4) ─────────────────────────────────────────
     static QString stateFilePath();

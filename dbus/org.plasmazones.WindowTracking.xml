@@ -335,6 +335,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop (1-based)."/>
             </arg>
         </signal>
+        <signal name="windowOutputMoveRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to move a window to another output. Used by the workspace verbs for engine-untracked (floating) windows, where no tiling handoff carries the output change; the effect calls windowToScreen. A window already on the target output is a no-op."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to move."/>
+            </arg>
+            <arg name="targetScreenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Target output's screen id."/>
+            </arg>
+        </signal>
         <signal name="windowOutputMoveExpected">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon-initiated cross-output move: the daemon already migrated its tiling state for the window onto targetScreenId and reflowed both outputs. The window's resulting outputChanged is expected; the effect updates bookkeeping and decoration only, without re-issuing windowClosed/windowOpened. User-drag cross-output moves carry no marker."/>
             <arg name="windowId" type="s">

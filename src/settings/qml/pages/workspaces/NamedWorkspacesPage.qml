@@ -18,8 +18,8 @@ import org.kde.kirigami as Kirigami
  * (Workspaces.Named/Entries), so the page keeps a staged deep copy and every
  * edit commits the whole array; the daemon reacts live (create / claim /
  * unpin / rebind the per-name shortcuts) with no restart. Order in the list
- * is meaningful only as UI order today; the per-entry position field stays
- * -1 (before the trailing empty) from this editor.
+ * is UI order; each row's Position spin box edits the per-entry preferred
+ * slice index (-1, shown as "Automatic", means before the trailing empty).
  */
 SettingsFlickable {
     id: root

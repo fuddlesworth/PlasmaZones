@@ -907,19 +907,20 @@ bool collidesWithSettingsDrivenId(const QString& id)
         return QSet<QString>(ids.cbegin(), ids.cend());
     }();
     return kStaticIdSet.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
-        || id.startsWith(QLatin1String(kSnapToZonePrefix)) || id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix));
+        || id.startsWith(QLatin1String(kSnapToZonePrefix)) || id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix))
+        || id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix));
 }
 } // namespace
 
-bool ShortcutManager::setForeignShortcut(const QString& componentName, const QString& actionName,
-                                         const QKeySequence& sequence)
+bool ShortcutManager::setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                          const QList<QKeySequence>& sequences)
 {
-    return m_registry ? m_registry->setForeignShortcut(componentName, actionName, sequence) : false;
+    return m_registry ? m_registry->setForeignShortcuts(componentName, actionName, sequences) : false;
 }
 
-QKeySequence ShortcutManager::foreignShortcut(const QString& componentName, const QString& actionName) const
+QList<QKeySequence> ShortcutManager::foreignShortcuts(const QString& componentName, const QString& actionName) const
 {
-    return m_registry ? m_registry->foreignShortcut(componentName, actionName) : QKeySequence();
+    return m_registry ? m_registry->foreignShortcuts(componentName, actionName) : QList<QKeySequence>();
 }
 
 void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
@@ -1117,7 +1118,7 @@ QStringList ShortcutManager::staticShortcutIds()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 3 * kIndexedSlotCount);
+    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 4 * kIndexedSlotCount);
 
     Settings* s = m_settings;
     ShortcutManager* sm = this;
@@ -1173,6 +1174,37 @@ void ShortcutManager::buildEntries()
             Q_EMIT workspaceMoveSlotRequested(slot);
         };
         m_entries.push_back(std::move(e));
+    }
+
+    // Workspace focus slots (plan §7): switch the acting monitor to workspace
+    // N of its own list. Bound via KDE's Shortcuts settings only.
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
+        Entry e;
+        e.id = workspaceFocusSlotId(i);
+        e.description = PhosphorI18n::tr("Focus Workspace %1").arg(i + 1);
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->workspaceFocusSlotShortcut(i), idCopy);
+        };
+        const int slot = i + 1;
+        e.fire = [this, slot] {
+            Q_EMIT workspaceFocusSlotRequested(slot);
+        };
+        m_entries.push_back(std::move(e));
+    }
+
+    // Workspace chords grab only while the feature is on: with dynamic
+    // workspaces off the verbs are inert, and a system-wide grab that does
+    // nothing shadows those chords for every other application. rebindAll()
+    // (riding every settings save, the enable toggle included) re-applies
+    // the real sequences when the feature turns on.
+    for (auto& e : m_entries) {
+        if (e.id.startsWith(QLatin1String("workspace_"))) {
+            const auto inner = e.currentSeq;
+            e.currentSeq = [s, inner] {
+                return s->workspacesEnabled() ? inner() : QKeySequence();
+            };
+        }
     }
 
     // Snap-to-zone slots. Mirror of quick-layout slots — separate signal,

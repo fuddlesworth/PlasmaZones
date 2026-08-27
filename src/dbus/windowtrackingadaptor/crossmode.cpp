@@ -74,8 +74,15 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& windowId, c
     }
     if (!sourceEngine) {
         // Untracked (floating / excluded) windows still change desktops; no
-        // engine state exists to hand over.
+        // engine state exists to hand over. The OUTPUT leg matters too: a
+        // move-workspace-to-monitor rider keeps its desktop int, so the
+        // desktop move alone would be a no-op and the floating rider would
+        // never leave the source output. The effect no-ops the output move
+        // when the window is already there.
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        if (!targetScreenId.isEmpty()) {
+            Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
+        }
         return;
     }
     crossModeMoveImpl(sourceEngine, windowId, targetScreenId, targetDesktop, direction, /*allowSameEngine=*/true);
