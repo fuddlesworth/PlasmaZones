@@ -125,14 +125,55 @@ if [ -S "$SOCK" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
 fi
 rm -f "$SOCK"
 
+# The socket guard above keys on PZ_NESTED_SOCKET while everything below
+# destroys PZ_NESTED_DIR, so two runs with distinct sockets and a shared or
+# defaulted dir sail past it and then delete the first session's state out
+# from under its running compositor. Probe the dir the same way: if the
+# previous env.sh names a bus whose socket is still there, a session is live
+# in THIS tree.
+if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
+    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
+    if [ -n "$OLDBUS" ] && [ -S "$OLDBUS" ]; then
+        echo "a nested session is live in $NEST (its bus socket $OLDBUS still exists);" >&2
+        echo "point PZ_NESTED_DIR somewhere else, kill that session, or re-run with PZ_NESTED_FORCE=1" >&2
+        exit 1
+    fi
+fi
+
+# PZ_NESTED_DIR is interpolated straight into the rm -rf and the chmod below.
+# An operator typo of / or $HOME would take out /home or open the home
+# directory up, so require something that looks like a scratch dir: absolute,
+# and at least two components deep. Unset is safe already — it falls through
+# to the default above.
+case "$NEST" in
+    /*/*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must be an absolute path at least two components deep, got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+
 rm -rf "$HOME_N"
 # Stale control files must not survive into the new run: a daemon.sh run
-# against a previous session's env.sh would target a dead bus. The kill is
-# identity-gated so a recycled pid cannot take down an unrelated process.
+# against a previous session's env.sh would target a dead bus.
+#
+# The kill is identity-gated on the bus address, not on comm alone: comm only
+# proves the pid is A plasmazonesd, and after a pid recycle that can be the
+# user's real host-session daemon. Every nested daemon runs on a
+# dbus-run-session bus under /tmp/dbus-, which the login bus never does.
 if [ -f "$NEST/daemon.pid" ]; then
     OLDPID=$(cat "$NEST/daemon.pid")
-    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ]; then
+    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ] \
+        && tr '\0' '\n' < "/proc/$OLDPID/environ" 2>/dev/null \
+        | grep -q '^DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-'; then
         kill "$OLDPID" 2>/dev/null || true
+        # Wait for it to actually go before dropping its only pid record,
+        # otherwise a slow exit leaves an untracked daemon behind.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            [ -d "/proc/$OLDPID" ] || break
+            sleep 0.2
+        done
+        [ -d "/proc/$OLDPID" ] && kill -9 "$OLDPID" 2>/dev/null || true
     fi
 fi
 rm -f "$NEST/env.sh" "$NEST/daemon.pid" "$NEST/daemon.log"
@@ -156,6 +197,16 @@ export QT_QPA_PLATFORM=wayland
 # (wayland-shell-integration/phosphorwayland-qpa.so). Without the second
 # entry the nested daemon silently loads the INSTALLED layer-shell plugin,
 # so layer-shell changes would not actually be under test.
+# Refuse a missing build tree rather than starting a session that silently
+# tests the INSTALLED effect. With $REPO/$BUILD absent QT_PLUGIN_PATH points
+# at nothing, kwin_wayland loads whatever is installed, and the run looks
+# entirely normal while exercising code that is not under test — the exact
+# failure the header warns about.
+if [ ! -d "$REPO/$BUILD/bin" ]; then
+    echo "no build tree at $REPO/$BUILD/bin; configure and build first," >&2
+    echo "or set PZ_NESTED_BUILD to the right configure dir" >&2
+    exit 1
+fi
 export QT_PLUGIN_PATH="$REPO/$BUILD/bin:$REPO/$BUILD/plugins:${QT_PLUGIN_PATH:-}"
 export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1
 # plasmazones.* covers daemon/effect categories; kwin.effect.plasmazones.*
@@ -225,6 +276,12 @@ EXTRA_FLAGS=""
 [ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
 exec dbus-run-session -- sh -c "
+  # set -e inside the child: the outer set -eu does NOT cross an sh -c, so
+  # without this a failed env.sh write (full disk, read-only or unwritable
+  # runtime dir) falls straight through to the exec below and the compositor
+  # comes up healthy with no state file — after which every helper script
+  # reports 'no nested session' while a session is in fact running.
+  set -e
   {
     echo \"export DBUS_SESSION_BUS_ADDRESS='\$DBUS_SESSION_BUS_ADDRESS'\"
     echo \"export WAYLAND_DISPLAY=$PZ_NESTED_SOCKET\"

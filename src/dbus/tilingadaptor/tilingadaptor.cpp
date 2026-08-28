@@ -772,7 +772,31 @@ void TilingAdaptor::flushPendingWindowOpens()
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         engine->beginArrivalBurst();
     }
+    // DISPATCH is the choke point for validity and duplicates, not the two
+    // append sites. windowsOpenedBatch applies its seenWindowIds guard only on
+    // the immediate path, and windowOpened does not check the queue at all, so
+    // a window can reach here twice: once from a batch carrying it twice, and
+    // once from two separate deferred calls (the effect drops m_notifiedWindows
+    // on a desktop or activity demotion with no daemon-side close, so a return
+    // re-announces while the first entry is still queued). Dispatching twice
+    // runs applyOpenRoutingForTiling's side effects twice, which the
+    // parked-open path bakes in a routed screen specifically to avoid.
+    //
+    // Guarding here rather than at the appends means a future enqueue path
+    // cannot bypass it. Keep-first preserves the replay order that decides
+    // strip column order and master assignment, and matches the batch guard.
+    QSet<QString> seenWindowIds;
     for (const auto& entry : toFlush) {
+        if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
+            qCWarning(lcDbusTiling) << "flushPendingWindowOpens: dropping invalid queued entry" << entry.windowId
+                                    << entry.screenId;
+            continue;
+        }
+        if (seenWindowIds.contains(entry.windowId)) {
+            qCDebug(lcDbusTiling) << "flushPendingWindowOpens: dropping duplicate queued open" << entry.windowId;
+            continue;
+        }
+        seenWindowIds.insert(entry.windowId);
         dispatchWindowOpened(entry);
     }
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {

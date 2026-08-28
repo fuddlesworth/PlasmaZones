@@ -8,7 +8,7 @@
 # so the run has one daemon with a known pid and log, and reaps daemons left
 # behind by earlier sessions whose bus is gone. Never touches the host
 # session's own daemon.
-set -eu
+set -euo pipefail
 NEST="${PZ_NESTED_DIR:-${XDG_RUNTIME_DIR:-/tmp/pz-nested-$USER}/pz-nested}"
 if [ ! -r "$NEST/env.sh" ]; then
     echo "no nested session state at $NEST/env.sh; start run-nested.sh first" >&2
@@ -33,7 +33,13 @@ fi
 # identity-gated so a recycled pid cannot hit an unrelated process.
 if [ -f "$NEST/daemon.pid" ]; then
     OLDPID=$(cat "$NEST/daemon.pid")
-    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ]; then
+    # Bus address, not comm alone: comm only proves the pid is A
+    # plasmazonesd, and after a pid recycle that can be the user's real
+    # host-session daemon. A nested daemon always runs on a dbus-run-session
+    # bus under /tmp/dbus-, which the login bus never does.
+    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ] \
+        && tr '\0' '\n' < "/proc/$OLDPID/environ" 2>/dev/null \
+        | grep -q '^DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-'; then
         kill "$OLDPID" 2>/dev/null || true
     fi
     rm -f "$NEST/daemon.pid"
@@ -54,9 +60,15 @@ fi
 # accumulate across runs, and once several are competing the eviction here
 # starts losing the race and a run silently answers with the HOST's screens.
 #
-# Matched on the bus address in the process environment, so only daemons that
-# belong to a pz-nested bus can be hit. The user's real session daemon has the
-# login bus address and is never matched.
+# Matched on the bus address in the process environment. The pattern is any
+# dbus-run-session bus under /tmp/dbus-, not specifically a pz-nested one, so
+# a daemon stranded on some other private bus is fair game too — which is the
+# intent, since the kill fires only once that bus socket is already gone and
+# the daemon is genuinely orphaned. Narrowing this to pz-nested buses would
+# miss exactly the daemons it exists to collect, because a session killed hard
+# enough to orphan its activation leaves no pz marker on the bus path. The
+# user's real session daemon carries the login bus address and is never
+# matched.
 for pid in $(pgrep -x plasmazonesd 2>/dev/null || true); do
     [ "$pid" = "${BUSPID:-}" ] && continue
     peer_bus=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \

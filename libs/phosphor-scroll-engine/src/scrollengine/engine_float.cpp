@@ -64,6 +64,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -114,6 +115,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // not carry it — float and windowed fullscreen are exclusive), so the
     // emit-gate memory goes with it.
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {
@@ -325,6 +327,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

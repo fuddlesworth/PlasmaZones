@@ -285,6 +285,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_declinedOpenFocus.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not

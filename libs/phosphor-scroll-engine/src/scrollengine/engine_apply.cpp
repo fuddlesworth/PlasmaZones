@@ -718,6 +718,23 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             } else {
                 m_lastAppliedWindowedFs.remove(tile.windowId);
             }
+            // The column-maximize flag needs the same leg, and for a stronger
+            // reason than its sibling. It is not just that a toggle moves no
+            // rect: the flag is derived partly from extentPinnedByMinimum, so
+            // it flips whenever a client reports a minimum anywhere in
+            // [resolveColumnWidthPx(width), workAreaMain] on a column already
+            // at full width, or whenever respectMinimumSize is toggled over
+            // one — in both cases with every committed rect byte-identical.
+            // Without this the batch is suppressed and the compositor keeps
+            // asserting a maximize the engine has already dropped.
+            if (m_lastAppliedColumnMaximized.contains(tile.windowId) != columnMaximized) {
+                anyEntryChanged = true;
+            }
+            if (columnMaximized) {
+                m_lastAppliedColumnMaximized.insert(tile.windowId);
+            } else {
+                m_lastAppliedColumnMaximized.remove(tile.windowId);
+            }
         }
     }
     if (arr.isEmpty()) {

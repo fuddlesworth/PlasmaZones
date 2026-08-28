@@ -1276,6 +1276,17 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
+    /// Windows whose last EMITTED batch entry carried columnMaximized. The
+    /// column twin of m_lastAppliedWindowedFs and its own leg of the same
+    /// emit-on-change gate, for the same reason and one more: this flag can
+    /// flip with every committed rect byte-identical. It is derived partly
+    /// from extentPinnedByMinimum, which moves when a client reports a
+    /// minimum anywhere in [resolveColumnWidthPx(width), workAreaMain] on an
+    /// already-full-width column, or when respectMinimumSize is toggled over
+    /// one. Without this leg the batch is suppressed and the compositor keeps
+    /// asserting a maximize the engine has dropped. Maintained wherever
+    /// m_lastAppliedWindowedFs is.
+    QSet<QString> m_lastAppliedColumnMaximized;
     /// Which screen edge each currently-parked window went out by — one of
     /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
     /// the screen's strip axis: a horizontal strip goes out left/right, a
