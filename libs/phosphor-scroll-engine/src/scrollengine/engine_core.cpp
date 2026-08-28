@@ -1046,9 +1046,14 @@ void ScrollEngine::refreshConfigFromSettings()
     m_defaultColumnDisplay =
         (display == static_cast<int>(ColumnDisplay::Tabbed)) ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
 
-    // Default window height: the config vocabulary IS WindowHeight::Kind
-    // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.
+    // Default window height. Translated with explicit ifs rather than cast:
+    // the config vocabulary is DefaultHeightKind, whose ClientDecides has no
+    // WindowHeight::Kind counterpart (see the enum). The client-sized case is
+    // a flag the OPEN path reads, exactly like its width twin above, and the
+    // height itself falls through to Auto so every consumer that needs a
+    // concrete default (relayout, the reset verb's fallback) still has one.
     const int heightKind = settings->scrollingDefaultWindowHeightKind();
+    m_defaultHeightClientDecides = (heightKind == static_cast<int>(DefaultHeightKind::ClientDecides));
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
         // Bounded before the round, for the width twin's reason.
         m_defaultWindowHeight = WindowHeight::makeFixed(

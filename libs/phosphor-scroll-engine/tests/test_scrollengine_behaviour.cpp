@@ -81,6 +81,9 @@ private Q_SLOTS:
     void stickyWindowHandlingOverrideIsPerScreen();
     void widthClientDecidesOverrideIsPerScreen();
     void outOfRangeWidthRuleDoesNotSuppressClientDecides();
+    void heightClientDecidesOverrideIsPerScreen();
+    void outOfRangeHeightRuleDoesNotSuppressClientDecides();
+    void retileKeepsClientDecidedHeightsUnlessARulePinsOne();
     void retileKeepsClientDecidedWidthsUnlessARulePinsOne();
     void wrongTypedBehaviourOverridesAreRejected();
     void focusScrollLimitNamesTheWindowsPastTheCap();
@@ -379,6 +382,102 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
     const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
     QCOMPARE(rulePinned.size(), 1);
     QCOMPARE(Ax::mainLen(rulePinned.first()), qRound(0.75 * kMainExtent));
+}
+
+void TestScrollEngineBehaviour::heightClientDecidesOverrideIsPerScreen()
+{
+    // The height twin of widthClientDecidesOverrideIsPerScreen: S1 opens
+    // windows at the client's own CROSS extent, S2 at the configured fixed
+    // height. Cross, not physical height — the transposed rect makes the 400
+    // the assertion expects the tile's extent ACROSS the strip on both axes,
+    // so an arm that read the client's main extent fails on one of them.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 250.0;
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+    engine->applyPerScreenConfig(
+        kS1,
+        onlyKey(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::ClientDecides)));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    const QVector<QRect> client = engine->visibleTileRects(kS1);
+    QCOMPARE(client.size(), 1);
+    QCOMPARE(Ax::crossLen(client.first()), 400);
+
+    const QVector<QRect> configured = engine->visibleTileRects(kS2);
+    QCOMPARE(configured.size(), 1);
+    QCOMPARE(Ax::crossLen(configured.first()), 250);
+}
+
+void TestScrollEngineBehaviour::outOfRangeHeightRuleDoesNotSuppressClientDecides()
+{
+    // The height twin of outOfRangeWidthRuleDoesNotSuppressClientDecides: a
+    // rule fraction the height resolver REJECTS contributes no height, so it
+    // must not suppress the client-sized open either. S1 carries
+    // ClientDecides plus an out-of-range 1.5 fraction; S2 carries
+    // ClientDecides plus a legal 0.25, which does pin a height and wins.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+
+    engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::defaultWindowHeight(), 1.5));
+    engine->applyPerScreenConfig(kS2, onlyKey(ScrollPerScreenKeys::defaultWindowHeight(), 0.25));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    const QVector<QRect> clientSized = engine->visibleTileRects(kS1);
+    QCOMPARE(clientSized.size(), 1);
+    QCOMPARE(Ax::crossLen(clientSized.first()), 400);
+
+    const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
+    QCOMPARE(rulePinned.size(), 1);
+    QCOMPARE(Ax::crossLen(rulePinned.first()), qRound(0.25 * ScrollTestUtils::kCrossExtent));
+}
+
+void TestScrollEngineBehaviour::retileKeepsClientDecidedHeightsUnlessARulePinsOne()
+{
+    // The height twin of retileKeepsClientDecidedWidthsUnlessARulePinsOne: on
+    // a ClientDecides HEIGHT screen there is no default height to go back to,
+    // so retile leaves the tile at the height it has instead of forcing the
+    // even split. A rule fraction outranks the kind, so S2 does reset — to
+    // the EVEN SPLIT, which is what retile has always reset heights to and
+    // what its copy promises; the rule's fraction is an OPEN-time default,
+    // not a reset target (see resetDefaultWindowHeightFor).
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+    engine->applyPerScreenConfig(kS2, onlyKey(ScrollPerScreenKeys::defaultWindowHeight(), 0.25));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    // Push both off their opening height so the reset has something to do.
+    engine->windowFocused(QStringLiteral("app|a"), kS1);
+    engine->setWindowHeight(WindowHeight::makeFixed(300), kS1);
+    engine->windowFocused(QStringLiteral("app|b"), kS2);
+    engine->setWindowHeight(WindowHeight::makeFixed(300), kS2);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS2).first()), 300);
+
+    // ClientDecides with no rule: the height the user set stays.
+    engine->resetStripToDefaults(kS1);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
+
+    // ClientDecides with a rule height: there IS a default to go back to, and
+    // it is the even split — a lone tile then fills its column's cross extent.
+    engine->resetStripToDefaults(kS2);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS2).first()), ScrollTestUtils::kCrossExtent);
 }
 
 void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne()

@@ -343,9 +343,13 @@ public:
     /// std::nullopt when the context's default is "the client decides" (the
     /// engine's ClientDecides kind with no rule pinning a width), in which
     /// case every column keeps the width it has and only display and
-    /// heights are reset. Returns true when any intent changed. Clears the
-    /// single pre-maximize slot, since no column is maximized afterwards.
-    bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth, ColumnDisplay defaultDisplay,
+    /// heights are reset. The height is std::nullopt on the same terms (the
+    /// ClientDecides height kind with no rule pinning one), and then every
+    /// tile keeps the height it has. Returns true when any intent changed.
+    /// Clears the single pre-maximize slot, since no column is maximized
+    /// afterwards.
+    bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
+                         const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                          const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
     /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,

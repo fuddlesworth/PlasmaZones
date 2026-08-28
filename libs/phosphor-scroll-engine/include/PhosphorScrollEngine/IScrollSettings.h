@@ -79,8 +79,9 @@ public:
     virtual qreal scrollingDefaultColumnWidthValue() const = 0;
     virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
     /// Default height intent for fresh tiles: kind (0 = auto, 1 = fixed px,
-    /// 2 = preset index) + fixed pixel value + preset index. Matches
-    /// WindowHeight::Kind 1:1 (DefaultHeightKind).
+    /// 2 = preset index, 3 = client decides) + fixed pixel value + preset
+    /// index. The kind space is DefaultHeightKind, NOT WindowHeight::Kind —
+    /// client-decides has no counterpart there.
     virtual int scrollingDefaultWindowHeightKind() const = 0;
     virtual qreal scrollingDefaultWindowHeightValue() const = 0;
     virtual int scrollingDefaultWindowHeightPresetIndex() const = 0;

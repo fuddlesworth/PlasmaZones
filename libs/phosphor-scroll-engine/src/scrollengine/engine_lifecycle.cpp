@@ -491,6 +491,35 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                                                  WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent))));
         }
     }
+    // "The client decides" default HEIGHT, the twin of the width gate above
+    // the insert. Every term of that gate applies here for its own reason:
+    // a stash restore's remembered shape outranks an open-time default (the
+    // rule arm just above documents that precedence), a per-window
+    // openWindowHeight rule outranks the kind and is handled there, and a
+    // per-screen rule height means the resolver already pinned one.
+    //
+    // Placed AFTER the insert rather than folded into params.defaultWindowHeight
+    // because the insert is what puts the tile in the strip: unlike the
+    // width, which the insert takes as an argument, a tile's height is
+    // written by the insert from params and can only be re-stated through
+    // setWindowHeightIntent afterwards.
+    if (inserted && !restoredFromStash && !openParams.heightFraction && m_windowTracker
+        && effectiveHeightClientDecides(screenOverrides) && !ruleWindowHeightFraction(screenOverrides).has_value()) {
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
+            // CROSS extent, decoded by role like everything else that reads
+            // this rect: a window height divides the within-column stack,
+            // which runs across the strip whichever way the strip runs.
+            // Reading .height() unconditionally would feed the client's MAIN
+            // extent into the tile's cross intent on a vertical strip.
+            //
+            // Bounded before the round for the width twin's reason: the rect
+            // comes from an embedder-implemented tracker and its extents are
+            // whatever the compositor reported.
+            const int clientCross = params.axis.crossSize(geo->size());
+            state->strip().setWindowHeightIntent(
+                windowId, WindowHeight::makeFixed(qBound(1, clientCross, static_cast<int>(kMaxFixedExtentPx))));
+        }
+    }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
         // A refusal is still an OUTCOME, and the seed's "consumed on every

@@ -112,6 +112,16 @@ bool isKnownWidthKind(int kind)
         || kind == static_cast<int>(DefaultWidthKind::Preset);
 }
 
+/// Whether @p kind names a DefaultHeightKind this build knows. The height
+/// twin of isKnownWidthKind, and shared by the same two halves for the same
+/// reason.
+bool isKnownHeightKind(int kind)
+{
+    return kind == static_cast<int>(DefaultHeightKind::Auto) || kind == static_cast<int>(DefaultHeightKind::Fixed)
+        || kind == static_cast<int>(DefaultHeightKind::Preset)
+        || kind == static_cast<int>(DefaultHeightKind::ClientDecides);
+}
+
 /// Shared validation for both template preset lists: every entry must clear
 /// the given floor (the same bound the settings parser applies), and an
 /// empty or entirely-invalid list means "no template" — never an empty
@@ -481,11 +491,14 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
     // adjust verbs use). Cross, not physical height: a window height divides
     // the within-column stack, which runs across the strip whichever way the
     // strip itself runs.
+    // Through the shared helper, so the open path's ClientDecides gate asks
+    // the SAME question this resolver answers (the width twin documents why a
+    // presence test is the wrong question).
     const int crossExtent = axis.crossSize(workArea);
-    qreal fraction = 0.0;
-    if (crossExtent > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
-        && fraction > 0.0 && fraction <= 1.0) {
-        return WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent)));
+    if (crossExtent > 0) {
+        if (const auto ruleFraction = ruleWindowHeightFraction(overrides)) {
+            return WindowHeight::makeFixed(qMax(1, qRound(*ruleFraction * crossExtent)));
+        }
     }
     // Settings channel: the kind trio, resolved per SLOT against the cached
     // global — see effectiveDefaultColumnWidth for why a partial trio is the
@@ -521,9 +534,57 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
         } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
             return WindowHeight{};
         }
+        // ClientDecides (and a kind whose resolved value is still out of
+        // range) falls through to the global — the open path decides the
+        // client-sized case via effectiveHeightClientDecides, and this
+        // function only ever supplies the fallback height for it.
     }
     // Value anchor: no clamp, resolution snaps (see the width twin).
     return m_defaultWindowHeight;
+}
+
+std::optional<qreal> ScrollEngine::ruleWindowHeightFraction(const QVariantMap& overrides)
+{
+    qreal fraction = 0.0;
+    if (overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction) && fraction > 0.0
+        && fraction <= 1.0) {
+        return fraction;
+    }
+    return std::nullopt;
+}
+
+bool ScrollEngine::effectiveHeightClientDecides(const QString& screenId) const
+{
+    return effectiveHeightClientDecides(overridesForScreen(screenId));
+}
+
+bool ScrollEngine::effectiveHeightClientDecides(const QVariantMap& overrides) const
+{
+    // Kind VALIDATION, not just a read — the width twin carries the full
+    // reasoning: the resolver falls through to the global on a kind it does
+    // not recognise, so this half of the same setting must fall through too.
+    int kind = 0;
+    if (overrideInt(overrides, ScrollPerScreenKeys::defaultWindowHeightKind(), kind) && isKnownHeightKind(kind)) {
+        return kind == static_cast<int>(DefaultHeightKind::ClientDecides);
+    }
+    return m_defaultHeightClientDecides;
+}
+
+std::optional<WindowHeight> ScrollEngine::resetDefaultWindowHeightFor(const QVariantMap& overrides) const
+{
+    // A rule's height outranks the kind (effectiveDefaultWindowHeight folds
+    // it in first), so only a ClientDecides verdict with NO rule height means
+    // "there is no default height to go back to".
+    if (effectiveHeightClientDecides(overrides) && !ruleWindowHeightFraction(overrides).has_value()) {
+        return std::nullopt;
+    }
+    // The even split, not params.defaultWindowHeight: this verb's promise is
+    // "every window back to sharing its column", which is what the retile
+    // copy says and what the arm it replaces always did. A Fixed or Preset
+    // DEFAULT height is an OPEN-time shape, and re-imposing it here would
+    // stack every window in a column at the same pixel height and let the
+    // relayout renormalize them back apart.
+    return WindowHeight::makeAuto();
 }
 
 ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screenId) const

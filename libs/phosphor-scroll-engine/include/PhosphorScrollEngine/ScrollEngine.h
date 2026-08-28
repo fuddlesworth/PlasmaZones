@@ -245,9 +245,10 @@ public:
     void minimizeColumnWidth(const QString& screenId);
     /// Every column on the screen back to the context's default width and
     /// display, every window back to the even split: the scrolling half of
-    /// the mode-neutral Retile shortcut. Widths are left as they are when
-    /// the context's default is "the client decides" and no rule pins one
-    /// (see resetDefaultColumnWidthFor); display and heights still reset.
+    /// the mode-neutral Retile shortcut. Either extent is left as it is when
+    /// the context's default for it is "the client decides" and no rule pins
+    /// one (see resetDefaultColumnWidthFor and resetDefaultWindowHeightFor);
+    /// the display always resets.
     /// Re-applies the layout the way the autotile and snapping halves
     /// re-apply theirs.
     void resetStripToDefaults(const QString& screenId);
@@ -1245,6 +1246,11 @@ private:
     bool m_smartGaps = false;
     /// Default height intent for fresh tiles (Auto = historical even split).
     WindowHeight m_defaultWindowHeight{};
+    /// "Client decides" default height: a fresh tile joins its column at the
+    /// client's own CROSS extent. The GLOBAL verdict only, on the same terms
+    /// as m_defaultWidthClientDecides — open-path consumers must ask
+    /// effectiveHeightClientDecides so a per-screen kind answers for itself.
+    bool m_defaultHeightClientDecides = false;
     /// Where a fresh open's column enters the strip (config default; the
     /// openColumnPlacement rule and remembered positions outrank it).
     ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
@@ -1461,6 +1467,25 @@ private:
     /// Vocabulary-taking overload — the height twin of the width one above.
     WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea, StripAxis axis,
                                               const QList<qreal>& presetHeights) const;
+    /// The RULE channel's bare default-height fraction, when the map carries
+    /// one that clears the range effectiveDefaultWindowHeight accepts. The
+    /// height twin of ruleColumnWidthFraction, and it exists for the same
+    /// reason: the open path's ClientDecides gate must ask what the RESOLVER
+    /// answers, not whether the key is present, or an out-of-range rule value
+    /// would suppress the client-sized open while contributing no height.
+    static std::optional<qreal> ruleWindowHeightFraction(const QVariantMap& overrides);
+    /// Whether "the client decides" is the EFFECTIVE default-height verdict
+    /// for the screen these @p overrides resolve: a per-screen kind override
+    /// answers for itself, an absent or unrecognised one defers to the cached
+    /// global flag. The width twin's doc carries the full rationale.
+    bool effectiveHeightClientDecides(const QString& screenId) const;
+    bool effectiveHeightClientDecides(const QVariantMap& overrides) const;
+    /// The height resetStripToDefaults hands the strip: the even split, or
+    /// std::nullopt when the effective verdict is "the client decides" and no
+    /// rule pins a height, in which case the tiles keep the heights they have.
+    /// The height twin of resetDefaultColumnWidthFor. No params: the reset
+    /// height is the even split, which needs no work area to resolve.
+    std::optional<WindowHeight> resetDefaultWindowHeightFor(const QVariantMap& overrides) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
     ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;
     /// Per-property override, so a rule that sets only the position leaves the

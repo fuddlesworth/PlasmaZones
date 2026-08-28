@@ -289,9 +289,12 @@ private Q_SLOTS:
                  ConfigDefaults::scrollingHeightKindFixed());
         QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindPreset()).toInt(),
                  ConfigDefaults::scrollingHeightKindPreset());
-        // 3 is the first value past the closed set {Auto, Fixed, Preset}; a
-        // clamping validator would hand it back as Preset.
-        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindPreset() + 1).toInt(),
+        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindClientDecides()).toInt(),
+                 ConfigDefaults::scrollingHeightKindClientDecides());
+        // 4 is the first value past the closed set {Auto, Fixed, Preset,
+        // ClientDecides}; a clamping validator would hand it back as
+        // ClientDecides.
+        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindClientDecides() + 1).toInt(),
                  ConfigDefaults::scrollingDefaultWindowHeightKind());
 
         const auto* insertPos =

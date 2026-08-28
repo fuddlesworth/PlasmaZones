@@ -479,15 +479,19 @@ enum class DefaultWidthKind : int {
     Preset = 3,
 };
 
-/// Wire vocabulary of the DEFAULT-window-height KIND setting. Unlike the
-/// width pair above, this one IS the model enum's vocabulary
-/// (WindowHeight::Kind values match 1:1 — Auto/Fixed/Preset, no
-/// "client decides" wrinkle on the height side), so the engine may cast the
-/// config value directly after a range guard.
+/// Wire vocabulary of the DEFAULT-window-height KIND setting. The first
+/// three members happen to share WindowHeight::Kind's values (Auto/Fixed/
+/// Preset), but this space is NOT that enum and must never be cast to it:
+/// ClientDecides has no WindowHeight::Kind counterpart at all, exactly like
+/// its width twin. The engine translates with explicit ifs.
 enum class DefaultHeightKind : int {
     Auto = 0,
     Fixed = 1,
     Preset = 2,
+    /// New windows join their column at the client's own cross extent, the
+    /// height twin of DefaultWidthKind::ClientDecides. Appended as 3 — the
+    /// three below are load-bearing wire values in stored configs.
+    ClientDecides = 3,
 };
 
 /// Where a fresh-opened window's new column enters the strip (config

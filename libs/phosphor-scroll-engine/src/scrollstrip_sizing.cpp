@@ -452,7 +452,8 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     return true;
 }
 
-bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth, ColumnDisplay defaultDisplay,
+bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
+                                  const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                                   const ScrollLayoutParams& params)
 {
     if (params.axis.mainSize(params.workArea) <= 0) {
@@ -474,11 +475,15 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
             col.display = defaultDisplay;
             changed = true;
         }
-        for (Tile& tile : col.tiles) {
-            const WindowHeight even = WindowHeight::makeAuto();
-            if (!(tile.height == even)) {
-                tile.height = even;
-                changed = true;
+        // No default height at all means the client's own size IS the
+        // default, exactly as for width above: the heights the windows opened
+        // at are the closest thing to it, so they are left alone.
+        if (defaultHeight) {
+            for (Tile& tile : col.tiles) {
+                if (!(tile.height == *defaultHeight)) {
+                    tile.height = *defaultHeight;
+                    changed = true;
+                }
             }
         }
     }

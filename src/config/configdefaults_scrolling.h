@@ -697,9 +697,12 @@ public:
     {
         return false;
     }
-    /// DefaultWindowHeightKind wire values — the engine's WindowHeight::Kind
-    /// vocabulary 1:1 (0 = auto split, 1 = fixed px, 2 = preset index); the
-    /// schema static_asserts the pair via DefaultHeightKind.
+    /// DefaultWindowHeightKind wire values (0 = auto split, 1 = fixed px,
+    /// 2 = preset index, 3 = client decides). Named so the settings layer's
+    /// kind-aware branches read against the vocabulary instead of raw ints;
+    /// the schema static_asserts each against DefaultHeightKind. NOT
+    /// WindowHeight::Kind — ClientDecides has no member there, so the engine
+    /// translates with explicit ifs (see DefaultHeightKind).
     static constexpr int scrollingHeightKindAuto()
     {
         return 0;
@@ -712,6 +715,13 @@ public:
     {
         return 2;
     }
+    /// Client-decides kind, appended as 3 (0-2 are load-bearing wire values
+    /// in stored configs); the engine's DefaultHeightKind::ClientDecides
+    /// carries the same value and the schema static_asserts the pair.
+    static constexpr int scrollingHeightKindClientDecides()
+    {
+        return 3;
+    }
     /// Default window height kind for fresh tiles: auto (even split).
     static constexpr int scrollingDefaultWindowHeightKind()
     {
@@ -720,7 +730,8 @@ public:
     /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
     static constexpr bool isValidScrollingHeightKind(int v)
     {
-        return v == scrollingHeightKindAuto() || v == scrollingHeightKindFixed() || v == scrollingHeightKindPreset();
+        return v == scrollingHeightKindAuto() || v == scrollingHeightKindFixed() || v == scrollingHeightKindPreset()
+            || v == scrollingHeightKindClientDecides();
     }
     /// Fixed-kind pixel height for fresh tiles, plus its range. Only read
     /// under the Fixed kind; Auto and Preset ignore it. The relayout

@@ -171,11 +171,12 @@ void ScrollEngine::resetStripToDefaults(const QString& screenId)
 {
     // "retile" rather than "resize": this is the scrolling arm of the
     // mode-neutral Retile shortcut, and the OSD's retile copy is what the
-    // user pressed for. Both defaults are resolved here because the strip
-    // does not carry the display in params, and the width may be "the
-    // client decides", which has no value to hand down (see
-    // resetDefaultColumnWidthFor and resetToDefaults). Hand-expanded so the
-    // per-context override map is resolved ONCE for both of them, the
+    // user pressed for. All three defaults are resolved here because the
+    // strip does not carry the display in params, and either extent may be
+    // "the client decides", which has no value to hand down (see
+    // resetDefaultColumnWidthFor, resetDefaultWindowHeightFor and
+    // resetToDefaults). Hand-expanded so the
+    // per-context override map is resolved ONCE for all of them, the
     // file's resolve-once discipline; P_SCROLL_VERB's op expression would
     // have each default re-fetch it.
     P_SCROLL_RESOLVE(screenId);
@@ -187,6 +188,7 @@ void ScrollEngine::resetStripToDefaults(const QString& screenId)
     const QString sourceWindow = state->strip().activeWindowId();
     const QVariantMap overrides = overridesForScreen(screen);
     const bool changed = state->strip().resetToDefaults(resetDefaultColumnWidthFor(overrides, params),
+                                                        resetDefaultWindowHeightFor(overrides),
                                                         effectiveDefaultColumnDisplay(overrides), params);
     if (changed) {
         applyLayout(screen, false);

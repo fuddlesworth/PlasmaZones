@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Scrolling windows can open at their own height**: Default width under Scrolling → New columns has always offered Window decides, which opens a column at the size the application asked for. Default height offered only the even split, a fixed pixel height and a preset. It now offers Window decides too, so a window joining a column keeps the height it asked for. As with the width, a per-window rule and a per-monitor setting still outrank it, and Retile leaves a window-decided height alone rather than pulling it back to the even split.
+
 ### Fixed
 
 - **Clicking the focused window brings it back into view**: scrolling the strip by hand takes the view out of the centering policy's hands, which is what lets a scrolled view stay put. Focusing a window hands it back, but a click on the window that already had focus was ignored entirely, and so was the one the compositor sends when you return to a desktop. So was a switch between two windows stacked in the same column. A window you had scrolled away from stayed off to one side no matter how many times you clicked it. All three now hand the view back, and under the two policies that only move the view when they have to, a scroll that left the window fully on screen is still left alone ([#992](https://github.com/fuddlesworth/PlasmaZones/pull/992)).
