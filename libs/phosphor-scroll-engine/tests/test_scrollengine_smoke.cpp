@@ -467,7 +467,7 @@ void TestScrollEngineSmoke::floatRestoresDisplayIntent()
 
 void TestScrollEngineSmoke::pruneDropsWindowBookkeeping()
 {
-    // dropWindowBookkeeping regression: pruning a desktop's state must
+    // Side-map regression: pruning a desktop's state must
     // sweep the per-window side maps — the float marker is the observable
     // one headless (m_lastAppliedRect never populates without a screen
     // manager).

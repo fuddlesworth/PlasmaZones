@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -141,19 +142,33 @@ private:
     /// Effective census desktop for a window: its own desktop int, or 0 for
     /// sticky / multi-desktop / unknown (counts toward no desktop).
     static int censusDesktop(const PhosphorEngine::WindowMetadata& meta);
+    /// The one census mutation. Every path that adds or drops a window from a
+    /// desktop's count goes through here so the clamp, the empty-row drop and
+    /// the reconciler notification cannot drift apart.
+    void adjustPopulationById(const QString& desktopId, int delta);
+    /// Number-keyed convenience over adjustPopulationById; translates through
+    /// the VDM's current list.
     void adjustPopulation(int desktopInt, int delta);
     void publishIfChanged();
     void tryFirstAdoption();
+    /// The shared post-adoption tail: realize the declarations parked while
+    /// adoption was pending, then run the owner-wins reunion check over the
+    /// census seeded before adoption (both are refused while !m_adopted).
+    /// Both adoption paths (tryFirstAdoption and the start() timeout
+    /// fallback) must run it.
+    void applyNamedDeclarationsAfterAdoption();
 
     PhosphorWorkspaces::VirtualDesktopManager* m_vdm;
     PhosphorEngine::WindowRegistry* m_registry;
     PhosphorScreens::ScreenManager* m_screens;
     PhosphorWorkspaces::WorkspaceReconciler m_reconciler;
-    /// Window census by desktop ID (translated at event time; ids are the
-    /// fixed points across renumbering).
+    /// Window count per desktop ID (translated at event time; ids are the
+    /// fixed points across renumbering). desktopId → population.
     QHash<QString, int> m_populationById;
-    /// Per-window census desktop int at last sighting, so a metadata change
-    /// adjusts the right bucket even after renumbering (translated on entry).
+    /// The desktop ID a window was last counted against — an id STRING, not
+    /// the desktop int, so a metadata change adjusts the right bucket even
+    /// after renumbering (the int is translated on entry).
+    /// instanceId → desktopId.
     QHash<QString, QString> m_windowCensusDesktopId;
     QString m_lastPublishedJson;
     bool m_adopted = false;
@@ -167,6 +182,9 @@ private:
     /// effect command with the int resolved at emit time).
     void switchScreenToDesktop(const QString& screenId, const QString& desktopId);
     QList<std::function<void()>> m_quietQueue;
+    /// Set while drainQuietQueue walks the batch, so a mapChanged emitted by a
+    /// drained verb cannot re-enter the drain.
+    bool m_draining = false;
     /// Last applied named declarations (re-applied after adoption).
     QVariantList m_namedEntries;
     bool m_namedApplied = false;
@@ -181,6 +199,10 @@ private:
     /// diagnosis. Arrival confirmation lives in onMetadataChanged.
     void watchWindowMove(const QString& windowId, const QString& targetDesktopId);
     QHash<QString, QString> m_pendingWindowMoves; ///< windowId → expected desktopId
+    /// windowId → the sequence of the watch that owns the entry above, so a
+    /// superseded watch's timer cannot retire its successor's expectation.
+    QHash<QString, quint64> m_windowMoveSequences;
+    quint64 m_windowMoveSequence = 0;
     /// Per-screen snap-back cooldown stamps (ms since epoch).
     QHash<QString, qint64> m_lastSnapBackMs;
 
@@ -193,6 +215,9 @@ private:
     /// output move on an unchanged desktop, so no census arrival clears it —
     /// the cooldown is what stops a slow effect from drawing repeat issues.
     QHash<QString, qint64> m_lastReunionMs;
+    /// Windows with a reunion body sitting in the quiet queue. Keeps a burst
+    /// of reports during structural churn from queueing one body per report.
+    QSet<QString> m_pendingReunions;
     struct DisplacedByRemoval
     {
         QString ownerScreenId;

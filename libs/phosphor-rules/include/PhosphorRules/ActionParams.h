@@ -128,6 +128,26 @@ inline constexpr int MaxZoneOrdinal = 64;
 /// ParamSchema `max` so the editor can read it from the schema).
 inline constexpr int MaxZoneNameLength = 128;
 
+/// Upper bound on a `RouteToWorkspace` target name (`ActionParam::TargetWorkspaceName`),
+/// in characters, measured on the TRIMMED name. Same posture as MaxZoneNameLength
+/// above: a grossly-malformed-payload guard, not a real limit — the workspace
+/// declarations UI keeps names far shorter, but a hand-edited rules file may
+/// carry anything, so the bound only stops an unbounded string riding through
+/// the loader. Consumers: the descriptor validator
+/// (ruleaction_builtins_engine.cpp), which trims before measuring so it and the
+/// daemon's trimmed-name resolution measure the same string; it is also
+/// published as the `workspaceName` ParamSchema `max` so the editor can read
+/// the bound from the schema instead of re-typing the constant.
+inline constexpr int MaxWorkspaceNameLength = 128;
+
+/// Upper bound on a `RouteToScreen` target id (`ActionParam::TargetScreenId`),
+/// in characters, measured on the TRIMMED value. Same
+/// grossly-malformed-payload posture as the two name bounds above: a real
+/// canonical id (`Manuf:Model:Serial`, optionally `/CONNECTOR`-suffixed, or a
+/// virtual screen id) runs well under it. Consumers: the descriptor validator
+/// (ruleaction_builtins_engine.cpp) and the `screenId` ParamSchema `max`.
+inline constexpr int MaxScreenIdLength = 128;
+
 /// Upper bound on a tab label font FAMILY (`SetTabIndicatorFontFamily`), in
 /// characters, measured on the TRIMMED value. Same posture and same number as
 /// MaxZoneNameLength: a grossly-malformed-payload guard, not a real limit —

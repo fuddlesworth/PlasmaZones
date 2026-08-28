@@ -11,12 +11,17 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Dynamic workspaces — Quick Shortcuts leaf.
  *
- * The quick-layout model applied to workspaces: nine fixed slots, each with
- * a factory chord (Meta+Shift+N, rebindable in KDE's Shortcuts settings),
- * and the page assigns WHICH named workspace the slot sends the active
- * window to. The chord itself is not editable here, exactly like the
- * snapping/tiling quick shortcuts. Names come from the Named Workspaces
- * leaf; a slot with no workspace assigned does nothing.
+ * The quick-layout model applied to workspaces: a fixed set of slots, each
+ * with a factory chord, and the page assigns WHICH named workspace the slot
+ * acts on. The chords themselves are not editable here, exactly like the
+ * snapping/tiling quick shortcuts. Names come from the Named Workspaces leaf;
+ * a slot with no workspace assigned does nothing.
+ *
+ * Each slot carries TWO daemon-bound chords: the move chord sends the active
+ * window to the assigned workspace, and the focus chord jumps to the slot's
+ * position in the acting monitor's list. Both are shown, because a chord the
+ * daemon binds but the page never mentions is a chord the user cannot
+ * discover.
  */
 SettingsFlickable {
     id: root
@@ -72,13 +77,14 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     wrapMode: Text.WordWrap
                     opacity: 0.6
-                    text: i18n("Each slot sends the active window to the workspace you assign here. The keys themselves can be changed in the system Shortcuts settings under PlasmaZones.")
+                    text: i18n("Assign named workspaces to keyboard shortcuts for quick switching.")
                 }
 
                 Repeater {
-                    // Nine slots, matching the quick-layout slot count the
-                    // indexed key builders and the daemon's 1..9 entries use.
-                    model: 9
+                    // The quick-slot count the indexed key builders and the
+                    // daemon's slot entries share
+                    // (ConfigDefaults::WorkspaceSlotCount).
+                    model: settingsController.workspaceSlotCount
 
                     delegate: ColumnLayout {
                         id: slotDelegate
@@ -88,6 +94,10 @@ SettingsFlickable {
                         property string shortcutText: {
                             void root._slotTick;
                             return appSettings.workspaceMoveSlotShortcut(slotDelegate.index);
+                        }
+                        property string focusShortcutText: {
+                            void root._slotTick;
+                            return appSettings.workspaceFocusSlotShortcut(slotDelegate.index);
                         }
                         property string targetName: {
                             void root._slotTick;
@@ -122,11 +132,27 @@ SettingsFlickable {
                                 }
 
                                 Label {
-                                    text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Shift+1", "Shortcut %1, moves the active window", slotDelegate.shortcutText) : i18n("No shortcut assigned")
+                                    text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Shift+1", "%1 moves the active window here", slotDelegate.shortcutText) : i18n("No move shortcut assigned")
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                     font: Kirigami.Theme.smallFont
                                     opacity: slotDelegate.shortcutText !== "" ? slotDelegate._captionOpacity : slotDelegate._emptyCaptionOpacity
+                                }
+
+                                // The slot's OTHER daemon-bound chord. It is
+                                // positional, not name-based: it focuses this
+                                // slot's place in the monitor's workspace list
+                                // (WorkspaceController::focusWorkspaceAt), so
+                                // it does not read the assignment beside it.
+                                // Hidden when unbound rather than showing a
+                                // second "none" line under the first.
+                                Label {
+                                    visible: slotDelegate.focusShortcutText !== ""
+                                    text: i18nc("%1 is a keyboard shortcut such as Meta+1", "%1 switches to the workspace in this position", slotDelegate.focusShortcutText)
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    font: Kirigami.Theme.smallFont
+                                    opacity: slotDelegate._captionOpacity
                                 }
                             }
 

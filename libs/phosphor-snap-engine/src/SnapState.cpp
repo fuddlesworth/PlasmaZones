@@ -256,6 +256,61 @@ bool SnapState::reassignDesktop(const QString& rawWindowId, int virtualDesktop)
     return true;
 }
 
+void SnapState::reapDesktopValues(int desktop)
+{
+    if (desktop <= 0) {
+        return; // 0 is the all-desktops sentinel; there is no desktop to reap
+    }
+    bool changed = false;
+    for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end();) {
+        if (it.value() == desktop) {
+            it = m_windowDesktopAssignments.erase(it);
+            changed = true;
+        } else {
+            ++it;
+        }
+    }
+    if (m_lastUsedDesktop == desktop) {
+        m_lastUsedDesktop = 0;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
+void SnapState::renumberDesktopValues(const QHash<int, int>& oldToNew)
+{
+    // A mapping to a non-positive target is malformed (see the declaration):
+    // applying it would stamp the all-desktops sentinel onto real windows.
+    // Treat such an entry as absent rather than dropping the whole renumber,
+    // so a single bad pair cannot strand every surviving desktop tag.
+    const auto mapDesktop = [&oldToNew](int desktop) {
+        const int mapped = oldToNew.value(desktop, desktop);
+        return mapped > 0 ? mapped : desktop;
+    };
+    bool changed = false;
+    for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
+        if (it.value() != 0) {
+            const int mapped = mapDesktop(it.value());
+            if (mapped != it.value()) {
+                it.value() = mapped;
+                changed = true;
+            }
+        }
+    }
+    if (m_lastUsedDesktop != 0) {
+        const int mapped = mapDesktop(m_lastUsedDesktop);
+        if (mapped != m_lastUsedDesktop) {
+            m_lastUsedDesktop = mapped;
+            changed = true;
+        }
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
 QStringList SnapState::windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const
 {
     QStringList result;

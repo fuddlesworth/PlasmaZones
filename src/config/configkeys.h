@@ -6,6 +6,11 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
+// The disable-rule label helpers used to live at the foot of this file; they
+// moved out when it hit its size ceiling. Included here rather than at each
+// call site so everything that reached them through configkeys.h still does.
+#include "configkeys_disablelabels.h"
+
 #include <QString>
 
 // Macro to define a static config key accessor returning a QStringLiteral.
@@ -96,11 +101,9 @@ public:
     // top-level group; the gap values are read by both engines.
     P_CONFIG_GROUP(gapsGroup, "Gaps")
 
-    // Workspaces — dynamic per-monitor workspaces (mode-neutral top-level
-    // group: the feature is a layer below all three placement modes).
-    P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
-    P_CONFIG_GROUP(workspacesNamedGroup, "Workspaces.Named")
-    P_CONFIG_GROUP(workspacesSlotsGroup, "Workspaces.Slots")
+    // The Workspaces.* groups and keys live in configkeys_workspaces.h
+    // (ConfigKeysWorkspaces, a later link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
@@ -278,63 +281,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(enabledKey, "Enabled")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Workspaces.Behavior
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Consent latch for writing KWin's PerOutputVirtualDesktops kwinrc key on
-    // the user's behalf (dynamic workspaces enable flow).
-    P_CONFIG_KEY(manageKWinPerOutputKey, "ManageKWinPerOutputSetting")
-    // Owner-wins snap-back OSD hint toggle.
-    P_CONFIG_KEY(snapBackOsdHintKey, "SnapBackOsdHint")
-    // Take over KWin's stock desktop-switch chords while the feature is on.
-    P_CONFIG_KEY(rebindKWinShortcutsKey, "RebindKWinDesktopShortcuts")
-    // Named-workspace declarations (Workspaces.Named): JSON array of
-    // {name, output, position, focusShortcut, moveShortcut} maps.
-    P_CONFIG_KEY(entriesKey, "Entries")
-
-    // Indexed workspace quick-shortcut slots 1..9 (Shortcuts.Global leaves;
-    // defaults unset). Same builder shape and range contract as quickLayoutKey.
-    P_CONFIG_KEY(workspaceMoveSlotKeyPattern, "WorkspaceMoveSlot%1")
-    static QString workspaceMoveSlotKey(int n)
-    {
-        if (n < 1 || n > 9) {
-            qFatal("workspaceMoveSlotKey: n out of range: %d", n);
-        }
-        return workspaceMoveSlotKeyPattern().arg(n);
-    }
-    P_CONFIG_KEY(workspaceFocusSlotKeyPattern, "WorkspaceFocusSlot%1")
-    static QString workspaceFocusSlotKey(int n)
-    {
-        if (n < 1 || n > 9) {
-            qFatal("workspaceFocusSlotKey: n out of range: %d", n);
-        }
-        return workspaceFocusSlotKeyPattern().arg(n);
-    }
-    // Quick-slot targets (Workspaces.Slots): the NAMED WORKSPACE each move
-    // slot sends the active window to (quick-layout model: chord fixed per
-    // slot and KCM-rebindable, target assigned in the settings app).
-    P_CONFIG_KEY(workspaceSlotTargetKeyPattern, "Target%1")
-    static QString workspaceSlotTargetKey(int n)
-    {
-        if (n < 1 || n > 9) {
-            qFatal("workspaceSlotTargetKey: n out of range: %d", n);
-        }
-        return workspaceSlotTargetKeyPattern().arg(n);
-    }
-
-    // Workspace verb shortcuts (Shortcuts.Global leaves).
-    P_CONFIG_KEY(workspaceFocusUpKey, "WorkspaceFocusUp")
-    P_CONFIG_KEY(workspaceFocusDownKey, "WorkspaceFocusDown")
-    P_CONFIG_KEY(workspaceMoveWindowUpKey, "WorkspaceMoveWindowUp")
-    P_CONFIG_KEY(workspaceMoveWindowDownKey, "WorkspaceMoveWindowDown")
-    P_CONFIG_KEY(workspaceMoveColumnUpKey, "WorkspaceMoveColumnUp")
-    P_CONFIG_KEY(workspaceMoveColumnDownKey, "WorkspaceMoveColumnDown")
-    P_CONFIG_KEY(workspaceReorderUpKey, "WorkspaceReorderUp")
-    P_CONFIG_KEY(workspaceReorderDownKey, "WorkspaceReorderDown")
-    P_CONFIG_KEY(workspaceMoveToMonitorLeftKey, "WorkspaceMoveToMonitorLeft")
-    P_CONFIG_KEY(workspaceMoveToMonitorRightKey, "WorkspaceMoveToMonitorRight")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Behavior
@@ -1146,64 +1092,6 @@ private:
     // Non-instantiable
     ConfigKeys() = delete;
 };
-
-// ─── Disable-rule label helpers ─────────────────────────────────────────────
-// Shared between the live Settings disable-list writer
-// (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
-// builders. Both call sites must produce the same `Rule::name` string for
-// a given (mode, screen, desktop, activity) tuple so that resaving an existing
-// disable list (e.g. after a UI edit) doesn't fork into two slightly different
-// labels for what is otherwise the same rule.
-//
-// These are NOT translated. `Rule::name` is the persisted identity
-// surface in rules.json; running the app under different locales must
-// not change its on-disk text. The rule editor surfaces the name verbatim,
-// matching the historic behaviour.
-inline QString autotileDisableRulePrefix()
-{
-    return QStringLiteral("Autotile off · ");
-}
-
-inline QString snappingDisableRulePrefix()
-{
-    return QStringLiteral("Snapping off · ");
-}
-
-inline QString scrollingDisableRulePrefix()
-{
-    return QStringLiteral("Scrolling off · ");
-}
-
-/// Persistent label-prefix for the Rule::name field of a per-mode
-/// disable rule. Exhaustive switch — a future `Mode` enum value added in
-/// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
-/// diagnostic rather than silently producing an empty prefix that lands
-/// in the persisted `Rule::name` as bare ` · DP-1` (parseable but
-/// anonymous, and identical across modes — losing the screen→mode
-/// affinity that makes the rule editor scannable).
-inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    switch (mode) {
-    case PhosphorZones::AssignmentEntry::Snapping:
-        return snappingDisableRulePrefix();
-    case PhosphorZones::AssignmentEntry::Autotile:
-        return autotileDisableRulePrefix();
-    case PhosphorZones::AssignmentEntry::Scrolling:
-        return scrollingDisableRulePrefix();
-    }
-    Q_UNREACHABLE();
-    return QString();
-}
-
-inline QString disableRuleDesktopSuffix(int desktop)
-{
-    return QStringLiteral(" · Desktop ") + QString::number(desktop);
-}
-
-inline QString disableRuleActivitySuffix()
-{
-    return QStringLiteral(" · Activity");
-}
 
 } // namespace PlasmaZones
 

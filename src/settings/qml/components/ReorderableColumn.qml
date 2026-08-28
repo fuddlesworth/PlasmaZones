@@ -80,6 +80,16 @@ Item {
     // invalidate the map; reassigned whole on each publish so bindings re-run.
     property var delegateHeights: ({})
 
+    // The id of the row a keyboard reorder just moved. A consumer commits a
+    // move by REPLACING its `items` array, which the Repeater treats as a full
+    // model reset: every delegate is destroyed and rebuilt, and the one that
+    // had focus dies with it, so a second Alt+Up would go nowhere. Each rebuilt
+    // delegate checks this against its own id and takes focus back when it
+    // matches, which lands focus on the moved row at its NEW index. Cleared by
+    // the delegate that claims it, so an ordinary rebuild (a reload, a filter
+    // change) never steals focus from elsewhere in the page.
+    property string pendingFocusId: ""
+
     // Prune cache entries whose id no longer appears in `items`, so the map
     // doesn't grow across deletions (every publish copies the whole map).
     // Rebuilding here rather than deleting in Component.onDestruction is
@@ -103,6 +113,20 @@ Item {
         }
         if (kept !== Object.keys(delegateHeights).length)
             delegateHeights = next;
+        // A pending focus restore whose row is gone from the model (removed
+        // rather than moved) can never be claimed, so drop it here instead of
+        // letting it sit and grab focus off a later unrelated rebuild.
+        if (pendingFocusId.length > 0 && next[pendingFocusId] === undefined && !_containsId(pendingFocusId))
+            pendingFocusId = "";
+    }
+
+    function _containsId(itemId) {
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i];
+            if (item !== undefined && item !== null && root.idOf(item) === itemId)
+                return true;
+        }
+        return false;
     }
 
     function setDelegateHeight(itemId, h) {
@@ -150,6 +174,11 @@ Item {
     Layout.preferredHeight: totalHeight
     implicitHeight: totalHeight
     clip: true
+
+    // The rows announce themselves as ListItems, so the container announcing
+    // itself as a List is what lets assistive technology report "item 2 of 5"
+    // instead of five unrelated items.
+    Accessible.role: Accessible.List
 
     Repeater {
         model: root.items
@@ -199,6 +228,13 @@ Item {
 
             Component.onCompleted: {
                 root.setDelegateHeight(delegateRoot._itemId, actualHeight);
+                // Take back the focus a keyboard reorder lost when the commit
+                // reset the model (see root.pendingFocusId). Cleared first, so
+                // no later rebuild claims it a second time.
+                if (root.pendingFocusId.length > 0 && root.pendingFocusId === delegateRoot._itemId) {
+                    root.pendingFocusId = "";
+                    delegateRoot.forceActiveFocus(Qt.OtherFocusReason);
+                }
                 if (root.anchorPrefix.length > 0) {
                     Qt.callLater(function () {
                         // The coalesced callback can fire after this row has
@@ -232,6 +268,20 @@ Item {
             y: baseY + visualOffset
             z: dragArea.drag.active ? 100 : 0
             activeFocusOnTab: true
+
+            // Focus ring. The row is keyboard-reachable and Alt+Up/Down acts
+            // on whichever row holds focus, so without a visual there is no
+            // way to tell which row the next chord will move. Same recipe as
+            // SettingsCard's focusable header.
+            Rectangle {
+                anchors.fill: parent
+                visible: delegateRoot.activeFocus
+                color: "transparent"
+                radius: Kirigami.Units.smallSpacing
+                border.width: 1
+                border.color: Kirigami.Theme.focusColor
+            }
+
             Accessible.role: Accessible.ListItem
             Accessible.name: root.accessibleNameOf ? root.accessibleNameOf(modelData) : (root.idOf(modelData) || "")
 
@@ -256,6 +306,10 @@ Item {
                 } else {
                     return;
                 }
+                // Claimed by whichever rebuilt delegate carries this id, so
+                // the moved row keeps focus and the next Alt+Up/Down goes to
+                // the same row rather than nowhere.
+                root.pendingFocusId = delegateRoot._itemId;
                 root.moveRequested(from, to);
             }
 

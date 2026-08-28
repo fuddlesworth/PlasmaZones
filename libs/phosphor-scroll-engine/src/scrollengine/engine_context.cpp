@@ -485,32 +485,6 @@ void ScrollEngine::consumePendingInitialOrder(const QString& screenId, const QSt
     }
 }
 
-void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
-{
-    // Shared sweep for every state-destruction path: the per-window side
-    // maps must die with the state or they grow unbounded and
-    // lastManagedRect keeps answering for windows whose context is gone —
-    // the float-back poison-guard input (mirrors the autotile prunes'
-    // in-callback drops).
-    const QStringList windows = state->managedWindows();
-    for (const QString& windowId : windows) {
-        m_lastAppliedRect.remove(windowId);
-        m_lastAppliedWindowedFs.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        m_floatRestore.remove(windowId);
-        m_scrollFloatedWindows.remove(windowId);
-        // The dying context's windows can never answer their queued echoes;
-        // a stale entry would swallow the first genuine focus of a reused
-        // id (windowClosed and releaseScreenState sweep the same way).
-        m_pendingSelfActivations.removeAll(windowId);
-        // Identical reasoning, and the same reused-id hazard: a declined-open
-        // marker left behind swallows the first genuine focus the next window
-        // to take this id receives. Unlike its sibling above it carries no
-        // size cap, so this sweep is the only thing bounding it here.
-        m_declinedOpenFocus.remove(windowId);
-    }
-}
-
 void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds)
 {
     // Per-screen (not per-state) bookkeeping outlives an individual context
@@ -555,19 +529,52 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
         cancelDragInsertPreview();
     }
     QSet<QString> touchedScreens;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [removedDesktop](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return key.desktop == removedDesktop;
         },
-        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+        [this, &touchedScreens, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key,
+                                                                    ScrollState* state) {
             touchedScreens.insert(key.screenId);
-            dropWindowBookkeeping(state);
-            state->deleteLater();
+            releasedScreens.insert(key.screenId);
+            // Through the FULL release, not a bare bookkeeping drop. Dynamic
+            // workspaces made this a POPULATED-context reap: a destroyed
+            // desktop's windows are ALIVE (KWin relocates them), so skipping
+            // the release lost each one's scrolling slot into the unified
+            // placement record and emitted no windowsReleased — leaving the
+            // daemon's tracking service and the effect's float cache holding
+            // windows this engine no longer manages, and stranding every
+            // scroll-floated window without its snap-float clear. Both
+            // siblings' desktop prunes already do this (AutotileEngine via
+            // releaseScreenStateForTeardown), and this engine's own
+            // removed-screen prune is the same shape.
+            //
+            // clearScreenBookkeeping=false: the SCREEN survives this prune,
+            // only one of its desktop contexts dies, so its seed and
+            // tab-strip maps belong to the surviving contexts.
+            // sweepStatelessScreenBookkeeping below clears them if this was
+            // the screen's last state, which is the pre-existing behaviour.
+            releaseScreenState(state, releasedWindows, /*clearScreenBookkeeping=*/false);
         });
     m_states.removeWindowsIf([removedDesktop](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
     m_context.pruneDesktop(removedDesktop);
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
+    // Only NOW may the per-window side maps go — the handler above consumes
+    // the float markers and the last-applied rects (the same ordering
+    // contract pruneStatesForRemovedScreen documents).
+    for (const QString& windowId : std::as_const(releasedWindows)) {
+        m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_floatRestore.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
+    }
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
@@ -580,17 +587,22 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = it.key().desktop == removedDesktop ? m_perScreenOverrides.erase(it) : std::next(it);
     }
+    // The context-keyed burst markers go with the desktop. Swept HERE rather
+    // than in reapDesktopState so the count-based caller (Daemon::start's
+    // desktopCountChanged sweep, live whenever dynamic workspaces are off)
+    // gets it too: left behind, a marker at a dead key can never drain
+    // through endArrivalBurst, which only ever resolves live keys.
+    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
+        it = it.key().desktop == removedDesktop ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
 }
 
 void ScrollEngine::reapDesktopState(int desktop)
 {
-    // The count-based prune already sweeps everything a destroyed desktop
-    // leaves in this engine except the burst flags, which only had a screen
-    // sweep before dynamic workspaces made identity-based reaps a real path.
+    // Identity-based entry point. The count-based prune already sweeps
+    // everything a destroyed desktop leaves in this engine, the burst markers
+    // included, so this is a straight delegation.
     pruneStatesForDesktop(desktop);
-    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
-        it = it.key().desktop == desktop ? m_burstPendingApplies.erase(it) : std::next(it);
-    }
 }
 
 void ScrollEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
@@ -623,18 +635,41 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
         cancelDragInsertPreview();
     }
     QSet<QString> touchedScreens;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&stale](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return stale(key.activity);
         },
-        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+        [this, &touchedScreens, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key,
+                                                                    ScrollState* state) {
             touchedScreens.insert(key.screenId);
-            dropWindowBookkeeping(state);
-            state->deleteLater();
+            releasedScreens.insert(key.screenId);
+            // Full release for the same reason as the desktop prune above: a
+            // deleted activity's windows are alive, so their slots must reach
+            // the placement record and the daemon must hear windowsReleased.
+            // Screen-keyed bookkeeping stays for the surviving contexts.
+            releaseScreenState(state, releasedWindows, /*clearScreenBookkeeping=*/false);
         });
     m_states.removeWindowsIf([&stale](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
+    for (const QString& windowId : std::as_const(releasedWindows)) {
+        m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_floatRestore.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
+    }
+    // The mid-burst deferred-apply markers are context-keyed, so a deleted
+    // activity leaves entries endArrivalBurst can never drain — every sibling
+    // axis (desktop reap, removed screen, renumber) already sweeps them.
+    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
+        it = stale(it.key().activity) ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);

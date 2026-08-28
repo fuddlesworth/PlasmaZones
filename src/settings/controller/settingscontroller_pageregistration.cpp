@@ -111,8 +111,14 @@ void SettingsController::buildApplicationController()
     // placement modes (empty qmlFile + children), carrying the same sidebar
     // enable toggle (Main.qml trailing delegate). The parent id avoids the
     // existing "overview" (monitor dashboard) id.
+    //
+    // preferences-desktop-virtual rather than virtual-desktops: the Virtual
+    // Screens row directly above already carries virtual-desktops, and two
+    // adjacent top-level rows sharing one glyph read as two views of the same
+    // thing (the rule the Snapping registration's icon note states). This is
+    // the glyph KDE's own Virtual Desktops module uses, so it stays on topic.
     regVirtual(QStringLiteral("workspaces"), QString(), PhosphorI18n::tr("Workspaces"), QString(),
-               QStringLiteral("virtual-desktops"), /*collapsible=*/false,
+               QStringLiteral("preferences-desktop-virtual"), /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("workspaces-behavior"), QStringLiteral("workspaces"), PhosphorI18n::tr("Behavior"),
                QStringLiteral("pages/workspaces/WorkspacesBehaviorPage.qml"), QStringLiteral("configure"),

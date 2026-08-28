@@ -105,13 +105,19 @@ SettingsFlickable {
         readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
         readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
         // Backs the RouteToWorkspace action's named-workspace picker: the
-        // DECLARED names from Workspaces → Named Workspaces.
+        // DECLARED names from Workspaces → Named Workspaces. Coerced and
+        // trimmed exactly like the twin shim on WorkspacesShortcutsPage, so
+        // both pickers offer the same set: a hand-edited config can carry a
+        // non-string name, and the trim matches how the schema canonicalizes
+        // a name before storing it (canonicalNamedEntries).
         readonly property var workspaceNames: {
             var entries = appSettings.workspacesNamedEntries || [];
             var names = [];
-            for (var i = 0; i < entries.length; ++i)
-                if (entries[i].name && entries[i].name.length > 0)
-                    names.push(entries[i].name);
+            for (var i = 0; i < entries.length; ++i) {
+                var name = ("" + (entries[i].name || "")).trim();
+                if (name.length > 0)
+                    names.push(name);
+            }
             return names;
         }
         // `AnimationsPageController` — exposes `eventSections()` and

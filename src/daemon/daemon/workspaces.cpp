@@ -13,6 +13,7 @@
 
 #include "daemon/daemon.h"
 
+#include "config/configdefaults.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include "daemon/controllers/shortcutmanager.h"
@@ -25,9 +26,11 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/WorkspaceReconciler.h>
 
@@ -37,8 +40,13 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QKeySequence>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStringView>
+#include <QVector>
+
+#include <optional>
 
 #ifdef USE_KDE_FRAMEWORKS
 #include <KConfig>
@@ -78,6 +86,21 @@ void enableKWinPerOutputDesktops()
     qCInfo(lcDaemon) << "wrote PerOutputVirtualDesktops=true to kwinrc and asked KWin to reconfigure (user consent)";
 }
 
+/// QKeySequence(QString) answers an empty sequence on anything it cannot
+/// parse, so a typo in a named workspace's chord would bind nothing and say
+/// nothing. Registering the empty sequence is worse than skipping it (the
+/// adhoc id would exist with no key), so this returns empty and the caller
+/// leaves the binding out entirely.
+QKeySequence parseNamedChord(const QString& raw, const QString& workspaceName)
+{
+    const QKeySequence sequence(raw);
+    if (sequence.isEmpty()) {
+        qCWarning(lcDaemon) << "unparseable shortcut" << raw << "on named workspace" << workspaceName
+                            << "- leaving it unbound";
+    }
+    return sequence;
+}
+
 QString kwinShortcutBackupPath()
 {
     // StateLocation is already app-scoped; see stateFilePath's relocation
@@ -89,6 +112,11 @@ QString kwinShortcutBackupPath()
     const QString legacyPath = QStandardPaths::writableLocation(QStandardPaths::StateLocation)
         + QStringLiteral("/plasmazones/kwin-shortcut-backup.json");
     if (!QFile::exists(path) && QFile::exists(legacyPath)) {
+        // The destination directory is not guaranteed to exist yet (the
+        // legacy path lives one level DEEPER, so its existence says nothing
+        // about the parent being writable); rename fails silently otherwise
+        // and the user's stolen chords stay stranded in the old file.
+        QDir().mkpath(QFileInfo(path).absolutePath());
         QFile::rename(legacyPath, path);
     }
     return path;
@@ -122,32 +150,34 @@ void Daemon::initializeWorkspaces()
     if (!m_settings) {
         return;
     }
+    // Already up. The rearm lambda below carries this check on its own arm;
+    // the DIRECT callers (start(), and a re-entered start after a stop) did
+    // not, and a second pass here would build a second controller and a
+    // second m_workspaceWiring over the first — the old wiring's connections
+    // are severed only by the unique_ptr reset, so the previous controller
+    // would be destroyed mid-session with its state file written from a
+    // half-torn map.
+    if (m_workspaceController) {
+        return;
+    }
     // Enabling the feature (or granting consent) at runtime re-enters this
     // gate without a daemon restart.
     if (!m_workspaceRearmConnected) {
         m_workspaceRearmConnected = true;
         const auto rearm = [this]() {
+            // These connections outlive stop() (they hang off m_settings, not
+            // m_workspaceWiring, so the runtime-disable teardown cannot reach
+            // them and must not — they are what re-enables the feature). A
+            // settings save on a STOPPED daemon would otherwise re-run the
+            // whole bring-up on torn-down dependencies.
+            if (!m_running || m_shuttingDown) {
+                return;
+            }
             const bool wantOn = m_settings->workspacesEnabled();
             if (wantOn && !m_workspaceController) {
                 initializeWorkspaces();
             } else if (!wantOn && m_workspaceController) {
-                // Runtime disable: sever EVERY connection this feature made
-                // (m_workspaceWiring is the receiver context for all of them —
-                // shortcut verbs, settings reactions, the adaptor probe), drop
-                // the adhoc named binds whose lambdas capture the controller,
-                // then tear the controller down (its dtor writes the final
-                // state file) and hand KWin its chords back. The kwinrc write
-                // is deliberately NOT reverted (stated in the UI).
-                m_workspaceWiring.reset();
-                for (const QString& id : std::as_const(m_workspaceNamedShortcutIds)) {
-                    m_shortcutManager->unregisterAdhocShortcut(id);
-                }
-                m_workspaceNamedShortcutIds.clear();
-                m_workspaceController.reset();
-                if (m_windowTrackingAdaptor) {
-                    m_windowTrackingAdaptor->setWorkspaceRouteResolver(nullptr);
-                }
-                restoreKWinShortcutBackup(m_shortcutManager.get());
+                teardownWorkspaces();
                 qCInfo(lcDaemon) << "dynamic workspaces disabled at runtime";
             }
         };
@@ -155,6 +185,13 @@ void Daemon::initializeWorkspaces()
         connect(m_settings.get(), &Settings::workspacesManageKWinPerOutputChanged, this, rearm);
     }
     if (!m_settings->workspacesEnabled()) {
+        return;
+    }
+    // Dependency gate BEFORE the consent write: enableKWinPerOutputDesktops
+    // changes the user's kwinrc and restarts KWin's desktop layout, and doing
+    // that on a bring-up that is about to bail for a missing dependency
+    // reconfigures the session for a feature that never starts.
+    if (!m_virtualDesktopManager || !m_windowRegistry || !m_screenManager) {
         return;
     }
     if (!WorkspaceController::kwinPerOutputEnabled()) {
@@ -165,9 +202,6 @@ void Daemon::initializeWorkspaces()
                                    "consent to manage it; feature stays dormant";
             return;
         }
-    }
-    if (!m_virtualDesktopManager || !m_windowRegistry || !m_screenManager) {
-        return;
     }
 
     m_workspaceController = std::make_unique<WorkspaceController>(m_virtualDesktopManager.get(), m_windowRegistry.get(),
@@ -229,6 +263,104 @@ void Daemon::initializeWorkspaces()
                         });
                     }
                 }
+                // Daemon-side per-context caches keyed by desktop NUMBER. The
+                // count-based sweep in start.cpp is disabled while the
+                // controller lives (it only knows counts and would destroy
+                // the wrong desktop's state), so this renumber pass is the
+                // only thing that keeps them aligned with the engines.
+                if (!m_lastEngineOrders.isEmpty()) {
+                    QHash<TilingStateKey, QStringList> remapped;
+                    remapped.reserve(m_lastEngineOrders.size());
+                    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
+                        TilingStateKey key = it.key();
+                        if (key.desktop > 0) {
+                            key.desktop = oldToNew.value(key.desktop, key.desktop);
+                        }
+                        remapped.insert(key, it.value());
+                    }
+                    m_lastEngineOrders = remapped;
+                }
+                if (m_settings) {
+                    // Composite entries are "screenId/desktopNumber"; virtual
+                    // screen ids contain '/' themselves, so the number is the
+                    // segment after the LAST one (same split
+                    // pruneDisabledDesktopEntries uses).
+                    bool anyChanged = false;
+                    for (const auto mode : PhosphorZones::allModes()) {
+                        QStringList disabled = m_settings->disabledDesktops(mode);
+                        bool modeChanged = false;
+                        for (QString& entry : disabled) {
+                            const int slash = entry.lastIndexOf(QLatin1Char('/'));
+                            if (slash < 0) {
+                                continue;
+                            }
+                            bool ok = false;
+                            const int desktop = QStringView(entry).mid(slash + 1).toInt(&ok);
+                            if (!ok || desktop <= 0) {
+                                continue;
+                            }
+                            const int mapped = oldToNew.value(desktop, desktop);
+                            if (mapped == desktop) {
+                                continue;
+                            }
+                            entry = entry.left(slash + 1) + QString::number(mapped);
+                            modeChanged = true;
+                        }
+                        if (modeChanged) {
+                            m_settings->setDisabledDesktops(mode, disabled);
+                            anyChanged = true;
+                        }
+                    }
+                    if (anyChanged) {
+                        m_settings->save();
+                    }
+                }
+                // Window metadata carries its own copy of the desktop number,
+                // and KWin will NOT re-push it: desktopsChanged notifies the
+                // desktops LIST, while a renumber mutates each
+                // VirtualDesktop's x11DesktopNumber behind a different signal
+                // the effect does not relay. Left alone, every tracked
+                // window's virtualDesktop stays on the pre-renumber number
+                // while the map and the engines have already shifted, and the
+                // controller's census then buckets windows onto the wrong
+                // desktop id. Remap here, same shape as the store transform
+                // above: 0 and below are the sticky/unknown sentinels.
+                if (m_windowRegistry) {
+                    const QStringList instanceIds = m_windowRegistry->instanceIds();
+                    for (const QString& instanceId : instanceIds) {
+                        const auto meta = m_windowRegistry->metadata(instanceId);
+                        if (!meta) {
+                            continue;
+                        }
+                        PhosphorEngine::WindowMetadata updated = *meta;
+                        bool changed = false;
+                        const int mapped = updated.virtualDesktop > 0
+                            ? oldToNew.value(updated.virtualDesktop, updated.virtualDesktop)
+                            : updated.virtualDesktop;
+                        if (mapped != updated.virtualDesktop) {
+                            updated.virtualDesktop = mapped;
+                            changed = true;
+                        }
+                        for (int& desktop : updated.virtualDesktops) {
+                            if (desktop <= 0) {
+                                continue;
+                            }
+                            const int mappedEntry = oldToNew.value(desktop, desktop);
+                            if (mappedEntry != desktop) {
+                                desktop = mappedEntry;
+                                changed = true;
+                            }
+                        }
+                        if (changed) {
+                            // upsert re-emits metadataChanged, which is what
+                            // re-keys the controller's census onto the new
+                            // numbers. WindowMetadata comparison is by value,
+                            // so an unchanged record would be a silent no-op
+                            // anyway; the guard just skips the copy.
+                            m_windowRegistry->upsert(instanceId, updated);
+                        }
+                    }
+                }
             });
 
     // Change-gated stream to the effect (replay handled by the adaptor query).
@@ -280,14 +412,20 @@ void Daemon::initializeWorkspaces()
     // Focused-screen tracking (fork 3): externally created desktops adopt to
     // the screen the user is working on, resolved from the effect's activation
     // reports (already in the effect id space; extract the physical output).
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowActivated, wiring,
-            [this](const QString& windowId, const QString& screenId) {
-                Q_UNUSED(windowId)
-                if (!screenId.isEmpty()) {
-                    m_workspaceController->reconciler().setFocusedScreen(
-                        PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
-                }
-            });
+    // Both adaptor-sourced connects are guarded: m_windowTrackingAdaptor is
+    // wired in init() and is null on a bring-up that ran without it (a test
+    // fixture, an init that failed before the adaptors), and connect() with a
+    // null sender is a runtime warning plus a silently dead connection.
+    if (m_windowTrackingAdaptor) {
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowActivated, wiring,
+                [this](const QString& windowId, const QString& screenId) {
+                    Q_UNUSED(windowId)
+                    if (!screenId.isEmpty()) {
+                        m_workspaceController->reconciler().setFocusedScreen(
+                            PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+                    }
+                });
+    }
 
     // ── Shortcut verbs ─────────────────────────────────────────────────────
     // The acting screen is the shortcut screen's PHYSICAL output (the map and
@@ -315,12 +453,21 @@ void Daemon::initializeWorkspaces()
                 if (column.isEmpty()) {
                     // Not a scrolling screen (or empty strip): the verb is
                     // scrolling-scoped by definition; hint instead of no-op.
-                    if (m_overlayService) {
+                    // Same gate every other navigation-feedback card honours
+                    // (OSD style None, global suppression, the per-context
+                    // rule); this one was bypassing it.
+                    if (m_overlayService && navigationOsdAllowed(screenId)) {
                         m_overlayService->showDisabledOsd(
                             PhosphorI18n::tr("Moving a column needs a scrolling screen.", "OSD hint"), screenId);
                     }
                     return;
                 }
+                // The column is enumerated HERE, at chord time, while the move
+                // itself defers behind the reconciler's ledger. That is
+                // deliberate: the user pressed the chord on the column they
+                // were looking at, so the membership that press meant is the
+                // one that should travel, not whatever the strip holds once
+                // the structural churn settles.
                 m_workspaceController->moveColumnToWorkspace(screenId, column, delta);
             });
     connect(m_shortcutManager.get(), &ShortcutManager::workspaceReorderRequested, wiring,
@@ -336,7 +483,10 @@ void Daemon::initializeWorkspaces()
         // window TO is the named workspace assigned in the settings app. An
         // unassigned slot does nothing (like a quick-layout slot with no
         // layout picked).
-        const QString name = m_settings->workspaceSlotTarget(slot - 1);
+        // Trimmed on the read, like the declaration side: the target is
+        // matched against the declared NAME, which was trimmed when it was
+        // bound, so an untrimmed target here never matches anything.
+        const QString name = m_settings->workspaceSlotTarget(slot - 1).trimmed();
         if (name.isEmpty()) {
             return;
         }
@@ -354,41 +504,62 @@ void Daemon::initializeWorkspaces()
     // quick-layout-slot pattern. The bound-id list is a daemon member so the
     // runtime-disable teardown can unregister them too.
     const auto rebindNamedShortcuts = [this]() {
-        for (const QString& id : std::as_const(m_workspaceNamedShortcutIds)) {
-            m_shortcutManager->unregisterAdhocShortcut(id);
-        }
+        // Batched on BOTH halves: the per-id register flushes to the backend
+        // once each, and on the Portal backend every flush supersedes the
+        // prior in-flight Response, so a user with several named workspaces
+        // lost the confirmation for all but the last chord.
+        m_shortcutManager->unregisterAdhocShortcuts(m_workspaceNamedShortcutIds);
         m_workspaceNamedShortcutIds.clear();
+        QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding> bindings;
+        // Two names differing only in surrounding whitespace trim to the same
+        // string and would build the same adhoc id, so the second silently
+        // replaced the first's callback. The declaration side collapses them
+        // the same way, so the first one wins here too.
+        QSet<QString> seenNames;
         const QVariantList entries = m_settings->workspacesNamedEntries();
         for (const QVariant& value : entries) {
             const QVariantMap entry = value.toMap();
-            const QString name = entry.value(QStringLiteral("name")).toString().trimmed();
+            const QString name = entry.value(ConfigDefaults::namedEntryNameField()).toString().trimmed();
             if (name.isEmpty()) {
                 continue;
             }
-            const QString focusChord = entry.value(QStringLiteral("focusShortcut")).toString();
-            if (!focusChord.isEmpty()) {
-                const QString id = QStringLiteral("workspace_named_focus:") + name;
-                m_shortcutManager->registerAdhocShortcut(
-                    id, QKeySequence(focusChord),
-                    PhosphorI18n::tr("Focus Workspace \"%1\"", "named workspace shortcut").arg(name), [this, name]() {
-                        m_workspaceController->focusNamedWorkspace(name);
-                    });
-                m_workspaceNamedShortcutIds.append(id);
+            if (seenNames.contains(name)) {
+                qCWarning(lcDaemon) << "duplicate named workspace" << name
+                                    << "- keeping the first declaration's shortcuts";
+                continue;
             }
-            const QString moveChord = entry.value(QStringLiteral("moveShortcut")).toString();
+            seenNames.insert(name);
+            const QString focusChord = entry.value(ConfigDefaults::namedEntryFocusShortcutField()).toString();
+            if (!focusChord.isEmpty()) {
+                const QKeySequence sequence = parseNamedChord(focusChord, name);
+                if (!sequence.isEmpty()) {
+                    const QString id = QStringLiteral("workspace_named_focus:") + name;
+                    bindings.append({id, sequence,
+                                     PhosphorI18n::tr("Focus Workspace \"%1\"", "named workspace shortcut").arg(name),
+                                     [this, name]() {
+                                         m_workspaceController->focusNamedWorkspace(name);
+                                     }});
+                    m_workspaceNamedShortcutIds.append(id);
+                }
+            }
+            const QString moveChord = entry.value(ConfigDefaults::namedEntryMoveShortcutField()).toString();
             if (!moveChord.isEmpty()) {
-                const QString id = QStringLiteral("workspace_named_move:") + name;
-                m_shortcutManager->registerAdhocShortcut(
-                    id, QKeySequence(moveChord),
-                    PhosphorI18n::tr("Move Window to Workspace \"%1\"", "named workspace shortcut").arg(name),
-                    [this, name]() {
-                        const QString windowId =
-                            m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
-                        m_workspaceController->moveWindowToNamedWorkspace(name, windowId);
-                    });
-                m_workspaceNamedShortcutIds.append(id);
+                const QKeySequence sequence = parseNamedChord(moveChord, name);
+                if (!sequence.isEmpty()) {
+                    const QString id = QStringLiteral("workspace_named_move:") + name;
+                    bindings.append(
+                        {id, sequence,
+                         PhosphorI18n::tr("Move Window to Workspace \"%1\"", "named workspace shortcut").arg(name),
+                         [this, name]() {
+                             const QString windowId =
+                                 m_windowTrackingAdaptor ? m_windowTrackingAdaptor->lastActiveWindowId() : QString();
+                             m_workspaceController->moveWindowToNamedWorkspace(name, windowId);
+                         }});
+                    m_workspaceNamedShortcutIds.append(id);
+                }
             }
         }
+        m_shortcutManager->registerAdhocShortcuts(bindings);
     };
     m_workspaceController->applyNamedDeclarations(m_settings->workspacesNamedEntries());
     rebindNamedShortcuts();
@@ -403,26 +574,30 @@ void Daemon::initializeWorkspaces()
     // file changed back). With the user's consent latch on, self-heal by
     // re-issuing the consent write + reconfigure; without it, warn — the
     // controller keeps running and KWin's next reconfigure resolves it.
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::perOutputDesktopsModeReported, wiring,
-            [this](bool enabled) {
-                if (enabled) {
-                    return;
-                }
-                if (m_settings->workspacesManageKWinPerOutput()) {
-                    qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
-                                           "workspaces are active; re-applying the consented kwinrc write";
-                    enableKWinPerOutputDesktops();
-                } else {
-                    qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
-                                           "workspaces are active; kwinrc and the running KWin disagree "
-                                           "(missing reconfigure?)";
-                }
-            });
+    if (m_windowTrackingAdaptor) {
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::perOutputDesktopsModeReported, wiring,
+                [this](bool enabled) {
+                    if (enabled) {
+                        return;
+                    }
+                    if (m_settings->workspacesManageKWinPerOutput()) {
+                        qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
+                                               "workspaces are active; re-applying the consented kwinrc write";
+                        enableKWinPerOutputDesktops();
+                    } else {
+                        qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
+                                               "workspaces are active; kwinrc and the running KWin disagree "
+                                               "(missing reconfigure?)";
+                    }
+                });
+    }
 
     // ── Stock KWin desktop-shortcut takeover (Phase 5) ─────────────────────
-    // The stock "Switch One Desktop" quad iterates the GLOBAL pool, tripping
-    // owner-wins snap-back on nearly every press, and its Down/Up chords are
-    // the focus verbs' defaults. With the rebind toggle on, back each chord
+    // The stock desktop-switch actions (the "Switch One Desktop" quad plus
+    // the two Walk Through Desktops chords) iterate the GLOBAL pool, tripping
+    // owner-wins snap-back on nearly every press, and the quad's Down/Up
+    // chords are the focus verbs' defaults. With the rebind toggle on, back
+    // each chord
     // up (state dir, once) and clear it via the KGlobalAccel foreign-rebind
     // pass-through; restore on toggle-off. If the backend cannot rebind
     // (portal), nothing is stolen and snap-back-with-hint stays the story.
@@ -438,15 +613,32 @@ void Daemon::initializeWorkspaces()
         QDir().mkpath(QFileInfo(kwinShortcutBackupPath()).absolutePath());
         QSettings backup(kwinShortcutBackupPath(), QSettings::IniFormat);
         for (const QString& action : kKWinDesktopActions) {
-            if (!backup.contains(action)) {
-                const QList<QKeySequence> current = m_shortcutManager->foreignShortcuts(QStringLiteral("kwin"), action);
-                if (current.isEmpty()) {
-                    continue; // already unbound; nothing to steal or restore
-                }
-                if (m_shortcutManager->setForeignShortcuts(QStringLiteral("kwin"), action, {})) {
-                    // The FULL binding (primary + alternates) round-trips.
-                    backup.setValue(action, QKeySequence::listToString(current, QKeySequence::PortableText));
-                }
+            // A backup entry already present means the chord is ALREADY
+            // stolen, so nothing re-reads it. That also means a user who
+            // re-binds the stock chord by hand while we hold the backup keeps
+            // it: re-stealing would fight the user's explicit choice, and the
+            // restore on toggle-off would then overwrite what they chose with
+            // the pre-theft value. Deliberate, not an oversight.
+            if (backup.contains(action)) {
+                continue;
+            }
+            const std::optional<QList<QKeySequence>> current =
+                m_shortcutManager->foreignShortcuts(QStringLiteral("kwin"), action);
+            if (!current) {
+                // The query FAILED (wrong backend, kglobalacceld unreachable).
+                // That is not "unbound": stealing on the strength of it would
+                // clear a live chord with no backup written, and the later
+                // restore would then have nothing to give back. Skip the
+                // action entirely and let the next pass try again.
+                qCWarning(lcDaemon) << "could not read KWin shortcut" << action << "- leaving it alone";
+                continue;
+            }
+            if (current->isEmpty()) {
+                continue; // genuinely unbound; nothing to steal or restore
+            }
+            if (m_shortcutManager->setForeignShortcuts(QStringLiteral("kwin"), action, {})) {
+                // The FULL binding (primary + alternates) round-trips.
+                backup.setValue(action, QKeySequence::listToString(*current, QKeySequence::PortableText));
             }
         }
         backup.sync();
@@ -457,7 +649,10 @@ void Daemon::initializeWorkspaces()
     // Desktop-cap degradation hint (once per episode, reconciler-gated).
     connect(
         &m_workspaceController->reconciler(), &PhosphorWorkspaces::WorkspaceReconciler::capReached, wiring, [this]() {
-            if (m_overlayService) {
+            // Screen-less card (the cap is global), but it still answers to
+            // the same suppression gate as the sibling hints above — an OSD
+            // style of None or a suppressed session must not get one.
+            if (m_overlayService && navigationOsdAllowed(QString())) {
                 m_overlayService->showDisabledOsd(PhosphorI18n::tr("Workspace limit reached.", "OSD hint"), QString());
             }
         });
@@ -499,6 +694,47 @@ void Daemon::initializeWorkspaces()
 
     m_workspaceController->start();
     qCInfo(lcDaemon) << "dynamic workspaces active";
+}
+
+void Daemon::teardownWorkspaces()
+{
+    if (!m_workspaceController) {
+        // Nothing was built (feature off, dormant gate, or already torn down).
+        // The KWin chord backup is still restored below on purpose: the
+        // takeover survives in the state file across a restart, so a stop()
+        // with the feature since disabled must still give the chords back.
+        if (m_shortcutManager) {
+            restoreKWinShortcutBackup(m_shortcutManager.get());
+        }
+        return;
+    }
+    // Sever EVERY connection this feature made (m_workspaceWiring is the
+    // receiver context for all of them — shortcut verbs, settings reactions,
+    // the adaptor probe), drop the adhoc named binds whose lambdas capture the
+    // controller, then tear the controller down (its dtor writes the final
+    // state file) and hand KWin its chords back. The kwinrc write is
+    // deliberately NOT reverted (stated in the UI).
+    m_workspaceWiring.reset();
+    if (m_shortcutManager) {
+        m_shortcutManager->unregisterAdhocShortcuts(m_workspaceNamedShortcutIds);
+    }
+    // Cleared whether or not the unregister ran: these ids name bindings of a
+    // registry that is about to be destroyed anyway, and carrying them into
+    // the next start() would hand unregisterAdhocShortcuts a list of ids the
+    // fresh registry has never heard of.
+    m_workspaceNamedShortcutIds.clear();
+    m_workspaceController.reset();
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setWorkspaceRouteResolver(nullptr);
+        // The map stream stopped with the wiring, which leaves the effect
+        // holding the LAST published map forever. The interface promises an
+        // empty payload while the feature is off, and the effect reads empty
+        // as "clear".
+        m_windowTrackingAdaptor->setWorkspaceMapPayload(QString());
+    }
+    if (m_shortcutManager) {
+        restoreKWinShortcutBackup(m_shortcutManager.get());
+    }
 }
 
 } // namespace PlasmaZones

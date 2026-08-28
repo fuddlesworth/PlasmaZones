@@ -17,18 +17,27 @@ import org.kde.kirigami as Kirigami
  * pages, its rows stay editable while the feature is off.
  *
  * The consent warning grants only the latch (workspacesManageKWinPerOutput);
- * the daemon owns the actual kwinrc write + reconfigure and re-enters its
- * gate on the settings change, so accepting here takes effect immediately
- * with no restart.
+ * the daemon owns the actual kwinrc write and the reconfigure, and re-enters
+ * its gate when that setting reaches it. Like every other setting on this
+ * page, it reaches the daemon on Save, not on the click. No restart is
+ * involved either way.
+ *
+ * The warning hides the moment the latch is set, which is BEFORE Save has
+ * committed it. That is deliberate: a warning that stayed up would read as if
+ * the consent had not registered. The daemon acts on Save.
  */
 SettingsFlickable {
     id: root
 
-    // kwinPerOutputDesktopsEnabled() is a plain invokable (kwinrc has no
-    // change notification), so re-read it whenever the states that can
-    // change it from OUR side flip; an external kwinrc edit is picked up on
-    // the next page visit.
-    property bool _kwinPerOutput: settingsController.kwinPerOutputDesktopsEnabled()
+    // Seeded once, then re-read by hand. kwinPerOutputDesktopsEnabled() is a
+    // plain invokable (kwinrc has no change notification), so this is a
+    // snapshot and NOT a binding, however much the initializer looks like one:
+    // nothing it reads would ever make it re-evaluate. The Connections below
+    // re-read it whenever a state that can change it from OUR side flips. An
+    // external kwinrc edit is picked up the next time this page is built.
+    property bool _kwinPerOutput: false
+
+    Component.onCompleted: _kwinPerOutput = settingsController.kwinPerOutputDesktopsEnabled()
 
     Connections {
         function onWorkspacesEnabledChanged() {
@@ -57,7 +66,7 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
-            text: i18n("Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones can turn on KWin's per-output virtual desktops setting. The change takes effect immediately, and PlasmaZones does not turn it back off.")
+            text: i18n("Dynamic workspaces need KWin to switch virtual desktops independently on each monitor. PlasmaZones can turn on KWin's per-output virtual desktops setting when you save. It never turns the setting back off.")
             visible: appSettings.workspacesEnabled && !root._kwinPerOutput && !appSettings.workspacesManageKWinPerOutput
 
             actions: [

@@ -57,6 +57,10 @@ private Q_SLOTS:
     void foreign_pausedDuringRemovalThenReevaluatedAtSettle();
     void adoption_keepsKnownPopulations();
     void named_createEchoFifoMismatchHealedByKWinNames();
+    void named_placeholderNameNeverClaims();
+    void named_explicitPositionStaysBeforeTrailingEmpty();
+    void settled_emptyListIsIgnored();
+    void screenAdded_freshScreenGetsItsOwnDesktop();
 
 private:
     /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
@@ -154,8 +158,8 @@ void TestWorkspaceReconciler::destroyOnEmpty_debouncedAndRechecked()
     QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
     QCOMPARE(removeSpy.first().first().toString(), id(3));
 
-    // The adopt-if-lost re-check: a desktop that re-fills inside the debounce
-    // window is NOT removed.
+    // The destroy-debounce re-check: a desktop that re-fills inside the
+    // debounce window is NOT removed when the timer fires.
     rec.onKwinDesktopRemoved(id(3));
     rec.onDesktopListSettled({id(1), id(5), id(2), id(4)});
     rec.onPopulationChanged(id(1), 1);
@@ -551,14 +555,106 @@ void TestWorkspaceReconciler::named_claimByKWinName()
     // stamped last session on {d1} (a NON-trailing desktop — claiming a
     // trailing empty would legitimately trigger a trailing-empty repair
     // create); the declaration claims it, no name-carrying create.
+    // The name list is KWin's RAW form: an unnamed desktop is an EMPTY entry,
+    // never a "Desktop N" placeholder.
     QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
     PhosphorWorkspaces::NamedWorkspace chat;
     chat.name = QStringLiteral("chat");
-    rec.applyNamedWorkspaces({chat},
-                             {QStringLiteral("chat"), QStringLiteral("Desktop 2"), QStringLiteral("Desktop 3"),
-                              QStringLiteral("Desktop 4")});
+    rec.applyNamedWorkspaces({chat}, {QStringLiteral("chat"), QString(), QString(), QString()});
     QCOMPARE(createSpy.count(), 0);
     QCOMPARE(rec.map().entryFor(id(1)).name, QStringLiteral("chat"));
+}
+
+void TestWorkspaceReconciler::named_placeholderNameNeverClaims()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // last ids: {d1} {d3} {d2} {d4}, all unnamed in KWin
+
+    // A workspace a user happened to call "Desktop 2" must NOT claim the
+    // second desktop just because a display placeholder would read that way.
+    // Raw names are empty for every unnamed desktop, so nothing matches and
+    // the declaration is created instead.
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    PhosphorWorkspaces::NamedWorkspace decoy;
+    decoy.name = QStringLiteral("Desktop 2");
+    rec.applyNamedWorkspaces({decoy}, {QString(), QString(), QString(), QString()});
+
+    QCOMPARE(createSpy.count(), 1);
+    QCOMPARE(createSpy.first().at(1).toString(), QStringLiteral("Desktop 2"));
+    for (const QString& desktopId : {id(1), id(2), id(3), id(4)}) {
+        QVERIFY(rec.map().entryFor(desktopId).name.isEmpty());
+    }
+}
+
+void TestWorkspaceReconciler::named_explicitPositionStaysBeforeTrailingEmpty()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3(trailing empty)}
+
+    // An out-of-range explicit position must clamp to the slot BEFORE the
+    // trailing empty. Landing behind it would demote the empty desktop to
+    // mid-slice (maintenance then reaps it) and hand the trailing role to a
+    // named workspace, which is destroy-exempt — the invariant would never
+    // recover.
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    chat.outputId = QStringLiteral("A");
+    chat.position = 9;
+    rec.applyNamedWorkspaces({chat}, {});
+    QCOMPARE(createSpy.count(), 1);
+    // A's slice starts at global position 0 and holds two desktops, so the
+    // slot before its trailing empty is global position 1.
+    QCOMPARE(createSpy.first().first().toUInt(), 1u);
+
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(5), id(3), id(2), id(4)});
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("A"));
+    QCOMPARE(rec.map().sliceIndexOf(id(5)), 1);
+    // The trailing empty is still last, and still the unnamed one.
+    const auto slice = rec.map().slice(QStringLiteral("A"));
+    QCOMPARE(slice.last().desktopId, id(3));
+    QVERIFY(slice.last().name.isEmpty());
+}
+
+void TestWorkspaceReconciler::settled_emptyListIsIgnored()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1,d3}, B: {d2,d4}
+
+    // A failed upstream read surfaces as an empty list. KWin never has zero
+    // desktops, so acting on it would drop every slice and have the engines
+    // reap all per-desktop state. Refuse it and ask for a resync instead.
+    QSignalSpy resyncSpy(&rec, &WorkspaceReconciler::resyncRequested);
+    QSignalSpy renumberSpy(&rec, &WorkspaceReconciler::renumberComputed);
+    rec.onDesktopListSettled({});
+
+    QCOMPARE(renumberSpy.count(), 0);
+    QCOMPARE(resyncSpy.count(), 1);
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
+    QCOMPARE(rec.map().ownerOf(id(1)), QStringLiteral("A"));
+    // And the verbs still resolve against the kept list.
+    rec.onScreenDesktopReport(QStringLiteral("A"), 1);
+    QCOMPARE(rec.currentDesktopIdOf(QStringLiteral("A")), id(1));
+}
+
+void TestWorkspaceReconciler::screenAdded_freshScreenGetsItsOwnDesktop()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+
+    // A monitor with no hotplug history joins: it owns nothing, so the
+    // slice-never-empty invariant asks for a desktop of its own.
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    rec.onScreenAdded(QStringLiteral("C"));
+    QCOMPARE(createSpy.count(), 1);
+    QVERIFY(rec.hasPendingStructuralOps()); // the Create is open
+
+    rec.onKwinDesktopCreated(id(6));
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(4), id(6)});
+    QCOMPARE(rec.map().ownerOf(id(6)), QStringLiteral("C"));
+    QVERIFY(!rec.hasPendingStructuralOps()); // and retired once it landed
 }
 
 void TestWorkspaceReconciler::named_unnamedRevertsToDynamic()
@@ -665,8 +761,8 @@ void TestWorkspaceReconciler::named_createEchoFifoMismatchHealedByKWinNames()
     // Re-verifying against KWin's OWN name list (what the controller does
     // after every settle) moves the identity to the desktop that really
     // carries the name.
-    const QStringList kwinNames{QStringLiteral("Desktop 1"), QStringLiteral("Desktop 2"), QStringLiteral("Desktop 3"),
-                                QStringLiteral("Desktop 4"), QStringLiteral("Desktop 5"), QStringLiteral("chat")};
+    // Raw KWin names: only the desktop KWin really named carries a string.
+    const QStringList kwinNames{QString(), QString(), QString(), QString(), QString(), QStringLiteral("chat")};
     rec.applyNamedWorkspaces(declarations, kwinNames);
     QCOMPARE(rec.map().entryFor(id(8)).name, QStringLiteral("chat"));
     QVERIFY(rec.map().entryFor(id(7)).name.isEmpty());

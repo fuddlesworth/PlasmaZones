@@ -371,7 +371,15 @@ SettingsController::SettingsController(QObject* parent)
     m_workspaceVdm = std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>();
     m_workspaceVdm->init();
     m_workspaceVdm->start();
+    m_workspacesAtCapLast = workspacesAtCap();
+    // Only on the transition: desktopCountChanged fires on every add and
+    // remove, and the property is a boolean that moves at one count.
     connect(m_workspaceVdm.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this, [this](int) {
+        const bool atCap = workspacesAtCap();
+        if (atCap == m_workspacesAtCapLast) {
+            return;
+        }
+        m_workspacesAtCapLast = atCap;
         Q_EMIT workspacesAtCapChanged();
     });
 
@@ -609,6 +617,17 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
+
+    // The indexed workspace quick-slot targets are reached through
+    // Q_INVOKABLE accessors (one key per slot, no Q_PROPERTY), so the
+    // meta-object loop above never wires their change signal and an edit on
+    // Workspaces → Quick Shortcuts would never enable Save. Routed through the
+    // ordinary onSettingsPropertyChanged rather than the value-blind variant:
+    // the workspaces-shortcuts manifest owns every Target key, so the
+    // value-based reconcile can see the delta and clear the page again when
+    // the user puts the old target back. Settings only emits when a slot
+    // actually moved, so a no-op reassignment stays quiet either way.
+    connect(&m_settings, &Settings::workspaceSlotTargetsChanged, this, &SettingsController::onSettingsPropertyChanged);
 
     // The three ordering pages (and the layout library's Priority sort
     // availability) bind to the staged*OrderChanged signals only. When

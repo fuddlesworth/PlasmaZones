@@ -276,7 +276,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier to switch."/>
             </arg>
             <arg name="desktop" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop, 1-based global index at emit time."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop, 1-based global index at emit time. The index is resolved by the daemon at emit and is NOT re-checked by the effect against the desktop identity it was meant for, so a renumber landing between the emit and the effect's handling switches the screen to whatever now holds that number. The effect does bound the index against effects->desktops() and drops an out-of-range one. Accepted rather than guarded: the reconciler's ledger matches the answering report by desktop IDENTITY, not by index, so a switch that landed on the wrong desktop fails to retire its ledger entry, and once that entry expires the owner-wins foreign-switch correction switches the screen back."/>
             </arg>
         </signal>
         <signal name="pendingRestoresAvailable">

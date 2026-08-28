@@ -1123,9 +1123,12 @@ public:
     /// remembered-placement fallback (the cross-screen tile reclaim).
     bool applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
-    /// Shared by the two open-routing entry points: if @p resolved carries a
-    /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
-    void emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
+    /// Shared by the two open-routing entry points: send @p windowId to the
+    /// workspace or desktop @p resolved names. A RouteToWorkspace action is
+    /// tried first through the late-bound workspace resolver (named workspaces
+    /// outrank a positional number, and an undeclared name falls through); a
+    /// RouteToDesktop action then emits windowDesktopMoveRequested.
+    void emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -1185,6 +1188,19 @@ public:
      */
     void setWorkspaceMapPayload(const QString& mapJson);
 
+    /**
+     * @brief The compositor's last reported per-output-virtual-desktops mode,
+     * or nullopt when the effect has not reported yet.
+     *
+     * The replay half of perOutputDesktopsModeReported, which is change-gated
+     * and so tells a late subscriber (the workspace wiring rebuilt by a runtime
+     * re-enable) nothing at all. Not a D-Bus method.
+     */
+    std::optional<bool> perOutputDesktopsMode() const
+    {
+        return m_perOutputDesktopsMode;
+    }
+
 public Q_SLOTS:
     /**
      * @brief The current dynamic-workspaces map payload (replay half of
@@ -1212,8 +1228,11 @@ Q_SIGNALS:
 
     /**
      * @brief In-process relay of reportPerOutputDesktopsMode (the effect's
-     * authoritative probe of KWin's per-output-desktops mode). Emitted on
-     * every report, change-gated by the cache.
+     * authoritative probe of KWin's per-output-desktops mode). CHANGE-GATED:
+     * it fires on the first report and on every later report that flips the
+     * value, never on a repeat of the same answer. A subscriber wired up after
+     * the effect already reported therefore gets nothing and must read
+     * perOutputDesktopsMode() to learn the current answer.
      */
     void perOutputDesktopsModeReported(bool enabled);
 
@@ -1486,8 +1505,19 @@ public:
      * handoffs allowed (release + receive with toDesktop; autotile targets
      * take the reactive catch-scan branch). An untracked (floating) window
      * degrades to a bare compositor desktop move. Not a D-Bus method.
+     *
+     * @p rawWindowId may be a bare compositor instance id — the owner-wins
+     * reunion and removal-race re-route emitters work from the registry census,
+     * which is keyed that way. It is canonicalized to the composite id every
+     * consumer (engine tracking, the effect's window lookup) is keyed on before
+     * anything else happens.
+     *
+     * A sticky (on-all-desktops) window is refused: the effect declines the
+     * desktop move for it, so carrying the handoff would diverge daemon state
+     * from the compositor. An empty @p targetScreenId (an as-yet-unowned
+     * workspace) degrades to the window's own screen for a tracked window.
      */
-    void moveWindowToWorkspaceVerb(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+    void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
                                    const QString& direction);
 
 private:

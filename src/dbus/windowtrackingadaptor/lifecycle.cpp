@@ -574,7 +574,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
 {
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || !m_service) {
         return;
     }
     // Delegate to service
@@ -915,6 +915,20 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     // key miss before falling back to the global desktop. updateScreenDesktop emits
     // screenDesktopChanged only on a real change (emit-on-change).
     m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
+}
+
+void WindowTrackingAdaptor::setWorkspaceMapPayload(const QString& mapJson)
+{
+    if (m_lastWorkspaceMap == mapJson) {
+        return;
+    }
+    m_lastWorkspaceMap = mapJson;
+    Q_EMIT workspaceMapChanged(mapJson);
+}
+
+QString WindowTrackingAdaptor::workspaceMap() const
+{
+    return m_lastWorkspaceMap;
 }
 
 void WindowTrackingAdaptor::reportPerOutputDesktopsMode(bool enabled)

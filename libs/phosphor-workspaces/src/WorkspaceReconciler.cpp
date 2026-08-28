@@ -67,6 +67,7 @@ void WorkspaceReconciler::expireLedger()
 {
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     bool expired = false;
+    QStringList refusedRemovals;
     for (int i = m_ledger.size() - 1; i >= 0; --i) {
         if (m_ledger.at(i).deadline <= now) {
             qCWarning(lcWorkspaceRec) << "pending workspace op expired, kind =" << static_cast<int>(m_ledger.at(i).kind)
@@ -79,6 +80,12 @@ void WorkspaceReconciler::expireLedger()
             // Self-healing against a mislearn from a transient D-Bus stall:
             // onDesktopListSettled raises the cap back to the default the
             // moment the count ever exceeds the learned value.
+            //
+            // "List unchanged" is the precondition, and it is checked here
+            // rather than at request time: a create that DID land grew the
+            // list past the size this op was issued against, and
+            // onDesktopListSettled has already retired it, so an entry that
+            // survives to expiry is one KWin never answered.
             if (m_ledger.at(i).kind == PendingOp::Kind::Create && !m_lastIds.isEmpty()
                 && m_lastIds.size() < m_desktopCap) {
                 m_desktopCap = m_lastIds.size();
@@ -89,6 +96,9 @@ void WorkspaceReconciler::expireLedger()
                     Q_EMIT capReached();
                 }
             }
+            if (m_ledger.at(i).kind == PendingOp::Kind::Remove) {
+                refusedRemovals.append(m_ledger.at(i).desktopId);
+            }
             m_ledger.removeAt(i);
             expired = true;
         }
@@ -96,6 +106,26 @@ void WorkspaceReconciler::expireLedger()
     if (m_ledger.isEmpty()) {
         m_ledgerTimer.stop();
     }
+
+    // A removal KWin refused (or lost) leaves a surplus empty desktop that
+    // nothing would ever retry: the destroy timer was consumed when the Remove
+    // was issued, and the population gate only fires on a fresh >0 → 0 edge
+    // that will never come for a desktop that is already empty. Re-arm the
+    // destroy check so maintenance gets another attempt, and re-evaluate the
+    // foreign state the pending Remove had been suppressing.
+    for (const QString& desktopId : refusedRemovals) {
+        m_racedDesktops.remove(desktopId);
+        if (!m_map.ownerOf(desktopId).isEmpty() && isDesktopEmpty(desktopId)) {
+            scheduleDestroyCheck(desktopId);
+        }
+    }
+    if (!refusedRemovals.isEmpty()) {
+        const QStringList screens = m_map.screenOrder();
+        for (const QString& screenId : screens) {
+            evaluateForeign(screenId);
+        }
+    }
+
     if (expired) {
         Q_EMIT resyncRequested();
     }
@@ -111,6 +141,49 @@ bool WorkspaceReconciler::hasPendingStructuralOps() const
     return false;
 }
 
+bool WorkspaceReconciler::hasPendingRemove(const QString& desktopId) const
+{
+    for (const auto& op : m_ledger) {
+        if (op.kind == PendingOp::Kind::Remove && op.desktopId == desktopId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WorkspaceReconciler::hasPendingCreate(const QString& screenId) const
+{
+    for (const auto& op : m_ledger) {
+        if (op.kind == PendingOp::Kind::Create && op.screenId == screenId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int WorkspaceReconciler::pendingCreateCount() const
+{
+    int count = 0;
+    for (const auto& op : m_ledger) {
+        if (op.kind == PendingOp::Kind::Create) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void WorkspaceReconciler::retireLedgerFor(const QString& desktopId)
+{
+    for (int i = m_ledger.size() - 1; i >= 0; --i) {
+        if (m_ledger.at(i).kind != PendingOp::Kind::Create && m_ledger.at(i).desktopId == desktopId) {
+            m_ledger.removeAt(i);
+        }
+    }
+    if (m_ledger.isEmpty()) {
+        m_ledgerTimer.stop();
+    }
+}
+
 // ── KWin echoes ─────────────────────────────────────────────────────────────
 
 void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
@@ -122,6 +195,21 @@ void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
         if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
             // FIFO match: our create landed; realize the planned slice entry.
             const PendingOp op = m_ledger.takeAt(i);
+            if (m_ledger.isEmpty()) {
+                m_ledgerTimer.stop();
+            }
+            // The planned owner can have been unplugged between the request
+            // and the echo. Inserting onto a screen the map no longer knows
+            // would resurrect its slice (WorkspaceMap::insert re-appends an
+            // unknown screen to the order), so fall back to normal adoption.
+            if (!m_map.knowsScreen(op.screenId)) {
+                qCWarning(lcWorkspaceRec) << "create echo for" << desktopId << "whose planned screen" << op.screenId
+                                          << "is gone — adopting instead";
+                if (adoptExternal(desktopId)) {
+                    bumpGeneration();
+                }
+                return;
+            }
             WorkspaceEntry entry;
             entry.desktopId = desktopId;
             entry.name = op.name;
@@ -132,7 +220,9 @@ void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
     }
     // External creation: adopt (fork 3). The settled list reply will confirm
     // ordering; adopting here keeps repairAgainst from re-reporting it.
-    adoptExternal(desktopId);
+    if (adoptExternal(desktopId)) {
+        bumpGeneration();
+    }
 }
 
 void WorkspaceReconciler::onKwinDesktopRemoved(const QString& desktopId)
@@ -140,14 +230,23 @@ void WorkspaceReconciler::onKwinDesktopRemoved(const QString& desktopId)
     if (desktopId.isEmpty()) {
         return;
     }
-    for (int i = 0; i < m_ledger.size(); ++i) {
-        if (m_ledger.at(i).kind == PendingOp::Kind::Remove && m_ledger.at(i).desktopId == desktopId) {
-            m_ledger.removeAt(i);
-            m_map.remove(desktopId);
-            m_population.remove(desktopId);
-            bumpGeneration();
-            return;
-        }
+    const bool wasOurs = hasPendingRemove(desktopId);
+    // Every open entry naming this desktop dies with it — a SetCurrent onto a
+    // desktop that no longer exists can never be echoed, and leaving it open
+    // would block that screen's next correction for the full ledger timeout
+    // and then fire a spurious resync.
+    retireLedgerFor(desktopId);
+    m_racedDesktops.remove(desktopId);
+    if (QTimer* timer = m_destroyTimers.take(desktopId)) {
+        timer->stop();
+        timer->deleteLater();
+    }
+
+    if (wasOurs) {
+        m_map.remove(desktopId);
+        m_population.remove(desktopId);
+        bumpGeneration();
+        return;
     }
     // External removal: KWin is the source of truth — follow, then repair
     // invariants when the list settles (slice-never-empty, trailing-empty).
@@ -159,35 +258,48 @@ void WorkspaceReconciler::onKwinDesktopRemoved(const QString& desktopId)
 
 bool WorkspaceReconciler::onScreenDesktopReport(const QString& screenId, int desktop)
 {
+    // D-Bus boundary: the report comes from the effect over the wire. An empty
+    // screen id or a non-positive desktop is not a state worth recording — it
+    // would poison currentDesktopIdOf and the verbs resolved through it.
+    if (screenId.isEmpty() || desktop < 1) {
+        qCWarning(lcWorkspaceRec) << "ignoring malformed screen desktop report, screen =" << screenId
+                                  << "desktop =" << desktop;
+        return false;
+    }
+
     m_currentByScreen.insert(screenId, desktop);
-    const QString desktopId = (desktop >= 1 && desktop <= m_lastIds.size()) ? m_lastIds.at(desktop - 1) : QString();
+    const QString desktopId = (desktop <= m_lastIds.size()) ? m_lastIds.at(desktop - 1) : QString();
+
+    // The snap-back memo is recorded for EVERY report that lands the screen on
+    // one of its own desktops, echo or not: a matched SetCurrent echo is
+    // exactly the case where the screen just arrived somewhere it owns, and
+    // returning before this left the memo pointing at the pre-switch desktop.
+    const QString owner = desktopId.isEmpty() ? QString() : m_map.ownerOf(desktopId);
+    if (!desktopId.isEmpty() && owner == screenId) {
+        m_lastOwnedByScreen.insert(screenId, desktopId);
+    }
 
     for (int i = 0; i < m_ledger.size(); ++i) {
         const auto& op = m_ledger.at(i);
         if (op.kind == PendingOp::Kind::SetCurrent && op.screenId == screenId && op.desktopId == desktopId) {
             m_ledger.removeAt(i);
+            if (m_ledger.isEmpty()) {
+                m_ledgerTimer.stop();
+            }
             return true; // echo of our own correction — no reactive policy
         }
     }
 
-    if (!desktopId.isEmpty()) {
-        const QString owner = m_map.ownerOf(desktopId);
-        if (owner == screenId) {
-            m_lastOwnedByScreen.insert(screenId, desktopId); // snap-back target
+    if (!owner.isEmpty() && owner != screenId) {
+        // A structural op in flight makes reports transient: KWin renumbers on
+        // BOTH create and remove, and clampScreenDesktopsToCount fires interim
+        // switches that read as foreign against the pre-op map. Record only;
+        // onDesktopListSettled re-evaluates every screen against the settled
+        // truth (plan §4.3 destroy step 5).
+        if (hasPendingStructuralOps()) {
+            return false;
         }
-        if (!owner.isEmpty() && owner != screenId) {
-            // A removal in flight makes reports transient: KWin renumbers on
-            // the removal and clampScreenDesktopsToCount fires interim
-            // switches that read as foreign against the pre-removal map.
-            // Record only; onDesktopListSettled re-evaluates every screen
-            // against the settled truth (plan §4.3 destroy step 5).
-            for (const auto& op : m_ledger) {
-                if (op.kind == PendingOp::Kind::Remove) {
-                    return false;
-                }
-            }
-            evaluateForeign(screenId);
-        }
+        evaluateForeign(screenId);
     }
     return false;
 }
@@ -304,7 +416,7 @@ bool WorkspaceReconciler::reorderCurrentWorkspace(const QString& screenId, int d
 
 QString WorkspaceReconciler::transferCurrentWorkspace(const QString& screenId, const QString& targetScreenId)
 {
-    if (targetScreenId.isEmpty() || targetScreenId == screenId || !m_map.hasScreen(targetScreenId)) {
+    if (targetScreenId.isEmpty() || targetScreenId == screenId || !m_map.knowsScreen(targetScreenId)) {
         return QString();
     }
     const QString currentId = currentDesktopIdOf(screenId);
@@ -314,13 +426,14 @@ QString WorkspaceReconciler::transferCurrentWorkspace(const QString& screenId, c
     if (m_map.sliceSize(screenId) <= 1) {
         return QString(); // a screen never gives up its last desktop
     }
-    int index = m_map.sliceSize(targetScreenId);
-    if (!trailingEmptyOf(targetScreenId).isEmpty()) {
-        index = qMax(0, index - 1);
-    }
-    if (!m_map.transfer(currentId, targetScreenId, index)) {
+    if (!m_map.transfer(currentId, targetScreenId, insertIndexBeforeTrailingEmpty(targetScreenId))) {
         return QString();
     }
+    // A deliberate move overrides hotplug memory: the home stamp exists so an
+    // output's own workspaces come back when it is replugged, and keeping it
+    // through a user transfer would yank the workspace off the screen the user
+    // just put it on the next time that output reappears.
+    m_map.setHomeScreen(currentId, QString());
     // The source screen must land on one of its own desktops; the target's
     // slice may need trailing-empty repair.
     snapBack(screenId);
@@ -338,7 +451,20 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
         return;
     }
 
+    // KWin never has zero desktops, so an empty settled list while we know of
+    // some is a failed read upstream, not a fact. Acting on it would drop
+    // every slice and have the engines reap all per-desktop state. The
+    // VirtualDesktopManager already refuses to publish this, and this guard
+    // keeps a second source (a resync, a test harness) from doing the damage.
+    if (ids.isEmpty() && !m_lastIds.isEmpty()) {
+        qCWarning(lcWorkspaceRec) << "ignoring an empty desktop list while" << m_lastIds.size()
+                                  << "desktops are known — treating it as a failed read";
+        Q_EMIT resyncRequested();
+        return;
+    }
+
     // Renumber mapping from the id delta: ids are the fixed points.
+    const int oldSize = m_lastIds.size();
     QHash<int, int> oldToNew;
     QList<int> removed;
     for (int oldIdx = 0; oldIdx < m_lastIds.size(); ++oldIdx) {
@@ -368,9 +494,48 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
         Q_EMIT renumberComputed(oldToNew, removed);
     }
 
+    // Our OWN per-screen cache is renumbered by the same mapping. It holds
+    // 1-based global ints, and every resolution the verbs make
+    // (currentDesktopIdOf and everything built on it) indexes m_lastIds with
+    // them. Leaving them at pre-renumber values makes each screen resolve to
+    // whatever desktop slid into its old slot, so the owner-wins pass below
+    // and every subsequent verb would act on the wrong desktop until the
+    // effect happened to re-report that output.
+    if (!oldToNew.isEmpty() || !removed.isEmpty()) {
+        const QSet<int> removedSet(removed.constBegin(), removed.constEnd());
+        for (auto it = m_currentByScreen.begin(); it != m_currentByScreen.end();) {
+            if (removedSet.contains(it.value())) {
+                // The screen's desktop is gone; drop the entry rather than
+                // guess. currentDesktopIdOf then resolves empty until the
+                // effect reports where KWin actually put the screen, which is
+                // the honest answer and what snapBack's fallback handles.
+                it = m_currentByScreen.erase(it);
+                continue;
+            }
+            it.value() = oldToNew.value(it.value(), it.value());
+            ++it;
+        }
+    }
+
     const QStringList unowned = m_map.repairAgainst(ids);
     for (const QString& id : unowned) {
         adoptExternal(id);
+    }
+    // Retire Creates the settled list answered. A Create whose desktop is now
+    // in the map has landed, whatever the id-only echo did with the FIFO
+    // match; letting it run to expiry instead would teach the cap probe a
+    // ceiling from a create that actually succeeded.
+    if (ids.size() > oldSize) {
+        int landed = ids.size() - oldSize;
+        for (int i = m_ledger.size() - 1; i >= 0 && landed > 0; --i) {
+            if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
+                m_ledger.removeAt(i);
+                --landed;
+            }
+        }
+        if (m_ledger.isEmpty()) {
+            m_ledgerTimer.stop();
+        }
     }
     // Populations are NOT cleared for adopted ids: the controller's census is
     // the source of truth and a desktop that already carried windows when it
@@ -387,29 +552,32 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
         evaluateForeign(screenId);
     }
 
+    // Announced unconditionally, and deliberately: a settle that only
+    // REORDERED the ids leaves the map value-identical, but mapChanged is also
+    // what releases the controller's quiet queue (drainQuietQueue) once the
+    // structural window closes. Gating it on a map delta would strand the
+    // deferred verbs of a reorder-only settle until the next unrelated change.
+    // The spurious-persist half of this is already absorbed downstream, where
+    // publishIfChanged diffs the serialized payload before writing.
     bumpGeneration();
 }
 
-void WorkspaceReconciler::adoptExternal(const QString& desktopId)
+bool WorkspaceReconciler::adoptExternal(const QString& desktopId)
 {
     QString target = m_focusedScreen;
-    if (target.isEmpty() || !m_map.hasScreen(target)) {
+    if (target.isEmpty() || !m_map.knowsScreen(target)) {
         const QStringList order = m_map.screenOrder();
         target = order.isEmpty() ? QString() : order.first();
     }
     if (target.isEmpty()) {
         qCWarning(lcWorkspaceRec) << "no screen available to adopt desktop" << desktopId;
-        return;
+        return false;
     }
-    // Before the screen's trailing empty (fork 3): second-to-last slot when a
-    // trailing empty exists, else append.
-    int index = m_map.sliceSize(target);
-    if (!trailingEmptyOf(target).isEmpty()) {
-        index = qMax(0, index - 1);
-    }
+    // Before the screen's trailing empty (fork 3).
     WorkspaceEntry entry;
     entry.desktopId = desktopId;
-    m_map.insert(target, index, entry);
+    m_map.insert(target, insertIndexBeforeTrailingEmpty(target), entry);
+    return true;
 }
 
 // ── Population and lifecycle ────────────────────────────────────────────────
@@ -417,6 +585,12 @@ void WorkspaceReconciler::adoptExternal(const QString& desktopId)
 bool WorkspaceReconciler::isDesktopEmpty(const QString& desktopId) const
 {
     return m_population.value(desktopId, 0) <= 0;
+}
+
+int WorkspaceReconciler::insertIndexBeforeTrailingEmpty(const QString& screenId) const
+{
+    const int size = m_map.sliceSize(screenId);
+    return trailingEmptyOf(screenId).isEmpty() ? size : qMax(0, size - 1);
 }
 
 QString WorkspaceReconciler::trailingEmptyOf(const QString& screenId) const
@@ -450,13 +624,14 @@ void WorkspaceReconciler::onPopulationChanged(const QString& desktopId, int wind
     // will sweep the window to an arbitrary neighbour when the removal lands.
     // Surface it so the controller can snapshot the census and re-route the
     // displaced windows to the owner's current workspace afterwards.
-    if (windowCount > 0) {
-        for (const auto& op : m_ledger) {
-            if (op.kind == PendingOp::Kind::Remove && op.desktopId == desktopId) {
-                Q_EMIT removalRaceDetected(desktopId, owner);
-                break;
-            }
-        }
+    //
+    // An edge, not a level: the controller re-snapshots on every emission, so
+    // further windows landing on the same doomed desktop must stay quiet. The
+    // latch clears when the Remove leaves the ledger (echo, expiry, or the
+    // desktop's own removal).
+    if (windowCount > 0 && !m_racedDesktops.contains(desktopId) && hasPendingRemove(desktopId)) {
+        m_racedDesktops.insert(desktopId);
+        Q_EMIT removalRaceDetected(desktopId, owner);
     }
 
     if (windowCount > 0 && previous <= 0) {
@@ -483,9 +658,18 @@ void WorkspaceReconciler::scheduleDestroyCheck(const QString& desktopId)
         timer->setInterval(DestroyDebounceMs);
         m_destroyTimers.insert(desktopId, timer);
         connect(timer, &QTimer::timeout, this, [this, desktopId]() {
-            m_destroyTimers.take(desktopId)->deleteLater();
+            if (QTimer* fired = m_destroyTimers.take(desktopId)) {
+                fired->deleteLater();
+            }
             // Last-moment emptiness re-check (plan §4.3 destroy step 2).
             if (!isDesktopEmpty(desktopId)) {
+                return;
+            }
+            // Our own Remove for this desktop is already in flight: issuing a
+            // second one would have KWin answer one echo and leave the other
+            // to expire, which fires a spurious resync and teaches the cap
+            // probe nothing true.
+            if (hasPendingRemove(desktopId)) {
                 return;
             }
             const QString owner = m_map.ownerOf(desktopId);
@@ -515,7 +699,11 @@ void WorkspaceReconciler::scheduleDestroyCheck(const QString& desktopId)
 
 void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceIndex, const QString& name)
 {
-    if (m_lastIds.size() >= m_desktopCap) {
+    // Count the creates KWin still owes us: the id list only grows once each
+    // lands, so gating on it alone lets a burst (several screens repairing
+    // their trailing empty in one maintenance pass) request past the ceiling
+    // and then learn a bogus cap from the refusals.
+    if (m_lastIds.size() + pendingCreateCount() >= m_desktopCap) {
         if (!m_capHintShown) {
             m_capHintShown = true;
             Q_EMIT capReached();
@@ -536,44 +724,55 @@ void WorkspaceReconciler::maintainScreen(const QString& screenId)
 {
     const auto entries = m_map.slice(screenId);
 
-    // A screen must always hold at least one desktop.
+    // A screen must always hold at least one desktop. This one is NOT
+    // cap-gated: at the ceiling a screen with an empty slice would otherwise
+    // get no desktop at all and no retry, so take one from a donor screen that
+    // can spare it rather than asking KWin for a desktop it will refuse.
     if (entries.isEmpty()) {
-        bool creating = false;
-        for (const auto& op : m_ledger) {
-            if (op.kind == PendingOp::Kind::Create && op.screenId == screenId) {
-                creating = true;
-                break;
+        if (hasPendingCreate(screenId)) {
+            return;
+        }
+        if (m_lastIds.size() + pendingCreateCount() >= m_desktopCap) {
+            const QStringList order = m_map.screenOrder();
+            for (const QString& donor : order) {
+                if (donor == screenId || m_map.sliceSize(donor) <= 1) {
+                    continue;
+                }
+                const QString spare = trailingEmptyOf(donor);
+                if (spare.isEmpty()) {
+                    continue;
+                }
+                qCWarning(lcWorkspaceRec) << "at the desktop cap; transferring" << spare << "from" << donor << "to"
+                                          << screenId << "so no screen is left without a workspace";
+                m_map.transfer(spare, screenId, 0);
+                maintainScreen(donor);
+                return;
             }
+            qCWarning(lcWorkspaceRec) << "at the desktop cap with no donor; screen" << screenId << "holds no workspace";
+            return;
         }
-        if (!creating) {
-            requestCreateAt(screenId, 0, QString());
-        }
+        requestCreateAt(screenId, 0, QString());
         return;
     }
 
     // Trailing empty: exactly one empty dynamic desktop at the end.
     if (trailingEmptyOf(screenId).isEmpty()) {
-        bool creating = false;
-        for (const auto& op : m_ledger) {
-            if (op.kind == PendingOp::Kind::Create && op.screenId == screenId) {
-                creating = true;
-                break;
-            }
-        }
-        if (!creating) {
+        if (!hasPendingCreate(screenId)) {
             requestCreateAt(screenId, entries.size(), QString());
         }
         return;
     }
 
-    // Surplus trailing empties (external ops can produce runs of empties at
-    // the end): destroy from the second-to-last inward, named exempt.
+    // Surplus empties: destroy from the second-to-last inward, named exempt.
+    // The scan does NOT stop at the first occupied desktop — an explicit
+    // named-workspace position can land a create mid-slice and leave an empty
+    // dynamic desktop behind it, which a stop-at-first-occupied scan would
+    // never reach and which would then live forever.
     for (int i = entries.size() - 2; i >= 0; --i) {
         const WorkspaceEntry& entry = entries.at(i);
-        if (!entry.name.isEmpty() || !isDesktopEmpty(entry.desktopId)) {
-            break;
+        if (entry.name.isEmpty() && isDesktopEmpty(entry.desktopId)) {
+            scheduleDestroyCheck(entry.desktopId);
         }
-        scheduleDestroyCheck(entry.desktopId);
     }
 }
 
@@ -587,6 +786,20 @@ void WorkspaceReconciler::maintainInvariants()
 
 // ── Named workspaces ────────────────────────────────────────────────────────
 
+int WorkspaceReconciler::namedSliceIndex(const QString& screenId, int declaredPosition) const
+{
+    // The trailing empty is an invariant, not a slot users place things after:
+    // a named workspace landing behind it makes the empty desktop mid-slice,
+    // which maintenance then reaps, and the named entry inherits the trailing
+    // role it is exempt from. Everything a declaration can ask for is clamped
+    // to the last position BEFORE it.
+    const int last = insertIndexBeforeTrailingEmpty(screenId);
+    if (declaredPosition < 0) {
+        return last;
+    }
+    return qBound(0, declaredPosition, last);
+}
+
 void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& declarations, const QStringList& kwinNames)
 {
     bool changed = false;
@@ -595,7 +808,12 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
     QSet<QString> declaredNames;
     for (const NamedWorkspace& decl : declarations) {
         if (decl.name.isEmpty() || declaredNames.contains(decl.name)) {
-            continue; // empty/duplicate declarations are UI-invalid; skip
+            // Config-fed and normally rejected by the settings UI, so reaching
+            // here means the config was hand-edited or a UI guard regressed —
+            // worth saying out loud rather than dropping in silence.
+            qCWarning(lcWorkspaceRec) << "skipping" << (decl.name.isEmpty() ? "an empty" : "a duplicate")
+                                      << "named-workspace declaration:" << decl.name;
+            continue;
         }
         declaredNames.insert(decl.name);
 
@@ -614,7 +832,11 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
         if (realizedId.isEmpty()) {
             for (int i = 0; i < m_lastIds.size() && i < kwinNames.size(); ++i) {
                 const QString& id = m_lastIds.at(i);
-                if (kwinNames.at(i) == decl.name && m_map.entryFor(id).name.isEmpty()) {
+                // Only a desktop the MAP owns can be claimed: setName on an
+                // unowned id is a silent no-op, so claiming one would leave
+                // realizedId pointing at nothing and re-run the same futile
+                // claim on every apply.
+                if (kwinNames.at(i) == decl.name && !m_map.ownerOf(id).isEmpty() && m_map.entryFor(id).name.isEmpty()) {
                     realizedId = id;
                     m_map.setName(id, decl.name);
                     changed = true;
@@ -634,20 +856,33 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
             const int pos = m_lastIds.indexOf(realizedId);
             const bool kwinAgrees = pos >= 0 && pos < kwinNames.size() && kwinNames.at(pos) == decl.name;
             if (!kwinAgrees) {
+                bool moved = false;
                 for (int i = 0; i < m_lastIds.size() && i < kwinNames.size(); ++i) {
                     const QString& other = m_lastIds.at(i);
-                    if (other != realizedId && kwinNames.at(i) == decl.name && m_map.entryFor(other).name.isEmpty()) {
+                    if (other != realizedId && kwinNames.at(i) == decl.name && !m_map.ownerOf(other).isEmpty()
+                        && m_map.entryFor(other).name.isEmpty()) {
                         m_map.setName(realizedId, QString());
                         m_map.setName(other, decl.name);
                         realizedId = other;
                         changed = true;
+                        moved = true;
                         break;
                     }
+                }
+                // Only when `kwinNames` actually covers the id list: a caller
+                // that passed none has told us nothing about KWin's side, and
+                // treating that as disagreement would re-push on every apply.
+                if (!moved && pos >= 0 && pos < kwinNames.size()) {
+                    // Nobody else carries the name, so the map is right and
+                    // KWin is behind (a rename that never reached it, or a
+                    // restart that dropped it). Push it, so the KWin-name
+                    // claim path can re-identify this desktop next session.
+                    Q_EMIT requestSetDesktopName(realizedId, decl.name);
                 }
             }
         }
 
-        const QString pin = (!decl.outputId.isEmpty() && m_map.hasScreen(decl.outputId)) ? decl.outputId : QString();
+        const QString pin = (!decl.outputId.isEmpty() && m_map.knowsScreen(decl.outputId)) ? decl.outputId : QString();
 
         if (realizedId.isEmpty()) {
             // Create it. One create per declaration per pass: an open Create
@@ -666,29 +901,36 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
             if (target.isEmpty()) {
                 target = m_focusedScreen;
             }
-            if (target.isEmpty() || !m_map.hasScreen(target)) {
+            if (target.isEmpty() || !m_map.knowsScreen(target)) {
                 const QStringList order = m_map.screenOrder();
                 target = order.isEmpty() ? QString() : order.first();
             }
             if (target.isEmpty()) {
                 continue;
             }
-            int index = decl.position >= 0 ? decl.position : m_map.sliceSize(target);
-            if (decl.position < 0 && !trailingEmptyOf(target).isEmpty()) {
-                index = qMax(0, index - 1);
-            }
-            requestCreateAt(target, index, decl.name); // cap-guarded inside
+            requestCreateAt(target, namedSliceIndex(target, decl.position), decl.name); // cap-guarded inside
             continue;
         }
 
         // Pin enforcement for a realized name.
         if (!pin.isEmpty() && m_map.ownerOf(realizedId) != pin) {
-            int index = decl.position >= 0 ? decl.position : m_map.sliceSize(pin);
-            if (decl.position < 0 && !trailingEmptyOf(pin).isEmpty()) {
-                index = qMax(0, index - 1);
+            const QString previousOwner = m_map.ownerOf(realizedId);
+            if (m_map.sliceSize(previousOwner) <= 1) {
+                // Pinning away a screen's ONLY desktop would empty its slice,
+                // and at the cap maintainScreen cannot refill it. Leave the
+                // workspace where it is; the next apply retries once that
+                // screen has a second desktop.
+                qCWarning(lcWorkspaceRec) << "not pinning" << decl.name << "to" << pin << "yet:" << previousOwner
+                                          << "would be left with no workspace";
+            } else {
+                m_map.transfer(realizedId, pin, namedSliceIndex(pin, decl.position));
+                // A pin can move the desktop the previous owner was SHOWING.
+                // That screen now sits on a foreign desktop and nothing else
+                // would notice — the verbs' own transfer path snaps back for
+                // exactly this reason.
+                evaluateForeign(previousOwner);
+                changed = true;
             }
-            m_map.transfer(realizedId, pin, index);
-            changed = true;
         }
     }
 
@@ -716,7 +958,7 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
 
 void WorkspaceReconciler::onScreenAdded(const QString& screenId)
 {
-    if (screenId.isEmpty() || m_map.hasScreen(screenId)) {
+    if (screenId.isEmpty() || m_map.knowsScreen(screenId)) {
         return;
     }
     m_map.setScreenOrder(m_map.screenOrder() << screenId);
@@ -742,17 +984,37 @@ void WorkspaceReconciler::onScreenAdded(const QString& screenId)
     maintainScreen(screenId);
     for (const QString& touched : touchedScreens) {
         maintainScreen(touched); // the foster screen's invariants re-settle
+        // The foster screen may have been SHOWING one of the migrated
+        // desktops; it now sits on a foreign one and needs the owner-wins
+        // correction, exactly as the verb-side transfer path does.
+        evaluateForeign(touched);
     }
     bumpGeneration();
 }
 
 void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
 {
-    if (!m_map.hasScreen(screenId)) {
+    if (!m_map.knowsScreen(screenId)) {
         return;
     }
     const QList<WorkspaceEntry> orphaned = m_map.takeSlice(screenId);
     m_currentByScreen.remove(screenId);
+    // The snap-back memo names a desktop this screen no longer owns; keeping
+    // it would aim a later correction (after a replug re-adds the screen) at
+    // whatever that desktop became in the meantime.
+    m_lastOwnedByScreen.remove(screenId);
+    // Screen-scoped ledger entries die with the screen: an open SetCurrent for
+    // a gone output can never be echoed, and until it expired it would block
+    // the corrections of a re-added screen with the same id and then fire a
+    // spurious resync.
+    for (int i = m_ledger.size() - 1; i >= 0; --i) {
+        if (m_ledger.at(i).screenId == screenId) {
+            m_ledger.removeAt(i);
+        }
+    }
+    if (m_ledger.isEmpty()) {
+        m_ledgerTimer.stop();
+    }
     if (m_focusedScreen == screenId) {
         m_focusedScreen.clear();
     }
@@ -773,10 +1035,7 @@ void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
     // second displacement keeps the ORIGINAL home (the entry already carries
     // one), so daisy-chained unplugs still return the workspace to where the
     // user put it.
-    int index = m_map.sliceSize(fallback);
-    if (!trailingEmptyOf(fallback).isEmpty()) {
-        index = qMax(0, index - 1);
-    }
+    int index = insertIndexBeforeTrailingEmpty(fallback);
     for (auto entry : orphaned) {
         if (entry.homeScreenId.isEmpty()) {
             entry.homeScreenId = screenId;
@@ -789,10 +1048,17 @@ void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
 
 void WorkspaceReconciler::onScreenOrderChanged(const QStringList& order)
 {
-    if (order == m_map.screenOrder()) {
+    const QStringList before = m_map.screenOrder();
+    if (order == before) {
         return;
     }
     m_map.setScreenOrder(order);
+    // setScreenOrder REPAIRS the order it is handed (slice-holding screens
+    // missing from it are appended), so a caller-order that differs can still
+    // repair back to what we already had. Compare the result, not the request.
+    if (m_map.screenOrder() == before) {
+        return;
+    }
     bumpGeneration();
 }
 
@@ -813,11 +1079,26 @@ void WorkspaceReconciler::adoptAll(const QStringList& ids, const QHash<QString, 
     const QStringList order = m_map.screenOrder();
     for (const QString& screenId : order) {
         const QString shownId = currentDesktopIdByScreen.value(screenId);
-        if (!shownId.isEmpty() && unowned.contains(shownId)) {
+        if (shownId.isEmpty()) {
+            continue;
+        }
+        // Seed the per-screen current from what the caller observed. Without
+        // it every verb resolves empty until the effect's first per-output
+        // report happens along, which can be a long time after adoption on a
+        // session that starts on its restored desktops.
+        const int globalIndex = ids.indexOf(shownId);
+        if (globalIndex >= 0) {
+            m_currentByScreen.insert(screenId, globalIndex + 1);
+            if (m_map.ownerOf(shownId) == screenId) {
+                m_lastOwnedByScreen.insert(screenId, shownId);
+            }
+        }
+        if (unowned.contains(shownId)) {
             WorkspaceEntry entry;
             entry.desktopId = shownId;
-            m_map.insert(screenId, m_map.sliceSize(screenId), entry);
+            m_map.insert(screenId, insertIndexBeforeTrailingEmpty(screenId), entry);
             unowned.removeAll(shownId);
+            m_lastOwnedByScreen.insert(screenId, shownId);
         }
     }
 
@@ -842,7 +1123,7 @@ void WorkspaceReconciler::adoptAll(const QStringList& ids, const QHash<QString, 
         }
         WorkspaceEntry entry;
         entry.desktopId = id;
-        m_map.insert(target, m_map.sliceSize(target), entry);
+        m_map.insert(target, insertIndexBeforeTrailingEmpty(target), entry);
     }
 
     maintainInvariants();

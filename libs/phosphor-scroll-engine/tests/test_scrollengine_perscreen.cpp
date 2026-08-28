@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE NOTE: over the 1000-line target, inside the 15% grace, and no
-// longer past the hard ceiling — splitting the template channel's blueprint
-// and cursor cases out to test_scrollengine_template.cpp is what brought it
-// back under. No exact figure is quoted here on purpose, since it goes stale
-// on the next slot added.
+// FILE-SIZE NOTE: over the 1000-line target and inside the 15% grace. Two
+// splits have kept it there: the template channel's blueprint and cursor
+// cases (test_scrollengine_template.cpp) and the desktop reap/renumber
+// lifecycle cases (test_scrollengine_desktopreap.cpp). No exact figure is
+// quoted, since it goes stale on the next slot added.
 //
 // The case for keeping the rest together: this file's concern is a single
 // resolution cascade —
@@ -16,12 +16,11 @@
 // a one-screen assertion passes just as happily when the engine reads the
 // global everywhere. Splitting by channel would put the two halves of a
 // precedence pair in different files and leave neither able to state the
-// ordering it exists to pin. Splitting by default (width here, height there)
-// would duplicate the whole fixture layer and split the trio's per-slot
-// fall-back rule, which is one rule applying identically to both.
+// ordering it pins. Splitting by default (width here, height there) would
+// duplicate the fixture layer and split the trio's per-slot fall-back rule.
 //
-// If a channel is ever added that resolves INDEPENDENTLY of these three, it
-// takes a sibling rather than growing this file.
+// A case that is NOT a precedence claim in this cascade takes a sibling
+// instead, which is what both splits above were.
 
 // Per-screen default-width / default-height resolution.
 //
@@ -113,10 +112,6 @@ private Q_SLOTS:
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
     void tabIndicatorRectIsNullForAZeroExtentColumn();
-    void reapDesktopStateDropsOnlyTheDeadDesktop();
-    void renumberDesktopStateShiftsKeysAndKeepsWindows();
-    void renumberDesktopStateMovesTheStripStash();
-    void renumberDesktopStateMovesPerScreenOverrides();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -1148,104 +1143,6 @@ void TestScrollEnginePerScreen::tabIndicatorRectIsNullForAZeroExtentColumn()
         params.position = position;
         QVERIFY(params.indicatorRectFor(QRect(0, 0, 0, 0), kTiles).isNull());
     }
-}
-
-void TestScrollEnginePerScreen::reapDesktopStateDropsOnlyTheDeadDesktop()
-{
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    // One window on desktop 1, one on desktop 2 (same screen, distinct
-    // per-desktop states).
-    engine->windowOpened(QStringLiteral("app|d1"), kS1, 0, 0);
-    engine->setCurrentDesktopForScreen(kS1, 2);
-    engine->windowOpened(QStringLiteral("app|d2"), kS1, 0, 0);
-    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1, 2}));
-
-    // Identity-based reap of desktop 1 leaves desktop 2 untouched.
-    engine->reapDesktopState(1);
-    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{2}));
-    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d2")));
-}
-
-void TestScrollEnginePerScreen::renumberDesktopStateShiftsKeysAndKeepsWindows()
-{
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->setCurrentDesktopForScreen(kS1, 3);
-    engine->windowOpened(QStringLiteral("app|d3"), kS1, 0, 0);
-    engine->setCurrentDesktopForScreen(kS1, 4);
-    engine->windowOpened(QStringLiteral("app|d4"), kS1, 0, 0);
-    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{3, 4}));
-
-    // Desktop 2 died elsewhere: 3→2, 4→3. MUTATION GUARD: after the pass no
-    // stale pre-shift int survives, and the windows stay resolvable under
-    // the screen's shifted current desktop.
-    QHash<int, int> mapping;
-    mapping.insert(3, 2);
-    mapping.insert(4, 3);
-    engine->renumberDesktopState(mapping);
-    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{2, 3}));
-    // The tracker shifted with the states (the screen sat on old-4 = new-3),
-    // so the current context still resolves the d4 window's column.
-    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d4")));
-    engine->setCurrentDesktopForScreen(kS1, 2);
-    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d3")));
-}
-
-void TestScrollEnginePerScreen::renumberDesktopStateMovesTheStripStash()
-{
-    // The AUX maps must renumber with the states: a stash left keyed at the
-    // old desktop int would restore into the wrong (possibly dead) context.
-    // Falsifies dropping the renumberDesktopKeyedHash(m_stripStash, ...)
-    // call from engine_context.cpp.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->setCurrentDesktopForScreen(kS1, 3);
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    // Mode reassignment stashes the strip under S1|3|.
-    engine->setActiveScreens({});
-    QVERIFY(engine->serializeStripState().contains(QStringLiteral("S1|3|")));
-
-    // Desktop 2 died elsewhere: 3→2.
-    QHash<int, int> mapping;
-    mapping.insert(3, 2);
-    engine->renumberDesktopState(mapping);
-
-    const QJsonObject blob = engine->serializeStripState();
-    QVERIFY(blob.contains(QStringLiteral("S1|2|")));
-    QVERIFY(!blob.contains(QStringLiteral("S1|3|")));
-}
-
-void TestScrollEnginePerScreen::renumberDesktopStateMovesPerScreenOverrides()
-{
-    // Same class of guard for m_perScreenOverrides: the override map keys by
-    // full context, the tracker shifts on renumber, and the two must move
-    // together or the screen silently loses its overrides.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->setCurrentDesktopForScreen(kS1, 3);
-    QVariantMap overrides;
-    overrides.insert(QStringLiteral("centerFocusedColumn"), true);
-    engine->applyPerScreenConfig(kS1, overrides);
-    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
-
-    QHash<int, int> mapping;
-    mapping.insert(3, 2);
-    engine->renumberDesktopState(mapping);
-
-    // The tracker now says desktop 2 for kS1; the overrides must have moved
-    // with it (a dropped aux-map renumber leaves them stranded at key 3).
-    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
-    QCOMPARE(engine->perScreenOverrides(kS1).value(QStringLiteral("centerFocusedColumn")).toBool(), true);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

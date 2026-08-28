@@ -24,8 +24,20 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    // Staged copy of appSettings.workspacesNamedEntries.
+    // Staged copy of appSettings.workspacesNamedEntries. Each element carries
+    // one extra field beyond the five stored ones, `uid`: a synthetic key that
+    // stays put across renames.
+    //
+    // The list is keyed by uid rather than by name because `name` is mutable
+    // from inside the row. ReorderableColumn keys its published-height cache
+    // and its deep-link search anchors by `idOf`, and a rename would move a row
+    // to a key with no cached height (the row visually overlaps its neighbour
+    // until it republishes) while leaving the old anchor entry pointing at a
+    // live delegate under a key nothing looks up any more.
     property var _entries: []
+    // Monotonic uid source. Only ever increments, so a uid is never reused
+    // within a session even after a removal.
+    property int _uidSeq: 0
 
     readonly property var _screenOptions: {
         var options = [
@@ -48,6 +60,7 @@ SettingsFlickable {
         var copy = [];
         for (var i = 0; i < stored.length; ++i)
             copy.push({
+                "uid": "ws" + (root._uidSeq++),
                 "name": stored[i].name || "",
                 "output": stored[i].output || "",
                 "position": stored[i].position !== undefined ? stored[i].position : -1,
@@ -57,25 +70,83 @@ SettingsFlickable {
         return copy;
     }
 
+    /// The staged array projected back onto the five stored fields — the shape
+    /// the config composite takes, and the shape the reload compare uses. The
+    /// uid is ours alone and never reaches the store (the schema's
+    /// canonicalNamedEntries would drop it anyway, which is exactly why the
+    /// compare has to strip it too or every reload would look like a change).
+    function _wireEntries(entries) {
+        var out = [];
+        for (var i = 0; i < entries.length; ++i)
+            out.push({
+                "name": entries[i].name,
+                "output": entries[i].output,
+                "position": entries[i].position,
+                "focusShortcut": entries[i].focusShortcut,
+                "moveShortcut": entries[i].moveShortcut
+            });
+        return out;
+    }
+
     function _loadEntries() {
-        var copy = _normalizedStored();
         // Skip the reload when the store already matches the staged copy —
         // every commit from THIS page echoes back through the change signal,
-        // and reassigning the array would rebuild all row delegates and
-        // collapse whichever row the user is editing.
-        if (JSON.stringify(copy) === JSON.stringify(_entries))
+        // and reassigning the array would rebuild all row delegates (issuing
+        // fresh uids), collapsing whichever row the user is editing.
+        var copy = _normalizedStored();
+        if (JSON.stringify(_wireEntries(copy)) === JSON.stringify(_wireEntries(_entries)))
             return;
         _entries = copy;
+        _namesTick++;
     }
 
     function _commitEntries() {
-        appSettings.workspacesNamedEntries = _entries;
+        appSettings.workspacesNamedEntries = _wireEntries(_entries);
     }
 
-    function _names() {
+    /// Carry a rename through the quick-shortcut slot targets.
+    ///
+    /// The workspace NAME is the wire value everywhere downstream: the
+    /// reconciler matches declarations by name, and a quick slot stores the
+    /// name it sends the window to (Workspaces.Slots/TargetN, resolved at
+    /// press time by WorkspaceController::moveWindowToNamedWorkspace). So a
+    /// rename here silently makes every slot pointing at the old name inert —
+    /// Settings deliberately never validates a target, precisely so the two
+    /// can be edited in any order. Following the rename is what the user
+    /// means: the slot still points at the workspace they renamed.
+    ///
+    /// Rules are NOT carried along. A RouteToWorkspace action stores the name
+    /// too, but rules live in their own store outside this page's staging, and
+    /// rewriting them from here would edit a document the user has open
+    /// elsewhere. Such a rule goes dormant until its action is re-pointed.
+    function _renameSlotTargets(previousName, newName) {
+        var from = ("" + (previousName || "")).trim();
+        var to = ("" + (newName || "")).trim();
+        if (from === "" || to === "" || from === to)
+            return;
+        for (var slot = 0; slot < settingsController.workspaceSlotCount; ++slot)
+            if (appSettings.workspaceSlotTarget(slot) === from)
+                appSettings.setWorkspaceSlotTarget(slot, to);
+    }
+
+    // Bumped whenever any entry's name changes. A rename is applied IN PLACE
+    // (see onFieldEdited), so `_entries` itself does not change identity and
+    // nothing reading it through a binding would re-evaluate — the Add
+    // button's duplicate check being the one that matters.
+    property int _namesTick: 0
+
+    /// Every declared name, in list order. Names are compared exactly, and
+    /// only trimmed: that is the daemon's own identity rule. The reconciler
+    /// matches declarations by `decl.name` with QString equality
+    /// (WorkspaceReconciler.cpp, applyNamedWorkspaces) and the config schema
+    /// trims a name before storing it (canonicalNamedEntries in
+    /// settingsschema_workspaces.cpp), so "Work" and "work" are two distinct
+    /// workspaces and "Work " is the same one as "Work".
+    readonly property var _names: {
+        void root._namesTick;
         var names = [];
-        for (var i = 0; i < _entries.length; ++i)
-            names.push(_entries[i].name);
+        for (var i = 0; i < root._entries.length; ++i)
+            names.push(("" + (root._entries[i].name || "")).trim());
         return names;
     }
 
@@ -103,7 +174,11 @@ SettingsFlickable {
             headerText: i18n("Add named workspace")
             searchAnchor: "workspacesNamedAdd"
             collapsible: true
-            initiallyCollapsed: root._entries.length > 0
+            // Read off the STORE, not the staged copy: SettingsCard adopts
+            // this one-shot in its own Component.onCompleted, which runs
+            // before the page's, so the staged array is still empty then and
+            // the form would always start expanded.
+            initiallyCollapsed: appSettings.workspacesNamedEntries.length > 0
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -152,11 +227,12 @@ SettingsFlickable {
                     Accessible.name: i18n("Add named workspace")
                     enabled: {
                         var trimmed = addNameField.text.trim();
-                        return trimmed.length > 0 && root._names().indexOf(trimmed) === -1;
+                        return trimmed.length > 0 && root._names.indexOf(trimmed) === -1;
                     }
                     onClicked: {
                         var arr = root._entries.slice();
                         arr.push({
+                            "uid": "ws" + (root._uidSeq++),
                             "name": addNameField.text.trim(),
                             "output": addOutputCombo.currentValue || "",
                             "position": -1,
@@ -164,6 +240,7 @@ SettingsFlickable {
                             "moveShortcut": ""
                         });
                         root._entries = arr;
+                        root._namesTick++;
                         root._commitEntries();
                         addNameField.clear();
                         addOutputCombo.currentIndex = 0;
@@ -206,11 +283,19 @@ SettingsFlickable {
                     visible: root._entries.length > 0
                     items: root._entries
                     anchorPrefix: "namedWorkspace:"
+                    // Keyed by the synthetic uid, never by the name: see the
+                    // `_entries` comment for why a mutable key corrupts the
+                    // height cache and strands the search anchor.
+                    //
+                    // Null-guarded like ReorderableColumn's own defaults:
+                    // during a model reset the delegate's modelData detaches
+                    // before its destruction handler runs, and both resolvers
+                    // are called from bindings that re-evaluate in that window.
                     idOf: function (item) {
-                        return item.name;
+                        return item ? item.uid : "";
                     }
                     accessibleNameOf: function (item) {
-                        return item.name || i18n("(unnamed)");
+                        return (item && item.name) ? item.name : i18n("(unnamed)");
                     }
                     reorderableOf: function (item) {
                         return true;
@@ -230,7 +315,7 @@ SettingsFlickable {
                         entryIndex: parent.rowIndex
                         screenOptions: root._screenOptions
                         siblingNamesOf: function (index) {
-                            var names = root._names();
+                            var names = root._names.slice();
                             names.splice(index, 1);
                             return names;
                         }
@@ -243,13 +328,19 @@ SettingsFlickable {
                             if (index < 0 || index >= root._entries.length)
                                 return;
 
+                            var previousName = root._entries[index].name;
                             root._entries[index][field] = value;
+                            if (field === "name") {
+                                root._namesTick++;
+                                root._renameSlotTargets(previousName, value);
+                            }
                             root._commitEntries();
                         }
                         onRemoveRequested: function (index) {
                             var arr = root._entries.slice();
                             arr.splice(index, 1);
                             root._entries = arr;
+                            root._namesTick++;
                             root._commitEntries();
                         }
                     }

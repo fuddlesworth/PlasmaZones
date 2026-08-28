@@ -45,7 +45,15 @@ public:
     void setScreenOrder(const QStringList& order);
 
     // ── Slice access ────────────────────────────────────────────────────────
+    /// Whether this screen HOLDS A SLICE. A screen that is part of the world
+    /// but owns no desktop yet (just added, or emptied by a transfer) answers
+    /// false — use knowsScreen() to ask about membership.
     bool hasScreen(const QString& screenId) const;
+    /// Whether this screen is part of the world at all: it holds a slice, or
+    /// it appears in the screen order. This is the question to ask before
+    /// routing a desktop to a screen; hasScreen() would refuse a live screen
+    /// simply for being empty.
+    bool knowsScreen(const QString& screenId) const;
     QList<WorkspaceEntry> slice(const QString& screenId) const;
     int sliceSize(const QString& screenId) const;
     /// Owner screen of a desktop id, or empty when unowned.
@@ -61,7 +69,7 @@ public:
     // ── Mutation (reconciler only) ──────────────────────────────────────────
     /// Insert an entry into a screen's slice at sliceIndex (clamped). The id
     /// must not be owned elsewhere; a duplicate insert is repaired by removal
-    /// from the previous owner first (logged by the caller).
+    /// from the previous owner first, and the map logs that repair itself.
     void insert(const QString& screenId, int sliceIndex, const WorkspaceEntry& entry);
     /// Remove a desktop from whatever slice owns it. Returns false if unowned.
     bool remove(const QString& desktopId);
@@ -88,7 +96,9 @@ public:
     // ── Consistency ─────────────────────────────────────────────────────────
     /// True when every invariant holds against `kwinIds` (each KWin id owned
     /// exactly once, no entry for a vanished id). Does not check contiguity
-    /// (deliberately weakened, plan §4.3).
+    /// (deliberately weakened, plan §4.3). A diagnostic: the production path
+    /// repairs unconditionally through repairAgainst() rather than asking
+    /// first, so this exists for tests and for debugging a suspect map.
     bool consistentWith(const QStringList& kwinIds) const;
     /// Repair against the authoritative KWin id list: drop entries whose id
     /// vanished, report ids KWin has that no slice owns (for adoption by the

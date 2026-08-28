@@ -374,7 +374,8 @@ private Q_SLOTS:
         // leak into the process-global singleton for the rest of the binary's
         // lifetime — see the file-level comment for the cross-test
         // independence pattern.
-        const QString customType = QStringLiteral("_zz_pwrTestCustomAction");
+        constexpr QLatin1StringView customTypeToken{"_zz_pwrTestCustomAction"};
+        const QString customType = QString(customTypeToken);
         QVERIFY(!reg.isRegistered(customType));
 
         reg.registerAction(ActionDescriptor{.type = customType,
@@ -388,7 +389,7 @@ private Q_SLOTS:
                                                 },
                                             .terminal = false});
         QVERIFY(reg.isRegistered(customType));
-        QCOMPARE(reg.slotFor(makeAction(QLatin1StringView("_zz_pwrTestCustomAction"))), QStringLiteral("custom-slot"));
+        QCOMPARE(reg.slotFor(makeAction(customTypeToken)), QStringLiteral("custom-slot"));
 
         // Clean up: unregister the sentinel so the singleton is left pristine
         // for any later test (and so the binary does not carry a bespoke type).

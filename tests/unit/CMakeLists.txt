@@ -630,6 +630,7 @@ add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
 add_executable(test_cheatsheet_compression
     daemon/test_cheatsheet_compression.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
 target_link_libraries(test_cheatsheet_compression
@@ -643,6 +644,7 @@ add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
 add_executable(test_scrolling_shortcut_parity
     daemon/test_scrolling_shortcut_parity.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
 target_link_libraries(test_scrolling_shortcut_parity
@@ -690,6 +692,7 @@ add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_co
 add_executable(test_shortcutmanager_teardown
     daemon/test_shortcutmanager_teardown.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
 )
 target_link_libraries(test_shortcutmanager_teardown
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)

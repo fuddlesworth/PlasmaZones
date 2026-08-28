@@ -3,6 +3,14 @@
 
 #pragma once
 
+// SANCTIONED FILE-SIZE EXCEPTION, for the same reason settings.h carries one.
+// This header is one Q_OBJECT class declaration whose bulk is the pure-virtual
+// accessor and Q_SIGNALS surface that every setting must carry. moc requires
+// the whole Q_OBJECT class in one translation unit's header, so "splitting" it
+// would mean fragmenting one class across several headers, which buys nothing
+// and costs every reader the hunt for where a signal lives. Growth of the
+// accessor / signal surface is expected here; new non-declaration logic is not.
+//
 // ISettings — PZ global settings facade.
 //
 // Split out of interfaces.h so consumers can include just the settings

@@ -197,6 +197,14 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         ++m_daemonGate.bridgeRegistrationGeneration;
         m_daemonGate.readyRestoresDone = false;
         m_daemonGate.readyWindowStateProcessed = false;
+        // The workspace map and its ordering guard belong to the dead session.
+        // The successor's generation counter restarts from its own base, so a
+        // retained floor would reject every map the new daemon publishes below
+        // it — the effect would then hold last session's map for the rest of
+        // the session. Clearing BOTH is what re-arms slotWorkspaceMapChanged's
+        // empty-cache acceptance for the first push after bringup.
+        m_workspaceMapJson.clear();
+        m_workspaceMapGeneration = 0;
         m_snapHandler->clearRestoreCache();
         // Reset the rules-subscription gate so the next daemon's
         // `rulesChanged` broadcasts can be re-subscribed. Without this,

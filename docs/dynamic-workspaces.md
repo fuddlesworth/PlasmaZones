@@ -16,7 +16,7 @@ which desktops exist. Occupying a monitor's last empty workspace appends a new
 one; emptying a middle workspace destroys it. Named workspaces (Settings →
 Workspaces) persist while empty and can be pinned to an output. On unplug a
 monitor's workspaces foster onto a surviving screen and migrate home on replug.
-The map persists across restarts in `~/.local/state/plasmazones/workspaces.json`.
+The map persists across restarts in `~/.local/state/plasmazones/plasmazonesd/workspaces.json`.
 
 ## Requirements and consent
 

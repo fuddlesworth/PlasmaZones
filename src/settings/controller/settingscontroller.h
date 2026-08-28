@@ -343,6 +343,14 @@ public:
     Q_PROPERTY(bool workspacesAtCap READ workspacesAtCap NOTIFY workspacesAtCapChanged)
     bool workspacesAtCap() const;
 
+    /// WorkspaceReconciler::DefaultDesktopCap and
+    /// ConfigDefaults::WorkspaceSlotCount, mirrored because QML has no other
+    /// way to read a C++ constant and would otherwise hardcode both.
+    Q_PROPERTY(int workspacesDesktopCap READ workspacesDesktopCap CONSTANT)
+    Q_PROPERTY(int workspaceSlotCount READ workspaceSlotCount CONSTANT)
+    int workspacesDesktopCap() const;
+    int workspaceSlotCount() const;
+
     /// The default snapping layout and default scrolling template:
     /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
     /// They are SET from the library pages' card context menus, so the owner
@@ -1049,6 +1057,9 @@ private:
     /// Live KWin desktop count for the workspaces cap badge (this app's own
     /// read-only VirtualDesktopManager; the daemon owns the writable one).
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_workspaceVdm;
+    /// Last published workspacesAtCap, so the count signal re-emits the
+    /// property only on an actual transition.
+    bool m_workspacesAtCapLast = false;
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;

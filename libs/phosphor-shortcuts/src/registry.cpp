@@ -77,9 +77,12 @@ bool Registry::setForeignShortcuts(const QString& componentName, const QString& 
     return m_backend ? m_backend->setForeignShortcuts(componentName, actionName, sequences) : false;
 }
 
-QList<QKeySequence> Registry::foreignShortcuts(const QString& componentName, const QString& actionName) const
+std::optional<QList<QKeySequence>> Registry::foreignShortcuts(const QString& componentName,
+                                                              const QString& actionName) const
 {
-    return m_backend ? m_backend->foreignShortcuts(componentName, actionName) : QList<QKeySequence>();
+    // A gone backend is a failed read, not an unbound action — nullopt, so a
+    // caller about to steal the chord stops instead of clearing blind.
+    return m_backend ? m_backend->foreignShortcuts(componentName, actionName) : std::nullopt;
 }
 
 void Registry::rebind(const QString& id, const QKeySequence& seq)
@@ -111,6 +114,11 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         it->registered = false;
         it->lastSentDefault = QKeySequence();
         it->lastSentCurrent = QKeySequence();
+        // `true` is the fresh-Entry value, deliberately not entry.persistent:
+        // this field records what was last SENT, and nothing has been. It is
+        // also never consulted while registered is false — flush() re-registers
+        // unconditionally in that case — so the two spellings are equivalent
+        // today; the fresh-Entry one keeps the "nothing sent" story uniform.
         it->lastSentPersistent = true;
         return;
     }

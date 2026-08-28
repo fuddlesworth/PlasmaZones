@@ -107,13 +107,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("rebind")});
     search->setPageKeywords(QStringLiteral("workspaces-named"),
                             {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("named workspace"),
-                             PhosphorI18n::tr("pin"), PhosphorI18n::tr("persistent")});
+                             PhosphorI18n::tr("pin"), PhosphorI18n::tr("persistent"), PhosphorI18n::tr("rename")});
     addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedAdd"),
                PhosphorI18n::tr("Add named workspace"));
     addSection(search, QStringLiteral("workspaces-named"), QStringLiteral("workspacesNamedList"),
                PhosphorI18n::tr("Named workspaces"));
     search->setPageKeywords(QStringLiteral("workspaces-shortcuts"),
-                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("shortcut"),
+                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"),
+                             PhosphorI18n::tr("keybind"), PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"),
                              PhosphorI18n::tr("quick shortcut"), PhosphorI18n::tr("move window")});
     addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspaceQuickShortcuts"),
                PhosphorI18n::tr("Workspace Quick Shortcuts"));
@@ -297,7 +298,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("blur"), PhosphorI18n::tr("performance")});
     search->setPageKeywords(QStringLiteral("rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
-                             PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
+                             PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity"),
+                             PhosphorI18n::tr("workspace")});
     search->setPageKeywords(QStringLiteral("profiles"),
                             {PhosphorI18n::tr("profile"), PhosphorI18n::tr("profiles"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("switch"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export"),

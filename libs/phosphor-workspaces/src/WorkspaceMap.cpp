@@ -23,7 +23,16 @@ QStringList WorkspaceMap::screenOrder() const
 
 void WorkspaceMap::setScreenOrder(const QStringList& order)
 {
-    QStringList next = order;
+    // De-duplicate as we build: the order is the slice-concatenation order, so
+    // a screen listed twice would have its slice counted and serialized twice
+    // (allDesktopIds, toJson, globalPositionForInsert all walk it).
+    QStringList next;
+    next.reserve(order.size());
+    for (const QString& screenId : order) {
+        if (!screenId.isEmpty() && !next.contains(screenId)) {
+            next.append(screenId);
+        }
+    }
     // Keep slices reachable: any slice-holding screen missing from the new
     // order is appended in its previous relative position.
     for (const QString& screenId : m_screenOrder) {
@@ -42,6 +51,11 @@ void WorkspaceMap::setScreenOrder(const QStringList& order)
 bool WorkspaceMap::hasScreen(const QString& screenId) const
 {
     return m_slices.contains(screenId);
+}
+
+bool WorkspaceMap::knowsScreen(const QString& screenId) const
+{
+    return m_slices.contains(screenId) || m_screenOrder.contains(screenId);
 }
 
 QList<WorkspaceEntry> WorkspaceMap::slice(const QString& screenId) const
@@ -118,7 +132,12 @@ void WorkspaceMap::insert(const QString& screenId, int sliceIndex, const Workspa
 
 bool WorkspaceMap::remove(const QString& desktopId)
 {
-    const QString owner = m_ownerOf.take(desktopId);
+    // Look the owner up first and only commit the index removal once the entry
+    // is actually found: taking it up front would strip a desktop from the
+    // inverse index while leaving it in its slice, and every later lookup for
+    // it (ownerOf, entryFor, sliceIndexOf) would then answer "unowned" for a
+    // desktop the map still holds.
+    const QString owner = m_ownerOf.value(desktopId);
     if (owner.isEmpty()) {
         return false;
     }
@@ -126,6 +145,7 @@ bool WorkspaceMap::remove(const QString& desktopId)
     for (int i = 0; i < entries.size(); ++i) {
         if (entries.at(i).desktopId == desktopId) {
             entries.removeAt(i);
+            m_ownerOf.remove(desktopId);
             return true;
         }
     }
@@ -321,25 +341,51 @@ bool WorkspaceMap::fromJson(const QString& json)
     }
     const QJsonArray orderArray = root.value(QLatin1String("screenOrder")).toArray();
     const QJsonObject slices = root.value(QLatin1String("slices")).toObject();
+
+    // screenOrder drives the walk, so anything it omits would be silently
+    // dropped and anything it repeats would be walked twice. Build the ordered
+    // screen list from the union of both halves, de-duplicated: the order
+    // decides sequence, the slices object decides membership.
+    QStringList screens;
     for (const QJsonValue& value : orderArray) {
         const QString screenId = value.toString();
-        if (screenId.isEmpty()) {
-            continue;
+        if (!screenId.isEmpty() && !screens.contains(screenId)) {
+            screens.append(screenId);
         }
-        m_screenOrder.append(screenId);
+    }
+    const QStringList sliceKeys = slices.keys();
+    for (const QString& screenId : sliceKeys) {
+        if (!screenId.isEmpty() && !screens.contains(screenId)) {
+            qCWarning(lcWorkspaceMap) << "restoring slice for" << screenId << "which the stored screen order omits";
+            screens.append(screenId);
+        }
+    }
+
+    for (const QString& screenId : screens) {
         const QJsonArray sliceArray = slices.value(screenId).toArray();
-        auto& entries = m_slices[screenId];
+        QList<WorkspaceEntry> entries;
         for (const QJsonValue& entryValue : sliceArray) {
             const QJsonObject obj = entryValue.toObject();
             WorkspaceEntry entry;
             entry.desktopId = obj.value(QLatin1String("id")).toString();
             entry.name = obj.value(QLatin1String("name")).toString();
             entry.homeScreenId = obj.value(QLatin1String("homeScreen")).toString();
+            // Shape only — whether these ids still EXIST is decided later by
+            // repairAgainst against KWin's live list, which is the only
+            // authority on that.
             if (entry.desktopId.isEmpty() || m_ownerOf.contains(entry.desktopId)) {
                 continue;
             }
             entries.append(entry);
             m_ownerOf.insert(entry.desktopId, screenId);
+        }
+        m_screenOrder.append(screenId);
+        // Materialize the slice only when it holds something: an empty entry
+        // would make hasScreen() true for a screen the restore knows nothing
+        // real about, and the reconciler reads hasScreen as "this output is
+        // part of the world".
+        if (!entries.isEmpty()) {
+            m_slices.insert(screenId, entries);
         }
     }
     return true;

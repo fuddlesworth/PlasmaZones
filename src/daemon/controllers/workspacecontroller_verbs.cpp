@@ -28,10 +28,22 @@ constexpr int WindowMoveTimeoutMs = 2000;
 
 void WorkspaceController::watchWindowMove(const QString& windowId, const QString& targetDesktopId)
 {
+    // Sequence token per watch, not just the target id: two moves of the same
+    // window to the same desktop (a repeated chord, a reunion following a
+    // displacement) are indistinguishable by target, so the FIRST timer would
+    // match the SECOND watch's entry, clear it and warn — while the second
+    // move was still perfectly in flight, and its own arrival then had no
+    // entry left to retire.
+    const quint64 sequence = ++m_windowMoveSequence;
     m_pendingWindowMoves.insert(windowId, targetDesktopId);
-    QTimer::singleShot(WindowMoveTimeoutMs, this, [this, windowId, targetDesktopId]() {
+    m_windowMoveSequences.insert(windowId, sequence);
+    QTimer::singleShot(WindowMoveTimeoutMs, this, [this, windowId, targetDesktopId, sequence]() {
+        if (m_windowMoveSequences.value(windowId) != sequence) {
+            return; // superseded by a later watch (or already retired)
+        }
         if (m_pendingWindowMoves.value(windowId) == targetDesktopId) {
             m_pendingWindowMoves.remove(windowId);
+            m_windowMoveSequences.remove(windowId);
             qCWarning(lcWorkspaceCtl) << "workspace move for window" << windowId << "to desktop" << targetDesktopId
                                       << "saw no arrival (effect not loaded, window closed, or handoff refused)";
         }
@@ -49,13 +61,39 @@ void WorkspaceController::runWhenQuiet(std::function<void()> fn)
 
 void WorkspaceController::drainQuietQueue()
 {
-    if (m_quietQueue.isEmpty() || m_reconciler.hasPendingStructuralOps()) {
+    // Re-entrancy: a drained verb emits mapChanged, which is wired straight
+    // back to this slot. Without the latch the nested call would walk the
+    // member queue a second time and run the re-queued remainder out of order.
+    if (m_draining || m_quietQueue.isEmpty() || m_reconciler.hasPendingStructuralOps()) {
         return;
     }
-    const auto queue = std::exchange(m_quietQueue, {});
-    for (const auto& fn : queue) {
-        fn();
+    m_draining = true;
+    // Looped rather than one pass: the mapChanged a drained verb emits is
+    // swallowed by the latch above, so the condition has to be re-tested here
+    // or work queued (or unblocked) during the batch would strand until an
+    // unrelated later signal.
+    while (!m_quietQueue.isEmpty() && !m_reconciler.hasPendingStructuralOps()) {
+        const auto queue = std::exchange(m_quietQueue, {});
+        for (int i = 0; i < queue.size(); ++i) {
+            // Re-checked per verb, not once for the batch. A drained verb can
+            // START structural churn of its own (a reorder or an output
+            // transfer that makes the reconciler create or remove a desktop),
+            // and every verb after it in the batch would then resolve its
+            // slice index against a map mid-renumber — the exact stale-index
+            // window runWhenQuiet exists to keep verbs out of.
+            if (m_reconciler.hasPendingStructuralOps()) {
+                QList<std::function<void()>> rest = queue.mid(i);
+                // Anything a drained verb queued re-entrantly landed in the
+                // member queue and belongs AFTER the remainder, in arrival
+                // order.
+                rest.append(m_quietQueue);
+                m_quietQueue = std::move(rest);
+                break;
+            }
+            queue.at(i)();
+        }
     }
+    m_draining = false;
 }
 
 void WorkspaceController::switchScreenToDesktop(const QString& screenId, const QString& desktopId)
@@ -226,7 +264,13 @@ void WorkspaceController::applyNamedDeclarations(const QVariantList& entries)
             decl.position = map.value(QStringLiteral("position"), -1).toInt();
             declarations.append(decl);
         }
-        m_reconciler.applyNamedWorkspaces(declarations, m_vdm->desktopNames());
+        // rawDesktopNames, NOT desktopNames: this is the IDENTITY path, and it
+        // needs KWin's names verbatim with an empty string for an unnamed
+        // desktop. desktopNames() fills "Desktop N" placeholders for DISPLAY
+        // callers, and matching against those let a workspace literally named
+        // "Desktop 3" claim an unnamed desktop — and then let the kwinAgrees
+        // tiebreak carry that identity across a renumber.
+        m_reconciler.applyNamedWorkspaces(declarations, m_vdm->rawDesktopNames());
     });
 }
 
@@ -237,6 +281,16 @@ bool WorkspaceController::hasNamedWorkspace(const QString& name) const
 
 QString WorkspaceController::desktopIdForName(const QString& name) const
 {
+    // Adoption gate. Before adoption the map is NOT empty — start() loads the
+    // previous session's candidate map from the state file, names and all —
+    // so a name resolves to a desktop id that has not been reconciled against
+    // the live compositor yet. Routing on it sends the window to whatever
+    // position that id happens to occupy in this session's list. Every caller
+    // treats an empty answer as "name unrealized" and falls back, which is
+    // the right behaviour for the pre-adoption window.
+    if (!m_adopted) {
+        return QString();
+    }
     const QStringList ids = m_reconciler.map().allDesktopIds();
     for (const QString& id : ids) {
         if (m_reconciler.map().entryFor(id).name == name) {
@@ -255,7 +309,16 @@ void WorkspaceController::focusNamedWorkspace(const QString& name)
         }
         // A named workspace shows where it LIVES: the switch targets its
         // owner screen, whichever screen the shortcut fired on.
-        switchScreenToDesktop(m_reconciler.map().ownerOf(target), target);
+        const QString owner = m_reconciler.map().ownerOf(target);
+        if (owner.isEmpty()) {
+            // Ownership has not settled. Unlike the MOVE verbs, whose adaptor
+            // degrades an empty target screen to the window's own output,
+            // there is nothing to degrade to here: a per-screen switch with no
+            // screen would take a ledger slot and answer nothing.
+            qCWarning(lcWorkspaceCtl) << "focus named workspace" << name << ": no owner screen yet, ignoring";
+            return;
+        }
+        switchScreenToDesktop(owner, target);
     });
 }
 

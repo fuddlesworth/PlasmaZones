@@ -80,6 +80,9 @@ private Q_SLOTS:
     void renumberDesktops_shiftsKeysCollisionFree();
     void renumberDesktops_skipPredicateExemptsSentinels();
     void renumberDesktopKeyedHash_auxMaps();
+    void reapDesktop_nullHookAndSkipPredicate();
+    void renumberDesktops_defaultSkipShiftsSentinels();
+    void renumberDesktops_rejectsTargetsBelowOne();
 
 private:
     std::vector<std::unique_ptr<FakeState>> m_owned;
@@ -312,6 +315,80 @@ void TestPerScreenStates::renumberDesktops_skipPredicateExemptsSentinels()
     QCOMPARE(states.stateForKey(key(QString(), 2)), global);
     QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 1)), normal);
     QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+
+    // The REVERSE map honours the same predicate: a window parked under the
+    // sentinel key keeps its desktop int, or its entry stops naming the state
+    // the forward map left in place.
+    PerScreenStates<FakeState> withWindows;
+    withWindows.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+    withWindows.setKeyForWindow(QStringLiteral("wScreen"), key(QStringLiteral("S1"), 2));
+    withWindows.renumberDesktops(mapping, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+    QCOMPARE(withWindows.keyForWindow(QStringLiteral("wGlobal")).desktop, 2);
+    QCOMPARE(withWindows.keyForWindow(QStringLiteral("wScreen")).desktop, 1);
+}
+
+void TestPerScreenStates::reapDesktop_nullHookAndSkipPredicate()
+{
+    PerScreenStates<FakeState> states;
+    states.insertState(key(QString(), 2), makeState(QString()));
+    states.insertState(key(QStringLiteral("S1"), 2), makeState(QStringLiteral("S1")));
+    states.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+    states.setKeyForWindow(QStringLiteral("wScreen"), key(QStringLiteral("S1"), 2));
+
+    // A null teardown hook is legal (a container with nothing to tear down),
+    // and the skip predicate exempts the sentinel key from BOTH maps.
+    states.reapDesktop(2, nullptr, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+
+    QVERIFY(states.containsKey(key(QString(), 2)));
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+    QVERIFY(states.hasWindow(QStringLiteral("wGlobal")));
+    QVERIFY(!states.hasWindow(QStringLiteral("wScreen")));
+}
+
+void TestPerScreenStates::renumberDesktops_defaultSkipShiftsSentinels()
+{
+    // With no predicate the sentinel key is NOT special — it shifts like any
+    // other. An engine holding sentinel keys must pass its own skip; this
+    // pins the default so a caller cannot assume protection it did not ask for.
+    PerScreenStates<FakeState> states;
+    FakeState* global = makeState(QString());
+    states.insertState(key(QString(), 2), global);
+    states.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+
+    QHash<int, int> mapping;
+    mapping.insert(2, 1);
+    states.renumberDesktops(mapping);
+
+    QCOMPARE(states.stateForKey(key(QString(), 1)), global);
+    QVERIFY(!states.containsKey(key(QString(), 2)));
+    QCOMPARE(states.keyForWindow(QStringLiteral("wGlobal")).desktop, 1);
+}
+
+void TestPerScreenStates::renumberDesktops_rejectsTargetsBelowOne()
+{
+    // Desktops are 1-based; a mapping target below 1 is treated as absent so a
+    // poisoned reconciler cannot write a key no lookup can ever resolve.
+    PerScreenStates<FakeState> states;
+    FakeState* s = makeState(QStringLiteral("S1"));
+    states.insertState(key(QStringLiteral("S1"), 3), s);
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+
+    QHash<int, int> poisoned;
+    poisoned.insert(3, 0);
+    states.renumberDesktops(poisoned);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 3)), s);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w3")).desktop, 3);
+
+    // Same rule in the aux-map helper.
+    QHash<PlacementStateKey, QString> aux;
+    aux.insert(key(QStringLiteral("S1"), 3), QStringLiteral("a"));
+    PhosphorEngine::renumberDesktopKeyedHash(aux, poisoned);
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 3)), QStringLiteral("a"));
+    QCOMPARE(aux.size(), 1);
 }
 
 void TestPerScreenStates::renumberDesktopKeyedHash_auxMaps()

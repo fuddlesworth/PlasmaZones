@@ -403,6 +403,11 @@ QString paramHint(const QString& type, const QString& key)
             "Zone names like “Editor, Terminal”, found in whichever layout is active. "
             "Give numbers, names, or both.");
     }
+    if (type == ActionType::RouteToWorkspace && key == ActionParam::TargetWorkspaceName) {
+        return PhosphorI18n::tr(
+            "A name that is not declared yet is still valid. "
+            "The rule stays dormant until a workspace with that name exists.");
+    }
     return {};
 }
 
@@ -415,17 +420,16 @@ QString paramHint(const QString& type, const QString& key)
 /// read the same truth instead of each hardcoding the type ladder.
 bool actionAcceptsAccent(const QString& typeWire)
 {
-    return typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
-        || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive)
-        || typeWire == QString(PhosphorRules::ActionType::SetTintColor);
+    return typeWire == PhosphorRules::ActionType::SetBorderColorActive
+        || typeWire == PhosphorRules::ActionType::SetBorderColorInactive
+        || typeWire == PhosphorRules::ActionType::SetTintColor;
 }
 
 } // namespace
 
 QString paramEmptyValueLabel(const QString& typeWire, const QString& key)
 {
-    if (typeWire == QString(PhosphorRules::ActionType::SetTabIndicatorFontFamily)
-        && key == QString(PhosphorRules::ActionParam::Value)) {
+    if (typeWire == PhosphorRules::ActionType::SetTabIndicatorFontFamily && key == PhosphorRules::ActionParam::Value) {
         return PhosphorI18n::tr("System font");
     }
     return {};
@@ -606,7 +610,7 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else {
             // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
             // animationEvent, shaderEffect, overlayShader, curveEditor,
-            // screenId) and plain strings all start empty. The tab-indicator
+            // screenId, workspaceName) and plain strings all start empty. The tab-indicator
             // font family is a plain string rather than a picker, and empty is
             // a meaningful value for it (it means the system font), so unlike
             // the pickers its seeded rule is already savable. Four kinds are

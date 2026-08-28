@@ -11,6 +11,7 @@
 #include <QVector>
 
 #include <functional>
+#include <optional>
 
 #include "phosphorshortcuts_export.h"
 
@@ -79,10 +80,15 @@ public:
      * Rebind / read another component's global shortcut (IBackend foreign
      * pass-throughs; only the KGlobalAccel backend supports them). The
      * dynamic-workspaces stock-shortcut takeover is the caller.
+     *
+     * foreignShortcuts is tri-state — see IBackend::foreignShortcuts. A
+     * disengaged optional means "could not read", and a caller about to steal
+     * the chord must treat that as a hard stop rather than as "unbound":
+     * clearing without a backup strands the user's binding.
      */
     bool setForeignShortcuts(const QString& componentName, const QString& actionName,
                              const QList<QKeySequence>& sequences);
-    QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const;
+    std::optional<QList<QKeySequence>> foreignShortcuts(const QString& componentName, const QString& actionName) const;
 
     /**
      * Drop a binding entirely. Releases any key grab and forgets the

@@ -1048,6 +1048,16 @@ public:
         Q_UNUSED(desktop)
     }
     /// Drop a screen's per-output desktop, reverting it to the global current.
+    ///
+    /// No production caller, and wiring one would be a bug — see
+    /// ScreenContextTracker::clearCurrentDesktopForScreen for the full
+    /// argument. In short: the global desktop this reverts to is written once
+    /// at startup and never updated, so a screen dropped back onto it keys
+    /// every context to the login desktop. Turning Plasma's per-output setting
+    /// off needs no call here (the effect keeps pushing, the pushes merely
+    /// become uniform), and a screen that genuinely goes away is handled by
+    /// the screen-removal prunes. Present so an engine can expose the
+    /// tracker's operation to tests without reaching through the engine.
     virtual void clearCurrentDesktopForScreen(const QString& screenId)
     {
         Q_UNUSED(screenId)

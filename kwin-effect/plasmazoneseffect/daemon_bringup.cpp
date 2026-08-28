@@ -284,18 +284,36 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // Replay the dynamic-workspaces map: an effect that loads after the map
     // last changed would otherwise wait for the next change-gated push.
     {
-        QDBusMessage query = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("workspaceMap"));
-        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(query);
-        auto* watcher = new QDBusPendingCallWatcher(pending, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            QDBusPendingReply<QString> reply = *w;
-            if (reply.isValid() && !reply.value().isEmpty()) {
-                slotWorkspaceMapChanged(reply.value());
-            }
-            w->deleteLater();
-        });
+        // Generation-guarded like the registerBridge watcher: serviceUnregistered
+        // bumps the counter and clears the map cache, so a reply still in flight
+        // from the dead daemon must not re-seed the cache (and with it the
+        // generation floor) behind the successor's own replay.
+        const quint64 replayGeneration = m_daemonGate.bridgeRegistrationGeneration;
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("workspaceMap")),
+            this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, replayGeneration](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    if (m_daemonGate.bridgeRegistrationGeneration != replayGeneration) {
+                        qCInfo(lcEffect) << "workspaceMap replay reply from a superseded daemon cycle — ignoring";
+                        return;
+                    }
+                    QDBusPendingReply<QString> reply = *w;
+                    if (!reply.isValid()) {
+                        // Its siblings (getFloatingWindows, getPendingRestoreGeometries)
+                        // warn on the same shape; this path was silent, and the effect
+                        // then holds no workspace map until the daemon's next
+                        // change-gated push.
+                        qCWarning(lcEffect) << "workspaceMap replay failed at bringup:" << reply.error().message()
+                                            << "— no map until the next daemon push";
+                        return;
+                    }
+                    if (!reply.value().isEmpty()) {
+                        slotWorkspaceMapChanged(reply.value());
+                    }
+                });
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).
@@ -903,8 +921,17 @@ void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
     // bringup replay is an async query whose reply can land after a live
     // push — the payload's generation counter decides which is newer, and an
     // older map never overwrites a newer one.
-    const quint64 generation = static_cast<quint64>(
-        QJsonDocument::fromJson(mapJson.toUtf8()).object().value(QLatin1String("generation")).toDouble());
+    const QJsonDocument doc = QJsonDocument::fromJson(mapJson.toUtf8());
+    if (!doc.isObject()) {
+        // Caching an unparseable payload verbatim would publish it as the
+        // current map AND floor the generation at 0, so the next well-formed
+        // push could only ever be accepted by the empty-cache arm below.
+        qCWarning(lcEffect) << "workspaceMapChanged: non-object payload — ignoring";
+        return;
+    }
+    // toVariant().toULongLong(), not toDouble(): the generation is an integer
+    // counter and the double round-trip loses exactness past 2^53.
+    const quint64 generation = doc.object().value(QLatin1String("generation")).toVariant().toULongLong();
     if (!m_workspaceMapJson.isEmpty() && generation < m_workspaceMapGeneration) {
         return;
     }

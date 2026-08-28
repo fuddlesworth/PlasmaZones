@@ -58,10 +58,15 @@ ContextChange ScreenContextTracker::setCurrentDesktopForScreen(const QString& sc
         // and a later GLOBAL setCurrentDesktop dragged its key onto a
         // desktop the screen was not showing (its state then read as
         // untracked until a re-push healed it, order-dependently).
-        // `changed` reports whether the key's EFFECTIVE desktop moved (a
-        // first push equal to the global changes nothing observable);
-        // establishing is never a switch, so armSwitch stays false either
-        // way.
+        // `changed` compares against the GLOBAL desktop, which is the value
+        // this entry displaces for an UNPINNED screen — so on the common path
+        // it reads as "the key's effective desktop moved". On a screen that
+        // already carries a sticky pin it does not: the pin outranks both, the
+        // key does not move at all, and `changed` can still report true.
+        // Consumers use it for logging and for engine-local context-switch
+        // bookkeeping, never to decide that state must migrate, so the
+        // over-report is inert. Establishing is never a switch, so armSwitch
+        // stays false either way.
         //
         // Not a missed arm in practice, and arming here would be actively
         // wrong. The effect pushes a desktop for EVERY output at daemon
@@ -148,6 +153,16 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // leave nothing pushes at all, and the global desktop the lookup would fall
     // back to is written once at startup — so there the drop is permanent and
     // merges every output onto one desktop.
+    //
+    // m_currentDesktop is deliberately NOT touched, even when it names the
+    // removed desktop. There is no correct replacement to write: this path is
+    // count-based and does not know which desktop identity died, and the
+    // daemon never re-pushes the global (engines' setCurrentDesktop is called
+    // once at startup — every later change arrives per-output). Leaving the
+    // stale number is inert because the effect pushes a per-output desktop for
+    // every output at daemon registration, so currentKeyForScreen's tier-3
+    // fallback is unreachable while a screen exists. The identity-based
+    // renumberDesktops path below is where the global does get corrected.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);
@@ -175,8 +190,13 @@ void ScreenContextTracker::renumberDesktops(const QHash<int, int>& oldToNew)
     if (oldToNew.isEmpty()) {
         return;
     }
+    // A mapped value below 1 is treated as absent. Every setter here rejects
+    // desktop < 1 because KWin desktops are 1-based and a 0/negative would
+    // poison a pin that outranks both other tiers; a renumber must not be the
+    // one path that writes what those guards refuse.
     const auto remap = [&oldToNew](int desktop) {
-        return oldToNew.value(desktop, desktop);
+        const int mapped = oldToNew.value(desktop, desktop);
+        return mapped >= 1 ? mapped : desktop;
     };
     m_currentDesktop = remap(m_currentDesktop);
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end(); ++it) {

@@ -9,6 +9,16 @@ deliverable of `docs/dynamic-workspaces-plan-prompt.md`; the invariants, scope f
 pre-resolved forks in that prompt are treated as settled and are not restated except where
 the plan refines them.
 
+> **Implementation drift (post-ship note).** Some file names below differ from what
+> shipped. The shortcut key defaults planned as a separate
+> `src/config/configdefaults_workspace_shortcuts.h` landed inside
+> `src/config/configdefaults_workspaces.h`. The single settings page planned as
+> `src/settings/qml/pages/workspaces/WorkspacesPage.qml` with `NamedWorkspacesCard.qml`
+> and `WorkspaceShortcutsCard.qml` shipped instead as three pages plus a row delegate in
+> the same directory: `WorkspacesBehaviorPage.qml`, `NamedWorkspacesPage.qml` (with
+> `NamedWorkspaceRow.qml`), and `WorkspacesShortcutsPage.qml`. Read the planned names
+> below through that mapping.
+
 ## 0. Seam re-verification results (drift vs the prompt)
 
 Confirmed as described: the 5-connection `desktopChanged` block in
@@ -54,7 +64,7 @@ at line 87, `virtualscreens` at 106); the inferred `perScreenModeActive()` and i
    runtime state outside config, caches (`CacheLocation`), and user data assets
    (`GenericDataLocation`). The reuse mandate's "follow the existing state persistence"
    resolves to "there is none"; §3.3 picks `QStandardPaths::StateLocation`
-   (`~/.local/state/plasmazones/`) and a JSON format mirroring the wire format, which is
+   (`~/.local/state/plasmazones/plasmazonesd/`) and a JSON format mirroring the wire format, which is
    the closest thing to a house style (JSON everywhere else).
 4. `ActivityManager` lives beside `VirtualDesktopManager` in phosphor-workspaces; the new
    classes join that pair. Current file sizes (95 h / 399 cpp) leave headroom, but the
@@ -187,7 +197,7 @@ reinterpret, if it turns out otherwise).
 ### 3.3 State file (Phase 4)
 
 `QStandardPaths::writableLocation(QStandardPaths::StateLocation)` →
-`~/.local/state/plasmazones/workspaces.json`. NOT config.json (prompt requirement) and not
+`~/.local/state/plasmazones/plasmazonesd/workspaces.json`. NOT config.json (prompt requirement) and not
 GenericDataLocation (that tree is user-visible assets). Format = the wire object plus
 `"homeScreen"` per displaced entry and per-desktop `"name"` snapshots, written atomically
 (QSaveFile) on map change, debounced ~1s. Restore semantics in §4.6. No migration

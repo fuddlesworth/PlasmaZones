@@ -58,10 +58,30 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
                       targetDesktop, direction);
 }
 
-void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& windowId, const QString& targetScreenId,
+void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId,
                                                       int targetDesktop, const QString& direction)
 {
-    if (windowId.isEmpty() || targetDesktop < 1) {
+    if (rawWindowId.isEmpty() || targetDesktop < 1) {
+        return;
+    }
+    // Canonicalize at the entry. Two workspace-verb emitters hand this slot a
+    // BARE compositor instance id rather than a composite: the owner-wins
+    // reunion arm and the removal-race re-route (WorkspaceController's census
+    // walks the registry by instanceId). Every consumer downstream — the
+    // engines' tracking maps and, over the wire, the effect's findWindowById —
+    // is keyed on the composite id, so a bare id finds no engine here and
+    // resolves no window there, and the move is silently dropped.
+    // shadowWindowId() maps instanceId → the registry's canonical composite and
+    // is the identity for an id that is already composite.
+    const QString windowId = shadowWindowId(rawWindowId);
+    // Sticky (on-all-desktops) windows: the effect REFUSES the desktop move
+    // outright (slotWindowDesktopMoveRequested drops isOnAllDesktops windows),
+    // so running the handoff would re-key the daemon's engine state onto a
+    // desktop the real window never moves to. Refuse at the entry instead, so
+    // no state diverges. The window is already present on every workspace,
+    // which is what the verb was asking for.
+    if (m_service && m_service->isWindowSticky(windowId)) {
+        qCDebug(lcDbusWindow) << "workspace move: refusing sticky window" << windowId;
         return;
     }
     PhosphorEngine::PlacementEngineBase* sourceEngine = nullptr;
@@ -85,7 +105,25 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& windowId, c
         }
         return;
     }
-    crossModeMoveImpl(sourceEngine, windowId, targetScreenId, targetDesktop, direction, /*allowSameEngine=*/true);
+    // An empty target screen is reachable on the wire: the reconciler's
+    // ownerOf() answers empty for a workspace whose ownership has not settled,
+    // and the verbs emit that value through. crossModeMoveImpl requires a
+    // target screen (it resolves the destination MODE from it) and would
+    // otherwise return silently, leaving the window on its old workspace with
+    // no trace. Degrade to the window's OWN screen — an unowned workspace has
+    // no other monitor to name, and same-output cross-desktop IS the ordinary
+    // shape of this verb — rather than the untracked branch's bare desktop
+    // move, which would part a tracked window from its engine state.
+    QString resolvedScreenId = targetScreenId;
+    if (resolvedScreenId.isEmpty()) {
+        resolvedScreenId = sourceEngine->screenForTrackedWindow(windowId);
+        qCWarning(lcDbusWindow) << "workspace move: no owner screen for" << windowId << "- falling back to its own"
+                                << resolvedScreenId;
+        if (resolvedScreenId.isEmpty()) {
+            return;
+        }
+    }
+    crossModeMoveImpl(sourceEngine, windowId, resolvedScreenId, targetDesktop, direction, /*allowSameEngine=*/true);
 }
 
 void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine,
@@ -174,6 +212,9 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     //     deferral is autotile-only.
     const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
     bool placedOnTarget = false;
+    // Set only on the reactive branch (see its arm below): the compositor-side
+    // output hop that branch has no other carrier for.
+    bool needsOutputMove = false;
     if (!reactiveAutotileDesktopArrival) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
@@ -237,6 +278,28 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         // once the window actually lands on the target desktop.
         sourceEngine->handoffRelease(windowId);
         placedOnTarget = true;
+        // The OUTPUT leg has no other carrier on this branch. The immediate
+        // arm above relocates the window through the target engine's placement
+        // geometry, but here nothing is placed — the effect's desktop-return
+        // catch-scan adopts the window, and that scan keys each window to the
+        // output it is PHYSICALLY on (getWindowScreenId(w) == screenId, in
+        // screenschanged.cpp). Left on the source output the window is adopted
+        // into the wrong screen's tiling state, or into none at all when that
+        // output is not autotiled. Ask the compositor to move it; the effect
+        // no-ops a window already on the target output.
+        //
+        // Deliberately NO windowOutputMoveExpected marker: that one-shot exists
+        // to stop the effect re-issuing windowClosed/windowOpened for a move the
+        // daemon already carried in its own state. Here the source engine has
+        // released and no engine holds the window, so the close/open re-issue is
+        // exactly the adoption path this branch relies on.
+        //
+        // Emitted AFTER the desktop move at the tail, mirroring the untracked
+        // branch's desktop-then-output order: the window leaves the visible
+        // desktop first, so the output hop is not drawn on the desktop the user
+        // is looking at.
+        needsOutputMove =
+            !sourceScreen.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen);
     }
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
         sourceEngine->retile(sourceScreen);
@@ -250,6 +313,9 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     // window anyway would part it from its state.
     if (placedOnTarget && targetDesktop > 0) {
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        if (needsOutputMove) {
+            Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
+        }
     }
 }
 

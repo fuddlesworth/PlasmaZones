@@ -17,9 +17,15 @@
 namespace PhosphorEngine {
 
 /// Rewrite the desktop dimension of a PlacementStateKey-keyed hash per
-/// `oldToNew` (absent = unchanged). Companion to PerScreenStates::
-/// renumberDesktops for the engines' auxiliary per-context maps (stash,
-/// overrides, burst flags). Take-then-reinsert so shifted keys never collide.
+/// `oldToNew` (absent = unchanged; a mapped value below 1 is treated as
+/// absent — KWin desktops are >= 1 and a poisoned target would corrupt the
+/// key). Companion to PerScreenStates::renumberDesktops for the engines'
+/// auxiliary per-context maps (stash, overrides, burst flags).
+/// Take-then-reinsert so shifted keys never collide. No `skip` predicate,
+/// unlike PerScreenStates::renumberDesktops: the aux maps engines pass here
+/// never hold sentinel keys (the snap engine's empty-screenId globals live in
+/// its state map, not in any keyed hash). A future aux map that did carry
+/// sentinels would need the same exemption renumberDesktops has.
 template<typename ValueT>
 void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHash<int, int>& oldToNew)
 {
@@ -29,7 +35,7 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
     QList<std::pair<PlacementStateKey, ValueT>> moved;
     for (auto it = hash.begin(); it != hash.end();) {
         const auto mapped = oldToNew.constFind(it.key().desktop);
-        if (mapped != oldToNew.constEnd()) {
+        if (mapped != oldToNew.constEnd() && mapped.value() >= 1) {
             PlacementStateKey newKey = it.key();
             newKey.desktop = mapped.value();
             moved.append({newKey, std::move(it.value())});
@@ -92,6 +98,10 @@ public:
     }
 
     /// Insert/replace the state at `key` (caller retains ownership semantics).
+    /// Replacing an existing entry does NOT tear the old state down or touch
+    /// the reverse map — a caller for whom a state may already exist at `key`
+    /// must takeState() first and run its own teardown, or the replaced
+    /// state's windows keep resolving to a state no longer in the forward map.
     void insertState(const PlacementStateKey& key, StateT* state)
     {
         m_states.insert(key, state);
@@ -162,7 +172,10 @@ public:
     }
 
     /// Resolve the state that owns `windowId` (no create). When `outKey` is
-    /// non-null it receives the window's owning key iff the window is tracked.
+    /// non-null it receives the window's owning key whenever a reverse-map
+    /// entry exists — including a dangling entry whose forward state is gone,
+    /// where the return value is nullptr but `outKey` is still written. Check
+    /// the returned state, not `outKey`, to decide whether the window resolved.
     StateT* forWindow(const QString& windowId, PlacementStateKey* outKey = nullptr) const
     {
         auto it = m_windowToKey.constFind(windowId);
@@ -182,8 +195,16 @@ public:
     /// a stale-caller bug (in debug builds) rather than driving the move.
     void migrate(const QString& windowId, const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
-        Q_ASSERT(!m_windowToKey.contains(windowId) || m_windowToKey.value(windowId) == oldKey);
-        Q_UNUSED(oldKey)
+        const auto tracked = m_windowToKey.constFind(windowId);
+        const bool staleCaller = tracked != m_windowToKey.constEnd() && !(tracked.value() == oldKey);
+        if (staleCaller) {
+            // Diagnostic only — the reverse map is authoritative and the move
+            // proceeds either way; the caller's asserted key being stale means
+            // ITS bookkeeping is wrong, which the log surfaces in release too.
+            qWarning("PhosphorEngine::PerScreenStates::migrate: caller's oldKey is stale for window %ls",
+                     qUtf16Printable(windowId));
+        }
+        Q_ASSERT(!staleCaller);
         m_windowToKey.insert(windowId, newKey);
     }
 
@@ -219,38 +240,59 @@ public:
     }
 
     /// Reap all state for a destroyed virtual desktop: forward map (with the
-    /// engine's teardown callback) and reverse map together. The dynamic-
-    /// workspaces pass calls this for each removed desktop BEFORE renumbering
-    /// the survivors.
-    void reapDesktop(int desktop, const std::function<void(const PlacementStateKey&, StateT*)>& onRemove)
+    /// engine's teardown callback) and reverse map together. `skip` exempts
+    /// sentinel keys (the snap engine's empty-screenId globals) exactly as it
+    /// does in renumberDesktops. No production caller today: each engine's
+    /// reapDesktopState composes its existing count-based prune with its own
+    /// value-side sweeps instead. Kept as the single, combined identity-based
+    /// form of that sweep and exercised by the container's tests.
+    void reapDesktop(int desktop, const std::function<void(const PlacementStateKey&, StateT*)>& onRemove,
+                     const std::function<bool(const PlacementStateKey&)>& skip = nullptr)
     {
         removeStatesIf(
-            [desktop](const PlacementStateKey& key, StateT*) {
-                return key.desktop == desktop;
+            [desktop, &skip](const PlacementStateKey& key, StateT*) {
+                return key.desktop == desktop && !(skip && skip(key));
             },
             onRemove);
-        removeWindowsIf([desktop](const QString&, const PlacementStateKey& key) {
-            return key.desktop == desktop;
+        removeWindowsIf([desktop, &skip](const QString&, const PlacementStateKey& key) {
+            return key.desktop == desktop && !(skip && skip(key));
         });
     }
 
     /// Rewrite the desktop dimension of every key per `oldToNew` (1-based ints;
-    /// keys whose desktop is absent from the mapping are untouched). Both maps
-    /// move atomically: forward entries are taken out first so a shifted key
-    /// can never collide with a not-yet-shifted one. `skip` exempts sentinel
-    /// keys (the snap engine's empty-screenId globals) from the rewrite.
+    /// keys whose desktop is absent from the mapping are untouched, as is a
+    /// mapped value below 1 — KWin desktops are >= 1, so a poisoned target is
+    /// rejected here rather than written into a key). Both maps move
+    /// atomically: forward entries are taken out first so a shifted key can
+    /// never collide with a not-yet-shifted one. `skip` exempts sentinel keys
+    /// (the snap engine's empty-screenId globals) from the rewrite.
+    ///
+    /// `oldToNew` must be INJECTIVE over the desktops actually present, and no
+    /// mapped-to desktop may already be held by an unmapped (or skipped) key.
+    /// Either violation makes two states land on one key and the later insert
+    /// silently drops the earlier state, leaking it and stranding its windows'
+    /// reverse entries. The reconciler derives the map from a KWin id-list
+    /// delta, where both hold; the assert below catches a caller that does not.
     void renumberDesktops(const QHash<int, int>& oldToNew,
                           const std::function<bool(const PlacementStateKey&)>& skip = nullptr)
     {
         if (oldToNew.isEmpty()) {
             return;
         }
+        const auto shifts = [&oldToNew, &skip](const PlacementStateKey& key, int& newDesktop) {
+            const auto mapped = oldToNew.constFind(key.desktop);
+            if (mapped == oldToNew.constEnd() || mapped.value() < 1 || (skip && skip(key))) {
+                return false;
+            }
+            newDesktop = mapped.value();
+            return true;
+        };
         QList<std::pair<PlacementStateKey, StateT*>> moved;
         for (auto it = m_states.begin(); it != m_states.end();) {
-            const auto mapped = oldToNew.constFind(it.key().desktop);
-            if (mapped != oldToNew.constEnd() && !(skip && skip(it.key()))) {
+            int newDesktop = 0;
+            if (shifts(it.key(), newDesktop)) {
                 PlacementStateKey newKey = it.key();
-                newKey.desktop = mapped.value();
+                newKey.desktop = newDesktop;
                 moved.append({newKey, it.value()});
                 it = m_states.erase(it);
             } else {
@@ -258,12 +300,14 @@ public:
             }
         }
         for (const auto& [key, state] : moved) {
+            Q_ASSERT_X(!m_states.contains(key), "PerScreenStates::renumberDesktops",
+                       "target key already occupied — mapping is not injective, or an unmapped key holds the target");
             m_states.insert(key, state);
         }
         for (auto it = m_windowToKey.begin(); it != m_windowToKey.end(); ++it) {
-            const auto mapped = oldToNew.constFind(it.value().desktop);
-            if (mapped != oldToNew.constEnd() && !(skip && skip(it.value()))) {
-                it.value().desktop = mapped.value();
+            int newDesktop = 0;
+            if (shifts(it.value(), newDesktop)) {
+                it.value().desktop = newDesktop;
             }
         }
     }

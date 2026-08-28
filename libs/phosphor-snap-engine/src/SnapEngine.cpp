@@ -179,6 +179,11 @@ void SnapEngine::setCurrentDesktopForScreen(const QString& screenId, int desktop
     m_context.setCurrentDesktopForScreen(screenId, desktop);
 }
 
+void SnapEngine::clearCurrentDesktopForScreen(const QString& screenId)
+{
+    m_context.clearCurrentDesktopForScreen(screenId);
+}
+
 void SnapEngine::setCurrentActivity(const QString& activity)
 {
     m_context.setCurrentActivity(activity);
@@ -278,6 +283,57 @@ QSet<int> SnapEngine::desktopsWithActiveState() const
     return out;
 }
 
+void SnapEngine::releaseWindowsForDyingStates(
+    const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& matches)
+{
+    // Unlike a context whose observers died with it, the windows in a state
+    // this predicate selects are ALIVE — only their desktop or their output
+    // went away. Deleting the stores drops their zone assignments and float
+    // bits silently, so every consumer keeps believing in a placement that no
+    // longer exists. Route the zone drop through the tracking service's
+    // unassign (the same path an interactive unsnap takes, so the per-window
+    // notification and the DirtyZoneAssignments mark both happen, matching
+    // WindowTrackingService::pruneMigratedWindows) and correct the float bits
+    // by emission.
+    //
+    // Two passes: unassignWindow resolves the owning store through this
+    // engine's reverse map, which the caller's removal clears afterwards.
+    // Floating windows are collected separately because they carry no zone
+    // assignment for unassignWindow to clear — and the emit loop sits OUTSIDE
+    // the m_windowTracker guard, because it does not use the tracker and a
+    // tracker-less engine's subscribers need the correction just as much.
+    //
+    // Each pair carries the STATE's own screenId, not a caller-supplied one:
+    // a predicate deliberately spans a physical output's virtual sub-screens
+    // ("conn/vs:N"), so emitting the physical id would hand every subscriber
+    // that keys on screenId — the adaptor's float bookkeeping, the effect's
+    // per-screen float cache — a screen the window never floated on.
+    //
+    // Residence-only windows (screen recorded, no zone, no float bit) are
+    // deliberately not announced: they have no placement any consumer holds,
+    // so there is nothing to correct.
+    QList<QPair<QString, QString>> floatedWindows;
+    QStringList assignedWindows;
+    const auto& allStates = m_states.states();
+    for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+        if (!it.value() || !matches(it.key())) {
+            continue;
+        }
+        assignedWindows += it.value()->snappedWindows();
+        for (const QString& windowId : it.value()->floatingWindows()) {
+            floatedWindows.append({windowId, it.key().screenId});
+        }
+    }
+    if (m_windowTracker) {
+        for (const QString& windowId : std::as_const(assignedWindows)) {
+            m_windowTracker->unassignWindow(windowId);
+        }
+    }
+    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
+        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
+    }
+}
+
 void SnapEngine::pruneStatesForDesktop(int removedDesktop)
 {
     // removedDesktop is a real (>= 1) destroyed desktop; the global holder has an
@@ -287,6 +343,19 @@ void SnapEngine::pruneStatesForDesktop(int removedDesktop)
     const auto matches = [removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return !key.screenId.isEmpty() && key.desktop == removedDesktop;
     };
+    // The stores about to die hold ALIVE windows: a destroyed desktop's
+    // windows are relocated by KWin, exactly like the removed-output case
+    // below, and dynamic workspaces made this a populated reap (the identity
+    // reap fires on whichever desktop the user deleted, not only an empty
+    // trailing one). A silent drop would leave every zone-state consumer —
+    // the effect via the windowZoneChanged relay, autotile's
+    // onWindowZoneChanged, the daemon's snap-assist dismissal — believing the
+    // window still occupies a zone, and every float consumer believing it
+    // still floats. Route both through the same paths the screen prune uses,
+    // in the same order (unassign first, so it can still resolve the owning
+    // store through the reverse map, then the float corrections, then the
+    // removal). Both siblings' desktop prunes already run their full release.
+    releaseWindowsForDyingStates(matches);
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
             return matches(key);
@@ -308,7 +377,10 @@ void SnapEngine::reapDesktopState(int desktop)
     // and the global holder is deliberately excluded from the prune).
     const auto& states = m_states.states();
     for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
-        it.value()->reapDesktopValues(desktop);
+        // Null-guarded like every other whole-store walk in this file.
+        if (it.value()) {
+            it.value()->reapDesktopValues(desktop);
+        }
     }
 }
 
@@ -325,7 +397,9 @@ void SnapEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
     m_context.renumberDesktops(oldToNew);
     const auto& states = m_states.states();
     for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
-        it.value()->renumberDesktopValues(oldToNew);
+        if (it.value()) {
+            it.value()->renumberDesktopValues(oldToNew);
+        }
     }
 }
 
@@ -336,6 +410,10 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
     const auto matches = [&valid](const PhosphorEngine::PlacementStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);
     };
+    // Alive windows again (a deleted activity's windows are relocated, not
+    // destroyed), so the same announcement the desktop and screen prunes make.
+    // Both sibling engines' activity prunes run their full release too.
+    releaseWindowsForDyingStates(matches);
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
             return matches(key);
@@ -360,51 +438,10 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         return !key.screenId.isEmpty()
             && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
     };
-    // Unlike the desktop / activity prunes, whose contexts are gone along with
-    // everything that could observe them, the windows here are ALIVE: only their
-    // output was unplugged, and KWin relocates them to a surviving monitor.
-    // Deleting their stores below drops the zone assignments, so a silent prune
-    // would leave every zone-state consumer (the effect via the D-Bus
-    // windowZoneChanged relay, autotile's onWindowZoneChanged, the daemon's
-    // snap-assist dismissal) still believing the window occupies a zone on a
-    // monitor that no longer exists. Route the drop through the tracking
-    // service's unassign — the same path the interactive unsnap uses — so the
-    // per-window notification and the DirtyZoneAssignments mark both happen,
-    // matching WindowTrackingService::pruneMigratedWindows, the other bulk prune
-    // of live windows' assignments. Two passes: unassignWindow resolves the
-    // owning store through this engine's reverse map, which the removal clears.
-    // FLOATING windows on the removed output need the same treatment for the
-    // same reason: their float bit dies with the store, silently, so every
-    // consumer of the float state keeps believing they float on a monitor
-    // that no longer exists. Collected separately because they carry no zone
-    // assignment for unassignWindow to clear — and OUTSIDE the m_windowTracker
-    // guard, because the emission does not use the tracker and a tracker-less
-    // engine's subscribers need the correction just as much.
-    //
-    // Each pair carries the STATE's own screenId, not physicalScreenId:
-    // `matches` deliberately spans a physical output's virtual sub-screens
-    // ("conn/vs:N"), so emitting the physical id would hand every subscriber
-    // that keys on screenId — the adaptor's float bookkeeping, the effect's
-    // per-screen float cache — a screen the window never floated on.
-    QList<QPair<QString, QString>> floatedWindows;
-    QStringList assignedWindows;
-    const auto& allStates = m_states.states();
-    for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
-        if (it.value() && matches(it.key())) {
-            assignedWindows += it.value()->snappedWindows();
-            for (const QString& windowId : it.value()->floatingWindows()) {
-                floatedWindows.append({windowId, it.key().screenId});
-            }
-        }
-    }
-    if (m_windowTracker) {
-        for (const QString& windowId : std::as_const(assignedWindows)) {
-            m_windowTracker->unassignWindow(windowId);
-        }
-    }
-    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
-        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
-    }
+    // The windows here are ALIVE: only their output was unplugged, and KWin
+    // relocates them to a surviving monitor. The shared helper announces the
+    // zone drops and the float corrections before their stores go.
+    releaseWindowsForDyingStates(matches);
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
             return matches(key);
@@ -418,6 +455,12 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_context.removeScreensIf([&physicalScreenId](const QString& screenId) {
         return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     });
+    // A dead screen id must not keep feeding the hint-less shortcut paths
+    // (both sibling engines clear their m_activeScreen the same way).
+    if (!m_lastActiveScreenId.isEmpty()
+        && PhosphorIdentity::VirtualScreenId::samePhysical(m_lastActiveScreenId, physicalScreenId)) {
+        m_lastActiveScreenId.clear();
+    }
 }
 
 const SnapState* SnapEngine::lastUsedStateForScreen(const QString& screenId) const

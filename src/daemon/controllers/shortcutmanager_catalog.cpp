@@ -623,10 +623,14 @@ QVariantList ShortcutManager::cheatsheetModel() const
     QStringList digitTokens;
     QStringList quickLayoutIds;
     QStringList snapToZoneIds;
+    QStringList workspaceMoveSlotIds;
+    QStringList workspaceFocusSlotIds;
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         digitTokens.append(QString::number(i + 1));
         quickLayoutIds.append(quickLayoutId(i));
         snapToZoneIds.append(snapToZoneId(i));
+        workspaceMoveSlotIds.append(workspaceMoveSlotId(i));
+        workspaceFocusSlotIds.append(workspaceFocusSlotId(i));
     }
     // One spelling of the digit range everywhere: the chip token and the row
     // labels used to disagree ("1…9" against "1-9") for no reason a reader
@@ -659,6 +663,18 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // and a visible tile in scrolling, so the row itself stays out of any
         // one mode's vocabulary.
         {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone %1").arg(digitRange), digitRange},
+        // The two workspace slot families are digit families like the two
+        // above, and get the same treatment: without a spec here they show up
+        // as two nine-row walls in the Workspaces group. Both take their
+        // description from a prefix arm, so every member carries the identical
+        // wording and the merged row keeping the first member's is right. The
+        // disambiguations are needed for the same reason quick layouts' is:
+        // the registration table uses these source strings with an ordinal.
+        {workspaceMoveSlotIds, digitTokens,
+         PhosphorI18n::tr("Move Window to Workspace Slot %1", "range of workspace slots, e.g. 1-9").arg(digitRange),
+         digitRange},
+        {workspaceFocusSlotIds, digitTokens,
+         PhosphorI18n::tr("Focus Workspace %1", "range of workspace slots, e.g. 1-9").arg(digitRange), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,

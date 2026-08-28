@@ -1368,13 +1368,14 @@ public:
     void setScrollingDragInsertGraceMs(int ms) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Scrolling Settings (IScrollSettings + Scrolling group)
+    // Workspaces Settings (Workspaces.* + the Shortcuts.Global chord leaves)
+    //
+    // Dynamic per-monitor workspaces. Store-backed like the scrolling block
+    // below; the five gate/declaration accessors carry Q_PROPERTYs, while the
+    // ten verb chords and the three indexed slot families do not — see
+    // snapshotWorkspaceKeyFamilies() for how those still participate in
+    // load / overlay / per-page reset change detection.
     // ═══════════════════════════════════════════════════════════════════════════
-
-    // Store-backed scalars; the enum int values rely on the schema
-    // validators (validIntOr), like every other stored scalar. The width
-    // VALUE is the exception: its clamp is kind-aware and lives in the
-    // hand-written setter below.
     bool workspacesEnabled() const;
     void setWorkspacesEnabled(bool enabled);
     bool workspacesManageKWinPerOutput() const;
@@ -1421,6 +1422,15 @@ public:
     /// `index`+1 sends the active window to; empty = unassigned.
     Q_INVOKABLE QString workspaceSlotTarget(int index) const;
     Q_INVOKABLE void setWorkspaceSlotTarget(int index, const QString& workspaceName);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Settings (IScrollSettings + Scrolling group)
+    //
+    // Store-backed scalars; the enum int values rely on the schema
+    // validators (validIntOr), like every other stored scalar. The width
+    // VALUE is the exception: its clamp is kind-aware and lives in the
+    // hand-written setter below.
+    // ═══════════════════════════════════════════════════════════════════════════
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
@@ -2090,12 +2100,13 @@ public:
     /// by the same Q_PROPERTY NOTIFY re-emit as load() so QML bindings update,
     /// and emits settingsChanged() once if anything actually changed.
     ///
-    /// SCOPE: re-emits only Q_PROPERTY NOTIFY signals (+ settingsChanged). It
-    /// does NOT re-emit the non-Q_PROPERTY change signals load() also fires —
-    /// the per-mode disable-list signals (disabled*Changed) and the per-screen
-    /// signals (perScreen*SettingsChanged). This is correct for the current
-    /// per-page manifest (all Q_PROPERTY-backed keys); if a future page ever
-    /// owns a disable-list or per-screen key, extend this to re-emit those.
+    /// SCOPE: re-emits the Q_PROPERTY NOTIFY signals plus the workspace verb /
+    /// slot family signals (+ settingsChanged). It does NOT re-emit the
+    /// remaining non-Q_PROPERTY change signals load() also fires — the
+    /// per-mode disable-list signals (disabled*Changed) and the per-screen
+    /// signals (perScreen*SettingsChanged). That is correct for the current
+    /// per-page manifest; if a future page ever owns a disable-list or
+    /// per-screen key, extend this to re-emit those too.
     void discardKeys(const ConfigKeyList& keys);
 
     /// Per-page Reset: set each key to its schema default. Same NOTIFY /
@@ -2290,6 +2301,20 @@ private:
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
+    // ── The same machinery for the non-Q_PROPERTY workspace key families ────
+    // The ten workspace verb chords and the three indexed slot families (focus
+    // chord, move chord, target) are reached through plain getters and
+    // Q_INVOKABLEs, so the metaobject walk above cannot see them. These two
+    // capture and diff those keys' stored values with the same before/after
+    // contract, and are called from the same four places: load(),
+    // applyConfigOverlayStaged(), discardKeys() and resetKeys(). Without them a
+    // reload or a staged profile whose only delta was a chord fired no signal,
+    // so ShortcutManager (whose rebind rides settingsChanged) stayed bound to
+    // the previous chords. Defined in settings/workspaces.cpp beside the
+    // accessors they mirror.
+    QVector<QString> snapshotWorkspaceKeyFamilies() const;
+    bool emitChangedWorkspaceKeyFamilies(const QVector<QString>& before);
+
     // Refresh the committed baseline — the last-persisted value of every
     // schema-declared key. Called at the end of load() and save() (the only
     // points where the in-memory store equals disk); discardKeys() reverts to
@@ -2346,7 +2371,8 @@ private:
     /// Reparse the backend from disk IF it holds no pending writes.
     /// Called by every composite-value setter (animation Profile blob,
     /// shader/decoration profile trees, autotile per-algorithm map,
-    /// snapping and tiling trigger lists including the zoneSpan pair)
+    /// snapping and tiling trigger lists including the zoneSpan pair, and
+    /// the named-workspace declaration list)
     /// before its stale-sensitive read; see the definition for the
     /// cross-process coherence rationale.
     void refreshCleanBackendFromDisk();

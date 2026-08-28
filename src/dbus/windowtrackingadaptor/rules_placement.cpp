@@ -207,8 +207,8 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     return directive;
 }
 
-void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
-                                                        const QString& windowId)
+void WindowTrackingAdaptor::emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved,
+                                                     const QString& windowId)
 {
     // Named-workspace routing outranks the positional desktop number when a
     // cascade carries both: the name is the stronger identity (it survives
@@ -219,8 +219,12 @@ void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
     const std::optional<PhosphorRules::RuleAction> workspaceRoute =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteWorkspace));
     if (workspaceRoute && m_workspaceRouteResolver) {
+        // Trimmed at the read site: the daemon's declaration list stores each
+        // name trimmed (workspaces.cpp trims before binding), so an untrimmed
+        // rule param would never match a declared workspace and would silently
+        // fall through to the positional route.
         const QString name =
-            workspaceRoute->params.value(QString(PhosphorRules::ActionParam::TargetWorkspaceName)).toString();
+            workspaceRoute->params.value(QString(PhosphorRules::ActionParam::TargetWorkspaceName)).toString().trimmed();
         if (!name.isEmpty() && m_workspaceRouteResolver(name, windowId)) {
             qCInfo(lcDbusWindow) << "open-routing: routed" << windowId << "to named workspace" << name;
             return;
@@ -261,7 +265,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
     stampScreenContext(*query, screenId);
     ensureRuleEvaluator();
-    emitRouteToDesktopIfMatched(
+    emitOpenRoutingIfMatched(
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 
@@ -413,7 +417,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
-    emitRouteToDesktopIfMatched(resolved, windowId);
+    emitOpenRoutingIfMatched(resolved, windowId);
 
     const auto markMatched = [&] {
         if (directiveMatched) {

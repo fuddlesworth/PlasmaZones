@@ -24,6 +24,7 @@ private Q_SLOTS:
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
     void renumberDesktops_identityShift();
+    void guards_rejectDesktopsBelowOne();
 };
 
 void TestScreenContextTracker::currentKeyForScreen_precedence()
@@ -230,6 +231,49 @@ void TestScreenContextTracker::renumberDesktops_identityShift()
     // Empty mapping is a no-op.
     t.renumberDesktops({});
     QCOMPARE(t.currentDesktop(), 3);
+}
+
+void TestScreenContextTracker::guards_rejectDesktopsBelowOne()
+{
+    // KWin desktops are 1-based with no reserved "unset" value, so a 0 or
+    // negative push must leave every tracked value exactly as it was rather
+    // than poisoning the keys derived from it.
+    ScreenContextTracker t;
+    t.setCurrentDesktop(3);
+    t.setCurrentDesktopForScreen(QStringLiteral("S1"), 4);
+    t.setStickyPin(QStringLiteral("S2"), 5);
+
+    // Global setter: value unchanged, no change reported.
+    ContextChange r = t.setCurrentDesktop(0);
+    QVERIFY(!r.changed);
+    QVERIFY(!r.armSwitch);
+    QCOMPARE(t.currentDesktop(), 3);
+    r = t.setCurrentDesktop(-1);
+    QVERIFY(!r.changed);
+    QCOMPARE(t.currentDesktop(), 3);
+
+    // Per-output setter on an ALREADY ESTABLISHED screen: the existing entry
+    // survives (the empty-map arm is covered in setCurrentDesktopForScreen_perOutput).
+    r = t.setCurrentDesktopForScreen(QStringLiteral("S1"), 0);
+    QVERIFY(!r.changed);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 4);
+
+    // Sticky pin: rejected outright, so 0 stays unambiguous as "not pinned".
+    t.setStickyPin(QStringLiteral("S3"), 0);
+    QVERIFY(!t.hasStickyPin(QStringLiteral("S3")));
+    t.setStickyPin(QStringLiteral("S2"), -2);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 5); // existing pin intact
+
+    // A renumber must not write what those setters refuse: a poisoned target
+    // leaves the value on its current desktop.
+    QHash<int, int> poisoned;
+    poisoned.insert(3, 0);
+    poisoned.insert(4, -1);
+    poisoned.insert(5, 2);
+    t.renumberDesktops(poisoned);
+    QCOMPARE(t.currentDesktop(), 3);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 4);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 2); // valid target still applies
 }
 
 QTEST_MAIN(TestScreenContextTracker)

@@ -20,6 +20,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <memory>
 
 Q_LOGGING_CATEGORY(lcWorkspaceCtl, "plasmazones.workspaces.controller", QtWarningMsg)
 
@@ -88,6 +89,10 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
             });
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::resyncRequested, this, [this]() {
         // A ledger entry expired: re-pull the authoritative desktop list.
+        // String-based on purpose: refreshFromKWin is a PRIVATE slot of
+        // VirtualDesktopManager, so a pointer-to-member form does not compile
+        // from here. The name is covered by the invoke's own runtime warning
+        // if it ever moves.
         QMetaObject::invokeMethod(m_vdm, "refreshFromKWin");
     });
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::foreignSwitchDetected, this,
@@ -168,9 +173,12 @@ void WorkspaceController::wireVirtualDesktops()
             &PhosphorWorkspaces::WorkspaceReconciler::onKwinDesktopCreated);
     connect(m_vdm, &VDM::kwinDesktopRemoved, &m_reconciler,
             &PhosphorWorkspaces::WorkspaceReconciler::onKwinDesktopRemoved);
-    // Removal-race consumption BEFORE the reconciler processes the removal:
-    // the snapshot taken at removalRaceDetected re-routes each swept window
-    // to the owner's current workspace (plan §4.3 step 4).
+    // Removal-race consumption. Connected AFTER the reconciler's own handler
+    // above, so it runs second — and that is fine either way: the snapshot it
+    // consumes was taken at removalRaceDetected, and the re-route it queues
+    // resolves the owner's current workspace inside runWhenQuiet, once the
+    // structural churn has settled. Nothing here reads reconciler state that
+    // the removal is in the middle of changing.
     connect(m_vdm, &VDM::kwinDesktopRemoved, this, [this](const QString& desktopId) {
         const auto it = m_displacedByRemoval.constFind(desktopId);
         if (it == m_displacedByRemoval.constEnd()) {
@@ -178,10 +186,15 @@ void WorkspaceController::wireVirtualDesktops()
         }
         const DisplacedByRemoval record = it.value();
         m_displacedByRemoval.erase(it);
-        bool any = false;
+        // The hint says "the window moved". Emitting it here would have said
+        // that as soon as the riders were QUEUED, and every one of the bodies
+        // below can still bail (owner has no current desktop, desktop gone) —
+        // leaving the user a card about a move that never happened. Shared so
+        // the FIRST body that actually issues a move raises it, exactly once.
+        const auto hinted = std::make_shared<bool>(false);
         for (const QString& windowId : record.windowIds) {
             const QString ownerScreen = record.ownerScreenId;
-            runWhenQuiet([this, windowId, ownerScreen]() {
+            runWhenQuiet([this, windowId, ownerScreen, hinted]() {
                 const QString target = m_reconciler.currentDesktopIdOf(ownerScreen);
                 const int desktop = target.isEmpty() ? 0 : m_vdm->desktopIndexOf(target);
                 if (desktop <= 0) {
@@ -189,11 +202,26 @@ void WorkspaceController::wireVirtualDesktops()
                 }
                 watchWindowMove(windowId, target);
                 Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"));
+                if (!*hinted) {
+                    *hinted = true;
+                    Q_EMIT windowDisplacedByRemoval(ownerScreen);
+                }
             });
-            any = true;
         }
-        if (any) {
-            Q_EMIT windowDisplacedByRemoval(record.ownerScreenId);
+    });
+    // Census rows for a desktop that no longer exists. Nothing else clears
+    // them: the population map is keyed by desktop ID, which is exactly what
+    // survives renumbering, so a dead desktop's row would sit there for the
+    // life of the daemon and keep reporting a population for a workspace the
+    // user destroyed.
+    connect(m_vdm, &VDM::kwinDesktopRemoved, this, [this](const QString& desktopId) {
+        m_populationById.remove(desktopId);
+        for (auto it = m_windowCensusDesktopId.begin(); it != m_windowCensusDesktopId.end();) {
+            if (it.value() == desktopId) {
+                it = m_windowCensusDesktopId.erase(it);
+            } else {
+                ++it;
+            }
         }
     });
     connect(m_vdm, &VDM::desktopListChanged, this, [this](const QStringList& ids) {
@@ -235,7 +263,13 @@ void WorkspaceController::wireScreens()
         m_reconciler.onScreenAdded(canonicalScreenId(screen.name));
     });
     connect(m_screens, &SM::screenRemoved, this, [this](const PhosphorScreens::PhysicalScreen& screen) {
-        m_reconciler.onScreenRemoved(canonicalScreenId(screen.name));
+        const QString screenId = canonicalScreenId(screen.name);
+        m_reconciler.onScreenRemoved(screenId);
+        // The snap-back cooldown is keyed by screen and nothing else clears
+        // it, so an unplugged output's stamp would outlive it — and on a
+        // replug within the cooldown window it would swallow the first real
+        // correction the new session needs.
+        m_lastSnapBackMs.remove(screenId);
         refreshScreenOrder();
     });
     connect(m_screens, &SM::screenGeometryChanged, this, [this](const PhosphorScreens::PhysicalScreen&) {
@@ -287,6 +321,11 @@ void WorkspaceController::loadStateFile()
     const QString legacyPath = QStandardPaths::writableLocation(QStandardPaths::StateLocation)
         + QStringLiteral("/plasmazones/workspaces.json");
     if (!QFile::exists(stateFilePath()) && QFile::exists(legacyPath)) {
+        // The parent of the new path is not guaranteed to exist: the legacy
+        // file lives one level deeper, so finding it says nothing about the
+        // parent directory. rename fails silently without this and the
+        // session re-adopts from scratch, losing stable ownership.
+        QDir().mkpath(QFileInfo(stateFilePath()).absolutePath());
         QFile::rename(legacyPath, stateFilePath());
     }
 
@@ -339,7 +378,11 @@ void WorkspaceController::saveStateFile() const
         },
         /*includeState=*/true);
     file.write(json.toUtf8());
-    file.commit();
+    if (!file.commit()) {
+        // QSaveFile swallows a failed rename otherwise, and this is the one
+        // write that decides whether ownership survives the restart.
+        qCWarning(lcWorkspaceCtl) << "could not commit workspace state file" << path << ":" << file.errorString();
+    }
 }
 
 void WorkspaceController::scheduleStateSave()
@@ -398,9 +441,27 @@ void WorkspaceController::start()
                 const auto order = m_reconciler.map().screenOrder();
                 for (const QString& screenId : order) {
                     const int current = m_vdm->currentDesktopForScreen(screenId);
-                    currentById.insert(screenId, m_vdm->desktopIdAt(current));
+                    const QString id = m_vdm->desktopIdAt(current);
+                    if (id.isEmpty()) {
+                        // The global fallback can resolve to a desktop index
+                        // with no id (a screen that never reported, and a
+                        // current outside the list). An empty id is not a
+                        // desktop; inserting one would make the map adopt a
+                        // slice pointing at nothing. tryFirstAdoption refuses
+                        // outright for this; here we cannot refuse, so the
+                        // screen adopts with no current instead.
+                        continue;
+                    }
+                    currentById.insert(screenId, id);
                 }
                 m_reconciler.adoptAll(ids, currentById);
+                // The SAME tail tryFirstAdoption runs. Without it, a session
+                // that adopted on the timeout never realized its named
+                // workspaces at all: the declarations arrived before adoption,
+                // were parked in m_namedEntries, and nothing here applied
+                // them — so every named chord, quick slot and RouteToWorkspace
+                // rule was a no-op for the life of that session.
+                applyNamedDeclarationsAfterAdoption();
             }
         });
     }
@@ -440,8 +501,26 @@ void WorkspaceController::tryFirstAdoption()
     m_adopted = true;
     m_reconciler.adoptAll(ids, currentById);
     qCInfo(lcWorkspaceCtl) << "adopted" << ids.size() << "desktops across" << order.size() << "screens";
+    applyNamedDeclarationsAfterAdoption();
+}
+
+void WorkspaceController::applyNamedDeclarationsAfterAdoption()
+{
+    // applyNamedDeclarations parks its entries and returns while !m_adopted,
+    // so BOTH adoption paths owe it this call once adoption completes.
     if (!m_namedApplied && !m_namedEntries.isEmpty()) {
         applyNamedDeclarations(m_namedEntries);
+    }
+    // Owner-wins sweep over the seeded census. start() feeds the registry's
+    // existing windows through onWindowAppeared BEFORE adoption, and
+    // reuniteWindowWithOwner refuses while !m_adopted — so every window that
+    // existed at bring-up had its reunion check silently skipped and would
+    // sit on a foreign output until its next metadata event, which for an
+    // idle window never comes. Re-run the check now that the map is real.
+    // The per-window cooldown and the one-in-flight guard bound the burst.
+    const QHash<QString, QString> seeded = m_windowCensusDesktopId;
+    for (auto it = seeded.constBegin(); it != seeded.constEnd(); ++it) {
+        reuniteWindowWithOwner(it.key(), it.value());
     }
 }
 
@@ -474,19 +553,38 @@ void WorkspaceController::reuniteWindowWithOwner(const QString& instanceId, cons
     if (windowScreen == owner) {
         return;
     }
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (now - m_lastReunionMs.value(instanceId, 0) < SnapBackCooldownMs) {
+    if (QDateTime::currentMSecsSinceEpoch() - m_lastReunionMs.value(instanceId, 0) < SnapBackCooldownMs) {
         return;
     }
-    m_lastReunionMs.insert(instanceId, now);
+    // One reunion in flight per window. The cooldown alone could not bound the
+    // QUEUE: while a structural op is pending every arriving report defers
+    // another body, and they all run in one burst when the ledger quiets,
+    // each re-emitting the same move.
+    if (m_pendingReunions.contains(instanceId)) {
+        return;
+    }
+    m_pendingReunions.insert(instanceId);
     runWhenQuiet([this, instanceId, desktopId, owner]() {
+        m_pendingReunions.remove(instanceId);
         if (m_reconciler.map().ownerOf(desktopId) != owner) {
             return; // ownership moved while deferred
+        }
+        // Re-checked HERE, not only at entry: a displacement re-route (the
+        // removal-race arm) can have queued its own move for this window in
+        // the meantime, and both bodies drain from the same quiet queue. Two
+        // moves for one window is last-write-wins at the compositor and makes
+        // the displacement watchdog warn about an arrival its move did get.
+        if (m_pendingWindowMoves.contains(instanceId)) {
+            return;
         }
         const int desktop = m_vdm->desktopIndexOf(desktopId);
         if (desktop <= 0) {
             return;
         }
+        // Cooldown stamped at the EMIT, not at entry: a body that bailed on
+        // any guard above issued nothing, and consuming the cooldown for it
+        // would suppress the next real reunion for a full second.
+        m_lastReunionMs.insert(instanceId, QDateTime::currentMSecsSinceEpoch());
         qCInfo(lcWorkspaceCtl) << "reuniting window" << instanceId << "with its workspace's owner screen" << owner;
         Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, QStringLiteral("down"));
     });
@@ -503,18 +601,29 @@ int WorkspaceController::censusDesktop(const PhosphorEngine::WindowMetadata& met
     return meta.virtualDesktop;
 }
 
+void WorkspaceController::adjustPopulationById(const QString& desktopId, int delta)
+{
+    if (desktopId.isEmpty()) {
+        return;
+    }
+    const int next = qMax(0, m_populationById.value(desktopId, 0) + delta);
+    if (next == 0) {
+        // An empty desktop and an unknown one read the same to every consumer
+        // (value(id, 0)), so drop the row instead of keeping a zero around
+        // for a desktop that may since have been destroyed.
+        m_populationById.remove(desktopId);
+    } else {
+        m_populationById.insert(desktopId, next);
+    }
+    m_reconciler.onPopulationChanged(desktopId, next);
+}
+
 void WorkspaceController::adjustPopulation(int desktopInt, int delta)
 {
     if (desktopInt <= 0) {
         return;
     }
-    const QString id = m_vdm->desktopIdAt(desktopInt);
-    if (id.isEmpty()) {
-        return;
-    }
-    const int next = qMax(0, m_populationById.value(id, 0) + delta);
-    m_populationById.insert(id, next);
-    m_reconciler.onPopulationChanged(id, next);
+    adjustPopulationById(m_vdm->desktopIdAt(desktopInt), delta);
 }
 
 void WorkspaceController::onWindowAppeared(const QString& instanceId)
@@ -536,13 +645,23 @@ void WorkspaceController::onWindowAppeared(const QString& instanceId)
 
 void WorkspaceController::onWindowDisappeared(const QString& instanceId)
 {
-    const QString id = m_windowCensusDesktopId.take(instanceId);
-    if (id.isEmpty()) {
-        return;
+    // Per-window bookkeeping outlives the census entry and has to go with it.
+    // The reunion cooldown and the move watchdog are both keyed by window id:
+    // left behind, they grow without bound for the life of the daemon, and a
+    // reused instance id inherits a cooldown that suppresses the new window's
+    // first reunion.
+    m_lastReunionMs.remove(instanceId);
+    m_pendingReunions.remove(instanceId);
+    m_pendingWindowMoves.remove(instanceId);
+    m_windowMoveSequences.remove(instanceId);
+    // A closed window also leaves the removal-race snapshots. Otherwise the
+    // deferred re-route emits a move for a window that no longer exists, and
+    // the watchdog then warns about the arrival that was never coming.
+    for (auto it = m_displacedByRemoval.begin(); it != m_displacedByRemoval.end(); ++it) {
+        it.value().windowIds.removeAll(instanceId);
     }
-    const int next = qMax(0, m_populationById.value(id, 0) - 1);
-    m_populationById.insert(id, next);
-    m_reconciler.onPopulationChanged(id, next);
+
+    adjustPopulationById(m_windowCensusDesktopId.take(instanceId), -1);
 }
 
 void WorkspaceController::onMetadataChanged(const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
@@ -556,6 +675,7 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
     // A watched move verb confirmed by its arrival (watchdog, plan §4.2).
     if (!newId.isEmpty() && m_pendingWindowMoves.value(instanceId) == newId) {
         m_pendingWindowMoves.remove(instanceId);
+        m_windowMoveSequences.remove(instanceId);
     }
     if (oldId == newId) {
         if (!oldId.isEmpty()) {
@@ -566,16 +686,10 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
         }
         return;
     }
-    if (!oldId.isEmpty()) {
-        const int next = qMax(0, m_populationById.value(oldId, 0) - 1);
-        m_populationById.insert(oldId, next);
-        m_reconciler.onPopulationChanged(oldId, next);
-    }
+    adjustPopulationById(oldId, -1);
     if (!newId.isEmpty()) {
         m_windowCensusDesktopId.insert(instanceId, newId);
-        const int next = m_populationById.value(newId, 0) + 1;
-        m_populationById.insert(newId, next);
-        m_reconciler.onPopulationChanged(newId, next);
+        adjustPopulationById(newId, +1);
         reuniteWindowWithOwner(instanceId, newId);
     }
 }

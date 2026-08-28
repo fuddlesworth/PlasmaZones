@@ -183,51 +183,21 @@ public:
     /// desktop's death can still hold stale values — the key-level prune
     /// cannot reach these. 0 (sticky / on-all-desktops) is a sentinel and is
     /// never touched by either arm.
-    void reapDesktopValues(int desktop)
-    {
-        bool changed = false;
-        for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end();) {
-            if (it.value() == desktop) {
-                it = m_windowDesktopAssignments.erase(it);
-                changed = true;
-            } else {
-                ++it;
-            }
-        }
-        if (m_lastUsedDesktop == desktop) {
-            m_lastUsedDesktop = 0;
-            changed = true;
-        }
-        if (changed) {
-            Q_EMIT stateChanged();
-        }
-    }
+    ///
+    /// A reaped window's desktop tag is ERASED, not rewritten to 0: 0 is the
+    /// all-desktops sentinel, and stamping it would make the window read as
+    /// sticky to buildOccupiedZoneSet (which passes desktop-0 windows on every
+    /// desktop) and to windowsOnScreenAndDesktop. An absent tag is the
+    /// "desktop unknown" state the rest of this class already handles, and the
+    /// effect's next report re-stamps the real one.
+    void reapDesktopValues(int desktop);
 
     /// Dynamic-workspaces arm: rewrite the per-window desktop tags and the
     /// last-used memo per `oldToNew` (absent = unchanged; 0 sentinel kept).
-    void renumberDesktopValues(const QHash<int, int>& oldToNew)
-    {
-        bool changed = false;
-        for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
-            if (it.value() != 0) {
-                const int mapped = oldToNew.value(it.value(), it.value());
-                if (mapped != it.value()) {
-                    it.value() = mapped;
-                    changed = true;
-                }
-            }
-        }
-        if (m_lastUsedDesktop != 0) {
-            const int mapped = oldToNew.value(m_lastUsedDesktop, m_lastUsedDesktop);
-            if (mapped != m_lastUsedDesktop) {
-                m_lastUsedDesktop = mapped;
-                changed = true;
-            }
-        }
-        if (changed) {
-            Q_EMIT stateChanged();
-        }
-    }
+    /// A mapping TO 0 is refused for the same sentinel reason as the reap
+    /// above — a renumber names surviving desktops, so a 0 target is a
+    /// malformed map, not an instruction to make windows sticky.
+    void renumberDesktopValues(const QHash<int, int>& oldToNew);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating State

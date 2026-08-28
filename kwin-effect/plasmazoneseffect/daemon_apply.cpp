@@ -13,6 +13,7 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -67,6 +68,31 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
     }
 }
 
+namespace {
+/// Resolve a 1-based desktop NUMBER to its VirtualDesktop by matching
+/// x11DesktopNumber(), not by position in effects->desktops().
+///
+/// The daemon derives every desktop number it sends from x11DesktopNumber()
+/// (the bringup re-sync and the per-screen desktop reports both read it), so a
+/// positional `at(desktop - 1)` is only equivalent while the list order and the
+/// numbering agree. Matching the number the sender actually meant is correct
+/// either way and costs one short walk. Returns nullptr when no desktop carries
+/// that number.
+KWin::VirtualDesktop* desktopByNumber(int desktop)
+{
+    if (desktop < 1 || !KWin::effects) {
+        return nullptr;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* vd : all) {
+        if (vd && static_cast<int>(vd->x11DesktopNumber()) == desktop) {
+            return vd;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
 void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
 {
     if (desktop < 1) {
@@ -77,9 +103,9 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
         return;
     }
-    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
-    if (desktop > all.size()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+    KWin::VirtualDesktop* target = desktopByNumber(desktop);
+    if (!target) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: no desktop numbered" << desktop;
         return;
     }
     // A sticky (on-all-desktops) window is already present on the target; pinning
@@ -89,9 +115,9 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
         return;
     }
-    // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
-    // (not on-all-desktops) so the window genuinely moves to the target.
-    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+    // Single-desktop membership (not on-all-desktops) so the window genuinely
+    // moves to the target.
+    KWin::effects->windowToDesktops(w, {target});
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId)
@@ -125,15 +151,15 @@ void PlasmaZonesEffect::slotSetScreenDesktopRequested(const QString& screenId, i
         qCDebug(lcEffect) << "slotSetScreenDesktopRequested: unknown screen" << screenId;
         return;
     }
-    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
-    if (desktop > all.size()) {
-        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: desktop" << desktop << "out of range, have" << all.size();
+    KWin::VirtualDesktop* target = desktopByNumber(desktop);
+    if (!target) {
+        qCDebug(lcEffect) << "slotSetScreenDesktopRequested: no desktop numbered" << desktop;
         return;
     }
     // Per-output switch (Plasma 6.7): only THIS output changes desktop. The
     // resulting desktopChanged report is the daemon's confirmation (its
     // reconciler retires the matching SetCurrent ledger entry on it).
-    KWin::effects->setCurrentDesktop(all.at(desktop - 1), output);
+    KWin::effects->setCurrentDesktop(target, output);
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
@@ -298,11 +324,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
 void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries,
                                                  const QString& action)
 {
-    qCInfo(lcEffect) << "applyGeometriesBatch:" << action;
-
     if (geometries.isEmpty()) {
         return;
     }
+    qCInfo(lcEffect) << "applyGeometriesBatch:" << action;
 
     QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap();
 

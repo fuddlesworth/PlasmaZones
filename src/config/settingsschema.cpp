@@ -8,11 +8,12 @@
 // or declared in settingsschema.h because the per-domain TUs share them too
 // (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList).
 // The domains big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp's three entry points and
-// settingsschema_tiling.cpp's one); every remaining function is under ninety
-// lines, and moving one out drags its helpers into a header for a single
-// consumer. When a domain grows past that, split it the way scrolling and
-// tiling were — do not let this file cross the 1150 ceiling instead.
+// (settingsschema_scrolling.cpp's three entry points, settingsschema_tiling.cpp's
+// one, and settingsschema_workspaces.cpp's one with its named-entry validator);
+// every remaining function is under ninety lines, and moving one out drags its
+// helpers into a header for a single consumer. When a domain grows past that,
+// split it the way those were — do not let this file cross the 1150 ceiling
+// instead.
 
 #include "settingsschema.h"
 
@@ -540,9 +541,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         CD::workspaceMoveSlot1Shortcut(), CD::workspaceMoveSlot2Shortcut(), CD::workspaceMoveSlot3Shortcut(),
         CD::workspaceMoveSlot4Shortcut(), CD::workspaceMoveSlot5Shortcut(), CD::workspaceMoveSlot6Shortcut(),
         CD::workspaceMoveSlot7Shortcut(), CD::workspaceMoveSlot8Shortcut(), CD::workspaceMoveSlot9Shortcut()};
-    for (int slot = 1; slot <= 9; ++slot) {
+    // Bound by the slot-count constant, not a local 9 — the same reason the
+    // quick-layout loop below is bound by its protocol constant: the key
+    // builders qFatal outside [1, WorkspaceSlotCount], so a raised constant
+    // with a stale literal here would silently declare too few keys.
+    static_assert(std::size(workspaceMoveSlotDefaults) == CD::WorkspaceSlotCount,
+                  "workspace move-slot defaults array must cover every slot");
+    for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
         addShortcut(globals, CD::workspaceMoveSlotKey(slot), workspaceMoveSlotDefaults[slot - 1]);
-        addShortcut(globals, CD::workspaceFocusSlotKey(slot), QString());
+        addShortcut(globals, CD::workspaceFocusSlotKey(slot), CD::workspaceFocusSlotShortcut());
     }
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
@@ -1102,29 +1109,6 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
 // The single inter-window gap model used by BOTH snapping and tiling. Uniform
 // inner/outer plus the per-side outer overrides (gated by UsePerSide). All ints
 // clamped to the shared gap range.
-
-void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
-{
-    using CD = ConfigDefaults;
-    // Dynamic per-monitor workspaces gate scalars. Named-workspace
-    // declarations join this group in Phase 3.
-    schema.groups[CD::workspacesBehaviorGroup()] = {
-        {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool},
-        {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
-        {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool},
-        {CD::rebindKWinShortcutsKey(), CD::workspacesRebindKWinShortcuts(), QMetaType::Bool},
-    };
-    schema.groups[CD::workspacesNamedGroup()] = {
-        {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList},
-    };
-    // Quick-slot targets: the named workspace each move slot sends the
-    // active window to; empty = unassigned (the slot's chord does nothing).
-    auto& slots = schema.groups[CD::workspacesSlotsGroup()];
-    slots.reserve(9);
-    for (int slot = 1; slot <= 9; ++slot) {
-        slots.append({CD::workspaceSlotTargetKey(slot), QString(), QMetaType::QString});
-    }
-}
 
 void appendGapsSchema(PhosphorConfig::Schema& schema)
 {

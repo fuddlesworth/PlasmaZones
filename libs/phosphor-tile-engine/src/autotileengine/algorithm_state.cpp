@@ -667,6 +667,12 @@ void AutotileEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
     };
     renumberKeySet(m_userTunedSplitRatio);
     renumberKeySet(m_userTunedMasterCount);
+    // PRECONDITION: oldToNew is injective. A renumber names surviving desktops
+    // after a removal, so two old numbers never map to one new one. If that
+    // ever stopped holding, the emplace below would keep the first arrival and
+    // silently drop the colliding stash (QSet's insert in renumberKeySet
+    // dedupes the same way), which is the documented behaviour rather than an
+    // arbitrary merge — a bag belongs to exactly one context.
     std::unordered_map<TilingStateKey, StashedScriptState> movedStash;
     movedStash.reserve(m_scriptStateStash.size());
     for (auto& [key, stash] : m_scriptStateStash) {
@@ -689,6 +695,15 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
     const auto matches = [&physicalScreenId](const QString& screenId) {
         return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     };
+    // Unwind a preview anchored on the dying output BEFORE the teardown, while
+    // both its states still exist — a preview left over it would strand on a
+    // dead key and commit would materialise a fresh empty state there. The
+    // scroll twin's removed-screen prune cancels on exactly these two terms.
+    if (m_dragInsertPreview
+        && (matches(m_dragInsertPreview->targetScreenId)
+            || (m_dragInsertPreview->hadPriorState && matches(m_dragInsertPreview->priorKey.screenId)))) {
+        cancelDragInsertPreview();
+    }
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
@@ -783,6 +798,18 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
 void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    const auto stale = [&valid](const QString& activity) {
+        return !activity.isEmpty() && !valid.contains(activity);
+    };
+    // Same preview unwind as the desktop and removed-screen prunes, on the
+    // activity axis (the scroll sibling's activity prune cancels on exactly
+    // these terms). The TARGET's live key, not the global current: per-output
+    // desktops aside, the preview's target screen resolves its own context.
+    if (m_dragInsertPreview
+        && ((m_dragInsertPreview->hadPriorState && stale(m_dragInsertPreview->priorKey.activity))
+            || stale(m_context.currentKeyForScreen(m_dragInsertPreview->targetScreenId).activity))) {
+        cancelDragInsertPreview();
+    }
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;

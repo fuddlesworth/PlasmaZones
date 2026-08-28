@@ -947,20 +947,19 @@ private:
     /// its scroll-float geometry. The rects are reclaimed by
     /// pruneStaleWindows instead. AutotileEngine documents the same contract
     /// on releaseScreenStateForTeardown.
-    void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
+    ///
+    /// @p clearScreenBookkeeping drops the SCREEN-keyed maps (order/focus
+    /// seeds, tab-strip latch) along with the state. False for the desktop
+    /// and activity prunes, where the screen SURVIVES and only one of its
+    /// contexts dies: clearing there would destroy the surviving contexts'
+    /// in-flight seed. Those callers run sweepStatelessScreenBookkeeping
+    /// instead, which clears the same maps only once a screen has no state
+    /// left at all. AutotileEngine's clearScreenOrderMaps flag is the twin.
+    void releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping = true);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
     // engine_context.cpp
-    /// Shared per-window side-map sweep for the SILENT prune paths (desktop
-    /// and activity teardown), which emit no windowsReleased and so have no
-    /// downstream consumer of the float marker or the last-applied rect.
-    ///
-    /// The removed-output prune is NOT one of them: it releases live windows
-    /// and emits, so it goes through releaseScreenState and sweeps the side
-    /// maps only AFTER the emit. The mode-transition release path likewise
-    /// uses releaseScreenState; see the contract there.
-    void dropWindowBookkeeping(const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
     /// drop both entries once every listed id is consumed — MUST run on

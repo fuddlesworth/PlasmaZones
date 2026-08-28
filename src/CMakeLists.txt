@@ -121,6 +121,7 @@ set(plasmazones_core_SRCS
     config/settingsschema_p.h
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
+    config/settingsschema_workspaces.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
@@ -500,6 +501,8 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/enginefactory.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
+    daemon/controllers/shortcutmanager_table.cpp
+    daemon/controllers/shortcutmanager_table.h
     daemon/daemon/start.cpp
     daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp

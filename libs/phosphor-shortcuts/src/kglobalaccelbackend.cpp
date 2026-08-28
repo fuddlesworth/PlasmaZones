@@ -391,9 +391,24 @@ bool KGlobalAccelBackend::setForeignShortcuts(const QString& componentName, cons
     // the action's full binding. The legacy setForeignShortcut(ai) variant
     // is deliberately NOT used: it reads each int as a separate alternate,
     // which turned a user's multi-chord sequence into bogus alternates.
+    //
+    // BLOCKING, up to 1 s per action, and the takeover caller walks its action
+    // list serially — six actions is a worst case of six seconds of stalled
+    // daemon bringup when kglobalacceld is unresponsive. Accepted rather than
+    // made async: the call only runs while the workspaces feature is being
+    // turned on (and on the rebind toggle), the realistic latency is a
+    // sub-millisecond local round trip, and an async chain would have to hold
+    // the half-applied takeover across the daemon's own startup sequence.
     const QStringList actionId{componentName, actionName, QString(), QString()};
-    qDBusRegisterMetaType<PhosphorDBusKeySequence>();
-    qDBusRegisterMetaType<QList<PhosphorDBusKeySequence>>();
+    // Registered once per process, not once per call: qDBusRegisterMetaType is
+    // idempotent but takes a lock and hashes the type on every invocation, and
+    // this runs per action during the takeover walk.
+    static const bool wireTypesRegistered = [] {
+        qDBusRegisterMetaType<PhosphorDBusKeySequence>();
+        qDBusRegisterMetaType<QList<PhosphorDBusKeySequence>>();
+        return true;
+    }();
+    Q_UNUSED(wireTypesRegistered);
     QList<PhosphorDBusKeySequence> wire;
     if (sequences.isEmpty()) {
         // Explicit "unbound": one sequence of a single 0 key.
@@ -425,7 +440,8 @@ bool KGlobalAccelBackend::setForeignShortcuts(const QString& componentName, cons
     return true;
 }
 
-QList<QKeySequence> KGlobalAccelBackend::foreignShortcuts(const QString& componentName, const QString& actionName) const
+std::optional<QList<QKeySequence>> KGlobalAccelBackend::foreignShortcuts(const QString& componentName,
+                                                                         const QString& actionName) const
 {
     const QStringList actionId{componentName, actionName, QString(), QString()};
     QDBusMessage call =
@@ -434,12 +450,25 @@ QList<QKeySequence> KGlobalAccelBackend::foreignShortcuts(const QString& compone
     call << actionId;
     const QDBusMessage reply = QDBusConnection::sessionBus().call(call, QDBus::Block, 1000);
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return {};
+        // The QUERY failed (service down, timed out, unexpected reply shape) —
+        // report "cannot answer", never an empty binding. An empty list here
+        // told the takeover caller the action was already unbound, so it wrote
+        // no backup and a later restore put the unbound sentinel on top of a
+        // chord the user still had.
+        qCWarning(lcPhosphorShortcuts) << "shortcutKeys query failed for" << componentName << actionName << ":"
+                                       << reply.errorMessage();
+        return std::nullopt;
+    }
+    const QVariant payload = reply.arguments().constFirst();
+    if (!payload.canConvert<QDBusArgument>()) {
+        qCWarning(lcPhosphorShortcuts) << "shortcutKeys returned an unexpected payload for" << componentName
+                                       << actionName;
+        return std::nullopt;
     }
     // Reply is a(ai): a list of sequences, each a struct holding key ints.
     // ALL entries are read — an action's alternates are part of its binding
     // and must survive a backup/restore round trip.
-    const QDBusArgument arg = reply.arguments().first().value<QDBusArgument>();
+    const QDBusArgument arg = payload.value<QDBusArgument>();
     QList<QKeySequence> sequences;
     arg.beginArray();
     while (!arg.atEnd()) {

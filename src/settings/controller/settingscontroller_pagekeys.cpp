@@ -23,6 +23,7 @@
 
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStringList>
 
 namespace PlasmaZones {
 
@@ -72,14 +73,51 @@ bool SettingsController::workspacesAtCap() const
         && m_workspaceVdm->desktopCount() >= PhosphorWorkspaces::WorkspaceReconciler::DefaultDesktopCap;
 }
 
+int SettingsController::workspacesDesktopCap() const
+{
+    return PhosphorWorkspaces::WorkspaceReconciler::DefaultDesktopCap;
+}
+
+int SettingsController::workspaceSlotCount() const
+{
+    return ConfigDefaults::WorkspaceSlotCount;
+}
+
 bool SettingsController::kwinPerOutputDesktopsEnabled() const
 {
     // Flat-INI read of KWin's per-output-desktops flag; the daemon's gate
     // (WorkspaceController::kwinPerOutputEnabled) is the documented twin.
+    //
+    // Two KConfig spellings QSettings does not decode on its own, both of
+    // which would otherwise read as "off" and put the consent warning back in
+    // front of a user who already has the setting on:
+    //   - an immutability / locale marker on the key ("PerOutputVirtualDesktops[$i]"),
+    //     which QSettings keeps as part of the key name;
+    //   - KConfig's boolean words, which include "true"/"on"/"yes"/"1";
+    //     QVariant::toBool only understands the first and last of those.
     const QString path =
         QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
     const QSettings kwinrc(path, QSettings::IniFormat);
-    return kwinrc.value(QStringLiteral("Windows/PerOutputVirtualDesktops"), false).toBool();
+    const QString group = QStringLiteral("Windows/");
+    const QString base = QStringLiteral("PerOutputVirtualDesktops");
+    QVariant raw = kwinrc.value(group + base);
+    if (!raw.isValid()) {
+        // Scan for the same key carrying any KConfig marker suffix.
+        const QStringList keys = kwinrc.allKeys();
+        for (const QString& key : keys) {
+            if (key.startsWith(group + base + QLatin1Char('['))) {
+                raw = kwinrc.value(key);
+                break;
+            }
+        }
+    }
+    if (!raw.isValid()) {
+        return false;
+    }
+    const QString text = raw.toString().trimmed();
+    return text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
+        || text.compare(QLatin1String("on"), Qt::CaseInsensitive) == 0
+        || text.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0 || text == QLatin1String("1");
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain

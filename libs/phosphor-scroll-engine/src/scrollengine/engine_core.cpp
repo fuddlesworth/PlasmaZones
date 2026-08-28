@@ -234,7 +234,7 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
     }
 }
 
-void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
+void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping)
 {
     const QString screenId = state->screenId();
     const QStringList windows = state->managedWindows();
@@ -271,6 +271,13 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_lastAppliedWindowedFs.remove(windowId);
     }
     releasedWindows.append(windows);
+    if (!clearScreenBookkeeping) {
+        // A sibling context of this screen is still live and owns these maps
+        // (see the declaration): the caller sweeps them through
+        // sweepStatelessScreenBookkeeping once the screen has no state left.
+        state->deleteLater();
+        return;
+    }
     // Per-screen bookkeeping dies with the state: a stale seed must not
     // replay on re-entry, and the tab-strip overlay must be told to clear —
     // no relayout will ever run for a departed screen to do it.

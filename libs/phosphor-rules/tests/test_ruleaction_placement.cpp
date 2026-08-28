@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The open-placement half of the RuleAction wire tests: the RouteToScreen /
-// RouteToDesktop slot mapping and the SnapToZone target payload (ordinals and
+// RouteToDesktop / RouteToWorkspace slot mapping and the SnapToZone target payload (ordinals and
 // zone names). Split from test_ruleaction.cpp for file-size, the way
 // test_ruleaction_contextbools.cpp and test_ruleaction_tilingparams.cpp were.
 
@@ -35,6 +35,20 @@ private Q_SLOTS:
         const auto loaded = RuleAction::fromJson(o);
         QVERIFY(loaded.has_value());
         QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteScreen));
+        // Whitespace-only is blank, not a target — rejected like the empty id.
+        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("   "));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // The length cap is inclusive and measured on the TRIMMED id: the
+        // boundary passes, one over fails, and padding around a boundary-length
+        // id does not push it over (mirrors the SnapToZone zone-name pins).
+        o.insert(QString(ActionParam::TargetScreenId), QString(MaxScreenIdLength, QLatin1Char('a')));
+        QVERIFY(RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetScreenId), QString(MaxScreenIdLength + 1, QLatin1Char('a')));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetScreenId),
+                 QString(QStringLiteral("  ") + QString(MaxScreenIdLength, QLatin1Char('a')) + QStringLiteral("  ")));
+        QVERIFY(RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("LG Electronics:38GN950:688325"));
         // Unknown param key is rejected by the strict loader.
         o.insert(QStringLiteral("bogus"), 1);
         QVERIFY(!RuleAction::fromJson(o).has_value());
@@ -80,6 +94,31 @@ private Q_SLOTS:
         const auto loaded = RuleAction::fromJson(o);
         QVERIFY(loaded.has_value());
         QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteWorkspace));
+        // Whitespace-only is blank, not a name — rejected like the empty one
+        // (the daemon resolves trimmed names, so an all-space name could never
+        // match a declaration).
+        o.insert(QString(ActionParam::TargetWorkspaceName), QStringLiteral("   "));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // The length cap is inclusive and measured on the TRIMMED name: the
+        // boundary passes, one over fails, and padding around a boundary-length
+        // name does not push it over (mirrors the SnapToZone zone-name pins).
+        o.insert(QString(ActionParam::TargetWorkspaceName), QString(MaxWorkspaceNameLength, QLatin1Char('a')));
+        QVERIFY(RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetWorkspaceName), QString(MaxWorkspaceNameLength + 1, QLatin1Char('a')));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(
+            QString(ActionParam::TargetWorkspaceName),
+            QString(QStringLiteral("  ") + QString(MaxWorkspaceNameLength, QLatin1Char('a')) + QStringLiteral("  ")));
+        QVERIFY(RuleAction::fromJson(o).has_value());
+        // A padded ordinary name is accepted and stored VERBATIM: trimming is a
+        // read-side concern of the daemon's resolver, not the loader's, the
+        // same contract the SnapToZone zone names pin.
+        o.insert(QString(ActionParam::TargetWorkspaceName), QStringLiteral("  chat  "));
+        const auto padded = RuleAction::fromJson(o);
+        QVERIFY(padded.has_value());
+        QCOMPARE(padded->toJson().value(QString(ActionParam::TargetWorkspaceName)).toString(),
+                 QStringLiteral("  chat  "));
+        o.insert(QString(ActionParam::TargetWorkspaceName), QStringLiteral("chat"));
         // Unknown param key is rejected by the strict loader.
         o.insert(QStringLiteral("bogus"), 1);
         QVERIFY(!RuleAction::fromJson(o).has_value());

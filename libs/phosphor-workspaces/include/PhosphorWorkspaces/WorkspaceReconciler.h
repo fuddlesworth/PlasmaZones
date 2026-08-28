@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -16,7 +17,7 @@
 namespace PhosphorWorkspaces {
 
 /// One declared named workspace (config-driven; persistent while empty).
-struct NamedWorkspace
+struct PHOSPHORWORKSPACES_EXPORT NamedWorkspace
 {
     QString name; ///< unique, non-empty
     QString outputId; ///< pinned screen; empty = unpinned
@@ -95,6 +96,11 @@ public:
     /// hints, never crashes). Map names with no surviving declaration revert
     /// to dynamic (requestSetDesktopName clears the KWin name; destroy-on-
     /// empty may then reap the desktop).
+    ///
+    /// `kwinNames` MUST be KWin's raw names (VirtualDesktopManager::
+    /// rawDesktopNames()), where an empty entry means "unnamed". Passing the
+    /// display form breaks identity: a workspace declared as "Desktop 3" would
+    /// claim an unnamed desktop whose placeholder happens to read that way.
     void applyNamedWorkspaces(const QList<NamedWorkspace>& declarations, const QStringList& kwinNames);
 
     // ── Verb support ────────────────────────────────────────────────────────
@@ -175,6 +181,15 @@ private:
 
     void ledgerAdd(PendingOp op);
     void expireLedger();
+    /// True while a Remove for this desktop is open in the ledger.
+    bool hasPendingRemove(const QString& desktopId) const;
+    /// True while a Create owned by this screen is open in the ledger.
+    bool hasPendingCreate(const QString& screenId) const;
+    /// Open Create entries — the desktops KWin still owes us. Counted into the
+    /// cap gate so a burst of requests cannot overshoot the ceiling.
+    int pendingCreateCount() const;
+    /// Drop every open ledger entry that targets this desktop id.
+    void retireLedgerFor(const QString& desktopId);
     /// Trailing-empty + slice-never-empty repair for every screen.
     void maintainInvariants();
     void maintainScreen(const QString& screenId);
@@ -183,7 +198,17 @@ private:
     bool isDesktopEmpty(const QString& desktopId) const;
     /// The trailing entry of a slice iff it is an empty dynamic desktop.
     QString trailingEmptyOf(const QString& screenId) const;
-    void adoptExternal(const QString& desktopId);
+    /// The slot a new entry takes so it lands BEFORE the screen's trailing
+    /// empty: the slice size, or one less when a trailing empty exists.
+    int insertIndexBeforeTrailingEmpty(const QString& screenId) const;
+    /// Where a named declaration's workspace belongs in a slice: its declared
+    /// position clamped to the last slot BEFORE the trailing empty (-1 means
+    /// exactly that slot).
+    int namedSliceIndex(const QString& screenId, int declaredPosition) const;
+    /// Adopt an externally created desktop onto the focused screen (or the
+    /// first screen). Returns false when no screen exists to adopt onto, so
+    /// the caller does not announce a map change that never happened.
+    bool adoptExternal(const QString& desktopId);
     void bumpGeneration();
     /// Owner-wins check for one screen's recorded current desktop; emits
     /// foreignSwitchDetected when it shows another screen's desktop (and no
@@ -203,6 +228,10 @@ private:
     QList<PendingOp> m_ledger;
     QTimer m_ledgerTimer;
     QHash<QString, QTimer*> m_destroyTimers; ///< desktopId → debounce
+    /// Desktops already reported through removalRaceDetected while their
+    /// Remove is open — the signal is an edge, not a level, so every further
+    /// population increment on the same doomed desktop must stay quiet.
+    QSet<QString> m_racedDesktops;
 };
 
 } // namespace PhosphorWorkspaces

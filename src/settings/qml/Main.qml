@@ -650,9 +650,10 @@ PhosphorUi.SettingsAppWindow {
     // window-root menus (layoutContextMenu, pageActionsMenu) is open,
     // the shortcut
     // overlay, the global search dropdown, the sidebar profile switcher's
-    // dropdown, the active page's own modal stack (RulesPage's
-    // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
-    // windowPickerDialog), OR a native child window (QtQuick FileDialog,
+    // dropdown, the active page's own modal stack (RulesPage's `anyModalOpen`,
+    // which is the one predicate covering forceSaveConfirm, addRuleWizard,
+    // ruleEditorSheet, windowPickerDialog, colorParamDialog and
+    // curveParamDialog), OR a native child window (QtQuick FileDialog,
     // system color picker, etc.) is open. The `window.active` check
     // covers native child windows — when they grab focus the main window
     // goes inactive. The inline-dialog checks cover Kirigami.PromptDialog
@@ -661,9 +662,9 @@ PhosphorUi.SettingsAppWindow {
     // while interacting with any of these prompts.
     /// Cross-cutting flag that pages opt into by writing through
     /// `window._pageOwnedModalOpen` when they open / close their own
-    /// modal stack. RulesPage publishes its
-    /// addRuleWizard / windowPickerDialog / ruleEditorSheet /
-    /// forceSaveConfirm aggregate state here so page-navigation
+    /// modal stack. RulesPage publishes its `anyModalOpen` aggregate
+    /// (addRuleWizard, windowPickerDialog, ruleEditorSheet,
+    /// colorParamDialog, curveParamDialog, forceSaveConfirm) here so page-navigation
     /// shortcuts (Ctrl+PgUp / PgDown) cannot drag the user off the
     /// page while a destructive modal is open. Pages without modals
     /// never touch this property and contribute false by default.
@@ -994,13 +995,14 @@ PhosphorUi.SettingsAppWindow {
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             // The section-toggle's own scope, deliberately NOT dirtyScopeId.
             // pendingSection feeds discardPage() / beginExternalEdit() and a
-            // subtitle that names one of exactly three features, so it must
-            // stay bounded to the three ids those consumers handle.
+            // subtitle that names one of the four toggleable features
+            // (snapping, tiling, scrolling, workspaces), so it must stay
+            // bounded to the four ids those consumers handle.
             // dirtyScopeId is an unbounded walk result and could hop past them.
             // Spelled out rather than defaulting to "scrolling" in the else
-            // branch: the three flags are not exhaustive over every row, and
+            // branch: the four flags are not exhaustive over every row, and
             // an empty id is a visibly inert scope rather than a silent write
-            // to scrollingEnabled from a row that is none of the three.
+            // to scrollingEnabled from a row that is none of them.
             readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : (isWorkspaces ? "workspaces" : "")))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
@@ -1063,7 +1065,7 @@ PhosphorUi.SettingsAppWindow {
                 }
             }
 
-            // ── Snapping / Tiling / Scrolling toggle ────────────────
+            // ── Snapping / Tiling / Scrolling / Workspaces toggle ───
             SettingsSwitch {
                 id: sectionToggle
 
@@ -1079,7 +1081,7 @@ PhosphorUi.SettingsAppWindow {
                     // when the page underneath has unsaved edits — those
                     // edits would silently apply through the
                     // beginExternalEdit/endExternalEdit pair (which commits
-                    // the snapping/tiling enable flag plus whatever dirty
+                    // the toggled feature's enable flag plus whatever dirty
                     // state the page has staged). Prompt before clobbering.
                     // Enabling is safe — it doesn't discard anything — so
                     // we only gate the disable path.

@@ -62,11 +62,28 @@ public:
     // Workspace verb shortcuts (Shortcuts.Global)
     //
     // The focus pair deliberately takes over KWin's stock "Switch One Desktop
-    // Down/Up" chords (user decision, 2026-08-26): until Phase 5's stock
-    // rebinding releases them, KGlobalAccel keeps the chord with KWin and our
-    // registration simply stays uncaptured — a conflict, not a breakage. The
-    // Shift/Alt derivatives are unclaimed by both KWin stock and every other
-    // PlasmaZones default (collision-checked against the whole table).
+    // Down/Up" chords (user decision, 2026-08-26). That takeover is real: the
+    // daemon's stock-rebind pass (src/daemon/daemon/workspaces.cpp) backs up
+    // and clears exactly the "Switch One Desktop *" / "Walk Through Desktops"
+    // actions while the feature and the rebind toggle are both on, and
+    // restores them on disable.
+    //
+    // Nothing else here may sit on a stock KWin chord, because that table
+    // covers only the SWITCH family. In particular Meta+Ctrl+Shift+Arrow is
+    // KWin's stock "Window One Desktop <direction>" quad, which the takeover
+    // does NOT release — a default there would stay permanently uncaptured
+    // (KGlobalAccel keeps the chord with KWin) and read to the user as a verb
+    // that silently does nothing. Every remaining Meta+Arrow tier is already
+    // claimed by another PlasmaZones family (moveWindow Meta+Alt+Shift,
+    // swapWindow and swapVirtualScreen Meta+Ctrl+Alt and
+    // Meta+Ctrl+Alt+Shift, span Ctrl+Alt, focusZone Alt+Shift — see the
+    // table in configdefaults.h, and the collision guard in
+    // tests/unit/config/settings/test_scrolling_settings.cpp).
+    //
+    // So the move-window pair and the move-to-monitor pair ship UNBOUND, the
+    // same way the nine focus slots do. An unbound verb is honest: the user
+    // assigns a chord that works, instead of a factory default that stock
+    // KWin or a sibling family would swallow.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString workspaceFocusUpShortcut()
@@ -79,11 +96,11 @@ public:
     }
     static QString workspaceMoveWindowUpShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Up");
+        return QString();
     }
     static QString workspaceMoveWindowDownShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Down");
+        return QString();
     }
     static QString workspaceMoveColumnUpShortcut()
     {
@@ -104,13 +121,17 @@ public:
     {
         return QStringLiteral("Meta+Ctrl+Shift+PgDown");
     }
+    // The reorder pair above keeps Meta+Ctrl+Shift+PgUp/PgDown: the stock
+    // window-to-desktop quad is arrow-only, so the page keys on that tier are
+    // free. These two are the arrow members of the family and move up a tier
+    // for the reason the banner gives.
     static QString workspaceMoveToMonitorLeftShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Left");
+        return QString();
     }
     static QString workspaceMoveToMonitorRightShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+Right");
+        return QString();
     }
 
     // Move-slot chords (quick-layout model: fixed factory chords, rebindable
@@ -153,6 +174,23 @@ public:
     static QString workspaceMoveSlot9Shortcut()
     {
         return QStringLiteral("Meta+Shift+9");
+    }
+
+    /// Focus-slot chords: unset by default for every slot. The family is
+    /// daemon-registered and bound by the user in KDE's Shortcuts settings,
+    /// so there is no factory chord to collide with anything. One accessor
+    /// rather than nine identical ones — the value does not vary by slot, and
+    /// the schema loop reads it per slot.
+    static QString workspaceFocusSlotShortcut()
+    {
+        return QString();
+    }
+
+    /// Quick-slot targets: unassigned by default. An empty target means the
+    /// slot's chord resolves to no workspace and the verb does nothing.
+    static QString workspaceSlotTarget()
+    {
+        return QString();
     }
 };
 

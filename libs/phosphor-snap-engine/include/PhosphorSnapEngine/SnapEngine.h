@@ -579,6 +579,13 @@ public:
 
     void setCurrentDesktop(int desktop) override;
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
+    /// Forwarded to the shared context tracker like its setter twin above.
+    /// Both siblings override it; without this one, a screen leaving
+    /// per-output desktops would keep a stale entry HERE only, so snap's
+    /// currentKeyForScreen kept resolving the old desktop while the other two
+    /// engines followed the global one — a per-engine divergence in the key
+    /// that owns every window's placement.
+    void clearCurrentDesktopForScreen(const QString& screenId) override;
     void setCurrentActivity(const QString& activity) override;
 
     // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.
@@ -1005,6 +1012,15 @@ Q_SIGNALS:
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
+
+    /// Announce the placement of every window held by the stores @p matches
+    /// selects, BEFORE the caller destroys them: zone assignments through the
+    /// tracking service's unassign, float bits by windowFloatingChanged(false).
+    /// For the prunes whose windows are still ALIVE (a destroyed desktop, an
+    /// unplugged output) — a silent drop there strands every consumer on a
+    /// placement that no longer exists. MUST run before the state removal:
+    /// unassignWindow resolves the owning store through the reverse map.
+    void releaseWindowsForDyingStates(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& matches);
 
     /// Canonicalize a raw windowId to its stable first-seen composite via the
     /// shared registry (passthrough when no registry is attached). The reverse map

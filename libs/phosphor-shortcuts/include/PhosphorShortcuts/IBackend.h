@@ -175,14 +175,29 @@ public:
 
     /**
      * The current bindings of another component's action (backup before a
-     * foreign rebind) — primary first, alternates after. Empty when unbound
-     * or unsupported.
+     * foreign rebind) — primary first, alternates after.
+     *
+     * Tri-state, for the same reason currentTriggers() above is:
+     *  - std::nullopt   → the query FAILED or this backend cannot answer (no
+     *    foreign-rebind support, binding service unreachable, malformed
+     *    reply). The caller must NOT proceed to clear the action: it has no
+     *    backup, so a later restore would write the "unbound" sentinel over a
+     *    binding the user still has.
+     *  - engaged, empty → the action is genuinely unbound; there is nothing to
+     *    back up and nothing to steal.
+     *  - engaged, non-empty → the action's full binding.
+     * Folding the first two into one empty list made an unreachable
+     * kglobalacceld look exactly like an already-unbound action.
+     *
+     * The default reports nullopt: a backend without setForeignShortcuts
+     * cannot answer this either.
      */
-    virtual QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const
+    virtual std::optional<QList<QKeySequence>> foreignShortcuts(const QString& componentName,
+                                                                const QString& actionName) const
     {
         Q_UNUSED(componentName);
         Q_UNUSED(actionName);
-        return {};
+        return std::nullopt;
     }
 
 Q_SIGNALS:

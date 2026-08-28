@@ -404,6 +404,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/rules/ActionListEditor.qml
         qml/pages/rules/ActionRow.qml
         qml/pages/rules/ActionParamEditors.qml
+        qml/pages/rules/ActionParamPickers.qml
         qml/pages/animations/InertAnimationEventChip.qml
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml

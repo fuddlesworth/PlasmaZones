@@ -406,9 +406,14 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     if (action.type == ActionType::RouteToWorkspace) {
         // The stored NAME renders quoted whether or not it is currently
         // declared — an undeclared name is a dormant rule, not an error.
-        const QString name = action.params.value(PhosphorRules::ActionParam::TargetWorkspaceName).toString();
-        return name.isEmpty() ? PhosphorI18n::tr("Open on workspace")
-                              : PhosphorI18n::tr("Open on workspace “%1”").arg(name);
+        // Trimmed and bounded the same way the SnapToZone name loop above
+        // applies the validator's range: a hand-edited payload past the wire
+        // bound falls back to the bare label instead of flooding the summary.
+        const QString name = action.params.value(PhosphorRules::ActionParam::TargetWorkspaceName).toString().trimmed();
+        if (name.isEmpty() || name.size() > PhosphorRules::MaxWorkspaceNameLength) {
+            return PhosphorI18n::tr("Open on workspace");
+        }
+        return PhosphorI18n::tr("Open on workspace “%1”", "%1 is the quoted workspace name").arg(name);
     }
     if (action.type == ActionType::RouteToDesktop) {
         // Both ends of the descriptor's bound, not just the floor: a
@@ -808,7 +813,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             const QString family = raw.toString();
             return PhosphorI18n::tr("Tab label font: %1")
                 .arg(family.isEmpty()
-                         ? RuleAuthoring::paramEmptyValueLabel(action.type, QString(PhosphorRules::ActionParam::Value))
+                         ? RuleAuthoring::paramEmptyValueLabel(action.type, PhosphorRules::ActionParam::Value)
                          : family);
         }
         if (action.type == ActionType::SetTabIndicatorFontWeight) {

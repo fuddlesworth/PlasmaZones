@@ -435,7 +435,15 @@ void Daemon::connectDesktopActivity()
                 // applies to the per-screen CURRENT-desktop maps (VDM / layout registry /
                 // engine context): they are corrected by the effect's next per-output
                 // desktop report rather than re-derived here.
-                if (m_settings) {
+                // Same reasoning as the engine sweep below: this prune only
+                // knows the new COUNT, so on a mid-list removal it drops the
+                // highest-numbered screen/desktop gate rather than the one
+                // that actually died, and then leaves every survivor's entry
+                // pointing at the wrong desktop. Under dynamic workspaces the
+                // renumber fan-out in workspaces.cpp owns these lists: it
+                // remaps them by the identity map KWin's settled id list
+                // gives us.
+                if (m_settings && !m_workspaceController) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
@@ -482,7 +490,13 @@ void Daemon::connectDesktopActivity()
                         const QSet<int> active = engine->desktopsWithActiveState();
                         for (int d : active) {
                             if (d > newCount) {
-                                engine->pruneStatesForDesktop(d);
+                                // reapDesktopState, not pruneStatesForDesktop:
+                                // the latter drops the engine's per-context
+                                // state but leaves the per-WINDOW desktop
+                                // values behind, so with dynamic workspaces
+                                // off those never got reaped at all. The reap
+                                // is a superset of the prune.
+                                engine->reapDesktopState(d);
                             }
                         }
                     }

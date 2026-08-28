@@ -17,6 +17,28 @@ include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dependencies
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Found via add_subdirectory in the in-tree build; the guarded find_package
+# arms are what make a standalone configure of this directory work.
+
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus)
+
+# PhosphorEngine supplies IVirtualDesktopManager, which VirtualDesktopManager
+# implements and its public header includes. PUBLIC — the type is part of this
+# library's own API surface.
+if(NOT TARGET PhosphorEngine::PhosphorEngine)
+    find_package(PhosphorEngine CONFIG REQUIRED)
+endif()
+
+# PhosphorIdentity supplies VirtualScreenId, used to resolve a virtual screen
+# id back to its parent output. PRIVATE — the include lives in the .cpp.
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorWorkspaces SHARED
     include/PhosphorWorkspaces/VirtualDesktopManager.h
     include/PhosphorWorkspaces/ActivityManager.h

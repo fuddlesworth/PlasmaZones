@@ -36,8 +36,27 @@ ExpandableRowDelegate {
     property string headerName: entry.name
     property string headerOutput: entry.output
 
+    /// Why the last rename attempt was refused, or empty. Shown under the name
+    /// field and cleared as soon as the user types again — a refusal that only
+    /// snapped the text back would look like the edit was simply lost.
+    property string nameError: ""
+
     signal fieldEdited(int index, string field, var value)
     signal removeRequested(int index)
+
+    /// Point the name field back at the stored name.
+    ///
+    /// Used for every exit from the rename handler, refusal or not, so the
+    /// field always shows what the store actually holds — including the
+    /// trimmed form after a rename that only changed surrounding whitespace.
+    /// Reassigned as a Qt.binding rather than a plain string so the
+    /// declarative `text: row.entry.name` binding survives; a bare assignment
+    /// would sever it and leave a later `entry` replacement unreflected.
+    function _restoreNameField() {
+        nameField.text = Qt.binding(function () {
+            return row.entry.name;
+        });
+    }
 
     function _monitorLabel(outputId) {
         if (outputId === "")
@@ -79,24 +98,14 @@ ExpandableRowDelegate {
     }
 
     // Pinned-monitor badge — only when actually pinned (the subtitle already
-    // says "Any monitor" for the unpinned case). Highlight-tinted like
-    // RuleRow's category badge.
-    Rectangle {
+    // says "Any monitor" for the unpinned case). MetadataChip is the shared
+    // badge the settings lists use, in its highlighted (state) flavour, which
+    // is the same recipe RuleRow's category badge follows.
+    MetadataChip {
         visible: row.headerOutput !== ""
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: pinnedBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing
-        implicitHeight: pinnedBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
-        radius: Kirigami.Units.smallSpacing
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
-
-        Label {
-            id: pinnedBadgeLabel
-
-            anchors.centerIn: parent
-            text: i18nc("Badge on a named workspace pinned to a monitor", "Pinned")
-            font: Kirigami.Theme.smallFont
-            opacity: 0.85
-        }
+        highlighted: true
+        text: i18nc("Badge on a named workspace pinned to a monitor", "Pinned")
     }
 
     ExpandChevron {
@@ -121,26 +130,67 @@ ExpandableRowDelegate {
             text: i18n("Name")
         }
 
-        TextField {
-            id: nameField
-
+        ColumnLayout {
             Layout.fillWidth: true
-            text: row.entry.name
-            Accessible.name: i18n("Workspace name")
-            onEditingFinished: {
-                var trimmed = text.trim();
-                if (trimmed === row.entry.name)
-                    return; // unchanged; tabbing through must not dirty the page
+            spacing: Kirigami.Units.smallSpacing / 2
 
-                var siblings = row.siblingNamesOf(row.entryIndex);
-                for (var i = 0; i < siblings.length; ++i) {
-                    if (siblings[i] === trimmed) {
-                        text = row.entry.name; // names are unique; refuse the duplicate
+            TextField {
+                id: nameField
+
+                Layout.fillWidth: true
+                text: row.entry.name
+                Accessible.name: i18n("Workspace name")
+                Accessible.description: row.nameError
+                onTextEdited: row.nameError = ""
+                onEditingFinished: {
+                    // Names are compared trimmed and case-sensitively, which is
+                    // the daemon's identity rule: the config schema trims a
+                    // name before storing it (canonicalNamedEntries) and the
+                    // reconciler matches declarations with plain QString
+                    // equality, so "Work" and "work" are two workspaces.
+                    var trimmed = text.trim();
+                    var stored = ("" + row.entry.name).trim();
+                    if (trimmed === stored) {
+                        // Unchanged: tabbing through must not dirty the page.
+                        // Still write the trimmed form back, so a rename that
+                        // only added whitespace does not leave the field
+                        // showing text the store will never hold.
+                        row.nameError = "";
+                        row._restoreNameField();
                         return;
                     }
+                    // An empty name is not a name. The schema drops an entry
+                    // whose name is empty (canonicalNamedEntries skips it), so
+                    // committing one would delete the declaration on the next
+                    // round-trip and take its shortcuts with it. The Add form
+                    // refuses the same input.
+                    if (trimmed === "") {
+                        row.nameError = i18n("A workspace needs a name.");
+                        row._restoreNameField();
+                        return;
+                    }
+                    var siblings = row.siblingNamesOf(row.entryIndex);
+                    for (var i = 0; i < siblings.length; ++i) {
+                        if (siblings[i] === trimmed) {
+                            row.nameError = i18n("Another workspace already uses that name.");
+                            row._restoreNameField();
+                            return;
+                        }
+                    }
+                    row.nameError = "";
+                    row.headerName = trimmed;
+                    row.fieldEdited(row.entryIndex, "name", trimmed);
+                    row._restoreNameField();
                 }
-                row.headerName = trimmed;
-                row.fieldEdited(row.entryIndex, "name", trimmed);
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: row.nameError !== ""
+                text: row.nameError
+                wrapMode: Text.WordWrap
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.negativeTextColor
             }
         }
 
@@ -154,6 +204,12 @@ ExpandableRowDelegate {
             Accessible.name: i18n("Pinned monitor")
             model: row.screenOptions
             storedValue: row.entry.output
+            // A monitor that is currently unplugged is not in `screenOptions`,
+            // and WideComboBox clamps an unresolved storedValue to index 0 —
+            // which is "Any monitor", so the pin would read as if it had been
+            // dropped. Show the stored output id instead, the same fallback
+            // the rules editors and the quick-shortcut combo use.
+            displayText: (row.entry.output !== "" && indexOfValue(row.entry.output) < 0) ? row.entry.output : currentText
             onActivated: {
                 row.headerOutput = currentValue;
                 row.fieldEdited(row.entryIndex, "output", currentValue);
@@ -168,7 +224,11 @@ ExpandableRowDelegate {
             id: positionSpin
 
             from: -1
-            to: 19
+            // The reconciler's desktop cap, minus one for the zero-based
+            // slice index. Read off the controller rather than spelled here:
+            // WorkspaceReconciler::DefaultDesktopCap is the one place the
+            // limit is decided.
+            to: settingsController.workspacesDesktopCap - 1
             value: row.entry.position
             unitText: ""
             accessibleName: i18n("Preferred position in the monitor's list")

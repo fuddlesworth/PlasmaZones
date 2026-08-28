@@ -160,7 +160,8 @@ public:
     std::optional<QStringList> currentTriggers(const QString& id) const override;
     bool setForeignShortcuts(const QString& componentName, const QString& actionName,
                              const QList<QKeySequence>& sequences) override;
-    QList<QKeySequence> foreignShortcuts(const QString& componentName, const QString& actionName) const override;
+    std::optional<QList<QKeySequence>> foreignShortcuts(const QString& componentName,
+                                                        const QString& actionName) const override;
 
 private:
     // QAction ownership is an implementation detail of this backend —
