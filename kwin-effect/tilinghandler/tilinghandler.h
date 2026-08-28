@@ -304,6 +304,16 @@ public:
      */
     void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate = false);
     void savePreTileForDesktopMove(const QString& windowId);
+    /// Consume the desktop-move stash for @p windowId, folding the preserved
+    /// pre-autotile rect back into @p screenId's bucket so a float-restore
+    /// after the move returns to the original free position rather than the
+    /// source desktop's tiled frame. MUST run after the re-add path's
+    /// releaseWindowTracking (which wipes the bucket) and before
+    /// notifyWindowAdded. Declines a rect stashed under a different screen —
+    /// saved rects are absolute in the SOURCE monitor's coordinate space and
+    /// would land off-target after a combined cross-desktop + cross-screen
+    /// move. Consumes the entry either way; a window with no stash is a no-op.
+    void restorePreTileForDesktopMove(const QString& windowId, const QString& screenId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
     // D-Bus signal connections and settings
