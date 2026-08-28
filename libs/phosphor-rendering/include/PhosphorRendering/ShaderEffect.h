@@ -145,8 +145,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     // ── Textures ─────────────────────────────────────────────────────
     Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY
                    audioSpectrumChanged FINAL)
-    Q_PROPERTY(
-        QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
+    Q_PROPERTY(QVariant wallpaperTexture READ wallpaperTextureVariant WRITE setWallpaperTextureVariant NOTIFY
+                   wallpaperTextureChanged FINAL)
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
     Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
 
@@ -595,7 +595,27 @@ public:
     void setUserTextureWrap(int slot, const QString& wrap);
 
     QImage wallpaperTexture() const;
+
+    /// QML-facing form of `wallpaperTexture`, and the reason the Q_PROPERTY is
+    /// a QVariant rather than a QImage.
+    ///
+    /// QML cannot reliably drive a QImage-typed property: a
+    /// `Binding on wallpaperTexture { value: someVarHoldingAnImage }` writes
+    /// NOTHING AT ALL — silently, with no engine warning — while the sibling
+    /// bool binding beside it applies. That is how every decoration preview in
+    /// the settings app came to render its no-backdrop fallback: the image
+    /// reached the host QML and stopped there. A QVariant property takes
+    /// whatever QML hands over and converts here, which works from both
+    /// binding forms and from a plain assignment.
+    ///
+    /// Mirrors the `audioSpectrum` property beside it, which is a QVariant for
+    /// the same class of reason.
+    QVariant wallpaperTextureVariant() const;
     void setWallpaperTexture(const QImage& image);
+    /// Accepts a QImage, a null, or an undefined — a host with nothing behind
+    /// its surface passes one of the latter two, which is the ordinary
+    /// no-backdrop state rather than an error, and resolves to a null QImage.
+    void setWallpaperTextureVariant(const QVariant& texture);
 
     bool useWallpaper() const
     {

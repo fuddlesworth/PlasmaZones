@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QColor>
+#include <QImage>
+#include <QRegularExpression>
+#include <QFile>
+#include <QQmlApplicationEngine>
+#include <QQmlComponent>
+#include <QQmlContext>
+#include <qqml.h>
 #include <QGuiApplication>
 #include <QPointF>
 #include <QSignalSpy>
@@ -151,6 +158,102 @@ private Q_SLOTS:
         // Exactly one Null -> Loading transition; headless, updatePaintNode never
         // runs so no further Ready/Error/Null change can follow to inflate this.
         QCOMPARE(statusSpy.count(), 1);
+    }
+
+    /// A QML BINDING must actually deliver the backdrop image to the item.
+    ///
+    /// Regression guard, and it has to go through the QML engine rather than
+    /// setProperty(): the property used to be QImage-typed, and a
+    /// `Binding on wallpaperTexture { value: <var holding a QImage> }` wrote
+    /// NOTHING through it — silently, with no engine warning, while a bool
+    /// binding beside it applied. Every decoration preview in the settings app
+    /// therefore ran with uHasBackdrop = 0 and drew its no-backdrop fallback:
+    /// the blur family showed a flat gradient slab where a blurred desktop
+    /// belonged. A C++ setProperty() with an exact-typed QVariant never
+    /// reproduced it, so only a real binding pins the fix.
+    void testSurfaceShaderItem_qmlBindingDeliversTheWallpaperImage()
+    {
+        qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZonesTest", 1, 0, "SurfaceShaderItem");
+
+        QImage backdrop(8, 4, QImage::Format_RGBA8888);
+        backdrop.fill(Qt::red);
+
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("testBackdrop"), QVariant::fromValue(backdrop));
+
+        // A DIRECT binding, which is the only shape that works and therefore
+        // the only shape the shipping QML is allowed to use — see the sweep in
+        // the slot below.
+        QQmlComponent component(&engine);
+        component.setData(R"QML(
+import QtQuick
+import PlasmaZonesTest 1.0
+Item {
+    property alias direct: a
+    SurfaceShaderItem { id: a; wallpaperTexture: testBackdrop }
+}
+)QML",
+                          QUrl(QStringLiteral("qrc:/test_wallpaper_binding.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY(root);
+
+        auto* item = root->property("direct").value<PlasmaZones::SurfaceShaderItem*>();
+        QVERIFY(item);
+        const QImage delivered = item->wallpaperTexture();
+        QVERIFY(!delivered.isNull());
+        QCOMPARE(delivered.size(), backdrop.size());
+    }
+
+    /// No shipping QML may drive `wallpaperTexture` through a Binding ELEMENT.
+    ///
+    /// `Binding { property: "wallpaperTexture"; value: <a QImage> }` hands the
+    /// setter an INVALID QVariant — the image does not survive Binding's own
+    /// `value` property, and nothing is logged, so the surface silently draws
+    /// its no-backdrop appearance. (`Binding on wallpaperTexture { ... }` is
+    /// worse still: it never writes at all.) A direct binding on the item
+    /// delivers the image intact, so this pins the two hosts to that shape.
+    /// Neighbouring Bindings for labelsTexture are fine and deliberately not
+    /// swept: ZoneLabelTexture is a QML-registered value type, a bare QImage
+    /// is not.
+    void testSurfaceShaderItem_noQmlDrivesTheWallpaperThroughABindingElement()
+    {
+        const QStringList hosts{QStringLiteral(P_SOURCE_DIR "/src/shared/SurfaceDecoration.qml"),
+                                QStringLiteral(P_SOURCE_DIR "/src/shared/ZoneShaderRenderer.qml")};
+        for (const QString& path : hosts) {
+            QFile f(path);
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(path));
+            QString src = QString::fromUtf8(f.readAll());
+            // Comments first: both files DOCUMENT the broken shapes at length,
+            // and a guard that matched the warning would fail on the warning.
+            static const QRegularExpression blockComment(QStringLiteral("/\\*.*?\\*/"),
+                                                         QRegularExpression::DotMatchesEverythingOption);
+            static const QRegularExpression lineComment(QStringLiteral("(?<![:\"'])//[^\n]*"));
+            src.remove(blockComment);
+            src.remove(lineComment);
+
+            QVERIFY2(!src.contains(QLatin1String("Binding on wallpaperTexture")), qPrintable(path));
+            static const QRegularExpression bindingElement(
+                QStringLiteral("Binding\\s*\\{[^}]*property:\\s*[\"']wallpaperTexture[\"'][^}]*\\}"),
+                QRegularExpression::DotMatchesEverythingOption);
+            QVERIFY2(!bindingElement.match(src).hasMatch(), qPrintable(path));
+        }
+    }
+
+    /// The no-backdrop state is ordinary, not an error: a host with nothing
+    /// behind its surface passes null, and that must resolve to a null image
+    /// rather than warning or leaving a stale one in place.
+    void testSurfaceShaderItem_aNullValueClearsTheWallpaperImage()
+    {
+        QImage backdrop(4, 4, QImage::Format_RGBA8888);
+        backdrop.fill(Qt::blue);
+
+        PlasmaZones::SurfaceShaderItem item;
+        item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
+        QVERIFY(!item.wallpaperTexture().isNull());
+
+        item.setProperty("wallpaperTexture", QVariant());
+        QVERIFY(item.wallpaperTexture().isNull());
     }
 
     void testSurfaceShaderItem_unsupportedUrlSchemeIsFullyRefused()

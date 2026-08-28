@@ -83,6 +83,8 @@ Item {
         iResolution: root.safeConfig.iResolution || Qt.size(width, height)
         iMouse: root.safeConfig.iMouse || Qt.point(0, 0)
         useWallpaper: root.safeConfig.useWallpaper ?? false
+        // See the note where the old Binding for this lived, below.
+        wallpaperTexture: root.safeConfig.wallpaperTexture
         useDepthBuffer: root.safeConfig.useDepthBuffer ?? false
         bufferWraps: root.safeConfig.bufferWraps || []
         bufferFilter: root.safeConfig.bufferFilter || "linear"
@@ -110,12 +112,15 @@ Item {
         when: root.safeConfig.labelsTexture !== undefined && root.safeConfig.labelsTexture !== null
     }
 
-    // wallpaperTexture uses Binding with explicit null guard because QImage
-    // truthiness evaluation is unreliable in QML (can crash during teardown).
-    Binding {
-        target: zoneShaderItem
-        property: "wallpaperTexture"
-        value: root.safeConfig.wallpaperTexture
-        when: root.safeConfig.wallpaperTexture !== undefined && root.safeConfig.wallpaperTexture !== null
-    }
+    // wallpaperTexture is assigned DIRECTLY on the item above, deliberately
+    // not through a Binding element like its neighbours here.
+    //
+    // A `Binding { property: "wallpaperTexture"; value: <a QImage> }` delivers
+    // an INVALID QVariant to the setter — the image does not survive the trip
+    // through Binding's own `value` property, and nothing is logged. The
+    // labelsTexture binding above is unaffected because ZoneLabelTexture is a
+    // QML-registered value type; a bare QImage is not. A direct binding on the
+    // item's own property hands the image over intact, and the property takes
+    // a QVariant (ShaderEffect::setWallpaperTextureVariant), so an absent
+    // config key resolves to "no wallpaper" instead of warning.
 }

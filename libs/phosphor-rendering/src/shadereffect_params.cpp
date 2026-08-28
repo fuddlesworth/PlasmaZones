@@ -8,6 +8,7 @@
 
 #include <PhosphorShaders/CustomParamsKey.h>
 
+#include <QJSValue>
 #include <QMutexLocker>
 #include <QVariant>
 
@@ -637,6 +638,42 @@ void ShaderEffect::setWallpaperTexture(const QImage& image)
     }
     Q_EMIT wallpaperTextureChanged();
     update();
+}
+
+QVariant ShaderEffect::wallpaperTextureVariant() const
+{
+    return QVariant::fromValue(wallpaperTexture());
+}
+
+void ShaderEffect::setWallpaperTextureVariant(const QVariant& texture)
+{
+    // Unwrapped, not just converted. QML delivers this property's value in
+    // three different shapes depending on how the host wrote it:
+    //
+    //   - a direct binding (`wallpaperTexture: someImage`) arrives as a plain
+    //     QVariant(QImage);
+    //   - a `Binding { target: item; property: "wallpaperTexture" }` element
+    //     arrives as a QVariant WRAPPING a QVariant that holds the image;
+    //   - a JS-side expression can arrive as a QJSValue holding either.
+    //
+    // value<QImage>() answers null for the last two, which is how a real
+    // backdrop turns into the pack's no-backdrop fallback with nothing logged
+    // anywhere. Peeling first is what makes every host shape deliver the same
+    // image.
+    QVariant unwrapped = texture;
+    if (unwrapped.metaType().id() == qMetaTypeId<QJSValue>()) {
+        unwrapped = unwrapped.value<QJSValue>().toVariant();
+    }
+    // Bounded loop, not `while (true)`: a QVariant chain this deep is already
+    // pathological, and an unbounded peel would hang on a self-referencing one.
+    for (int depth = 0; depth < 4 && unwrapped.metaType().id() == QMetaType::QVariant; ++depth) {
+        unwrapped = unwrapped.value<QVariant>();
+    }
+
+    // A host with no backdrop passes null / undefined / an invalid QVariant.
+    // That is the ordinary "nothing behind this surface" state, not an error,
+    // and resolves to a null image without warning.
+    setWallpaperTexture(unwrapped.value<QImage>());
 }
 
 void ShaderEffect::setUseWallpaper(bool use)

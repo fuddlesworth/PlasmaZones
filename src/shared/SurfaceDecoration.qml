@@ -142,6 +142,31 @@ Item {
     /// zone/overlay preview has always had.
     property bool animationsPaused: false
 
+    /// Route EVERY stage through a layer texture, not just the multipass ones.
+    ///
+    /// Mandatory for a host that applies a transform to this component or
+    /// relies on an ancestor's `clip`. A SurfaceShaderItem stage is a
+    /// QSGRenderNode that discards the RenderState it is handed
+    /// (ShaderNodeRhi::render, shadernoderhicore.cpp) and computes its own
+    /// viewport from `item->width() * devicePixelRatio` and the item's mapped
+    /// ORIGIN — so a scaled ancestor moves the stage but does not resize it,
+    /// and the node overwrites the scissor Qt set for the clip. A scaled host
+    /// therefore gets full-size stages drawn at scaled positions, spilling
+    /// over whatever is beside them.
+    ///
+    /// Layering removes the problem rather than working around it: the node
+    /// renders into an FBO sized to its own item (which is what it thinks it
+    /// is drawing at anyway), and the scene graph composites THAT texture with
+    /// the full transform and clip, like any other textured node. Multipass
+    /// stages already take this path for their own reasons, which is why the
+    /// blur family survived a scaled host while every single-pass pack escaped
+    /// its bounds.
+    ///
+    /// False by default: the daemon's overlay surfaces are drawn untransformed
+    /// at 1:1, and a layer per stage there would be a canvas-sized FBO for
+    /// nothing.
+    property bool layeredStages: false
+
     /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
     /// active from an inactive appearance keys on it — the border family mixes
     /// its two colours on it, and focus-fade washes the whole surface out when
@@ -452,20 +477,21 @@ Item {
                 // instead of its dummy, and the node raises uHasBackdrop off
                 // exactly that. Every stage in the chain gets the same
                 // backdrop, mirroring how each sees the same canvas.
-                // wallpaperTexture is a QImage property, so it only binds
-                // while a texture actually exists — the old
-                // `? ... : undefined` fallback tried to assign undefined to a
-                // QImage and logged an engine warning on every re-evaluation
-                // with no backdrop. useWallpaper is what gates sampling, so
-                // whatever stale image the property holds while unbound is
-                // never read.
+                //
+                // A PLAIN binding, and it has to stay one. This was a
+                // `Binding on wallpaperTexture { when: ...; value: ... }`,
+                // which wrote NOTHING — silently, no engine warning, while the
+                // useWallpaper binding right above it applied normally. Every
+                // decoration preview in the settings app therefore ran with
+                // uHasBackdrop = 0 and drew its no-backdrop fallback: the blur
+                // family showed its flat gradient slab where a blurred desktop
+                // belonged, and mosaic showed a tint slab with no cells at
+                // all. The property is a QVariant now (see
+                // ShaderEffect::setWallpaperTextureVariant), so a host with
+                // nothing to show can pass null or undefined straight through
+                // without the guard that broke it.
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
-
-                Binding on wallpaperTexture {
-                    when: root.backdropTexture !== null && root.backdropTexture !== undefined
-                    value: root.backdropTexture
-                    restoreMode: Binding.RestoreNone
-                }
+                wallpaperTexture: root.backdropTexture
 
                 // Which slice of that shared backdrop lies behind THIS stage.
                 // Both rects are in the host's coordinate space, so the item
@@ -638,7 +664,7 @@ Item {
                 // taps below still capture a layered stage: layer.enabled
                 // changes where the item renders, not whether it renders, so
                 // the hide-source fold is unaffected.
-                layer.enabled: stage.stageData.multipass === true && root.decorationActive
+                layer.enabled: (stage.stageData.multipass === true || root.layeredStages) && root.decorationActive
                 // Qt's DEFAULT mirroring (MirrorVertically), which differs from
                 // the NoMirroring ZoneShaderRenderer.qml sets. That difference
                 // is NOT a designed distinction between the two hosts: the zone
@@ -659,6 +685,20 @@ Item {
                 // pack (the whole glass/blur family) while single-pass packs
                 // stayed upright.
                 layer.textureMirroring: ShaderEffectSource.MirrorVertically
+                // Filtered minification for a host that shrinks the composed
+                // decoration (layeredStages implies exactly that). Drawing a
+                // busy shader's layer at 60% with plain bilinear filtering
+                // point-samples every other texel: fine mosaic cells, frost
+                // grain and blur noise BREAK UP rather than shrink, so the
+                // thumbnail stops reading as the same effect as the full-size
+                // one even when it was composed from identical geometry and
+                // parameters. A mip chain is what makes it an honest miniature.
+                //
+                // Only for the scaling host: at 1:1 the mip levels are never
+                // sampled and building them is pure cost, which is what the
+                // daemon's overlay surfaces would be paying.
+                layer.mipmap: root.layeredStages
+                layer.smooth: root.layeredStages
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on
