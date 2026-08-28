@@ -89,7 +89,14 @@ HOME_N="$NEST/home"
 # unlinking what might be a live session's socket. PZ_NESTED_FORCE=1 skips
 # the check either way and unlinks; note that a compositor still holding
 # the old socket keeps running orphaned and must be killed by hand.
-SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pznested"
+# Socket name, so two worktrees can each run a nested session at once (kwin
+# takes a lockfile named after it, and a second session on the same name dies
+# with "could not add wayland socket"). Pair a distinct PZ_NESTED_SOCKET with
+# a distinct PZ_NESTED_DIR — the state dir holds the env.sh every follow-up
+# script sources, so sharing one across two sessions points them both at
+# whichever started last.
+PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested}"
+SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$PZ_NESTED_SOCKET"
 if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     echo "refusing: $SOCK exists and is not a socket; remove it by hand" >&2
     exit 1
@@ -173,7 +180,7 @@ EXTRA_FLAGS=""
 exec dbus-run-session -- sh -c "
   {
     echo \"export DBUS_SESSION_BUS_ADDRESS='\$DBUS_SESSION_BUS_ADDRESS'\"
-    echo \"export WAYLAND_DISPLAY=pznested\"
+    echo \"export WAYLAND_DISPLAY=$PZ_NESTED_SOCKET\"
     echo \"export XDG_CONFIG_HOME='$XDG_CONFIG_HOME'\"
     echo \"export XDG_DATA_HOME='$XDG_DATA_HOME'\"
     echo \"export XDG_CACHE_HOME='$XDG_CACHE_HOME'\"
@@ -188,5 +195,5 @@ exec dbus-run-session -- sh -c "
     echo \"export PZ_NESTED_BUILD='$BUILD'\"
   } > '$NEST/env.sh.tmp'
   mv '$NEST/env.sh.tmp' '$NEST/env.sh'
-  exec kwin_wayland --virtual --output-count $OUTPUTS$EXTRA_FLAGS --socket pznested --no-lockscreen --no-global-shortcuts --no-kactivities
+  exec kwin_wayland --virtual --output-count $OUTPUTS$EXTRA_FLAGS --socket $PZ_NESTED_SOCKET --no-lockscreen --no-global-shortcuts --no-kactivities
 "
