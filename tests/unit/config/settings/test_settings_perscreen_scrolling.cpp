@@ -143,9 +143,12 @@ private Q_SLOTS:
              {}},
             {"height kind fixed", key(K::DefaultWindowHeightKind), ConfigDefaults::scrollingHeightKindFixed(), true,
              ConfigDefaults::scrollingHeightKindFixed()},
+            {"height kind client decides", key(K::DefaultWindowHeightKind),
+             ConfigDefaults::scrollingHeightKindClientDecides(), true,
+             ConfigDefaults::scrollingHeightKindClientDecides()},
             {"height kind past the set",
              key(K::DefaultWindowHeightKind),
-             ConfigDefaults::scrollingHeightKindPreset() + 1,
+             ConfigDefaults::scrollingHeightKindClientDecides() + 1,
              false,
              {}},
             {"display tabbed", key(K::DefaultColumnDisplay), ConfigDefaults::scrollingColumnDisplayTabbed(), true,
@@ -300,14 +303,25 @@ private Q_SLOTS:
             {key(K::DefaultColumnWidthValue), 1200.0},
             {key(K::DefaultColumnWidthPresetIndex), 3},
             {key(K::DefaultColumnDisplay), ConfigDefaults::scrollingColumnDisplayTabbed()},
-            {key(K::DefaultWindowHeightKind), ConfigDefaults::scrollingHeightKindFixed()},
+            // ClientDecides deliberately, not Fixed: this is the only test
+            // anywhere that carries a height kind through the whole save/load
+            // ladder, so an arm that dropped or coerced the newest wire value
+            // (a leftover kind > Preset bound, say) would otherwise stay
+            // green. The value key beside it is inert under this kind and is
+            // carried on its own terms.
+            {key(K::DefaultWindowHeightKind), ConfigDefaults::scrollingHeightKindClientDecides()},
             {key(K::DefaultWindowHeightValue), 720.0},
             {key(K::DefaultWindowHeightPresetIndex), 2},
             {key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical()},
         };
         {
             Settings settings;
-            // The kind goes first so the value write is validated under it.
+            // The WIDTH kind is written first explicitly rather than relying
+            // on the map walk below: QVariantMap iterates in key order, which
+            // happens to put Kind before Value today, and a fixture reordering
+            // should not be able to change what the width value is validated
+            // against. The height pair needs no such pre-write — its value key
+            // is validated independently of its kind.
             settings.setPerScreenScrollingSetting(screen, key(K::DefaultColumnWidthKind),
                                                   expected.value(key(K::DefaultColumnWidthKind)));
             for (auto it = expected.constBegin(); it != expected.constEnd(); ++it) {
@@ -521,6 +535,9 @@ private Q_SLOTS:
     }
 };
 
-// QTEST_MAIN (not GUILESS): Settings' load path reads QGuiApplication::palette().
+// QTEST_MAIN (not GUILESS): Settings installs an event filter on qGuiApp, and
+// its resolved colour getters read QGuiApplication::palette(). (The LOAD path
+// itself no longer touches the palette — resolution is lazy — which the
+// scrolling-settings suite's own note records.)
 QTEST_MAIN(TestSettingsPerScreenScrolling)
 #include "test_settings_perscreen_scrolling.moc"

@@ -85,6 +85,9 @@ static_assert(ConfigDefaults::scrollingHeightKindFixed()
 static_assert(ConfigDefaults::scrollingHeightKindPreset()
                   == static_cast<int>(PhosphorScrollEngine::DefaultHeightKind::Preset),
               "DefaultHeightKind::Preset wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingHeightKindClientDecides()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultHeightKind::ClientDecides),
+              "DefaultHeightKind::ClientDecides wire value drifted from ConfigDefaults");
 static_assert(ConfigDefaults::scrollingInsertRightOfActive()
                   == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::RightOfActive),
               "ScrollInsertPosition::RightOfActive wire value drifted from ConfigDefaults");
@@ -258,11 +261,13 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingDefaultWindowHeightKind(),
          QMetaType::Int,
          {},
-         validIntOr({CD::scrollingHeightKindAuto(), CD::scrollingHeightKindFixed(), CD::scrollingHeightKindPreset()},
+         validIntOr({CD::scrollingHeightKindAuto(), CD::scrollingHeightKindFixed(), CD::scrollingHeightKindPreset(),
+                     CD::scrollingHeightKindClientDecides()},
                     CD::scrollingDefaultWindowHeightKind()),
          intChoices({{CD::scrollingHeightKindAuto(), "auto"_L1},
                      {CD::scrollingHeightKindFixed(), "fixed"_L1},
-                     {CD::scrollingHeightKindPreset(), "preset"_L1}})},
+                     {CD::scrollingHeightKindPreset(), "preset"_L1},
+                     {CD::scrollingHeightKindClientDecides(), "clientDecides"_L1}})},
         {CD::defaultWindowHeightValueKey(),
          CD::scrollingDefaultWindowHeightValue(),
          QMetaType::Double,
