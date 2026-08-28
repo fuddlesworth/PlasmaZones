@@ -283,6 +283,12 @@ private Q_SLOTS:
         QTest::newRow("stripExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::StripExit) << true;
 
         // PassiveFloat — monocle is the ONE deliberate blank in the table.
+        // UntrackFunnel matches StripExit except for monocle, whose blank is
+        // recorded as unresolved rather than decided (see the enum comment).
+        QTest::newRow("untrack/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::UntrackFunnel) << false;
+        QTest::newRow("untrack/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::UntrackFunnel) << true;
+        QTest::newRow("untrack/column") << c(Claim::ColumnMaximize) << s(ClaimScope::UntrackFunnel) << true;
+
         QTest::newRow("passiveFloat/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::PassiveFloat) << false;
         QTest::newRow("passiveFloat/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::PassiveFloat) << true;
         QTest::newRow("passiveFloat/column") << c(Claim::ColumnMaximize) << s(ClaimScope::PassiveFloat) << true;

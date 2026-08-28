@@ -785,21 +785,17 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // KWin-fullscreen forever — snapping emits no tile batch to un-flag
     // it). Forget-then-release, membership first, so a synchronous
     // re-entry from setFullScreen finds the entry already gone.
-    if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
-        forgetWindowedFullscreen(windowId);
-        releaseWindowedFullscreenState(windowId);
-    }
-    m_windowedFsClearInFlight.remove(windowId);
-    // The column-maximize mirror dies with the tracking on the same two
-    // paths and for the same reason: on a cross-output transfer to a
-    // snapping screen no later tile batch exists to un-mirror it, and the
-    // window would stay KWin-maximized for the session. Resolved through the
-    // EffectWindow rather than dropped bare so the bit is actually handed
-    // back while the window is still alive, and so the release can re-seed
-    // the tracked-screen map after its own suppressed move.
-    if (m_columnMaximizedWindows.contains(windowId)) {
-        releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
-    }
+    // UntrackFunnel, not StripExit: monocle deliberately does NOT release here
+    // — it rides cleanupClosedWindowState's scrub — and that blank is recorded
+    // in the scope table with its reasoning rather than quietly filled by the
+    // funnel. Both other claims answer, for the reason this path documents: on
+    // a cross-output transfer to a screen these engines do not manage, no later
+    // tile batch exists to hand the state back.
+    //
+    // The EffectWindow is resolved rather than dropped bare so the bit is
+    // handed back while the window is still alive, and so the release can
+    // re-seed the tracked-screen map after its suppressed move.
+    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::UntrackFunnel);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared

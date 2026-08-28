@@ -161,10 +161,27 @@ enum class Claim {
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
 enum class ClaimScope {
-    /// The window is leaving the strip or the tiled set outright and no later
-    /// batch will carry it: close, cross-output transfer, the untile diff,
-    /// the active float channel, the leaving-scrolling loop.
+    /// The window is leaving the strip outright and no later batch will carry
+    /// it: the untile diff, the active float channel, the leaving-scrolling
+    /// loop.
     StripExit,
+    /// The untrack funnel — a close, or a cross-output transfer to a screen
+    /// this handler's engines do not manage.
+    ///
+    /// Identical to StripExit except that monocle does NOT release here, and
+    /// that blank is RECORDED rather than filled because it is unresolved, not
+    /// decided. Monocle rides cleanupClosedWindowState's bare scrub on this
+    /// path instead, which is right for a close (a dying window has nothing to
+    /// restore) and questionable for the cross-output half (the window
+    /// survives on a screen this handler no longer manages, holding a maximize
+    /// bit nothing will hand back).
+    ///
+    /// Filling it changes shipped monocle handling on a path the nested
+    /// harness cannot drive — the engine re-places script-driven cross-output
+    /// moves — so it wants a live check and its own argued commit. Encoded so
+    /// the next reader sees a cell with a reason rather than an omission with
+    /// none.
+    UntrackFunnel,
     /// The daemon's passive float channel, whose producers never reach the
     /// active funnel.
     PassiveFloat,
@@ -190,6 +207,9 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
     case ClaimScope::StripExit:
         // All three: the defining case. Nothing else will carry the window.
         return true;
+    case ClaimScope::UntrackFunnel:
+        // Monocle blank, and UNRESOLVED rather than decided — see the enum.
+        return claim != Claim::MonocleMaximize;
     case ClaimScope::PassiveFloat:
         // Monocle is EXCLUDED, and documented at its site: re-driving a
         // maximize restore from a passive float signal has not been shown
