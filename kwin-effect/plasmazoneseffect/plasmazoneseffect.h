@@ -376,6 +376,11 @@ public:
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
+    /// Wire the window's virtual-desktop-set handling (departure arm, arrival
+    /// arm, and the m_trackedDesktopsPerWindow stamp both diff against) and
+    /// seed that stamp. Called once per window from setupWindowConnections,
+    /// inside its idempotency guard; defined in window_desktop_connections.cpp.
+    void wireDesktopChangeHandler(KWin::EffectWindow* w);
 
     /**
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
@@ -3330,6 +3335,18 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Per-window VirtualDesktop id set as of the last windowDesktopsChanged, so
+    // that handler can tell a genuine MOVE onto the desktop in view from the
+    // other edits KWin reports through the same signal: a set that merely grew
+    // (desktop 1 → desktops 1 and 2), one that shrank, and an un-stick. Only a
+    // move makes the window newly present on the desktop the user is looking
+    // at, and only a move may be placed. An EMPTY value means the window was on
+    // all desktops (KWin's sticky encoding), which counts as already present;
+    // contains() is what distinguishes that from an unseeded entry. Keyed on
+    // the raw EffectWindow* like m_trackedScreenPerWindow, seeded at wire time
+    // and erased in the windowDeleted cleanup alongside it.
+    QHash<KWin::EffectWindow*, QSet<QString>> m_trackedDesktopsPerWindow;
 
     // Windows that already have their per-window connections. setupWindowConnections
     // issues raw connects with lambda slots, so a second call on the same window

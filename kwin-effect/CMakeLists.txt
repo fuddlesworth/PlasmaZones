@@ -78,6 +78,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/window_connections.cpp
+    plasmazoneseffect/window_desktop_connections.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_settings.cpp
     plasmazoneseffect/daemon_settings_scrolltabs.cpp
