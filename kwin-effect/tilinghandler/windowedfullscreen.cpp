@@ -160,6 +160,19 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     if (!kw) {
         return false;
     }
+    // Decline BEFORE the cancel when there is no daemon to answer.
+    //
+    // The dispatch below is fire-and-forget and drops silently on this same
+    // gate, but by then the cancel has already run and this function has
+    // already claimed the event — so with the daemon down or restarting the
+    // maximize button did nothing AND un-maximized the window, on every click,
+    // with nothing recording that a request was lost. Declining here hands the
+    // event back to KWin, whose own maximize will fight the strip's rect; that
+    // is the better half of the trade, because with no daemon there is no
+    // batch coming to impose one.
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return false;
+    }
     // CANCEL, then dispatch. The bit goes back to whatever the engine last
     // said (membership), never to what the click asked for: the engine owns
     // this state and is about to answer for itself, so writing the user's

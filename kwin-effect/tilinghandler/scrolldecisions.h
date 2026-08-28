@@ -52,7 +52,22 @@ inline WfsDecision resolveWindowedFullscreenAction(bool flagOnWire, bool inSet, 
         // The armed marker refuses re-adoption: a batch the daemon emitted
         // BEFORE processing our clear can still carry flag=true, and
         // adopting it would re-fullscreen the window the user just exited.
-        d.action = clearInFlight ? WfsAction::None : WfsAction::Adopt;
+        //
+        // SINGLE-SHOT. The marker only has to outlive the batches already in
+        // flight when the clear was sent, which is normally one, and consuming
+        // it here is the only thing that bounds it. Waiting for a flag=false
+        // entry to consume it latches for the session whenever the user
+        // re-enters windowed fullscreen before the daemon's flag-off batch
+        // arrives: the flag goes true again, no flag-off entry is ever
+        // emitted, and every later batch is refused. The successful reply
+        // cannot consume it either, because the reply can land before the
+        // stale batch, which is the whole race the marker exists for.
+        if (clearInFlight) {
+            d.consumeClearMarker = true;
+            d.action = WfsAction::None;
+            return d;
+        }
+        d.action = WfsAction::Adopt;
         return d;
     }
     // Requested state, not committed: during our OWN enter round-trip the

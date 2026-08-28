@@ -833,6 +833,23 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // cleanupAutotileTracking, which owns them for every caller.
     cleanupAutotileTracking(windowId);
 
+    // The column ledger gets an unconditional scrub HERE and nowhere else.
+    //
+    // cleanupClosedWindowState scrubs the monocle set but has no column
+    // equivalent, and the funnel's own release retains an entry it could not
+    // pay — deliberately, so a later arm can pay it. On a dying window there
+    // is no later arm, and restoreAllColumnMaximized re-inserts on a resolve
+    // miss, so a window closing around a daemon-loss drain leaves an entry
+    // with no window and no reaper. Window ids are appId-derived and reusable,
+    // and two live readers consume that entry: interceptMaximizeRequest reads
+    // it to decide what to cancel to, so a reused id makes the next window's
+    // first maximize click maximize instead of restore.
+    //
+    // It does NOT belong in cleanupAutotileTracking: that funnel also serves
+    // the cross-output transfer of a LIVE window, where the retained entry is
+    // a bit the effect genuinely still owes.
+    m_columnMaximizedWindows.remove(windowId);
+
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,

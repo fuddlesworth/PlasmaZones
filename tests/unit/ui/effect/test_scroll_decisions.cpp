@@ -51,11 +51,18 @@ private Q_SLOTS:
         QTest::newRow("off/held/req1/mark1") << false << true << true << true << a(WfsAction::Release) << true;
         // flag=1, not held: adopt — unless the armed marker refuses it (a
         // batch emitted before the daemon processed our clear must not
-        // re-fullscreen the window the user just exited). Never consumes.
+        // re-fullscreen the window the user just exited).
+        //
+        // The refusal is SINGLE-SHOT: it consumes the marker as it refuses.
+        // Waiting for a flag=0 entry to consume it latched for the session,
+        // because a user who re-enters windowed fullscreen before the
+        // daemon's flag-off batch arrives never produces one — the flag goes
+        // true again and every later batch is refused. The marker only has to
+        // outlive the batches already in flight when the clear was sent.
         QTest::newRow("on/free/req0/mark0") << true << false << false << false << a(WfsAction::Adopt) << false;
-        QTest::newRow("on/free/req0/mark1") << true << false << false << true << a(WfsAction::None) << false;
+        QTest::newRow("on/free/req0/mark1") << true << false << false << true << a(WfsAction::None) << true;
         QTest::newRow("on/free/req1/mark0") << true << false << true << false << a(WfsAction::Adopt) << false;
-        QTest::newRow("on/free/req1/mark1") << true << false << true << true << a(WfsAction::None) << false;
+        QTest::newRow("on/free/req1/mark1") << true << false << true << true << a(WfsAction::None) << true;
         // flag=1, held: requested discriminates steady-state refresh from
         // the deferred client-exit reconcile (committed lag must not read
         // as an exit — hence requested, not committed). Marker irrelevant.

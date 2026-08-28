@@ -183,6 +183,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                     forgetWindowedFullscreen(windowId);
                     releaseWindowedFullscreenState(windowId);
                 }
+                // Monocle sits in the same position and was the one claim this
+                // arm did not pay. It goes first, at the funnel's own order
+                // position: the maximize releases skip a window that still
+                // holds fullscreen, so the fullscreen release above has to
+                // land before either of them.
+                unmaximizeMonocleWindow(windowId);
                 // The column mirror is in the same position on this arm and
                 // must be released for the same reason. NOT on the scroll↔
                 // scroll arm above: there the destination strip owns the bit

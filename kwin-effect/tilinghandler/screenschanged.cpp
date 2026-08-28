@@ -573,6 +573,18 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // signal's arms evaluate against the world as it is.
     for (const QString& wid : std::as_const(windowedFsToRelease)) {
         releaseWindowedFullscreenState(wid);
+        // Re-drive the maximize releases the demote and untrack passes above
+        // could not pay. Those passes call them inline, while this window is
+        // still fullscreen in both the requested and the committed sense, so
+        // both releases hit their fullscreen guard and RETAIN — deliberately,
+        // so that a later call on a non-fullscreen window does the real
+        // restore. This is that later call, and it is the first point at which
+        // it can succeed: the requested bit went false one line above. Without
+        // it the window keeps KWin's maximize on a desktop or a screen the
+        // strip no longer manages, with the ledger still recording the debt.
+        // Both are no-ops for a non-member.
+        unmaximizeMonocleWindow(wid);
+        releaseColumnMaximized(wid, m_effect->findWindowByIdExact(wid));
     }
     // Now that the fullscreen state is dropped, land the pre-tile restores the
     // demote pass queued. Same bracket as the inline restore path: the

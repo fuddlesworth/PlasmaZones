@@ -404,10 +404,20 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             if (m_managedScreens.contains(currentScreen)) {
                 notifyWindowAdded(w, /*knownFreeFloating=*/true);
             }
+            // Pay any maximize claim before leaving. This is an OWNERSHIP exit:
+            // the untrack funnel already dropped m_notifiedWindows, so the
+            // repair the retention arms in windowedfullscreen.cpp point at can
+            // never be reached from here, and the entry would outlive the
+            // window with its bit still set. Both calls are no-ops for a
+            // non-member, and the branch is already under !isFullScreen().
+            unmaximizeMonocleWindow(windowId);
+            releaseColumnMaximized(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
         if (screenId.isEmpty()) {
+            unmaximizeMonocleWindow(windowId);
+            releaseColumnMaximized(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
@@ -417,6 +427,8 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // onto a no-longer-autotiled screen would hide the title bar with no
         // retile coming — demote the stale tracking and release instead.
         if (!m_managedScreens.contains(screenId)) {
+            unmaximizeMonocleWindow(windowId);
+            releaseColumnMaximized(windowId, w);
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
             m_effect->updateAllDecorations();
