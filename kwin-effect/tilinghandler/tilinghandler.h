@@ -388,12 +388,8 @@ public:
     ///
     /// @p w may be null for a window that no longer resolves; each claim
     /// handles that on its own terms.
-    /// @p deferredWindowedFs when non-null, the windowed-fullscreen COMPOSITOR
-    ///    half is appended here instead of run now, for the callers that must
-    ///    finish a managed-set write first (the release helpers' documented
-    ///    split). Membership and the in-flight marker are still shed now.
     ClaimReleaseResult releaseAllClaims(const QString& windowId, KWin::EffectWindow* w,
-                                        ScrollDecisions::ClaimScope scope, QStringList* deferredWindowedFs = nullptr);
+                                        ScrollDecisions::ClaimScope scope);
 
     /// Hand back the KWin maximize bit this handler imposed for a maximized
     /// column, and shed membership. @p w may be null for a gone window, in

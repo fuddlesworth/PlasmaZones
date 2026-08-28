@@ -3,6 +3,12 @@
 
 # One funnel for the effect's compositor-state claims
 
+**Status.** The claim vocabulary, the release table and its tests have landed,
+and so has `releaseAllClaims` plus three of the sixteen exit paths. The rest of
+the matrix below still holds its scattered calls. Everything from "Evidence"
+down describes the tree as it stood before the funnel unless a section says
+otherwise.
+
 The KWin effect imposes compositor state on windows that only it can hand
 back: KWin maximize for a monocle tile, KWin fullscreen plus a keep-flag
 demotion for windowed fullscreen, and KWin maximize again for a maximized
@@ -166,13 +172,17 @@ tree does today, including the deliberate blanks. Any cell that changes
 behaviour is a separate, argued commit — the refactor's value is that it makes
 such a change reviewable.
 
-That constraint is harder than it looks, and it is the reason the funnel is
-not in this branch. See below.
+That constraint is harder than it looks, and it is what shaped how much of the
+migration this branch carries. See below.
 
-## What a first implementation attempt found
+## What the implementation found
 
-The scope table and its tests landed. The funnel and the site migration were
-written, run into two problems, and reverted rather than shipped.
+A first attempt wrote the funnel and the site migration, ran into two problems,
+and was reverted. The second attempt landed the vocabulary, the funnel, and the
+three sites whose ordering could be settled by reading them:
+`applyFloatCleanup`, `applyPassiveFloatShed` and `cleanupAutotileTracking`. The
+remaining thirteen rows of the matrix still hold their scattered calls, for the
+reasons below.
 
 **The table and the tree disagree, and the table is the honest one.** Under a
 scope-driven funnel, `cleanupAutotileTracking` releases every claim that
@@ -205,25 +215,36 @@ suite, because the sites live in the effect. That makes the linkable
 kwin-effect test target a genuine PREREQUISITE for the migration rather than a
 parallel nice-to-have, which is the opposite of what this document assumed.
 
-What is safe to land ahead of that, and has landed here, is the vocabulary and
-the policy: `Claim`, `ClaimScope`, `claimReleasesOn`, `claimReleaseOrder` and
-`claimRetainsOnFullscreenSkip` in `scrolldecisions.h`, with a row per cell in
-`test_scroll_decisions`. That is the specification made executable. It changes
-no behaviour, it pins the ordering rule whose reversal was a live regression,
-and it gives the migration something to be checked against.
+What landed first is the vocabulary and the policy: `Claim`, `ClaimScope`,
+`claimReleasesOn`, `claimReleaseOrder` and `claimRetainsOnFullscreenSkip` in
+`scrolldecisions.h`, with a row per cell in `test_scroll_decisions`. That is
+the specification made executable. It changes no behaviour, it pins the
+ordering rule whose reversal was a live regression, and it gives the migration
+something to be checked against.
 
-### Three things the next attempt should start with
+`claimReleaseOrder` and `claimRetainsOnFullscreenSkip` are specification rather
+than dispatch: the funnel writes its three releases in order and asserts that
+order against `claimReleaseOrder` at compile time, and the retention rule is
+implemented inside each release body. They are stated here so a future arm
+cannot contradict them silently. `ClaimScope::ModeFlip`, `Teardown` and
+`FullscreenExitWhileFloating` likewise name rows that have not been migrated
+yet; they are pinned by the table's tests so the migration inherits a decided
+answer instead of re-deriving one.
 
-Learned by writing the funnel and three call sites, then reverting them.
+### Three things the funnel had to get right
 
-**The funnel must report what it released.** `applyPassiveFloatShed` gates a
+Learned by writing it, reverting it, and writing it again.
+
+**The funnel must report what it released.** Done: `ClaimReleaseResult`.
+`applyPassiveFloatShed` gates a
 decoration re-resolve on whether the windowed-fullscreen release actually ran
 (`shouldDecorateWindow`'s answer changes only for that claim). A `void` funnel
 swallows that signal, and gating on "any claim released" instead is a
 behaviour change, because the column claim can release where windowed
 fullscreen did not. Return a per-claim result.
 
-**`UntrackFunnel` has to be its own scope.** `cleanupAutotileTracking` serves
+**`UntrackFunnel` has to be its own scope.** Done, and still unresolved by
+design. `cleanupAutotileTracking` serves
 both close and cross-output transfer, and does NOT release monocle — that
 rides `cleanupClosedWindowState`'s bare scrub. Folding it into `StripExit`
 fills that blank silently. Whether the blank is right is genuinely open: it is
@@ -231,7 +252,8 @@ correct for a close and questionable for the cross-output half, where the
 window survives holding a bit nothing will hand back. Encode it, flag it as
 unresolved, and settle it in its own commit.
 
-**Some sites cannot collapse to one call.** `applyFloatCleanup` releases
+**Some sites cannot collapse to one call.** Confirmed by the migration.
+`applyFloatCleanup` releases
 windowed fullscreen early, does the tiled/floating flips and the
 relocation-delta damage, then releases the maximize claims, because the
 decoration resolve must see the window's final shape. Both positions are
@@ -251,10 +273,13 @@ before/after scenario diff is therefore a real regression gate, and
 Two cautions from doing it. The runner must assert its own fixture — window
 COUNT included — because `kwrite` is single-instance and two bare launches can
 collapse into one window, which then diffs clean against nothing; launch
-distinct documents. And each nested run leaves an installed `plasmazonesd`
-D-Bus-activated on the HOST bus; left to accumulate they compete for the bus
-name, `daemon.sh` starts losing the race, and later runs silently answer with
-the host's screens. Kill the orphan after every run.
+distinct documents. The second caution has since been fixed in the harness
+rather than worked around: a nested run used to leave an installed
+`plasmazonesd` D-Bus-activated against the HOST compositor, and once several had
+accumulated `daemon.sh` lost the race for the bus name and later runs silently
+answered with the host's screens. `run-nested.sh` now shadows the D-Bus service
+file so activation starts the build-tree daemon in-session, and `daemon.sh`
+reaps daemons whose nested bus is gone.
 
 The windowed-fullscreen claim was NOT reachable this way —
 `scroll_toggle_windowed_fullscreen` never engaged in the fixture — so that
@@ -270,12 +295,21 @@ regression that cannot be told apart from the maximize feature.
 
 ## Acceptance
 
-- a linkable kwin-effect test target exists, so the migration is checkable
-- every blank cell in the matrix has been ruled a decision or an accident, in
-  writing, before the funnel fills it
-- one `releaseAllClaims` call per exit path, and the 26 scattered calls gone
+Met by what has landed:
+
 - the matrix above reproduced exactly, as a table in code
 - scope policy unit-tested in `scrolldecisions.h`'s suite
+- every blank cell ruled a decision or an accident, in writing, before the
+  funnel fills it (`UntrackFunnel`'s monocle blank is recorded as unresolved
+  rather than filled)
+
+Still open for the remaining thirteen rows:
+
+- a linkable kwin-effect test target exists, so the migration is checkable
+- every migrated exit path releases through `releaseAllClaims`, and the
+  scattered calls on those paths are gone. Not one call per path: a site whose
+  claims must land on opposite sides of its own geometry work keeps two, as
+  `applyFloatCleanup` does
 - monocle and windowed fullscreen behaviour unchanged, checked in the nested
   harness on the paths it can reach (float, maximize/restore, engine disable,
   daemon loss) and by review on the paths it cannot (cross-output transfer,

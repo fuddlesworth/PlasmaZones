@@ -277,8 +277,7 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
 }
 
 TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString& windowId, KWin::EffectWindow* w,
-                                                                  ScrollDecisions::ClaimScope scope,
-                                                                  QStringList* deferredWindowedFs)
+                                                                  ScrollDecisions::ClaimScope scope)
 {
     using ScrollDecisions::Claim;
     using ScrollDecisions::claimReleasesOn;
@@ -306,18 +305,20 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         // deliberately does not consult membership, so re-driving it off the
         // snapshot is safe everywhere, not only there.
         const bool hadMembership = m_effect->m_windowedFullscreenWindows.contains(windowId);
+        // OUTSIDE the guard below, which is where both migrated sites had it:
+        // a marker outliving its hold can only refuse a future adopt, and the
+        // case that needs it most is exactly the one the guard rejects. On the
+        // close half of the untrack funnel slotWindowClosed has already removed
+        // membership and the release has already erased the snapshot, so the
+        // guard answers no while an armed marker is still sitting there — and
+        // window ids are appId-derived and reusable, so it would refuse the
+        // adopt of whatever reuses the id.
+        m_windowedFsClearInFlight.remove(windowId);
         if (hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
             if (hadMembership) {
                 forgetWindowedFullscreen(windowId);
             }
-            // A stale clear-in-flight marker must not outlive the hold it
-            // guarded: left armed it can only refuse a future adopt.
-            m_windowedFsClearInFlight.remove(windowId);
-            if (deferredWindowedFs) {
-                deferredWindowedFs->append(windowId);
-            } else {
-                releaseWindowedFullscreenState(windowId);
-            }
+            releaseWindowedFullscreenState(windowId);
             result.windowedFullscreen = true;
         }
     }

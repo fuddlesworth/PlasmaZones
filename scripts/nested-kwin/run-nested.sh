@@ -46,9 +46,11 @@
 #     from the nested ones. Check the compositor's own output, not the
 #     journal.
 #   - Do not `pkill -f` a pattern that appears in your own command line.
-#   - The stock session bus D-Bus-activates the INSTALLED daemon the
-#     moment the effect connects; daemon.sh kills it and claims the name
-#     with the build-tree daemon.
+#   - A stock session bus D-Bus-activates the INSTALLED daemon the moment
+#     the effect connects, which then answers with the HOST's screens. This
+#     script shadows the service file so activation starts the build-tree
+#     daemon in-session instead; daemon.sh still evicts whoever holds the
+#     name, so the run has one daemon with a known pid and log.
 #   - Screenshots are NOT evidence of effect behaviour: ScreenShot2's
 #     CaptureScreen bypasses the effect chain entirely, and workspace
 #     captures run it with no output pass. Only committed geometry

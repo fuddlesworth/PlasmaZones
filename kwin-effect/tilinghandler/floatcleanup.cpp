@@ -266,6 +266,15 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // an accident: monocle is excluded, for the reason spelled out above. The
     // funnel carries the membership-OR-snapshot guard this site argued for,
     // and the clear-in-flight drop that used to sit beside it.
+    //
+    // The column mirror DOES answer to this scope, unlike monocle. The
+    // exclusion reasoning above does not carry to it: monocle is refused
+    // because the monocle batch owns the membership and could re-drive it,
+    // whereas a float ENDS the strip's claim outright and no batch will ever
+    // carry a cleared flag for a window that is no longer in the strip. Left
+    // held, the window stays KWin-maximized as a floater for the session —
+    // this channel's whole reason for existing is that the active funnel
+    // never runs for its producers.
     const ClaimReleaseResult claims =
         releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::PassiveFloat);
     // A floating window is free to move itself — stop countering.
@@ -281,15 +290,6 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // below, per reconcileDecorationOnPlacementFlip's flip-facts-first
     // contract.
     clearWindowTiledAllScreens(windowId);
-    // The column mirror IS shed on this channel, unlike unmaximizeMonocleWindow
-    // above. The exclusion reasoning there does not carry: that one is refused
-    // because the monocle batch owns the membership and could re-drive it,
-    // whereas a float ENDS the strip's claim outright and no batch will ever
-    // carry a cleared flag for a window that is no longer in the strip. Left
-    // held, the window stays KWin-maximized as a floater for the session —
-    // this channel's whole reason for existing is that the active funnel
-    // never runs for its producers.
-    releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
     // relocation-delta entry makes a later snap on another screen paint the window

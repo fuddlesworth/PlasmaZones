@@ -2,11 +2,12 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Start the BUILD-TREE plasmazonesd inside the nested session. Kills the
-# installed daemon if D-Bus activation already claimed org.plasmazones on
-# the nested bus (it connects to the HOST compositor and answers with the
-# host's screens, poisoning every query). Never touches the host session's
-# own daemon.
+# Start the BUILD-TREE plasmazonesd inside the nested session. run-nested.sh
+# shadows the D-Bus service file, so activation on the nested bus already
+# starts a build-tree daemon in-session; this evicts whatever holds the name
+# so the run has one daemon with a known pid and log, and reaps daemons left
+# behind by earlier sessions whose bus is gone. Never touches the host
+# session's own daemon.
 set -eu
 NEST="${PZ_NESTED_DIR:-${XDG_RUNTIME_DIR:-/tmp/pz-nested-$USER}/pz-nested}"
 if [ ! -r "$NEST/env.sh" ]; then
@@ -61,9 +62,15 @@ for pid in $(pgrep -x plasmazonesd 2>/dev/null || true); do
     peer_bus=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
         | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p') || true
     case "$peer_bus" in
-        *"/tmp/dbus-"*)
+        "unix:path=/tmp/dbus-"*)
             # A pz-nested bus socket that no longer exists means the session it
             # belonged to is gone and this daemon is stranded.
+            #
+            # unix:path= specifically, not any address mentioning /tmp/dbus-:
+            # a dbus built for ABSTRACT sockets reads unix:abstract=/tmp/dbus-…,
+            # which the strip below cannot turn into a filesystem path, so the
+            # -S test would answer false for a perfectly LIVE bus and kill its
+            # daemon. An address whose liveness cannot be checked is left alone.
             sock=${peer_bus#unix:path=}
             sock=${sock%%,*}
             [ -S "$sock" ] || kill "$pid" 2>/dev/null || true

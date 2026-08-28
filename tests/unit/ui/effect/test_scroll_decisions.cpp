@@ -4,8 +4,10 @@
 // Pure-logic tests for the scroll-managed window decision helpers
 // (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
 // decision (with its clear-in-flight marker arm/consume contract), the
-// column-maximize 3-way batch decision, and the counter-assert burst
-// budget. Same header-only reach as test_anchor_uniforms:
+// column-maximize 3-way batch decision, the counter-assert burst budget,
+// and the compositor-claim release table (which claim answers to which exit
+// scope, the teardown ordering rule, and the retain-on-fullscreen-skip
+// policy). Same header-only reach as test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
 
