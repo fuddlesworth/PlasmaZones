@@ -93,7 +93,62 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
+            return;
         }
+
+        // The mirror case: the window arrived ON the desktop in view, moved
+        // here from another one (a pager / Overview drop, or "Move to
+        // Desktop" aimed at the current desktop). Nothing else adopts it.
+        // The arm above only fires for a window LEAVING the visible desktop,
+        // so the source context never released it, and the desktop-return
+        // catch-scan in slotScreensChanged never runs because no desktop
+        // switch happened. Without this the window sits over the strip /
+        // stack untracked until the user leaves the desktop and comes back.
+        if (!window || window->isOnAllDesktops()) {
+            return;
+        }
+        const QString windowId = getWindowId(window);
+        const QString screenId = getWindowScreenId(window);
+        if (!m_tilingHandler->isManagedScreen(screenId)) {
+            // Snapping screen. There is no stack to join and snapping places
+            // nothing on its own, so an arrival floats — unless the context's
+            // layout auto-assigns, which is the one case with somewhere to put
+            // it. Offer it the same auto-fill the drop path runs (drag_end.cpp),
+            // and let the daemon decide: snapToEmptyZone gates itself on
+            // `layout->autoAssign() || autoAssignAllLayouts()` and answers
+            // shouldSnap=false when neither is on, which is exactly the
+            // nothing-to-do case. It resolves the empty zone against the
+            // screen's CURRENT desktop, so the arrival is measured against the
+            // context it landed in, not the one it left.
+            if (isDaemonReady("auto-fill on desktop arrival")) {
+                tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
+                                 // sticky=false, not isWindowSticky(): a sticky
+                                 // window returned above, so it is the only
+                                 // value that can reach here.
+                                 {windowId, screenId, false}, window, windowId,
+                                 /*storePreSnap=*/true, /*fallback=*/nullptr);
+            }
+            return;
+        }
+        // Already in this desktop's stack: the signal reported a desktop SET
+        // that merely grew (desktop 1 → desktops 1 and 2), not a move. Re-adding
+        // would append the window to the engine state a second time.
+        if (m_tilingHandler->isTrackedWindow(windowId)) {
+            return;
+        }
+        // Release first, unconditionally. The window may still be parked in the
+        // SOURCE desktop's engine state (it was demoted, not dropped, when the
+        // user switched away from that desktop), and adding it here without
+        // releasing leaks it into two contexts at once. The daemon resolves the
+        // owning engine by window id, so this reaches the source context even
+        // though the current one has already changed; on a window the engine
+        // never held it is a no-op.
+        m_tilingHandler->releaseWindowTracking(windowId, screenId);
+        // knownFreeFloating=false, matching the catch-scan: the frame is very
+        // likely the SOURCE desktop's tiled rect, and the floating guard has to
+        // run and reject it rather than persist it as free-floating geometry.
+        m_tilingHandler->notifyWindowAdded(window, /*knownFreeFloating=*/false);
+        qCInfo(lcEffect) << "Window moved onto current desktop, added to autotile:" << windowId;
     });
 
     // Detect when a window moves between monitors (e.g., "Move to Screen Right").
