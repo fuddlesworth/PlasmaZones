@@ -29,6 +29,14 @@
 # and capture-output.py. Set PZ_NESTED_BUILD to use a configure dir other
 # than build/ (daemon.sh honours the same variable via env.sh).
 #
+# PZ_NESTED_SOCKET (default pznested) names the wayland socket. Two nested
+# sessions cannot share one — kwin locks on the name and the second dies with
+# "could not add wayland socket" — so to run one per worktree give each its
+# own PZ_NESTED_SOCKET and its own PZ_NESTED_DIR:
+#   PZ_NESTED_SOCKET=pzfoo PZ_NESTED_DIR="$XDG_RUNTIME_DIR/pz-nested-foo" \
+#     scripts/nested-kwin/run-nested.sh
+# The sibling scripts take PZ_NESTED_DIR the same way.
+#
 # Gotchas learned the hard way:
 #   - fish cannot source env.sh (POSIX `export VAR=...`); use bash -c.
 #   - The effect log needs QT_FORCE_STDERR_LOGGING=1 (set below and carried
