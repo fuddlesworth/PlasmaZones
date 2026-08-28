@@ -619,7 +619,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
 
         REGISTER_CONCRETE_INT("scrollingDefaultColumnWidthPresetIndex", scrollingDefaultColumnWidthPresetIndex,
                               setScrollingDefaultColumnWidthPresetIndex)
-        // scrollingDefaultWindowHeightKind: enum (0=Auto, 1=Fixed, 2=Preset)
+        // scrollingDefaultWindowHeightKind: enum (0=Auto, 1=Fixed, 2=Preset, 3=ClientDecides)
         m_getters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete]() {
             return concrete->scrollingDefaultWindowHeightKind();
         };

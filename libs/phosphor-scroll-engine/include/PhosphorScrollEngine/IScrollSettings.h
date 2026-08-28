@@ -75,12 +75,18 @@ public:
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
     /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
     /// or pixels) + the preset index the Preset kind resolves.
+    /// Values 2 and 3 mean the OPPOSITE of what they mean in the height
+    /// vocabulary below. Both numberings are load-bearing wire values in
+    /// stored configs (each kind was appended when it was added, to a
+    /// different existing set), so the mismatch is deliberate and neither
+    /// side can be renumbered to match the other.
     virtual int scrollingDefaultColumnWidthKind() const = 0;
     virtual qreal scrollingDefaultColumnWidthValue() const = 0;
     virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
     /// Default height intent for fresh tiles: kind (0 = auto, 1 = fixed px,
-    /// 2 = preset index) + fixed pixel value + preset index. Matches
-    /// WindowHeight::Kind 1:1 (DefaultHeightKind).
+    /// 2 = preset index, 3 = client decides) + fixed pixel value + preset
+    /// index. The kind space is DefaultHeightKind, NOT WindowHeight::Kind —
+    /// client-decides has no counterpart there.
     virtual int scrollingDefaultWindowHeightKind() const = 0;
     virtual qreal scrollingDefaultWindowHeightValue() const = 0;
     virtual int scrollingDefaultWindowHeightPresetIndex() const = 0;

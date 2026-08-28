@@ -375,7 +375,9 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 // index: with the kind left standing, a Preset kind and no
                 // index resolves against this template's own list (the
                 // engine's index fallback), while a Fixed kind keeps reading
-                // its pixel value — which the vocabulary swap never touched.
+                // its pixel value, which the vocabulary swap never touched.
+                // Auto and ClientDecides read no list and no value at all, so
+                // the drop cannot affect them.
                 overrides.remove(SPK::defaultWindowHeightPresetIndex());
             }
             // Seed blueprint for columns materializing on the fresh-open

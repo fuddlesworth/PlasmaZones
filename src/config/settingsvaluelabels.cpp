@@ -208,6 +208,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("auto"), PhosphorI18n::tr("Share the column evenly")},
                      {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed height")},
                      {QStringLiteral("preset"), PhosphorI18n::tr("Preset height")},
+                     {QStringLiteral("clientDecides"), PhosphorI18n::tr("Window decides")},
                  });
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::insertPositionKey()),
                  {
