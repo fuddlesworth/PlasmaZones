@@ -219,8 +219,10 @@ Item {
     ///   - a multipass pack's blur runs in a buffer of `itemPx * bufferScale`
     ///     texels (ShaderNodeRhi), so the browser card blurred in a ~61-texel
     ///     buffer and the detail pane in a ~96-texel one;
-    ///   - PopupFrame reserves a FIXED 23px capture margin, so the decorated
-    ///     frame occupied 81% of the small canvas and 88% of the large one;
+    ///   - PopupFrame reserves a capture margin of
+    ///     `ceil(Kirigami.Units.gridUnit * 1.25)` (23px at the default gridUnit
+    ///     of 18) whatever size the preview is, so the decorated frame occupied
+    ///     81% of the small canvas and 88% of the large one;
     ///   - the backdrop slice, the wallpaper's minification behind the card,
     ///     and the ground image's crop all follow the item's size and aspect.
     ///
@@ -248,13 +250,20 @@ Item {
     ///
     /// Requires `layeredStages` on the decoration below — see that property.
     /// A scaled SurfaceShaderItem draws at full size unless it is layered.
+    ///
+    /// REDUCE-ONLY. The canvas above is deliberately a fixed size while
+    /// everything composed inside it is gridUnit-derived, so a user on a larger
+    /// UI scale has a slot wider than the canvas. Magnifying the composed
+    /// texture to fill it only makes the preview soft (the stage layers are
+    /// smoothed), so the scale is clamped at 1.0 and the extra room is left
+    /// empty instead.
     readonly property real _canvasScale: {
         const w = root.width;
         const h = root.height;
         if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) {
             return 1.0;
         }
-        return Math.min(w / root._canvasSize.width, h / root._canvasSize.height);
+        return Math.min(1.0, w / root._canvasSize.width, h / root._canvasSize.height);
     }
 
     /// Card size: the largest _cardAspect rectangle that fits the space left
@@ -344,9 +353,10 @@ Item {
                 // Crop rather than letterbox: a letterboxed wallpaper would leave
                 // grey bands that read as part of the decoration.
                 fillMode: Image.PreserveAspectCrop
-                // Thumbnails are small and there are many on screen at once, so the
-                // decode is capped near display size instead of loading a 4K frame
-                // per card.
+                // Pinned at 2x the fixed canvas, the same for every instance, so
+                // a 4K wallpaper is not decoded at full size behind a preview.
+                // `cache: true` means one decode is shared across every card and
+                // pane rather than repeated per instance.
                 sourceSize.width: Math.max(1, Math.round(width * 2))
                 sourceSize.height: Math.max(1, Math.round(height * 2))
                 asynchronous: true

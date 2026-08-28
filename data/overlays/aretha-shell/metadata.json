@@ -50,7 +50,8 @@
             "type": "float",
             "default": 35.0,
             "min": 10.0,
-            "max": 100.0
+            "max": 100.0,
+            "unit": "px"
         },
         {
             "id": "hexLineThickness",

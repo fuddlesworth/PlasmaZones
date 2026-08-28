@@ -262,6 +262,13 @@ Item {
     /// dismiss path forces via the mode="" / loaded=false unload).
     property Item shaderAnchorItem: null
 
+    /// Whether _applyAnchorRouting actually demoted the current anchor, so the
+    /// un-demote below RESTORES rather than promotes. Writing `true`
+    /// unconditionally would turn an anchor that declared `shaderAnchor: false`
+    /// into a tagged one on a content swap. No in-tree host declares it false
+    /// today, which is the only reason that was invisible.
+    property bool _anchorDemoted: false
+
     function _resolveAnchor() {
         // Un-demote the anchor we are leaving before dropping our reference: if
         // it was demoted (shaderAnchor=false while decorationActive), it would
@@ -271,8 +278,9 @@ Item {
         // Guard the property write: _findShaderAnchor may match by objectName
         // alone (mirroring SurfaceAnimator), and assigning a nonexistent
         // property on such an anchor would throw in QML JS.
-        if (shaderAnchorItem && shaderAnchorItem.shaderAnchor !== undefined)
+        if (_anchorDemoted && shaderAnchorItem && shaderAnchorItem.shaderAnchor !== undefined)
             shaderAnchorItem.shaderAnchor = true;
+        _anchorDemoted = false;
         shaderAnchorItem = contentItem ? _findShaderAnchor(contentItem) : null;
         _applyAnchorRouting();
     }
@@ -292,8 +300,17 @@ Item {
     function _applyAnchorRouting() {
         // Same objectName-matched-anchor guard as _resolveAnchor: only demote /
         // restore via the property when the anchor actually declares it.
-        if (root.shaderAnchorItem && root.shaderAnchorItem.shaderAnchor !== undefined)
-            root.shaderAnchorItem.shaderAnchor = !root.decorationActive;
+        if (!root.shaderAnchorItem || root.shaderAnchorItem.shaderAnchor === undefined)
+            return;
+        if (root.decorationActive) {
+            root.shaderAnchorItem.shaderAnchor = false;
+            root._anchorDemoted = true;
+        } else if (root._anchorDemoted) {
+            // Restore, never promote: only a demotion we made ourselves is ours
+            // to undo.
+            root.shaderAnchorItem.shaderAnchor = true;
+            root._anchorDemoted = false;
+        }
     }
 
     onDecorationActiveChanged: root._applyAnchorRouting()
@@ -437,28 +454,72 @@ Item {
             /// something is actually wrong.
             readonly property bool stageSettled: stageItem.status === SurfaceShaderItem.Ready || stageItem.status === SurfaceShaderItem.Error
             readonly property bool stageErrored: stageItem.status === SurfaceShaderItem.Error
-            onStageSettledChanged: root._settledStageCount += stage.stageSettled ? 1 : -1
-            onStageErroredChanged: root._erroredStageCount += stage.stageErrored ? 1 : -1
-            Component.onCompleted: {
-                if (stage.stageSettled)
-                    root._settledStageCount += 1;
-                if (stage.stageErrored)
-                    root._erroredStageCount += 1;
+
+            /// What this delegate has ALREADY contributed to each root counter.
+            ///
+            /// The counters are maintained by three arms (the status change,
+            /// creation, destruction) and a stage that settles DURING delegate
+            /// creation runs two of them for the same event: the change handler
+            /// fires while the component is being built and Component.onCompleted
+            /// then adds the same stage a second time. Destruction only ever
+            /// subtracted one, so the count never returned to 0 and chainReady
+            /// could be true with a stage still compiling. Mirroring the
+            /// contribution here makes every arm idempotent: each stage is worth
+            /// exactly one, whenever its status happens to settle.
+            property bool _settledCounted: false
+            property bool _erroredCounted: false
+            /// Released by the Repeater. The delegate lingers (deleteLater) with
+            /// its status bindings still live, so it must never re-enter the
+            /// counts after handing its contribution back.
+            property bool _released: false
+
+            function _syncCounts() {
+                if (stage._released)
+                    return;
+                if (stage.stageSettled !== stage._settledCounted) {
+                    root._settledStageCount += stage.stageSettled ? 1 : -1;
+                    stage._settledCounted = stage.stageSettled;
+                }
+                if (stage.stageErrored !== stage._erroredCounted) {
+                    root._erroredStageCount += stage.stageErrored ? 1 : -1;
+                    stage._erroredCounted = stage.stageErrored;
+                }
             }
-            Component.onDestruction: {
-                if (stage.stageSettled)
+
+            // Hand back whatever this delegate contributed. Guarded by the same
+            // flags the sync arm keeps, so calling it at removal AND again at
+            // destruction subtracts once.
+            function _releaseCounts() {
+                if (stage._settledCounted) {
                     root._settledStageCount -= 1;
-                if (stage.stageErrored)
+                    stage._settledCounted = false;
+                }
+                if (stage._erroredCounted) {
                     root._erroredStageCount -= 1;
+                    stage._erroredCounted = false;
+                }
+                stage._released = true;
             }
+
+            onStageSettledChanged: stage._syncCounts()
+            onStageErroredChanged: stage._syncCounts()
+            Component.onCompleted: stage._syncCounts()
+            Component.onDestruction: stage._releaseCounts()
 
             // Called by the Repeater's onItemRemoved when this delegate is
             // released: imperative assignment clears the animator tags AND
             // severs their bindings, so the deleteLater-pending item cannot
             // re-tag itself against the successor chain.
+            //
+            // The counter contribution goes back HERE rather than at destruction
+            // for the same reason: the Repeater destroys released delegates
+            // later, so across a same-packId recompose the old stages were still
+            // counted as settled and chainReady read true (and chainHasError
+            // reported the OLD chain) before a single new stage had compiled.
             function detagAnchors() {
                 stageItem.shaderAnchor = false;
                 stageItem.shaderAnchorOverride = false;
+                stage._releaseCounts();
             }
 
             anchors.fill: parent
@@ -697,8 +758,13 @@ Item {
                 // Only for the scaling host: at 1:1 the mip levels are never
                 // sampled and building them is pure cost, which is what the
                 // daemon's overlay surfaces would be paying.
-                layer.mipmap: root.layeredStages
-                layer.smooth: root.layeredStages
+                //
+                // And only on the LAST stage. An intermediate stage's layer
+                // texture is never composited by the scene graph — the next
+                // stage's `tap` captures it instead — so its mip chain would be
+                // rebuilt every frame for a texture nothing samples through it.
+                layer.mipmap: root.layeredStages && stage.isLast
+                layer.smooth: root.layeredStages && stage.isLast
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on

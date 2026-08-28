@@ -98,7 +98,14 @@ Kirigami.Dialog {
     /// coarse for the zone rectangles beside them, which zonesForShaderPreview
     /// has already scaled into pane space. Handing the width to
     /// translateShaderParams is what puts the two on the same footing.
-    property int _zonePreviewWidth: 0
+    ///
+    /// A binding, not a handler write: `livePreviewPane` is declared in this
+    /// file, so the root can read its width directly. Floored at 1 to match the
+    /// zone geometry call, which uses the same floor — a 0 here would leave the
+    /// px parameters raw while zonesForShaderPreview scaled the geometry as if
+    /// the pane were 1px, the exact geometry/parameter mismatch this scaling
+    /// exists to avoid.
+    readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
     on_ZonePreviewWidthChanged: _recompute()
     property string _presetError: ""
     // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
@@ -765,15 +772,9 @@ Kirigami.Dialog {
 
                     // Zones the preview renders over — shared by the renderer,
                     // the label texture, and the hover hit-test. Recomputed on
-                    // resize; the settings backend supplies a 2-zone sample so
-                    // multi-zone + per-zone-highlight effects are visible.
+                    // resize; the settings backend supplies a four-zone sample
+                    // (one master, three stack) so multi-zone + per-zone-highlight effects are visible.
                     readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
-                    // Publish the render width for the px-parameter scaling
-                    // (see root._zonePreviewWidth). Written from a handler
-                    // rather than bound on the root, because the root cannot
-                    // reach into a Loader-created pane to read it.
-                    onWidthChanged: root._zonePreviewWidth = Math.max(0, Math.round(width))
-                    Component.onCompleted: root._zonePreviewWidth = Math.max(0, Math.round(width))
                     // Mouse position within the pane (preview pixels); -1,-1 when
                     // not hovering. Drives iMouse + the hovered-zone highlight.
                     property point _mouse: Qt.point(-1, -1)

@@ -14,6 +14,38 @@
 
 namespace PhosphorRendering {
 
+// Keep the slot-array sizes in lock-step with the key producer's budgets. The
+// loops below index `m_customParams` / `m_customColors` by the slot number the
+// key encodes, so a drift between the two would either drop the tail slots the
+// producer can emit or read past what the arrays hold. Same form and reason as
+// the kMaxUserTextureSlots assert in shadereffect.cpp.
+static_assert(kMaxCustomParams == PhosphorShaders::CustomParams::kVecCount,
+              "ShaderNodeRhi::kMaxCustomParams must equal PhosphorShaders::CustomParams::kVecCount");
+static_assert(kMaxCustomColors == PhosphorShaders::CustomColors::kColorCount,
+              "ShaderNodeRhi::kMaxCustomColors must equal PhosphorShaders::CustomColors::kColorCount");
+
+QVariant peelQmlVariant(const QVariant& value)
+{
+    // Bounded loop, not `while (true)`: a wrapper chain this deep is already
+    // pathological, and an unbounded peel would hang on a self-referencing
+    // one. Five iterations is the previous maximum peel depth (one QJSValue
+    // step ahead of a four-deep QVariant loop) preserved exactly, with the
+    // QJSValue check moved INSIDE the loop so a chain that terminates in a
+    // QJSValue — rather than starting with one — is peeled too.
+    QVariant unwrapped = value;
+    for (int depth = 0; depth < 5; ++depth) {
+        const int id = unwrapped.metaType().id();
+        if (id == qMetaTypeId<QJSValue>()) {
+            unwrapped = unwrapped.value<QJSValue>().toVariant();
+        } else if (id == QMetaType::QVariant) {
+            unwrapped = unwrapped.value<QVariant>();
+        } else {
+            break;
+        }
+    }
+    return unwrapped;
+}
+
 // ============================================================================
 // Pre-built per-slot key tables for setShaderParams
 // ============================================================================
@@ -89,15 +121,23 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // that round-trips an unrelated metadata field through the params
     // map) would re-enter the full parse on every call because the
     // equality check stayed false forever.
+    //
+    // Whether the stored map actually changed is tracked separately: the
+    // `shaderParams` Q_PROPERTY reads this member, so anything bound to it
+    // goes stale if a push that differs only in keys this decoder ignores
+    // updates the member without notifying. Property notification and
+    // scene-graph invalidation are separate concerns — the notify follows the
+    // member, `update()` follows `anyMutation` below.
+    const bool storedParamsChanged = (m_shaderParams != params);
     m_shaderParams = params;
 
     // Per-call mutation tracker. The stored-map update above keeps the
-    // equality check honest, but the `shaderParamsChanged` signal +
-    // `update()` should only fire when this call actually changed a
+    // equality check honest, but `update()` should only fire when this
+    // call actually changed a
     // uniform / texture / colour slot the GPU consumes — payloads that
     // differ only in irrelevant keys carry no rendering-visible change
     // and should not invalidate the scene graph. Each branch below that
-    // mutates a member sets `anyMutation = true`; the trailing emit
+    // mutates a member sets `anyMutation = true`; the trailing `update()`
     // checks the flag.
     bool anyMutation = false;
 
@@ -165,11 +205,22 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
                 return defaultVal;
             }
             const QVariant& val = *it;
-            if (val.canConvert<QColor>()) {
-                return val.value<QColor>();
-            }
+            // QString FIRST, not last. QtGui registers a QString→QColor
+            // converter, so `canConvert<QColor>()` answers true for EVERY
+            // string — which made the string branch below unreachable and,
+            // worse, handed an unparseable name ("", "notacolor") straight
+            // through as an INVALID QColor that then got stored and uploaded.
+            // Parsing here and falling back on failure is what that branch was
+            // always meant to do.
             if (val.typeId() == QMetaType::QString) {
-                QColor color(val.toString());
+                const QColor color(val.toString());
+                return color.isValid() ? color : defaultVal;
+            }
+            if (val.canConvert<QColor>()) {
+                // Same invalid-result guard for the generic path: a converter
+                // that fails still yields a default-constructed (invalid)
+                // QColor rather than signalling the failure.
+                const QColor color = val.value<QColor>();
                 if (color.isValid()) {
                     return color;
                 }
@@ -218,17 +269,18 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // `kUserTextureWrapKeys` — to skip the per-call `QString::arg(i)`
     // parse that the previous `arg`-formatted lookup paid on every
     // iteration regardless of which (if any) of the keys the params map
-    // references. `QMap::contains(QLatin1String)` and `value(QLatin1String)`
-    // each still synthesise a temporary `QString` for the hash lookup, so
-    // we bind the QLatin1String to a local `QString` once per slot per key
-    // and reuse it across the contains/value pair to deduplicate that
-    // implicit conversion as well. Tables sized to `kMaxUserTextures`, which
+    // references. A lookup still synthesises a temporary `QString` from the
+    // QLatin1String, so we bind it to a local `QString` once per slot per key,
+    // and we probe with a single `constFind` whose iterator carries the value
+    // — one hash lookup per key instead of the contains+value pair, matching
+    // the float / colour extractors above. Tables sized to `kMaxUserTextures`, which
     // is also the loop bound (pinned equal to the contract's
     // kMaxUserTextureSlots by the static_assert in shadereffect.cpp).
     for (int i = 0; i < kMaxUserTextures; ++i) {
         const QString sizeKey(kUserTextureSvgSizeKeys[i]);
         bool svgSizeChanged = false;
-        if (params.contains(sizeKey)) {
+        const auto sizeIt = params.constFind(sizeKey);
+        if (sizeIt != params.constEnd()) {
             // Use the `bool ok` parse pattern (matches the float / colour
             // extractors above). Without it, a non-numeric or missing-but-
             // present QVariant returns 0 from toInt, then qBound(64, 0, max)
@@ -238,12 +290,12 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // prior value persists and a malformed setting can't downgrade
             // the rasterise resolution.
             bool ok = false;
-            // Reuse the bound `sizeKey` QString for the value lookup so the
-            // implicit QLatin1String→QString conversion happens once per
-            // slot, not once for `contains` and again for `value`.
-            const int v = params.value(sizeKey).toInt(&ok);
+            // One hash lookup per key, reusing the iterator for the value —
+            // matches the `constFind` form the float / colour extractors above
+            // already use instead of a contains+value pair.
+            const int v = sizeIt->toInt(&ok);
             if (ok) {
-                const int clamped = qBound(64, v, kMaxSvgDimension);
+                const int clamped = qBound(kMinSvgDimension, v, kMaxSvgDimension);
                 if (m_userTextureSvgSizes[i] != clamped) {
                     m_userTextureSvgSizes[i] = clamped;
                     svgSizeChanged = true;
@@ -252,12 +304,11 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             }
         }
 
-        // Same per-iteration QString bind as `sizeKey` above: one
-        // QLatin1String→QString conversion shared by the contains+value
-        // pair instead of two implicit conversions per slot.
+        // Same single-lookup `constFind` form as `sizeIt` above.
         const QString texKey(kUserTexturePathKeys[i]);
-        const bool hasTexKey = params.contains(texKey);
-        const QString incomingPath = hasTexKey ? params.value(texKey).toString() : m_userTexturePaths[i];
+        const auto texIt = params.constFind(texKey);
+        const bool hasTexKey = (texIt != params.constEnd());
+        const QString incomingPath = hasTexKey ? texIt->toString() : m_userTexturePaths[i];
         const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != incomingPath);
         const bool needsReload = pathChanged || (svgSizeChanged && !m_userTexturePaths[i].isEmpty());
 
@@ -277,7 +328,7 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // existing `m_userTextureImages[i]`) handles that case
             // correctly. The exists() call only added a redundant
             // stat() per setShaderParams call.
-            const int maxDim = qBound(64, m_userTextureSvgSizes[i], kMaxSvgDimension);
+            const int maxDim = qBound(kMinSvgDimension, m_userTextureSvgSizes[i], kMaxSvgDimension);
             QImage loaded = path.isEmpty() ? QImage() : loadUserTextureFile(path, maxDim);
             // Empty path → intentional clear (sampler reads transparent black).
             // Non-empty path that produced a null image → load failure (file
@@ -296,15 +347,16 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             }
         }
 
-        // Same per-iteration QString bind as `sizeKey` / `texKey` above.
+        // Same single-lookup `constFind` form as `sizeIt` / `texIt` above.
         const QString wrapKey(kUserTextureWrapKeys[i]);
-        if (params.contains(wrapKey)) {
+        const auto wrapIt = params.constFind(wrapKey);
+        if (wrapIt != params.constEnd()) {
             // Normalize-then-guard, mirroring setUserTextureWrap below: a raw
             // store lets two spellings that normalize identically ("" vs
             // "clamp") defeat the equality guard and fire a spurious update()
             // per push. The registries currently emit only canonical tokens,
             // so this is consistency hardening, not a live-producer fix.
-            const QString incomingWrap = ShaderNodeRhi::normalizeWrapMode(params.value(wrapKey).toString());
+            const QString incomingWrap = ShaderNodeRhi::normalizeWrapMode(wrapIt->toString());
             if (m_userTextureWraps[i] != incomingWrap) {
                 m_userTextureWraps[i] = incomingWrap;
                 anyMutation = true;
@@ -321,8 +373,10 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // push and never permanently degrades the early-return fast path.
     m_userTexturesDirectlyOverridden = false;
 
-    if (anyMutation) {
+    if (storedParamsChanged) {
         Q_EMIT shaderParamsChanged();
+    }
+    if (anyMutation) {
         update();
     }
 }
@@ -502,13 +556,46 @@ QVariant ShaderEffect::audioSpectrumVariant() const
 
 void ShaderEffect::setAudioSpectrumVariant(const QVariant& spectrum)
 {
-    // Fast path: QVector<float> from C++ (no per-element conversion)
-    if (spectrum.metaType() == QMetaType::fromType<QVector<float>>()) {
-        setAudioSpectrum(spectrum.value<QVector<float>>());
+    // Peel the QML wrappers first, for the same reason
+    // setWallpaperTextureVariant does. A JS array handed over through a
+    // `createObject` initial-property map arrives as a QJSValue, and
+    // `QVariant(QJSValue).toList()` answers an EMPTY list — which used to
+    // clear a perfectly good spectrum without a word.
+    const QVariant unwrapped = peelQmlVariant(spectrum);
+
+    // Measured (Qt 6.11.2): QML `undefined`, an ABSENT key on a JS object, an
+    // undefined `property var`, and both `Binding` shapes ALL arrive as an
+    // invalid QVariant. A host letting its source go absent is the ordinary
+    // way to say "no spectrum", and the setter cannot tell that apart from a
+    // Binding's delivery, so invalid clears — silently, since an absent key is
+    // expected rather than an error.
+    if (!unwrapped.isValid()) {
+        setAudioSpectrum({});
         return;
     }
+
+    // Fast path: QVector<float> from C++ (no per-element conversion)
+    if (unwrapped.metaType() == QMetaType::fromType<QVector<float>>()) {
+        setAudioSpectrum(unwrapped.value<QVector<float>>());
+        return;
+    }
+
+    const int typeId = unwrapped.metaType().id();
+    if (typeId == QMetaType::Nullptr || typeId == QMetaType::Void) {
+        // Deliberate "no spectrum" from the host.
+        setAudioSpectrum({});
+        return;
+    }
+    if (!unwrapped.canConvert<QVariantList>()) {
+        // Valid but not a list (a QString, a number, an object): converting
+        // would silently yield an empty vector and drop the live spectrum.
+        qCWarning(lcShaderNode) << "ShaderEffect: audioSpectrum written with an unconvertible value of type"
+                                << unwrapped.metaType().name() << "— keeping the previous spectrum";
+        return;
+    }
+
     // Slow path: QVariantList from QML (JS array)
-    const QVariantList list = spectrum.toList();
+    const QVariantList list = unwrapped.toList();
     QVector<float> vec;
     vec.reserve(list.size());
     for (const QVariant& v : list) {
@@ -647,32 +734,52 @@ QVariant ShaderEffect::wallpaperTextureVariant() const
 
 void ShaderEffect::setWallpaperTextureVariant(const QVariant& texture)
 {
-    // Unwrapped, not just converted. QML delivers this property's value in
-    // three different shapes depending on how the host wrote it:
+    // Unwrapped, not just converted. Measured delivery shapes (Qt 6.11.2):
     //
-    //   - a direct binding (`wallpaperTexture: someImage`) arrives as a plain
-    //     QVariant(QImage);
-    //   - a `Binding { target: item; property: "wallpaperTexture" }` element
-    //     arrives as a QVariant WRAPPING a QVariant that holds the image;
-    //   - a JS-side expression can arrive as a QJSValue holding either.
+    //   - a direct assignment, a `createObject` initial-property map, and a
+    //     C++ `setProperty` all deliver a plain QVariant(QImage);
+    //   - QML `null` arrives as a VALID std::nullptr_t;
+    //   - QML `undefined`, an ABSENT key on a JS object, an undefined
+    //     `property var`, and BOTH `Binding` shapes (the
+    //     `Binding { target: …; property: … }` element and
+    //     `Binding on wallpaperTexture`) ALL arrive as an INVALID QVariant
+    //     carrying no payload. Retyping the property to QVariant did not
+    //     rescue the Binding forms; only a direct write delivers the image.
     //
-    // value<QImage>() answers null for the last two, which is how a real
-    // backdrop turns into the pack's no-backdrop fallback with nothing logged
-    // anywhere. Peeling first is what makes every host shape deliver the same
-    // image.
-    QVariant unwrapped = texture;
-    if (unwrapped.metaType().id() == qMetaTypeId<QJSValue>()) {
-        unwrapped = unwrapped.value<QJSValue>().toVariant();
-    }
-    // Bounded loop, not `while (true)`: a QVariant chain this deep is already
-    // pathological, and an unbounded peel would hang on a self-referencing one.
-    for (int depth = 0; depth < 4 && unwrapped.metaType().id() == QMetaType::QVariant; ++depth) {
-        unwrapped = unwrapped.value<QVariant>();
-    }
+    // Those last two groups are INDISTINGUISHABLE here: a host clearing its
+    // backdrop by letting a key go absent looks exactly like a Binding firing.
+    // Invalid therefore clears, which is right for the clear and cannot be
+    // defended against for the Binding. That is why the QML-source sweep test
+    // is the guard against a host driving one property from both a direct
+    // assignment and a Binding — this setter structurally cannot catch it.
+    //
+    // A JS-side expression can still hand over a QJSValue, and a QVariant
+    // nested in a QVariant is cheap to survive, so the peel below stays as
+    // belt-and-braces defensive code rather than a handler for a shape we have
+    // measured. value<QImage>() answers null for either wrapper, which is how
+    // a real backdrop would turn into the pack's no-backdrop fallback with
+    // nothing logged anywhere.
+    const QVariant unwrapped = peelQmlVariant(texture);
 
-    // A host with no backdrop passes null / undefined / an invalid QVariant.
+    // Invalid, `null`, `undefined`, or an absent key: a host with no backdrop.
     // That is the ordinary "nothing behind this surface" state, not an error,
     // and resolves to a null image without warning.
+    const int typeId = unwrapped.metaType().id();
+    if (!unwrapped.isValid() || typeId == QMetaType::Nullptr || typeId == QMetaType::Void) {
+        setWallpaperTexture(QImage());
+        return;
+    }
+    if (!unwrapped.canConvert<QImage>()) {
+        // Valid but not an image (a QString, a QUrl, a number). Clearing is
+        // still the honest answer — there is no image here — but it must not
+        // happen silently, which is the whole failure class this path exists
+        // to close.
+        qCWarning(lcShaderNode) << "ShaderEffect: wallpaperTexture written with an unconvertible value of type"
+                                << unwrapped.metaType().name() << "— clearing the texture";
+        setWallpaperTexture(QImage());
+        return;
+    }
+
     setWallpaperTexture(unwrapped.value<QImage>());
 }
 

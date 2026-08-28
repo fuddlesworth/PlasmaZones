@@ -65,8 +65,13 @@
                     "type": "string",
                     "enum": ["px"],
                     "description": "Unit the value is expressed in. Omit for a plain number. \"px\" declares logical pixels of the real surface the shader draws on, which a host rendering at reduced size (a settings preview) scales down by that reduction so the effect reads as a faithful miniature rather than one several times too coarse."
+                },
+                "wrap": {
+                    "type": "string",
+                    "description": "Sampler wrap mode for an image parameter: clamp, repeat or mirror, matching the runtime normaliser in ShaderNodeRhi. Omit to take the default clamp. The vocabulary is deliberately not pinned to an enum here, because the loader already warns about an unrecognised token and drops it so the sampler keeps its default. Rejecting the whole pack at this gate would turn a one-word typo into a pack that does not load at all."
                 }
-            }
+            },
+            "additionalProperties": false
         }
     }
 }

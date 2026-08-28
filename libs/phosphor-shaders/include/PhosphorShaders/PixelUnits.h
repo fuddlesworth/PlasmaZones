@@ -6,7 +6,6 @@
 #include <PhosphorShaders/phosphorshaders_export.h>
 
 #include <QLatin1String>
-#include <QList>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -14,8 +13,9 @@
 namespace PhosphorShaders {
 
 /// The `unit` a parameter declares when its value is logical pixels of the
-/// real surface the shader draws on (a window for a surface pack, the screen
-/// for a zone/overlay pack).
+/// real surface the shader draws on, which is the screen for a zone/overlay
+/// pack. Only zone/overlay pack metadata declares this: the surface schema has
+/// no `unit` field and nothing under `libs/phosphor-surface` reads one.
 ///
 /// Every other parameter is unitless as far as the runtime is concerned: a
 /// strength, an angle, a count, a colour. Only px values have to be re-read
@@ -38,32 +38,25 @@ inline QLatin1String pixelUnit()
 /// `factor` is the linear reduction (preview extent / real extent). 1.0, and
 /// anything non-finite or non-positive, leaves @p values untouched.
 ///
+/// ONE factor, taken from a single axis (width, at every current call site),
+/// is applied to every px parameter. That is exact only while the preview
+/// preserves the screen's aspect ratio, which the current preview hosts do NOT
+/// — they scale their rects anisotropically, so a px parameter denominating a
+/// VERTICAL length is still scaled by the horizontal ratio and comes out
+/// slightly off. A second, per-axis factor is not the fix: nothing in the pack
+/// metadata says which axis a parameter denominates, so there is no way to
+/// pick the right one. The limitation is documented rather than papered over.
+///
 /// A px parameter the caller left out of @p values is INSERTED at its scaled
 /// default rather than skipped: an absent parameter falls back to the pack's
 /// declared default further down the pipeline, which is the unscaled value
 /// this function exists to avoid. Parameters with any other unit are passed
 /// through, values that are not numbers are passed through, and the map keeps
-/// every entry the caller put in it.
+/// every entry the caller put in it. `image` parameters are skipped outright,
+/// even if one declares px: their values are paths, and inserting a default
+/// for one would manufacture the "the user set this" provenance that
+/// `ShaderRegistry::translateParamsToUniforms` derives from key presence to
+/// pick its absolute-path Trust-vs-Reject policy.
 PHOSPHORSHADERS_EXPORT void scalePixelParams(const QVariantList& parameterInfos, QVariantMap& values, double factor);
-
-/// Struct-list overload, for a caller holding parsed metadata rather than the
-/// QVariantMap form a registry hands to QML. `ParamInfo` needs `id` and `unit`
-/// QStrings and a `defaultValue` QVariant, which both
-/// `ShaderRegistry::ParameterInfo` and `SurfaceShaderEffect::ParameterInfo`
-/// have.
-template<typename ParamInfo>
-void scalePixelParams(const QList<ParamInfo>& parameterInfos, QVariantMap& values, double factor)
-{
-    QVariantList asMaps;
-    asMaps.reserve(parameterInfos.size());
-    for (const ParamInfo& info : parameterInfos) {
-        QVariantMap m;
-        m.insert(QStringLiteral("id"), info.id);
-        m.insert(QStringLiteral("unit"), info.unit);
-        m.insert(QStringLiteral("default"), info.defaultValue);
-        asMaps.append(m);
-    }
-    scalePixelParams(asMaps, values, factor);
-}
 
 } // namespace PhosphorShaders

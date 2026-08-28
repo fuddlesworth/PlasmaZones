@@ -105,6 +105,19 @@ Q_SIGNALS:
     void shaderPresetLoadFailed(const QString& error);
 
 private:
+    /// The shader's declared parameter metadata, memoized by shader id.
+    ///
+    /// shaderInfo() is cheap in the settings app (an in-process registry hit)
+    /// and expensive in the editor (an uncached blocking D-Bus round-trip to
+    /// the daemon), and translateShaderParams needs it on every debounced
+    /// slider move and every resize. Cached here rather than per-backend so
+    /// both hosts pay the same once-per-shader cost.
+    ///
+    /// NOTE: this controller observes no registry / effects-changed signal, so
+    /// there is nothing to hook invalidation to — the cache is keyed on the
+    /// shader id alone and turns over when the previewed shader changes.
+    QVariantList parameterInfos(const QString& shaderId) const;
+
     // Borrowed. In the settings app the owner (a unique_ptr backend declared
     // before the controller) outlives it. In the editor the backend IS the
     // EditorController, which owns the controller as a QObject child — there the
@@ -114,6 +127,9 @@ private:
     IShaderPreviewBackend* m_backend;
     PhosphorAudio::CavaSpectrumProvider* m_audioProvider = nullptr;
     QVector<float> m_audioSpectrum;
+    // Mutable: parameterInfos() is called from const preview accessors.
+    mutable QString m_paramInfoShaderId;
+    mutable QVariantList m_paramInfoCache;
 };
 
 } // namespace PlasmaZones

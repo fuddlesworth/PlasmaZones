@@ -24,10 +24,12 @@
 
 #include <QTest>
 
+#include <QColor>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -281,19 +283,27 @@ private Q_SLOTS:
                 if (info.value(QStringLiteral("default")).isValid())
                     declared.insert(info.value(QStringLiteral("id")).toString(), info.value(QStringLiteral("default")));
             }
-            const QVariantMap card = c.previewChain(packId, {}).value(0).toMap();
-            const QVariantMap pane = c.previewChain(packId, declared).value(0).toMap();
+            // Every pack in the list has to exist and produce a stage. Without
+            // this a renamed pack yields two empty chains, and an
+            // empty-versus-empty comparison passes while checking nothing.
+            QVERIFY2(registry.hasEffect(packId), qPrintable(packId));
+            const QVariantList cardChain = c.previewChain(packId, {});
+            const QVariantList paneChain = c.previewChain(packId, declared);
+            QVERIFY2(!cardChain.isEmpty(), qPrintable(packId));
+            QVERIFY2(!paneChain.isEmpty(), qPrintable(packId));
+            QCOMPARE(cardChain.size(), paneChain.size());
+
+            const QVariantMap card = cardChain.value(0).toMap();
+            const QVariantMap pane = paneChain.value(0).toMap();
             QVERIFY2(!card.isEmpty(), qPrintable(packId));
             QCOMPARE(card.value(QStringLiteral("preamble")).toString(),
                      pane.value(QStringLiteral("preamble")).toString());
             QCOMPARE(card.value(QStringLiteral("params")).toMap(), pane.value(QStringLiteral("params")).toMap());
+            // Whole stage, not the two interesting keys: bufferScale and the
+            // buffer-pass descriptors decide how a multi-pass pack is drawn,
+            // and a card that differs there shows a different effect.
+            QCOMPARE(card, pane);
         }
-
-        // And the value the mosaic pack's cell size actually reaches the
-        // shader with, from an empty map: its declared default, not zero.
-        const QVariantMap card = c.previewChain(QStringLiteral("mosaic"), {}).value(0).toMap();
-        qDebug().noquote() << "mosaic preamble:" << card.value(QStringLiteral("preamble")).toString();
-        qDebug().noquote() << "mosaic params:" << card.value(QStringLiteral("params")).toMap();
     }
 
     /// The browser card passes an EMPTY parameter map and the detail pane
@@ -335,6 +345,11 @@ private Q_SLOTS:
                 }
                 QCOMPARE(cardParams.keys(), paneParams.keys());
                 QCOMPARE(cardStage.value(QStringLiteral("preamble")), paneStage.value(QStringLiteral("preamble")));
+                // The per-key loop above exists only for a readable failure.
+                // THIS is the assertion the docstring promises: every key
+                // composeStageMap inserts, bufferScale and the buffer-pass
+                // descriptors included, not just params and preamble.
+                QCOMPARE(cardStage, paneStage);
             }
             QCOMPARE(c.previewOuterPadding(packId, {}), c.previewOuterPadding(packId, declared));
         }

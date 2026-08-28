@@ -32,6 +32,13 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
     // up in the registry, so a colour-scheme change, a highlight-colour change
     // or a pack installed while a preview is open all leave it showing stale
     // output until the user reopens the dialog.
+    //
+    // The wallpaper is the one dependency NOT covered here. wallpaperPath() /
+    // wallpaperImage() resolve through PhosphorShaders::ShaderRegistry's static
+    // wallpaper resolver, which exposes no change notification this controller
+    // could connect to, so a wallpaper the user switches mid-preview is not
+    // picked up: it is a snapshot taken when the preview asks, and the revision
+    // is never bumped for it.
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 &DecorationPreviewController::bumpPreviewRevision);
@@ -121,7 +128,7 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
     // (DecorationChainPreview._canvasSize) which IS the surface the pack is
     // judged on, and shrinking a pack's features to represent a bigger window
     // makes them illegible in the browser thumbnail that draws that canvas at
-    // 60%. The zone/overlay preview is the opposite case and does scale, see
+    // a reduced size. The zone/overlay preview is the opposite case and scales, see
     // ShaderPreviewController::translateShaderParams.
     QVariantMap resolved = friendlyParams;
     const QPalette pal = QGuiApplication::palette();

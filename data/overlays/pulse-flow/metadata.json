@@ -41,7 +41,8 @@
             "slot": 2,
             "default": 14.0,
             "min": 3.0,
-            "max": 40.0
+            "max": 40.0,
+            "unit": "px"
         },
         {
             "id": "feedbackStrength",

@@ -56,8 +56,20 @@ Item {
     /// the window was still fully visible.
     property bool animating: true
 
-    /// Pack metadata, re-read only when the pack changes rather than per frame.
-    readonly property var _info: (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({})
+    /// Read by the metadata expression below, which calls into the controller.
+    ///
+    /// packInfo() is a Q_INVOKABLE and QML records no dependency on a function
+    /// call, only on the properties an expression touches. Without naming this
+    /// one, a pack reload while the dialog is open would leave the notices and
+    /// the backdrop flag on the old metadata. Same `void root._rev;` idiom
+    /// DecorationChainPreview uses for exactly the same reason.
+    readonly property int _rev: previewController ? previewController.previewRevision : 0
+
+    /// Pack metadata, re-read when the pack changes or the registry revises.
+    readonly property var _info: {
+        void root._rev;
+        return (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({});
+    }
     readonly property bool _isAudioPack: _info.audio === true
     readonly property bool _needsBackdrop: _info.needsBackdrop === true
 

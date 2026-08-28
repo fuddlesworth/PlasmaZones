@@ -104,10 +104,26 @@ public:
     /// Binding element that image arrived as an invalid QVariant and the
     /// labels silently vanished, so those previews drew their zones with no
     /// numbers on them. Converting here accepts every shape any host produces.
+    /// A Binding's invalid delivery is indistinguishable from a host
+    /// legitimately clearing the property, so the QML-source sweep test is what
+    /// forbids driving this property from two places at once.
+    /// The daemon additionally writes this property from C++ via
+    /// `setProperty`, which delivers the payload intact like a direct QML
+    /// assignment does.
+    ///
+    /// The property is asymmetric on purpose: a WRITE accepts a QImage through
+    /// the converter, but a READ always returns the payload type, so a QML
+    /// round-trip (read the property back after writing an image) does not
+    /// hand back what was written.
     QVariant labelsTextureVariant() const;
     void setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels);
     /// Accepts the payload, a QImage (converted as a single full-size tile),
-    /// or null / undefined for "no labels".
+    /// or null / undefined / an absent key / an invalid QVariant for "no
+    /// labels". Measured: `null` arrives VALID (std::nullptr_t) while
+    /// `undefined`, an absent JS-object key, and BOTH `Binding` shapes all
+    /// arrive INVALID, so an invalid variant clears silently — it cannot be
+    /// told apart from a legitimate clear. A VALID but unconvertible value
+    /// clears too, but logs first.
     void setLabelsTextureVariant(const QVariant& labels);
 
     /**
