@@ -206,18 +206,20 @@ private:
     int pendingCreateCount() const;
     /// Drop every open ledger entry that targets this desktop id.
     void retireLedgerFor(const QString& desktopId);
-    /// Realize a desktop that is NEW in a settled list against the open Create
-    /// whose requested global position is nearest `newIndex` (the id's 0-based
-    /// index in the settled list), for the case where the settle beat (or
-    /// replaced) the id-only echo. Position, not ledger order: the echo path
-    /// can match FIFO because KWin echoes creations in the order it performed
-    /// them, but a settled list is ordered by POSITION, and with two Creates
-    /// open the screen that asked second can own the earlier slot. Consumes
-    /// the chosen op and inserts on its requesting screen. Returns false when
-    /// there was no open Create, or when the chosen op's planned screen is
-    /// gone (the op is consumed either way), leaving the caller to adopt
-    /// normally.
-    bool realizeSettledCreate(const QString& desktopId, int newIndex);
+    /// Pair the ids that are NEW in a settled list (in settled-list order)
+    /// against the open Creates, for the case where the settle beat (or
+    /// replaced) the id-only echoes. Rank, not ledger order and not per-id
+    /// distance: the echo path can match FIFO because KWin echoes creations in
+    /// the order it performed them, but a settled list is ordered by POSITION,
+    /// and with several Creates open the screen that asked second can own the
+    /// earlier slot. Distance cannot decide it either, because a batch of
+    /// requests all record positions that ignore their sibling creates and so
+    /// run uniformly low. Consumes every op it pairs; unpaired ids are left
+    /// for the caller to adopt. Returns id → the Create it belongs to.
+    QHash<QString, PendingOp> takeSettledCreates(const QStringList& newIds);
+    /// Insert a paired settled create on its requesting screen. Returns false
+    /// when that screen is gone, leaving the caller to adopt normally.
+    bool applySettledCreate(const PendingOp& op, const QString& desktopId);
     /// Trailing-empty + slice-never-empty repair for every screen.
     void maintainInvariants();
     void maintainScreen(const QString& screenId);

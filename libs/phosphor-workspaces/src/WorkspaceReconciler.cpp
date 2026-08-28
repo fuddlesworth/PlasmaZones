@@ -7,6 +7,7 @@
 #include <QLoggingCategory>
 #include <QSet>
 
+#include <algorithm>
 #include <iterator>
 
 Q_LOGGING_CATEGORY(lcWorkspaceRec, "plasmazones.workspaces.reconciler", QtWarningMsg)
@@ -199,35 +200,56 @@ void WorkspaceReconciler::retireLedgerFor(const QString& desktopId)
     }
 }
 
-bool WorkspaceReconciler::realizeSettledCreate(const QString& desktopId, int newIndex)
+QHash<QString, WorkspaceReconciler::PendingOp> WorkspaceReconciler::takeSettledCreates(const QStringList& newIds)
 {
-    // Nearest requested position wins. The ledger is oldest-request-first and
-    // the settled list is KWin-position-ordered; those rankings agree only when
-    // the screens happen to have asked in slice order. Screens [A,B] where B's
-    // population change fires first puts Create(B) at the head of the ledger
-    // while A's new desktop sits EARLIER in KWin's list, so a first-in-ledger
-    // match hands each desktop to the other screen's slice — and nothing
-    // corrects it, because both screens still end in a trailing empty and look
-    // repaired.
-    int best = -1;
-    int bestDistance = 0;
+    // Rank pairing, not nearest-distance. The ledger is oldest-request-first
+    // and the settled list is KWin-position-ordered; those rankings agree only
+    // when the screens happen to have asked in slice order. Screens [A,B] where
+    // B's population change fires first puts Create(B) at the head of the
+    // ledger while A's new desktop sits EARLIER in KWin's list, so a
+    // first-in-ledger match hands each desktop to the other screen's slice —
+    // and nothing corrects it, because both screens still end in a trailing
+    // empty and look repaired.
+    //
+    // Distances cannot be compared per id either: globalPosition is captured
+    // at request time and requestCreateAt does not mutate the map, so with
+    // several Creates issued in one maintenance pass each recorded value
+    // ignores the sibling creates that land ahead of it and is low by their
+    // count. The settled indices DO include them, so a per-id nearest match
+    // crosses over once that uniform drift reaches half the spacing. Ordering
+    // survives the drift, so the requested positions and the new ids are
+    // paired by RANK instead.
+    QHash<QString, PendingOp> matched;
+    if (newIds.isEmpty()) {
+        return matched;
+    }
+    QList<int> creates;
     for (int i = 0; i < m_ledger.size(); ++i) {
-        if (m_ledger.at(i).kind != PendingOp::Kind::Create) {
-            continue;
-        }
-        const int distance = qAbs(m_ledger.at(i).globalPosition - newIndex);
-        if (best < 0 || distance < bestDistance) {
-            best = i;
-            bestDistance = distance;
+        if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
+            creates.append(i);
         }
     }
-    if (best < 0) {
-        return false;
+    // Stable, so equal requested positions keep ledger (request) order.
+    std::stable_sort(creates.begin(), creates.end(), [this](int a, int b) {
+        return m_ledger.at(a).globalPosition < m_ledger.at(b).globalPosition;
+    });
+    const int pairs = qMin(creates.size(), newIds.size());
+    for (int rank = 0; rank < pairs; ++rank) {
+        matched.insert(newIds.at(rank), m_ledger.at(creates.at(rank)));
     }
-    const PendingOp op = m_ledger.takeAt(best);
+    QList<int> consumed = creates.mid(0, pairs);
+    std::sort(consumed.begin(), consumed.end());
+    for (int i = consumed.size() - 1; i >= 0; --i) {
+        m_ledger.removeAt(consumed.at(i));
+    }
     if (m_ledger.isEmpty()) {
         m_ledgerTimer.stop();
     }
+    return matched;
+}
+
+bool WorkspaceReconciler::applySettledCreate(const PendingOp& op, const QString& desktopId)
+{
     if (!m_map.knowsScreen(op.screenId)) {
         qCWarning(lcWorkspaceRec) << "settled create" << desktopId << "whose planned screen" << op.screenId
                                   << "is gone — adopting instead";
@@ -598,18 +620,28 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
     }
 
     const QStringList unowned = m_map.repairAgainst(ids);
+    // repairAgainst reports in KWin order, so this keeps the new ids in
+    // settled-list index order — the ranking takeSettledCreates pairs against.
+    QStringList newUnowned;
+    for (const QString& id : unowned) {
+        if (!previousIds.contains(id)) {
+            newUnowned.append(id);
+        }
+    }
+    const QHash<QString, PendingOp> settledCreates = takeSettledCreates(newUnowned);
     for (const QString& id : unowned) {
         // Creates are retired by MATCHING, never by counting. A create whose
         // id-only echo already arrived was realized (and its op consumed) in
         // onKwinDesktopCreated, so it is owned and never reaches this loop; a
         // create the settle answered first is an unowned NEW id, and it
         // consumes the open Create whose requested global position is nearest
-        // this id's position in the settled list. Counting the size delta
-        // instead retired a second op per landed desktop, which left the
-        // survivor's echo with no ledger entry to match (adopting onto the
-        // focused screen rather than the screen that asked) and let
-        // maintainScreen request a duplicate.
-        if (!previousIds.contains(id) && realizeSettledCreate(id, ids.indexOf(id))) {
+        // this id's rank among the new ids. Counting the size delta instead
+        // retired a second op per landed desktop, which left the survivor's
+        // echo with no ledger entry to match (adopting onto the focused screen
+        // rather than the screen that asked) and let maintainScreen request a
+        // duplicate.
+        const auto matched = settledCreates.constFind(id);
+        if (matched != settledCreates.constEnd() && applySettledCreate(*matched, id)) {
             continue;
         }
         adoptExternal(id);

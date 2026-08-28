@@ -64,6 +64,7 @@ private Q_SLOTS:
     void create_secondPendingSurvivesTheFirstsSettle();
     void create_settledBeforeEchoLandsOnRequestingScreen();
     void create_settledMatchesByPositionNotRequestOrder();
+    void create_threeConcurrentSettleLandOnTheirOwnScreens();
 
 private:
     /// Two screens, each occupied and each therefore owing a trailing-empty
@@ -868,6 +869,47 @@ void TestWorkspaceReconciler::create_settledMatchesByPositionNotRequestOrder()
     QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
     QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
     QCOMPARE(createSpy.count(), 2);
+}
+
+void TestWorkspaceReconciler::create_threeConcurrentSettleLandOnTheirOwnScreens()
+{
+    // Three screens repairing their trailing empty in ONE maintenance pass,
+    // all answered by a single settle with no echoes. globalPosition is taken
+    // at request time and requestCreateAt does not mutate the map, so the
+    // three requests record 1, 2 and 3 while the settled list puts the new
+    // desktops at indices 1, 3 and 5. That uniform low drift is what breaks a
+    // per-id nearest-distance match: for d5 (index 3) B is |2-3|=1 and C is
+    // |3-3|=0, so C would win a slot that belongs to B and the two screens
+    // would swap desktops silently, each still ending in a trailing empty.
+    // Pairing by rank is immune to the drift.
+    WorkspaceReconciler rec;
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+
+    rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+    rec.setFocusedScreen(QStringLiteral("A"));
+
+    QHash<QString, QString> current;
+    current.insert(QStringLiteral("A"), id(1));
+    current.insert(QStringLiteral("B"), id(2));
+    current.insert(QStringLiteral("C"), id(3));
+    rec.adoptAll({id(1), id(2), id(3)}, current);
+    QCOMPARE(createSpy.count(), 0);
+
+    rec.onPopulationChanged(id(1), 1);
+    rec.onPopulationChanged(id(2), 1);
+    rec.onPopulationChanged(id(3), 1);
+    QCOMPARE(createSpy.count(), 3);
+
+    rec.onDesktopListSettled({id(1), id(4), id(2), id(5), id(3), id(6)});
+
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("A"));
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("B"));
+    QCOMPARE(rec.map().ownerOf(id(6)), QStringLiteral("C"));
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("C")).size(), 2);
+    // Every op was consumed, so maintenance asks for nothing more.
+    QCOMPARE(createSpy.count(), 3);
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)
