@@ -97,6 +97,15 @@ int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& 
     // not own it keep their own intents untouched, so untabbing restores the
     // stack the user built rather than the flattened one an ownership wipe
     // would leave behind.
+    //
+    // This is where the parity ends, and deliberately. niri keeps the
+    // invariant that at most ONE tile per column is non-Auto — it normalizes
+    // the others to weighted Auto at the height-write sites, preserving their
+    // apparent heights — so a scan for "the fixed one" is safe there and its
+    // display toggle needs no bookkeeping at all. A column here may legitimately
+    // carry several sized tiles (the stack branch renormalizes them
+    // proportionally), so that invariant does not hold and the scan cannot
+    // stand in for an owner.
     const Tile* ownerTile = c.heightOwner();
     const WindowHeight* owner = ownerTile ? &ownerTile->height : nullptr;
     if (owner && owner->kind == WindowHeight::Auto) {
@@ -732,10 +741,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         if (rc.tabbed) {
             // A tabbed column takes its CROSS extent from the height intent
             // of the tab that OWNS it (Column::heightOwnerId), not from
-            // whichever tab is on show and not from the only tab carrying an
-            // intent — the others keep theirs (niri parity: a tabbed column
-            // may be shorter than
-            // the work area), so the rect the full-cross default above wrote
+            // whichever tab is on show. niri parity for the SHAPE (a tabbed
+            // column may be shorter than the work area) but not for the
+            // bookkeeping: niri holds at most one non-Auto tile per column
+            // and so can scan for it, while a column here may carry several
+            // sized tiles and names its owner instead. So the rect the
+            // full-cross default above wrote
             // is replaced before anything derives from it. Everything below —
             // the indicator rect, the content rect the tabs are committed at —
             // then follows the shortened column on its own.
