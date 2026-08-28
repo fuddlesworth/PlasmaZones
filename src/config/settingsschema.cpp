@@ -235,65 +235,55 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::shadersGroup()] = {
-        {CD::frameRateKey(),
-         CD::shaderFrameRate(),
-         QMetaType::Int,
-         {},
+        {CD::frameRateKey(), CD::shaderFrameRate(), QMetaType::Int,
+         QStringLiteral("Target refresh rate for shader animations."),
          clampInt(CD::shaderFrameRateMin(), CD::shaderFrameRateMax())},
     };
     schema.groups[CD::shadersAudioGroup()] = {
-        {CD::enabledKey(), CD::enableAudioVisualizer(), QMetaType::Bool},
-        {CD::barsKey(),
-         CD::audioSpectrumBarCount(),
-         QMetaType::Int,
-         {},
+        {CD::enabledKey(), CD::enableAudioVisualizer(), QMetaType::Bool,
+         QStringLiteral("Capture system audio so the audio-reactive shader packs have a signal to follow. Off, "
+                        "those shaders render but stay still.")},
+        {CD::barsKey(), CD::audioSpectrumBarCount(), QMetaType::Int,
+         QStringLiteral("Number of frequency bands in the audio visualization."),
          clampInt(CD::audioSpectrumBarCountMin(), CD::audioSpectrumBarCountMax())},
-        {CD::autosensKey(), CD::audioAutosens(), QMetaType::Bool},
-        {CD::sensitivityKey(),
-         CD::audioSensitivity(),
-         QMetaType::Int,
-         {},
+        {CD::autosensKey(), CD::audioAutosens(), QMetaType::Bool,
+         QStringLiteral("Continuously adjusts sensitivity so the bars fill the available range.")},
+        {CD::sensitivityKey(), CD::audioSensitivity(), QMetaType::Int,
+         QStringLiteral("Gain applied to the audio signal. With automatic gain on, this is the level it starts "
+                        "adapting from."),
          clampInt(CD::audioSensitivityMin(), CD::audioSensitivityMax())},
-        {CD::noiseReductionKey(),
-         CD::audioNoiseReduction(),
-         QMetaType::Int,
-         {},
+        {CD::noiseReductionKey(), CD::audioNoiseReduction(), QMetaType::Int,
+         QStringLiteral("How smoothly the bars respond. Higher values are slower and calmer while lower values are "
+                        "fast and twitchy."),
          clampInt(CD::audioNoiseReductionMin(), CD::audioNoiseReductionMax())},
-        {CD::lowerCutoffHzKey(),
-         CD::audioLowerCutoffHz(),
-         QMetaType::Int,
-         {},
+        {CD::lowerCutoffHzKey(), CD::audioLowerCutoffHz(), QMetaType::Int,
+         QStringLiteral("Sounds below this frequency are ignored."),
          clampInt(CD::audioLowerCutoffHzMin(), CD::audioLowerCutoffHzMax())},
-        {CD::higherCutoffHzKey(),
-         CD::audioHigherCutoffHz(),
-         QMetaType::Int,
-         {},
+        {CD::higherCutoffHzKey(), CD::audioHigherCutoffHz(), QMetaType::Int,
+         QStringLiteral("Sounds above this frequency are ignored."),
          clampInt(CD::audioHigherCutoffHzMin(), CD::audioHigherCutoffHzMax())},
-        {CD::monstercatKey(), CD::audioMonstercat(), QMetaType::Bool},
-        {CD::wavesKey(), CD::audioWaves(), QMetaType::Bool},
-        {CD::channelModeKey(),
-         CD::audioChannelMode(),
-         QMetaType::QString,
-         {},
+        {CD::monstercatKey(), CD::audioMonstercat(), QMetaType::Bool,
+         QStringLiteral("Spreads each bar into its neighbors for a smoother outline.")},
+        {CD::wavesKey(), CD::audioWaves(), QMetaType::Bool, QStringLiteral("Rounds the spectrum into soft waves.")},
+        {CD::channelModeKey(), CD::audioChannelMode(), QMetaType::QString,
+         QStringLiteral("Stereo shows left and right bars side by side. Mono collapses to one set of bars."),
          [](const QVariant& v) {
              return QVariant(CD::normalizeAudioChannelMode(v.toString()));
          },
          tokenChoices(CD::audioChannelModeOptions())},
-        {CD::reverseKey(), CD::audioReverse(), QMetaType::Bool},
-        {CD::extraSmoothingKey(),
-         CD::audioExtraSmoothing(),
-         QMetaType::Int,
-         {},
+        {CD::reverseKey(), CD::audioReverse(), QMetaType::Bool,
+         QStringLiteral("Flip the frequency order of the bars.")},
+        {CD::extraSmoothingKey(), CD::audioExtraSmoothing(), QMetaType::Int,
+         QStringLiteral("Additional smoothing applied on top of noise reduction."),
          clampInt(CD::audioExtraSmoothingMin(), CD::audioExtraSmoothingMax())},
-        {CD::inputMethodKey(),
-         CD::audioInputMethod(),
-         QMetaType::QString,
-         {},
+        {CD::inputMethodKey(), CD::audioInputMethod(), QMetaType::QString,
+         QStringLiteral("Leave on Automatic unless capture fails with the detected backend."),
          [](const QVariant& v) {
              return QVariant(CD::normalizeAudioInputMethod(v.toString()));
          },
          tokenChoices(CD::audioInputMethodOptions())},
-        {CD::inputSourceKey(), CD::audioInputSource(), QMetaType::QString},
+        {CD::inputSourceKey(), CD::audioInputSource(), QMetaType::QString,
+         QStringLiteral("Capture device or monitor source. Keep it set to auto to follow the default output.")},
     };
 }
 
@@ -315,52 +305,57 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // the system palette" (the same sentinel the scrolling colour keys
     // use); Settings resolves in the getters.
     schema.groups[CD::snappingZonesColorsGroup()] = {
-        {CD::highlightKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::inactiveKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::borderKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::highlightKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
+         QStringLiteral("Colour of the zone under the cursor. Empty follows the colour "
+                        "scheme."),
+         canonicalThemeFallbackColor},
+        {CD::inactiveKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
+         QStringLiteral("Colour of the zones not under the cursor. Empty follows the colour "
+                        "scheme."),
+         canonicalThemeFallbackColor},
+        {CD::borderKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
+         QStringLiteral("Colour of the zone borders. Empty follows the colour "
+                        "scheme."),
+         canonicalThemeFallbackColor},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
-        {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::fontFamilyKey(),
-         CD::labelFontFamily(),
-         QMetaType::QString,
-         {},
+        {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
+         QStringLiteral("Colour of the zone label text. Empty follows the colour "
+                        "scheme."),
+         canonicalThemeFallbackColor},
+        {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString,
+         QStringLiteral("Typeface for zone labels. Empty follows the system font."),
          canonicalFontFamily(PhosphorRules::MaxFontFamilyLength)},
-        {CD::fontSizeScaleKey(),
-         CD::labelFontSizeScale(),
-         QMetaType::Double,
-         {},
+        {CD::fontSizeScaleKey(), CD::labelFontSizeScale(), QMetaType::Double,
+         QStringLiteral("Size multiplier for zone label text."),
          clampDouble(CD::labelFontSizeScaleMin(), CD::labelFontSizeScaleMax())},
-        {CD::fontWeightKey(),
-         CD::labelFontWeight(),
-         QMetaType::Int,
-         {},
+        {CD::fontWeightKey(), CD::labelFontWeight(), QMetaType::Int,
+         QStringLiteral("Weight of the zone label text, on the usual 100 to 900 scale where 400 is regular and 700 is "
+                        "bold."),
          clampInt(CD::labelFontWeightMin(), CD::labelFontWeightMax())},
-        {CD::fontItalicKey(), CD::labelFontItalic(), QMetaType::Bool},
-        {CD::fontUnderlineKey(), CD::labelFontUnderline(), QMetaType::Bool},
-        {CD::fontStrikeoutKey(), CD::labelFontStrikeout(), QMetaType::Bool},
+        {CD::fontItalicKey(), CD::labelFontItalic(), QMetaType::Bool, QStringLiteral("Italicize the zone label text.")},
+        {CD::fontUnderlineKey(), CD::labelFontUnderline(), QMetaType::Bool,
+         QStringLiteral("Underline the zone label text.")},
+        {CD::fontStrikeoutKey(), CD::labelFontStrikeout(), QMetaType::Bool,
+         QStringLiteral("Strike through the zone label text.")},
     };
 
     schema.groups[CD::snappingZonesOpacityGroup()] = {
-        {CD::activeKey(),
-         CD::activeOpacity(),
-         QMetaType::Double,
-         {},
+        {CD::activeKey(), CD::activeOpacity(), QMetaType::Double,
+         QStringLiteral("Opacity of the zone under the cursor."),
          clampDouble(CD::activeOpacityMin(), CD::activeOpacityMax())},
-        {CD::inactiveKey(),
-         CD::inactiveOpacity(),
-         QMetaType::Double,
-         {},
+        {CD::inactiveKey(), CD::inactiveOpacity(), QMetaType::Double,
+         QStringLiteral("Opacity of zones not under the cursor."),
          clampDouble(CD::inactiveOpacityMin(), CD::inactiveOpacityMax())},
     };
 
     schema.groups[CD::snappingZonesBorderGroup()] = {
-        {CD::widthKey(), CD::borderWidth(), QMetaType::Int, {}, clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
-        {CD::radiusKey(),
-         CD::borderRadius(),
-         QMetaType::Int,
-         {},
+        {CD::widthKey(), CD::borderWidth(), QMetaType::Int,
+         QStringLiteral("Thickness of zone borders in "
+                        "pixels."),
+         clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
+        {CD::radiusKey(), CD::borderRadius(), QMetaType::Int, QStringLiteral("Corner rounding of zones in pixels."),
          clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
     };
     // The Effects group (display-OSD keys) is declared in one shot by
@@ -378,9 +373,18 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::orderingGroup()] = {
-        {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString,
+         QStringLiteral("The order zone layouts appear in, as a comma-separated list of layout ids. Anything not "
+                        "listed follows in its default order."),
+         canonicalCommaList},
+        {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString,
+         QStringLiteral("The order autotile algorithms appear in, as a comma-separated list of algorithm ids. "
+                        "Anything not listed follows in its default order."),
+         canonicalCommaList},
+        {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString,
+         QStringLiteral("The order scrolling templates appear in, as a comma-separated list of template ids. "
+                        "Anything not listed follows in its default order."),
+         canonicalCommaList},
     };
 }
 
@@ -415,13 +419,19 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
     // The static persists across Settings re-construction.
     static PhosphorAnimation::CurveRegistry sSchemaRegistry;
     schema.groups[CD::animationsGroup()] = {
-        {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
+        {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool,
+         QStringLiteral("Whether window transitions play at all. Off, windows appear and disappear with no "
+                        "motion.")},
         // Profile and ShaderProfileTree persist as nested JSON objects
         // (QVariantMap) so the on-disk config shows their structure
         // directly. Existing string-blob configs are migrated transparently
         // by Store::read's legacy-string fallback on first load.
-        {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap},
-        {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap},
+        {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap,
+         QStringLiteral("The active motion profile, holding its easing curve, duration, stagger interval, and "
+                        "sequence mode. The animations page writes this; it is not meant to be edited by hand.")},
+        {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
+         QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
+                        "writes this; it is not meant to be edited by hand.")},
     };
 }
 
@@ -434,10 +444,8 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::renderingGroup()] = {
-        {CD::backendKey(),
-         CD::renderingBackend(),
-         QMetaType::QString,
-         {},
+        {CD::backendKey(), CD::renderingBackend(), QMetaType::QString,
+         QStringLiteral("Graphics API used for overlay rendering."),
          [](const QVariant& v) {
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
          },
@@ -446,10 +454,9 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
         // machine's GPUs ("auto" or a "vendor:device" hex PCI pair), so there
         // are no declared choices — the picker enumerates DRM render nodes at
         // runtime. The validator still coerces malformed strings to "auto".
-        {CD::gpuKey(),
-         CD::gpuDevice(),
-         QMetaType::QString,
-         {},
+        {CD::gpuKey(), CD::gpuDevice(), QMetaType::QString,
+         QStringLiteral("GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver "
+                        "decide. KWin composites window contents, so those are unaffected."),
          [](const QVariant& v) {
              return QVariant(CD::normalizeGpuDevice(v.toString()));
          }},
@@ -463,20 +470,17 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::performanceGroup()] = {
-        {CD::pollIntervalMsKey(),
-         CD::pollIntervalMs(),
-         QMetaType::Int,
-         {},
+        {CD::pollIntervalMsKey(), CD::pollIntervalMs(), QMetaType::Int,
+         QStringLiteral("How often the daemon samples window positions while dragging. Lower reacts sooner and costs "
+                        "more CPU."),
          clampInt(CD::pollIntervalMsMin(), CD::pollIntervalMsMax())},
-        {CD::minimumZoneSizePxKey(),
-         CD::minimumZoneSizePx(),
-         QMetaType::Int,
-         {},
+        {CD::minimumZoneSizePxKey(), CD::minimumZoneSizePx(), QMetaType::Int,
+         QStringLiteral("Zones smaller than this on either side are treated as unusable and skipped when placing a "
+                        "window."),
          clampInt(CD::minimumZoneSizePxMin(), CD::minimumZoneSizePxMax())},
-        {CD::minimumZoneDisplaySizePxKey(),
-         CD::minimumZoneDisplaySizePx(),
-         QMetaType::Int,
-         {},
+        {CD::minimumZoneDisplaySizePxKey(), CD::minimumZoneDisplaySizePx(), QMetaType::Int,
+         QStringLiteral("Zones smaller than this on either side are left out of the overlay, so slivers in a dense "
+                        "layout do not clutter it."),
          clampInt(CD::minimumZoneDisplaySizePxMin(), CD::minimumZoneDisplaySizePxMax())},
     };
 }
@@ -491,10 +495,8 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
     // (appendGapsSchema); the Window Appearance page edits them as plain config.
     // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
     schema.groups[CD::snappingGapsGroup()] = {
-        {CD::adjacentThresholdKey(),
-         CD::adjacentThreshold(),
-         QMetaType::Int,
-         {},
+        {CD::adjacentThresholdKey(), CD::adjacentThreshold(), QMetaType::Int,
+         QStringLiteral("Distance from zone edge for multi-zone selection."),
          clampInt(CD::adjacentThresholdMin(), CD::adjacentThresholdMax())},
     };
 }
@@ -510,9 +512,15 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
 // schema below when every entry is the same shape.
-inline void addShortcut(QVector<PhosphorConfig::KeyDef>& list, const QString& key, const QString& defaultValue)
+//
+// `description` is what the action DOES, in the user's terms, for the
+// settings UI and the generated documentation to share. It stays optional
+// so an entry added before anyone has written its sentence still compiles;
+// the schema dump reports how many are still blank.
+inline void addShortcut(QVector<PhosphorConfig::KeyDef>& list, const QString& key, const QString& defaultValue,
+                        const QString& description = {})
 {
-    list.append({key, defaultValue, QMetaType::QString});
+    list.append({key, defaultValue, QMetaType::QString, description});
 }
 } // namespace
 
@@ -521,11 +529,14 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     QVector<PhosphorConfig::KeyDef> globals;
-    addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
-    addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
-    addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
-    addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
-    addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
+    addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut(), QStringLiteral("Open zone editor."));
+    addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut(), QStringLiteral("Open settings."));
+    addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut(),
+                QStringLiteral("Open the shortcut cheatsheet."));
+    addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut(),
+                QStringLiteral("Switches this screen to the previous layout in the list."));
+    addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut(),
+                QStringLiteral("Switches this screen to the next layout in the list."));
     const QString quickDefaults[] = {
         CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
         CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
@@ -539,28 +550,61 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     static_assert(std::size(quickDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
                   "quick-layout defaults array must cover every protocol slot");
     for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
-        addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
+        addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i],
+                    QStringLiteral("Loads quick-layout slot %1 on the focused screen. A slot holds a zone layout, an "
+                                   "autotile algorithm, or a scrolling template, depending on the screen's mode.")
+                        .arg(i + 1));
     }
-    addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
-    addShortcut(globals, CD::moveWindowRightKey(), CD::moveWindowRightShortcut());
-    addShortcut(globals, CD::moveWindowUpKey(), CD::moveWindowUpShortcut());
-    addShortcut(globals, CD::moveWindowDownKey(), CD::moveWindowDownShortcut());
-    addShortcut(globals, CD::focusZoneLeftKey(), CD::focusZoneLeftShortcut());
-    addShortcut(globals, CD::focusZoneRightKey(), CD::focusZoneRightShortcut());
-    addShortcut(globals, CD::focusZoneUpKey(), CD::focusZoneUpShortcut());
-    addShortcut(globals, CD::focusZoneDownKey(), CD::focusZoneDownShortcut());
-    addShortcut(globals, CD::pushToEmptyZoneKey(), CD::pushToEmptyZoneShortcut());
-    addShortcut(globals, CD::restoreWindowSizeKey(), CD::restoreWindowSizeShortcut());
-    addShortcut(globals, CD::toggleWindowFloatKey(), CD::toggleWindowFloatShortcut());
-    addShortcut(globals, CD::switchFocusFloatTilingKey(), CD::switchFocusFloatTilingShortcut());
-    addShortcut(globals, CD::swapWindowLeftKey(), CD::swapWindowLeftShortcut());
-    addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut());
-    addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut());
-    addShortcut(globals, CD::swapWindowDownKey(), CD::swapWindowDownShortcut());
-    addShortcut(globals, CD::spanWindowLeftKey(), CD::spanWindowLeftShortcut());
-    addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
-    addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
-    addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
+    addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut(),
+                QStringLiteral("Moves the focused window into the zone to the left of its current one."));
+    addShortcut(globals, CD::moveWindowRightKey(), CD::moveWindowRightShortcut(),
+                QStringLiteral("Moves the focused window into the zone to the right of its current one."));
+    addShortcut(globals, CD::moveWindowUpKey(), CD::moveWindowUpShortcut(),
+                QStringLiteral("Moves the focused window into the zone above its current one."));
+    addShortcut(globals, CD::moveWindowDownKey(), CD::moveWindowDownShortcut(),
+                QStringLiteral("Moves the focused window into the zone below its current one."));
+    addShortcut(globals, CD::focusZoneLeftKey(), CD::focusZoneLeftShortcut(),
+                QStringLiteral("Moves focus to the window in the zone to the left of the focused one."));
+    addShortcut(globals, CD::focusZoneRightKey(), CD::focusZoneRightShortcut(),
+                QStringLiteral("Moves focus to the window in the zone to the right of the focused one."));
+    addShortcut(globals, CD::focusZoneUpKey(), CD::focusZoneUpShortcut(),
+                QStringLiteral("Moves focus to the window in the zone above the focused one."));
+    addShortcut(globals, CD::focusZoneDownKey(), CD::focusZoneDownShortcut(),
+                QStringLiteral("Moves focus to the window in the zone below the focused one."));
+    addShortcut(globals, CD::pushToEmptyZoneKey(), CD::pushToEmptyZoneShortcut(),
+                QStringLiteral("Push focused window to the nearest empty zone."));
+    addShortcut(globals, CD::restoreWindowSizeKey(), CD::restoreWindowSizeShortcut(),
+                QStringLiteral("Restore focused window to its pre-snap size."));
+    addShortcut(globals, CD::toggleWindowFloatKey(), CD::toggleWindowFloatShortcut(),
+                QStringLiteral("Toggle focused window's floating state."));
+    addShortcut(
+        globals, CD::switchFocusFloatTilingKey(), CD::switchFocusFloatTilingShortcut(),
+        QStringLiteral("Moves focus between the floating windows and the placed layout. It returns to the window that "
+                       "last had focus there when that window is still available."));
+    addShortcut(globals, CD::swapWindowLeftKey(), CD::swapWindowLeftShortcut(),
+                QStringLiteral("Swaps the focused window with the window in the zone to the left of it."));
+    addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut(),
+                QStringLiteral("Swaps the focused window with the window in the zone to the right of it."));
+    addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut(),
+                QStringLiteral("Swaps the focused window with the window in the zone above it."));
+    addShortcut(globals, CD::swapWindowDownKey(), CD::swapWindowDownShortcut(),
+                QStringLiteral("Swaps the focused window with the window in the zone below it."));
+    addShortcut(
+        globals, CD::spanWindowLeftKey(), CD::spanWindowLeftShortcut(),
+        QStringLiteral("Extends the focused window across the adjacent zone to the left of it. Once the span reaches "
+                       "the edge of the layout, the same key pulls the opposite edge in instead."));
+    addShortcut(
+        globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut(),
+        QStringLiteral("Extends the focused window across the adjacent zone to the right of it. Once the span reaches "
+                       "the edge of the layout, the same key pulls the opposite edge in instead."));
+    addShortcut(
+        globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut(),
+        QStringLiteral("Extends the focused window across the adjacent zone above it. Once the span reaches the edge "
+                       "of the layout, the same key pulls the opposite edge in instead."));
+    addShortcut(
+        globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut(),
+        QStringLiteral("Extends the focused window across the adjacent zone below it. Once the span reaches the edge "
+                       "of the layout, the same key pulls the opposite edge in instead."));
     const QString snapToZoneDefaults[] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
@@ -570,34 +614,59 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     static_assert(std::size(snapToZoneDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
                   "snap-to-zone defaults array must cover every protocol slot");
     for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
-        addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
+        addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i],
+                    QStringLiteral("Snaps the focused window to zone %1 of the current layout.").arg(i + 1));
     }
-    addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());
-    addShortcut(globals, CD::rotateWindowsCounterclockwiseKey(), CD::rotateWindowsCounterclockwiseShortcut());
-    addShortcut(globals, CD::cycleWindowForwardKey(), CD::cycleWindowForwardShortcut());
-    addShortcut(globals, CD::cycleWindowBackwardKey(), CD::cycleWindowBackwardShortcut());
-    addShortcut(globals, CD::resnapToNewLayoutKey(), CD::resnapToNewLayoutShortcut());
-    addShortcut(globals, CD::snapAllWindowsKey(), CD::snapAllWindowsShortcut());
-    addShortcut(globals, CD::layoutPickerKey(), CD::layoutPickerShortcut());
-    addShortcut(globals, CD::toggleLayoutLockKey(), CD::toggleLayoutLockShortcut());
-    addShortcut(globals, CD::swapVirtualScreenLeftKey(), CD::swapVirtualScreenLeftShortcut());
-    addShortcut(globals, CD::swapVirtualScreenRightKey(), CD::swapVirtualScreenRightShortcut());
-    addShortcut(globals, CD::swapVirtualScreenUpKey(), CD::swapVirtualScreenUpShortcut());
-    addShortcut(globals, CD::swapVirtualScreenDownKey(), CD::swapVirtualScreenDownShortcut());
-    addShortcut(globals, CD::rotateVirtualScreensClockwiseKey(), CD::rotateVirtualScreensClockwiseShortcut());
+    addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut(),
+                QStringLiteral("Moves every window one zone clockwise within the current layout."));
+    addShortcut(globals, CD::rotateWindowsCounterclockwiseKey(), CD::rotateWindowsCounterclockwiseShortcut(),
+                QStringLiteral("Moves every window one zone counter-clockwise within the current layout."));
+    addShortcut(globals, CD::cycleWindowForwardKey(), CD::cycleWindowForwardShortcut(),
+                QStringLiteral("Moves the focused window to the next zone in the layout's order."));
+    addShortcut(globals, CD::cycleWindowBackwardKey(), CD::cycleWindowBackwardShortcut(),
+                QStringLiteral("Moves the focused window to the previous zone in the layout's order."));
+    addShortcut(globals, CD::resnapToNewLayoutKey(), CD::resnapToNewLayoutShortcut(),
+                QStringLiteral("Reapply current layout."));
+    addShortcut(globals, CD::snapAllWindowsKey(), CD::snapAllWindowsShortcut(),
+                QStringLiteral("Snap every visible window to its best-fit zone."));
+    addShortcut(globals, CD::layoutPickerKey(), CD::layoutPickerShortcut(),
+                QStringLiteral("Opens a picker to choose this screen's layout."));
+    addShortcut(globals, CD::toggleLayoutLockKey(), CD::toggleLayoutLockShortcut(),
+                QStringLiteral("Locks this screen's layout so nothing switches it until unlocked."));
+    addShortcut(
+        globals, CD::swapVirtualScreenLeftKey(), CD::swapVirtualScreenLeftShortcut(),
+        QStringLiteral("Swaps this virtual screen's windows with those of the virtual screen to the left of it."));
+    addShortcut(
+        globals, CD::swapVirtualScreenRightKey(), CD::swapVirtualScreenRightShortcut(),
+        QStringLiteral("Swaps this virtual screen's windows with those of the virtual screen to the right of it."));
+    addShortcut(globals, CD::swapVirtualScreenUpKey(), CD::swapVirtualScreenUpShortcut(),
+                QStringLiteral("Swaps this virtual screen's windows with those of the virtual screen above it."));
+    addShortcut(globals, CD::swapVirtualScreenDownKey(), CD::swapVirtualScreenDownShortcut(),
+                QStringLiteral("Swaps this virtual screen's windows with those of the virtual screen below it."));
+    addShortcut(globals, CD::rotateVirtualScreensClockwiseKey(), CD::rotateVirtualScreensClockwiseShortcut(),
+                QStringLiteral("Moves every virtual screen's windows one position clockwise."));
     addShortcut(globals, CD::rotateVirtualScreensCounterclockwiseKey(),
-                CD::rotateVirtualScreensCounterclockwiseShortcut());
+                CD::rotateVirtualScreensCounterclockwiseShortcut(),
+                QStringLiteral("Moves every virtual screen's windows one position counter-clockwise."));
     schema.groups[CD::shortcutsGlobalGroup()] = std::move(globals);
 
     schema.groups[CD::shortcutsTilingGroup()] = {
-        {CD::toggleKey(), CD::autotileToggleShortcut(), QMetaType::QString},
-        {CD::focusMasterKey(), CD::autotileFocusMasterShortcut(), QMetaType::QString},
-        {CD::swapMasterKey(), CD::autotileSwapMasterShortcut(), QMetaType::QString},
-        {CD::incMasterRatioKey(), CD::autotileIncMasterRatioShortcut(), QMetaType::QString},
-        {CD::decMasterRatioKey(), CD::autotileDecMasterRatioShortcut(), QMetaType::QString},
-        {CD::incMasterCountKey(), CD::autotileIncMasterCountShortcut(), QMetaType::QString},
-        {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
-        {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
+        {CD::toggleKey(), CD::autotileToggleShortcut(), QMetaType::QString,
+         QStringLiteral("Cycle the focused screen's placement mode.")},
+        {CD::focusMasterKey(), CD::autotileFocusMasterShortcut(), QMetaType::QString,
+         QStringLiteral("Focus the master window.")},
+        {CD::swapMasterKey(), CD::autotileSwapMasterShortcut(), QMetaType::QString,
+         QStringLiteral("Swap focused window with master.")},
+        {CD::incMasterRatioKey(), CD::autotileIncMasterRatioShortcut(), QMetaType::QString,
+         QStringLiteral("Gives the master area a larger share of the screen.")},
+        {CD::decMasterRatioKey(), CD::autotileDecMasterRatioShortcut(), QMetaType::QString,
+         QStringLiteral("Gives the master area a smaller share of the screen.")},
+        {CD::incMasterCountKey(), CD::autotileIncMasterCountShortcut(), QMetaType::QString,
+         QStringLiteral("Moves one more window into the master area.")},
+        {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString,
+         QStringLiteral("Moves one window out of the master area.")},
+        {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString,
+         QStringLiteral("Re-applies the tiling algorithm to every window on the screen.")},
     };
 
     // Shortcuts.Scrolling is declared by the scrolling TU (split out for
@@ -618,10 +687,14 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     schema.groups[CD::editorShortcutsGroup()] = {
-        {CD::duplicateKey(), CD::editorDuplicateShortcut(), QMetaType::QString},
-        {CD::splitHorizontalKey(), CD::editorSplitHorizontalShortcut(), QMetaType::QString},
-        {CD::splitVerticalKey(), CD::editorSplitVerticalShortcut(), QMetaType::QString},
-        {CD::fillKey(), CD::editorFillShortcut(), QMetaType::QString},
+        {CD::duplicateKey(), CD::editorDuplicateShortcut(), QMetaType::QString,
+         QStringLiteral("Editor shortcut that clones the selected zone.")},
+        {CD::splitHorizontalKey(), CD::editorSplitHorizontalShortcut(), QMetaType::QString,
+         QStringLiteral("Editor shortcut that divides the selected zone into left and right halves.")},
+        {CD::splitVerticalKey(), CD::editorSplitVerticalShortcut(), QMetaType::QString,
+         QStringLiteral("Editor shortcut that divides the selected zone into top and bottom halves.")},
+        {CD::fillKey(), CD::editorFillShortcut(), QMetaType::QString,
+         QStringLiteral("Editor shortcut that expands the selected zone to fill the empty area around it.")},
     };
 
     auto modifierOr = [](int fallback) {
@@ -640,31 +713,32 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     };
 
     schema.groups[CD::editorSnappingGroup()] = {
-        {CD::gridEnabledKey(), CD::editorGridSnappingEnabled(), QMetaType::Bool},
-        {CD::edgeEnabledKey(), CD::editorEdgeSnappingEnabled(), QMetaType::Bool},
-        {CD::intervalXKey(),
-         CD::editorSnapIntervalX(),
-         QMetaType::Double,
-         {},
+        {CD::gridEnabledKey(), CD::editorGridSnappingEnabled(), QMetaType::Bool,
+         QStringLiteral("Snap zones to a grid while dragging or resizing them in the editor.")},
+        {CD::edgeEnabledKey(), CD::editorEdgeSnappingEnabled(), QMetaType::Bool,
+         QStringLiteral("Snap zones to the edges of neighbouring zones while dragging or resizing them.")},
+        {CD::intervalXKey(), CD::editorSnapIntervalX(), QMetaType::Double,
+         QStringLiteral("Horizontal grid spacing, as a fraction of the screen width."),
          clampDouble(CD::editorSnapIntervalMin(), CD::editorSnapIntervalMax())},
-        {CD::intervalYKey(),
-         CD::editorSnapIntervalY(),
-         QMetaType::Double,
-         {},
+        {CD::intervalYKey(), CD::editorSnapIntervalY(), QMetaType::Double,
+         QStringLiteral("Vertical grid spacing, as a fraction of the screen height."),
          clampDouble(CD::editorSnapIntervalMin(), CD::editorSnapIntervalMax())},
-        {CD::overrideModifierKey(),
-         CD::editorSnapOverrideModifier(),
-         QMetaType::Int,
-         {},
+        {CD::overrideModifierKey(), CD::editorSnapOverrideModifier(), QMetaType::Int,
+         QStringLiteral("Modifier held to bypass editor snapping for as long as it is down, as a Qt keyboard-modifier "
+                        "value."),
          modifierOr(CD::editorSnapOverrideModifier())},
     };
 
     schema.groups[CD::editorFillOnDropGroup()] = {
-        {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool},
+        {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool,
+         QStringLiteral("Let a zone dropped in the editor expand into the empty space around it.")},
         // Qt::KeyboardModifier BITMASK, not the DragModifier enum that the
         // identically named zone-span key uses — there is no closed choice
         // set to declare here.
-        {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int, {}, modifierOr(CD::fillOnDropModifier())},
+        {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int,
+         QStringLiteral("Modifier held while dropping a zone to expand it into available space, as a Qt "
+                        "keyboard-modifier value."),
+         modifierOr(CD::fillOnDropModifier())},
     };
 }
 
@@ -689,16 +763,15 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
         // backend silently re-write dead defaults under the Exclusions
         // group, re-introducing keys we explicitly migrated out in v3→v4.
         // Only the three global knobs survive in this group.
-        {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool},
-        {CD::minimumWindowWidthKey(),
-         CD::minimumWindowWidth(),
-         QMetaType::Int,
-         {},
+        {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool,
+         QStringLiteral("Leave dialogs, popups, and toolbars where they are instead of placing them.")},
+        {CD::minimumWindowWidthKey(), CD::minimumWindowWidth(), QMetaType::Int,
+         QStringLiteral("Windows narrower than this are left alone by every placement mode. Zero turns the width "
+                        "threshold off."),
          clampInt(CD::minimumWindowWidthMin(), CD::minimumWindowWidthMax())},
-        {CD::minimumWindowHeightKey(),
-         CD::minimumWindowHeight(),
-         QMetaType::Int,
-         {},
+        {CD::minimumWindowHeightKey(), CD::minimumWindowHeight(), QMetaType::Int,
+         QStringLiteral("Windows shorter than this are left alone by every placement mode. Zero turns the height "
+                        "threshold off."),
          clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
     };
 
@@ -710,17 +783,16 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into ExcludeAnimations Rules.
         // Only the four global knobs survive in this group.
-        {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
-        {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
-        {CD::minimumWindowWidthKey(),
-         CD::animationMinimumWindowWidth(),
-         QMetaType::Int,
-         {},
+        {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool,
+         QStringLiteral("Skip animations for dialogs, popups, tooltips, and dropdown menus.")},
+        {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool,
+         QStringLiteral("Skip animations for notification popups and on-screen displays such as volume and "
+                        "brightness.")},
+        {CD::minimumWindowWidthKey(), CD::animationMinimumWindowWidth(), QMetaType::Int,
+         QStringLiteral("Windows narrower than this do not animate. Zero turns the width threshold off."),
          clampInt(CD::animationMinimumWindowWidthMin(), CD::animationMinimumWindowWidthMax())},
-        {CD::minimumWindowHeightKey(),
-         CD::animationMinimumWindowHeight(),
-         QMetaType::Int,
-         {},
+        {CD::minimumWindowHeightKey(), CD::animationMinimumWindowHeight(), QMetaType::Int,
+         QStringLiteral("Windows shorter than this do not animate. Zero turns the height threshold off."),
          clampInt(CD::animationMinimumWindowHeightMin(), CD::animationMinimumWindowHeightMax())},
     };
 
@@ -729,16 +801,13 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // separately from snapping and animation filtering. Reuses the shared
     // leaf keys; only the group differs.
     schema.groups[CD::decorationsWindowFilteringGroup()] = {
-        {CD::transientWindowsKey(), CD::decorationExcludeTransientWindows(), QMetaType::Bool},
-        {CD::minimumWindowWidthKey(),
-         CD::decorationMinimumWindowWidth(),
-         QMetaType::Int,
-         {},
+        {CD::transientWindowsKey(), CD::decorationExcludeTransientWindows(), QMetaType::Bool,
+         QStringLiteral("Skip decorations for dialogs, popups, and menus.")},
+        {CD::minimumWindowWidthKey(), CD::decorationMinimumWindowWidth(), QMetaType::Int,
+         QStringLiteral("Windows narrower than this get no decoration. Zero turns the width threshold off."),
          clampInt(CD::decorationMinimumWindowWidthMin(), CD::decorationMinimumWindowWidthMax())},
-        {CD::minimumWindowHeightKey(),
-         CD::decorationMinimumWindowHeight(),
-         QMetaType::Int,
-         {},
+        {CD::minimumWindowHeightKey(), CD::decorationMinimumWindowHeight(), QMetaType::Int,
+         QStringLiteral("Windows shorter than this get no decoration. Zero turns the height threshold off."),
          clampInt(CD::decorationMinimumWindowHeightMin(), CD::decorationMinimumWindowHeightMax())},
     };
 }
@@ -761,8 +830,11 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     schema.groups[CD::snappingBehaviorDisplayGroup()] = {
-        {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool},
-        {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
+        {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool,
+         QStringLiteral("Display zone overlays on every monitor while dragging a window, not only the one under the "
+                        "cursor.")},
+        {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool,
+         QStringLiteral("Only show layouts matching the current monitor's aspect ratio.")},
     };
 
     // Full Effects group declared here in one shot; declaring the whole
@@ -771,28 +843,28 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     // purgeStaleKeys() evicts the leftover key from existing user configs
     // on the next save().
     schema.groups[CD::snappingEffectsGroup()] = {
-        {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
-        {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
-        {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
-        {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
-        {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
+        {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool,
+         QStringLiteral("Display a number label inside each zone.")},
+        {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool,
+         QStringLiteral("Briefly flash the zones when switching between layouts.")},
+        {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool,
+         QStringLiteral("Show notification when switching between zone layouts.")},
+        {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool,
+         QStringLiteral("Show notification on virtual desktop change, activity change, and daemon startup.")},
+        {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool,
+         QStringLiteral("Show notification when moving windows with keyboard shortcuts.")},
         // validIntOr, not clampInt, per the enum-key convention documented in
         // settingsschema_p.h: qBound would reinterpret an out-of-range stored
         // value as the nearest enumerator instead of snapping to the default.
-        {CD::osdStyleKey(),
-         CD::osdStyle(),
-         QMetaType::Int,
-         {},
+        {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, QStringLiteral("Visual style of on-screen notifications."),
          validIntOr(
              {static_cast<int>(OsdStyle::None), static_cast<int>(OsdStyle::Text), static_cast<int>(OsdStyle::Preview)},
              CD::osdStyle()),
          intChoices({{static_cast<int>(OsdStyle::None), "none"_L1},
                      {static_cast<int>(OsdStyle::Text), "text"_L1},
                      {static_cast<int>(OsdStyle::Preview), "preview"_L1}})},
-        {CD::overlayDisplayModeKey(),
-         CD::overlayDisplayMode(),
-         QMetaType::Int,
-         {},
+        {CD::overlayDisplayModeKey(), CD::overlayDisplayMode(), QMetaType::Int,
+         QStringLiteral("How zones appear while dragging a window."),
          validIntOr({static_cast<int>(OverlayDisplayMode::ZoneRectangles),
                      static_cast<int>(OverlayDisplayMode::LayoutPreview)},
                     CD::overlayDisplayMode()),
@@ -810,18 +882,14 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::snappingZoneSelectorGroup()] = {
-        {CD::enabledKey(), CD::zoneSelectorEnabled(), QMetaType::Bool},
-        {CD::triggerDistanceKey(),
-         CD::triggerDistance(),
-         QMetaType::Int,
-         {},
+        {CD::enabledKey(), CD::zoneSelectorEnabled(), QMetaType::Bool,
+         QStringLiteral("Show a layout picker when a window is dragged to a screen edge.")},
+        {CD::triggerDistanceKey(), CD::triggerDistance(), QMetaType::Int,
+         QStringLiteral("How close to the screen edge a drag has to come before the picker opens."),
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
         // validIntOr for the three enum keys below, same convention note as
         // the Effects group's OSD enums.
-        {CD::positionKey(),
-         CD::position(),
-         QMetaType::Int,
-         {},
+        {CD::positionKey(), CD::position(), QMetaType::Int, QStringLiteral("Where on the screen the picker appears."),
          validIntOr({static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::Top),
                      static_cast<int>(ZoneSelectorPosition::TopRight), static_cast<int>(ZoneSelectorPosition::Left),
                      static_cast<int>(ZoneSelectorPosition::Center), static_cast<int>(ZoneSelectorPosition::Right),
@@ -837,10 +905,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(ZoneSelectorPosition::BottomLeft), "bottomLeft"_L1},
                      {static_cast<int>(ZoneSelectorPosition::Bottom), "bottom"_L1},
                      {static_cast<int>(ZoneSelectorPosition::BottomRight), "bottomRight"_L1}})},
-        {CD::layoutModeKey(),
-         CD::layoutMode(),
-         QMetaType::Int,
-         {},
+        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int,
+         QStringLiteral("How layout previews are arranged in the popup."),
          validIntOr({static_cast<int>(ZoneSelectorLayoutMode::Grid),
                      static_cast<int>(ZoneSelectorLayoutMode::Horizontal),
                      static_cast<int>(ZoneSelectorLayoutMode::Vertical)},
@@ -848,31 +914,26 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(ZoneSelectorLayoutMode::Grid), "grid"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Horizontal), "horizontal"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Vertical), "vertical"_L1}})},
-        {CD::previewWidthKey(),
-         CD::previewWidth(),
-         QMetaType::Int,
-         {},
+        {CD::previewWidthKey(), CD::previewWidth(), QMetaType::Int,
+         QStringLiteral("Width of each layout preview in the picker. Only applies when the size mode is manual."),
          clampInt(CD::previewWidthMin(), CD::previewWidthMax())},
-        {CD::previewHeightKey(),
-         CD::previewHeight(),
-         QMetaType::Int,
-         {},
+        {CD::previewHeightKey(), CD::previewHeight(), QMetaType::Int,
+         QStringLiteral("Height of each layout preview in the picker. Only applies when the size mode is manual and "
+                        "the aspect ratio is unlocked."),
          clampInt(CD::previewHeightMin(), CD::previewHeightMax())},
-        {CD::previewLockAspectKey(), CD::previewLockAspect(), QMetaType::Bool},
-        {CD::gridColumnsKey(),
-         CD::gridColumns(),
-         QMetaType::Int,
-         {},
+        {CD::previewLockAspectKey(), CD::previewLockAspect(), QMetaType::Bool,
+         QStringLiteral("Derive the preview height from its width using the screen's aspect ratio, so previews "
+                        "match the shape of the screen.")},
+        {CD::gridColumnsKey(), CD::gridColumns(), QMetaType::Int, QStringLiteral("Number of layout previews per row."),
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
-        {CD::sizeModeKey(),
-         CD::sizeMode(),
-         QMetaType::Int,
-         {},
+        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int,
+         QStringLiteral("Whether preview size is chosen for you or taken from the width and height below."),
          validIntOr({static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)},
                     CD::sizeMode()),
          intChoices({{static_cast<int>(ZoneSelectorSizeMode::Auto), "auto"_L1},
                      {static_cast<int>(ZoneSelectorSizeMode::Manual), "manual"_L1}})},
-        {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
+        {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, QStringLiteral("Scrolling enabled when more rows exist."),
+         clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
 
@@ -885,29 +946,36 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::snappingGroup()] = {
-        {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
+        {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool,
+         QStringLiteral("Whether snapping mode can be used at all. Off, it is skipped when cycling a screen's "
+                        "placement mode.")},
     };
     // Snapping.Behavior owns FIVE scalar keys directly — Triggers,
     // ToggleActivation, ReleaseGraceMs, FocusNewWindows and FocusFollowsMouse — while the
     // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
-        {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
-        {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
-        {CD::releaseGraceMsKey(),
-         CD::dragActivationGraceMs(),
-         QMetaType::Int,
-         {},
+        {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList,
+         QStringLiteral("Modifier and mouse-button combinations that show the zone overlay while a window is being "
+                        "dragged. Each entry is a {modifier, mouseButton} pair."),
+         canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool,
+         QStringLiteral("Tap the trigger to turn the overlay on, and tap again to turn it off, instead of holding "
+                        "it down.")},
+        {CD::releaseGraceMsKey(), CD::dragActivationGraceMs(), QMetaType::Int,
+         QStringLiteral("How long the overlay stays up after the trigger is released, so a brief slip does not cancel "
+                        "the snap."),
          clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
-        {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool},
-        {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool},
+        {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool,
+         QStringLiteral("Focus a window when it is automatically placed into a zone on open.")},
+        {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool,
+         QStringLiteral("Moving the mouse pointer over a snapped window gives it focus.")},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
-        {CD::enabledKey(), CD::zoneSpanEnabled(), QMetaType::Bool},
-        {CD::modifierKey(),
-         CD::zoneSpanModifier(),
-         QMetaType::Int,
-         {},
+        {CD::enabledKey(), CD::zoneSpanEnabled(), QMetaType::Bool,
+         QStringLiteral("Allow a window to be snapped across two or more adjacent zones.")},
+        {CD::modifierKey(), CD::zoneSpanModifier(), QMetaType::Int,
+         QStringLiteral("Modifier held while dragging to paint across zones."),
          // DragModifier int values are contiguous but not ordered — each is a
          // discrete named modifier combo. clampInt on an unknown value would
          // reinterpret e.g. 99 as the highest valid enum (CtrlMeta),
@@ -936,12 +1004,15 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1},
                      {static_cast<int>(DragModifier::MetaShift), "metaShift"_L1},
                      {static_cast<int>(DragModifier::CtrlMeta), "ctrlMeta"_L1}})},
-        {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
-        {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
-        {CD::releaseGraceMsKey(),
-         CD::zoneSpanGraceMs(),
-         QMetaType::Int,
-         {},
+        {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList,
+         QStringLiteral("Modifier and mouse-button combinations that span a drag across adjacent zones. Each entry "
+                        "is a {modifier, mouseButton} pair."),
+         canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool,
+         QStringLiteral("Tap the span trigger to start spanning, and tap again to stop, instead of holding it "
+                        "down.")},
+        {CD::releaseGraceMsKey(), CD::zoneSpanGraceMs(), QMetaType::Int,
+         QStringLiteral("How long spanning stays active after the trigger is released."),
          clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
@@ -954,13 +1025,15 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::snappingBehaviorWindowHandlingGroup()] = {
-        {CD::keepOnResolutionChangeKey(), CD::keepWindowsInZonesOnResolutionChange(), QMetaType::Bool},
-        {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool},
-        {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool},
-        {CD::stickyWindowHandlingKey(),
-         CD::snappingStickyWindowHandling(),
-         QMetaType::Int,
-         {},
+        {CD::keepOnResolutionChangeKey(), CD::keepWindowsInZonesOnResolutionChange(), QMetaType::Bool,
+         QStringLiteral("Move windows back to their zones after the screen resolution changes.")},
+        {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool,
+         QStringLiteral("Snap every newly opened window into whichever zone you most recently snapped a window "
+                        "into.")},
+        {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool,
+         QStringLiteral("Return a window to its original size when it is dragged out of a zone.")},
+        {CD::stickyWindowHandlingKey(), CD::snappingStickyWindowHandling(), QMetaType::Int,
+         QStringLiteral("How to treat windows that appear on every desktop."),
          validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
                      static_cast<int>(StickyWindowHandling::RestoreOnly),
                      static_cast<int>(StickyWindowHandling::IgnoreAll)},
@@ -968,22 +1041,40 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
-        {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
-        {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
-        {CD::keepFloatingAboveKey(), CD::snappingKeepFloatingAbove(), QMetaType::Bool},
-        {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
-        {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
-        {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
-        {CD::defaultLayoutIdKey(), CD::defaultLayoutId(), QMetaType::QString},
+        {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool,
+         QStringLiteral("When an app reopens, during the session or after a logout, return it to the zone it was "
+                        "last snapped in.")},
+        {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool,
+         QStringLiteral("When an unsnapped window reopens after a logout, return it to the position and monitor it "
+                        "was on. A rule can opt individual windows in or out.")},
+        {CD::keepFloatingAboveKey(), CD::snappingKeepFloatingAbove(), QMetaType::Bool,
+         QStringLiteral("Keep the windows you float stacked above the windows snapped into zones. A rule that sets "
+                        "a window layer takes precedence for the windows it matches.")},
+        {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool,
+         QStringLiteral("When you unfloat a window that was never snapped, snap it to a fallback zone instead of "
+                        "leaving it floating. The fallback is the last used zone, then the first empty one, then "
+                        "the first zone.")},
+        {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool,
+         QStringLiteral("Fill the first empty zone when a new window opens. When on, this overrides each layout's "
+                        "individual auto-assign toggle and applies to every layout.")},
+        {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool,
+         QStringLiteral("Snapping and tiling stay off until you assign a layout. A rule can re-enable the default "
+                        "per monitor.")},
+        {CD::defaultLayoutIdKey(), CD::defaultLayoutId(), QMetaType::QString,
+         QStringLiteral("Layout a screen uses until it is given one of its own. Empty picks the first layout that "
+                        "fits the screen.")},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
-        {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
-        {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
-        {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
-        {CD::releaseGraceMsKey(),
-         CD::snapAssistGraceMs(),
-         QMetaType::Int,
-         {},
+        {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool,
+         QStringLiteral("Offer to fill the remaining empty zones after you snap a window.")},
+        {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool,
+         QStringLiteral("Show the window picker after every snap, without waiting for you to hold anything.")},
+        {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList,
+         QStringLiteral("Modifier and mouse-button combinations that bring up the snap-assist picker for a single "
+                        "snap. Each entry is a {modifier, mouseButton} pair."),
+         canonicalTriggerList},
+        {CD::releaseGraceMsKey(), CD::snapAssistGraceMs(), QMetaType::Int,
+         QStringLiteral("How long the snap-assist picker stays up after the trigger is released."),
          clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
@@ -1011,67 +1102,50 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
         return validStringOr({WAS::Tiled, WAS::Normal, WAS::All}, fallback);
     };
     schema.groups[CD::windowsAppearanceGroup()] = {
-        {CD::showBorderKey(), CD::showWindowBorder(), QMetaType::Bool},
-        {CD::borderScopeKey(),
-         CD::windowBorderScope(),
-         QMetaType::QString,
-         {},
-         scopeValidator(CD::windowBorderScope()),
+        {CD::showBorderKey(), CD::showWindowBorder(), QMetaType::Bool,
+         QStringLiteral("Draw a colored border around windows placed by PlasmaZones.")},
+        {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString,
+         QStringLiteral("Which windows get a border."), scopeValidator(CD::windowBorderScope()),
          tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
-        {CD::widthKey(),
-         CD::windowBorderWidth(),
-         QMetaType::Int,
-         {},
+        {CD::widthKey(), CD::windowBorderWidth(), QMetaType::Int,
+         QStringLiteral("Thickness of the coloured border around windows."),
          clampInt(CD::windowBorderWidthMin(), CD::windowBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::windowBorderRadius(),
-         QMetaType::Int,
-         {},
+        {CD::radiusKey(), CD::windowBorderRadius(), QMetaType::Int,
+         QStringLiteral("Roundness of the border corners. Zero is square."),
          clampInt(CD::windowBorderRadiusMin(), CD::windowBorderRadiusMax())},
-        {CD::borderColorActiveKey(),
-         CD::windowBorderColorActive(),
-         QMetaType::QString,
-         {},
+        {CD::borderColorActiveKey(), CD::windowBorderColorActive(), QMetaType::QString,
+         QStringLiteral("Border colour for the focused window. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
-        {CD::borderColorInactiveKey(),
-         CD::windowBorderColorInactive(),
-         QMetaType::QString,
-         {},
+        {CD::borderColorInactiveKey(), CD::windowBorderColorInactive(), QMetaType::QString,
+         QStringLiteral("Border colour for unfocused windows. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
-        {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool},
-        {CD::titleBarScopeKey(),
-         CD::windowTitleBarScope(),
-         QMetaType::QString,
-         {},
-         scopeValidator(CD::windowTitleBarScope()),
+        {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool,
+         QStringLiteral("Remove window title bars, restored when a window floats.")},
+        {CD::titleBarScopeKey(), CD::windowTitleBarScope(), QMetaType::QString,
+         QStringLiteral("Which windows lose their title bar."), scopeValidator(CD::windowTitleBarScope()),
          tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
-        {CD::focusFadeDurationKey(),
-         CD::focusFadeDuration(),
-         QMetaType::Int,
-         {},
+        {CD::focusFadeDurationKey(), CD::focusFadeDuration(), QMetaType::Int,
+         QStringLiteral("How long decorations take to fade between focused and unfocused. Zero switches instantly."),
          clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
         // Plain opacity+tint layer: opacity/strength are [0.0, 1.0] doubles,
         // the tint colour shares the border-colour shape (#AARRGGBB or the
         // empty follow-the-accent sentinel) and the scope shares the closed
         // token set.
-        {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool},
-        {CD::opacityTintScopeKey(),
-         CD::windowOpacityTintScope(),
-         QMetaType::QString,
-         {},
-         scopeValidator(CD::windowOpacityTintScope()),
+        {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool,
+         QStringLiteral("Fade and tint windows placed by PlasmaZones.")},
+        {CD::opacityTintScopeKey(), CD::windowOpacityTintScope(), QMetaType::QString,
+         QStringLiteral("Which windows are faded and tinted."), scopeValidator(CD::windowOpacityTintScope()),
          tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
-        {CD::opacityKey(),
-         CD::windowOpacity(),
-         QMetaType::Double,
-         {},
+        {CD::opacityKey(), CD::windowOpacity(), QMetaType::Double,
+         QStringLiteral("How visible matched windows stay, where 1 is fully opaque."),
          clampDouble(CD::windowOpacityMin(), CD::windowOpacityMax())},
-        {CD::tintStrengthKey(),
-         CD::windowTintStrength(),
-         QMetaType::Double,
-         {},
+        {CD::tintStrengthKey(), CD::windowTintStrength(), QMetaType::Double,
+         QStringLiteral("How strongly the tint color blends over the window, where 0% keeps it untinted."),
          clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
-        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString,
+         QStringLiteral("Colour blended over matched windows. Empty follows the colour "
+                        "scheme."),
+         canonicalThemeFallbackColor},
     };
 }
 
@@ -1084,28 +1158,25 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::gapsGroup()] = {
-        {CD::innerGapKey(), CD::innerGap(), QMetaType::Int, {}, clampInt(CD::innerGapMin(), CD::innerGapMax())},
-        {CD::outerGapKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
-        {CD::usePerSideOuterGapKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
-        {CD::outerGapTopKey(),
-         CD::outerGapTop(),
-         QMetaType::Int,
-         {},
+        {CD::innerGapKey(), CD::innerGap(), QMetaType::Int, QStringLiteral("Space between neighbouring windows."),
+         clampInt(CD::innerGapMin(), CD::innerGapMax())},
+        {CD::outerGapKey(), CD::outerGap(), QMetaType::Int,
+         QStringLiteral("Space between the windows and the edges of the screen. Ignored when per-side outer gaps "
+                        "are on."),
+         clampInt(CD::outerGapMin(), CD::outerGapMax())},
+        {CD::usePerSideOuterGapKey(), CD::usePerSideOuterGap(), QMetaType::Bool,
+         QStringLiteral("Set a different outer gap for each screen edge instead of one value for all four.")},
+        {CD::outerGapTopKey(), CD::outerGapTop(), QMetaType::Int,
+         QStringLiteral("Outer gap along the top edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
-        {CD::outerGapBottomKey(),
-         CD::outerGapBottom(),
-         QMetaType::Int,
-         {},
+        {CD::outerGapBottomKey(), CD::outerGapBottom(), QMetaType::Int,
+         QStringLiteral("Outer gap along the bottom edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
-        {CD::outerGapLeftKey(),
-         CD::outerGapLeft(),
-         QMetaType::Int,
-         {},
+        {CD::outerGapLeftKey(), CD::outerGapLeft(), QMetaType::Int,
+         QStringLiteral("Outer gap along the left edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
-        {CD::outerGapRightKey(),
-         CD::outerGapRight(),
-         QMetaType::Int,
-         {},
+        {CD::outerGapRightKey(), CD::outerGapRight(), QMetaType::Int,
+         QStringLiteral("Outer gap along the right edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
     };
 }
@@ -1130,25 +1201,30 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // every read (withSeedDefaults), so shipped default updates keep
         // flowing to configs that never customized those surfaces.
         {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
-         QMetaType::QVariantMap},
+         QMetaType::QVariantMap,
+         QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window "
+                        "overrides. The decorations page writes this; it is not meant to be "
+                        "edited by hand.")},
     };
     // Mostly what the decoration chain is allowed to keep redrawing (an animated
     // pack repaints every window carrying it on every vsync, which never lets the
     // GPU leave its top performance state), plus one per-frame-cost knob, the
     // blur-scale multiplier.
     schema.groups[CD::decorationsPerformanceGroup()] = {
-        {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool},
-        {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool},
+        {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool,
+         QStringLiteral("Run decoration animations only on the focused window. Unfocused windows keep their "
+                        "decoration but hold still.")},
+        {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool,
+         QStringLiteral("Stop decoration animations while you are not interacting, and resume on the next input.")},
         // Clamped here, not in the UI. P_STORE_SET_INT delegates range enforcement
         // to the schema validator, and the daemon feeds this straight into an
         // ext-idle-notify-v1 timeout as `value * 1000` — a hand-edited 0 or -1 in
         // config.json would otherwise arm a nonsensical timer (fire-immediately, or
         // rejected outright, so the pause never engages). The slider's from/to are a
         // UI affordance, not a validation boundary.
-        {CD::idleTimeoutSecKey(),
-         CD::decorationIdleTimeoutSec(),
-         QMetaType::Int,
-         {},
+        {CD::idleTimeoutSecKey(), CD::decorationIdleTimeoutSec(), QMetaType::Int,
+         QStringLiteral("How long without input before decoration animations pause. Only applies when pausing while "
+                        "idle is on."),
          clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
         // Multiplier on each pack's declared buffer-pass resolution (the blur
         // pyramid density). Clamped so the persisted value stays inside its
@@ -1160,10 +1236,9 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // band is deliberately wider on the low end than the UI's three tiers
         // (headroom down to 0.25 for hand edits); the combo highlights the
         // nearest tier for an off-tier value.
-        {CD::blurScaleMultiplierKey(),
-         CD::decorationBlurScaleMultiplier(),
-         QMetaType::Double,
-         {},
+        {CD::blurScaleMultiplierKey(), CD::decorationBlurScaleMultiplier(), QMetaType::Double,
+         QStringLiteral("Resolution the blur passes render at, relative to the window. Below 1 is cheaper and softer, "
+                        "above 1 is sharper and costs more."),
          clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
     };
 }

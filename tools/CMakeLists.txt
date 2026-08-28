@@ -11,3 +11,4 @@ if(NOT BUILD_TOOLS)
 endif()
 
 add_subdirectory(shader-render)
+add_subdirectory(settings-schema-dump)
