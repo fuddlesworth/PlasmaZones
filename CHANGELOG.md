@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The shortcut cheatsheet lists the mode you are actually using**: the sheet picked its shortcuts using the mode assigned to the screen, without checking whether that mode was switched on. A screen still assigned to snapping with snapping turned off listed the snapping keys, which do nothing, and hid the tiling and scrolling ones. With tiling turned off as well, a screen assigned to tiling showed no mode's shortcuts at all. The sheet now picks a mode that is turned on. If you have all three turned off there is nothing to list, so it says so instead of opening ([#993](https://github.com/fuddlesworth/PlasmaZones/pull/993)).
+
 ## [3.4.2] - 2026-08-27
 
 ### Fixed
