@@ -516,6 +516,39 @@ void TestScrollEngineVerbs::refocusingTheActiveWindowHandsAPannedViewBack()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     QCOMPARE(viewX(), gentlePan);
     QVERIFY(!state->strip().viewDetached());
+
+    // The refusal is not the only way to reach a detached view on a report
+    // naming the active window: a same-COLUMN tile move is ACCEPTED by
+    // focusWindow and re-anchors nothing (no strip geometry moved), so it
+    // used to leave the pan owning the view exactly the way the refusal did.
+    // Switching between two windows stacked in one column has to hand the
+    // view back too, or the tab you just focused stays off screen.
+    engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // b and c share a column
+    QCOMPARE(state->strip().columnCount(), 2);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    engine->scrollViewByPercent(-75, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    const int stackPan = viewX();
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
+    QVERIFY(!state->strip().viewDetached());
+    QVERIFY(viewX() != stackPan);
+
+    // DETACH-ONCE: a live drag-insert preview on this screen owns the view
+    // for the rest of the hold. Picking a window up activates it, and the
+    // report that follows must NOT hand the view back — re-deriving the
+    // anchor mid-hold slides the layout under a stationary cursor, which is
+    // the hazard applyLayout's own drag guard exists for.
+    engine->scrollViewByPercent(-75, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|a"), QStringLiteral("S1")));
+    const int heldView = viewX();
+    QVERIFY(state->strip().viewDetached());
+    engine->windowFocused(state->strip().activeWindowId(), QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(viewX(), heldView);
+    engine->cancelDragInsertPreview();
 }
 
 void TestScrollEngineVerbs::edgeAutoScrollThenCancelKeepsTheScrolledView()
@@ -622,7 +655,7 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->moveFocusedToFloating(QStringLiteral("S1"));
     engine->moveFocusedToTiling(QStringLiteral("S1"));
     engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
-    engine->scrollViewByPercent(-25, QStringLiteral("S1"));
+    engine->scrollViewByPercent(25, QStringLiteral("S1"));
     engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
     engine->minimizeColumnWidth(QStringLiteral("S1"));
     engine->resetStripToDefaults(QStringLiteral("S1"));
