@@ -212,6 +212,54 @@ the policy: `Claim`, `ClaimScope`, `claimReleasesOn`, `claimReleaseOrder` and
 no behaviour, it pins the ordering rule whose reversal was a live regression,
 and it gives the migration something to be checked against.
 
+### Three things the next attempt should start with
+
+Learned by writing the funnel and three call sites, then reverting them.
+
+**The funnel must report what it released.** `applyPassiveFloatShed` gates a
+decoration re-resolve on whether the windowed-fullscreen release actually ran
+(`shouldDecorateWindow`'s answer changes only for that claim). A `void` funnel
+swallows that signal, and gating on "any claim released" instead is a
+behaviour change, because the column claim can release where windowed
+fullscreen did not. Return a per-claim result.
+
+**`UntrackFunnel` has to be its own scope.** `cleanupAutotileTracking` serves
+both close and cross-output transfer, and does NOT release monocle — that
+rides `cleanupClosedWindowState`'s bare scrub. Folding it into `StripExit`
+fills that blank silently. Whether the blank is right is genuinely open: it is
+correct for a close and questionable for the cross-output half, where the
+window survives holding a bit nothing will hand back. Encode it, flag it as
+unresolved, and settle it in its own commit.
+
+**Some sites cannot collapse to one call.** `applyFloatCleanup` releases
+windowed fullscreen early, does the tiled/floating flips and the
+relocation-delta damage, then releases the maximize claims, because the
+decoration resolve must see the window's final shape. Both positions are
+load-bearing, so that site keeps two calls — the funnel is still worth it
+there for the claims it does group, but "one call per exit path" is an
+aspiration, not an invariant.
+
+### On verifying it
+
+The nested harness CAN drive monocle and column claims: seed Virtual-0 with
+`setEngineMode` plus `setTilingAlgorithm: monocle` and both windows come up
+holding KWin maximize, and the float / engine-disable / maximize-restore
+transitions all run through `kglobalaccel`'s `invokeShortcut`. A
+before/after scenario diff is therefore a real regression gate, and
+`scripts/nested-kwin` plus a scenario runner is enough to build one.
+
+Two cautions from doing it. The runner must assert its own fixture — window
+COUNT included — because `kwrite` is single-instance and two bare launches can
+collapse into one window, which then diffs clean against nothing; launch
+distinct documents. And each nested run leaves an installed `plasmazonesd`
+D-Bus-activated on the HOST bus; left to accumulate they compete for the bus
+name, `daemon.sh` starts losing the race, and later runs silently answer with
+the host's screens. Kill the orphan after every run.
+
+The windowed-fullscreen claim was NOT reachable this way —
+`scroll_toggle_windowed_fullscreen` never engaged in the fixture — so that
+third claim still needs either a working fixture or review.
+
 ## Sequencing
 
 After #994 merges, not with it. #994 already carries 91 audit findings, a
