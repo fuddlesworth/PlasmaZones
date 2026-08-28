@@ -200,10 +200,11 @@ ownership ledger (`m_windowedFullscreenWindows`) and is untouched.
 
 ## Status: seam + scrolling arm BUILT
 
-NOT yet verified live on a compositor, and one part of it specifically wants
-that (see Risk). Build and test state is deliberately not recorded here: it
-changes with every commit, so a checked-in claim about it is stale the moment
-it is written.
+Verified on a live compositor (nested `kwin_wayland --virtual`, build-tree
+effect and daemon) — see Verified below for what was actually driven and what
+was not. Build and test state is deliberately not recorded here: it changes
+with every commit, so a checked-in claim about it is stale the moment it is
+written.
 
 ### What landed
 
@@ -314,7 +315,7 @@ rejections and the legal `windowedFullscreen` pairing are pinned in
 `test_phosphorprotocol`. Wire fixtures compare the new field in both
 directions, and the version pin is updated.
 
-### Risk to verify live
+### The anti-ballooning exemption
 
 The batch's anti-ballooning clear (`tiling.cpp`, the `MaximizeRestore` call on
 every non-monocle tiled entry) now EXEMPTS a `columnMaximized` entry, or the
@@ -332,18 +333,44 @@ The counter-assert is NOT part of that cover, contrary to an earlier reading
 here: it is gated on `!isWaylandClient()`, so it does not exist for a Wayland
 column at all, and it is rate-capped besides.
 
-**What genuinely wants a live check is narrower than the steady state.** On a
-WORK-AREA CHANGE (a panel's auto-hide, an output resize) KWin re-maximizes
-every `MaximizeFull` window. A monocle window differs from the maximize area by
-a few gap pixels; a tile in a MULTI-TILE column differs by its whole cross
-extent, so each tile would jump to full screen over its siblings until the
-corrective batch lands. That batch does arrive — `availableGeometryChanged`
-debounces into a retile — so the exposure is one debounce interval rather than
-open-ended.
+The sharpest case is the WORK-AREA CHANGE, and it was measured rather than
+argued. On such a change KWin re-maximizes every `MaximizeFull` window. A
+monocle window differs from the maximize area by a few gap pixels; a tile in a
+MULTI-TILE column differs by its whole cross extent, so a re-assert there would
+put every tile full screen over its siblings.
 
-**Repro: maximize a two-window column, then toggle a panel's auto-hide.** If it
-balloons, the fallback is to drop the outbound mirror and keep the inbound
-interception, at the cost of the titlebar button not latching.
+Driven in the nested harness on a two-tile maximized column — both tiles at the
+full main extent, each holding half the cross extent, both carrying
+`MaximizeFull`, which is the hazard state exactly — across a real
+logical-geometry change from 1600x900 to 1280x720. Both tiles held their
+stacked column rects (full main extent, half cross extent each) and neither
+took KWin's maximize area. Reversing the change restored the original rects.
+The engine's apply lands last and wins.
+
+### Verified live
+
+In a nested `kwin_wayland --virtual` session running the build-tree effect and
+daemon:
+
+- the v6/v7 handshake gate refuses a mismatched peer, with the installed
+  daemon rejected by version before the build-tree pair registered at 7
+- a maximize aimed at a NON-focused window grows that window's column and
+  leaves the focused column untouched, which is the whole point of the
+  `windowId` argument
+- the flag rides every tile of a two-tile column and clears on the way back,
+  and the un-maximize returns the column's PRE-MAXIMIZE width rather than the
+  default, so the stored slot resolves
+- sixteen consecutive compositor-driven maximize/restore edges converged in
+  both directions, with no echo ping-pong
+- the exemption does not balloon, single-tile or multi-tile (above)
+
+NOT covered by that session, and therefore resting on review alone: every
+release path that ends strip membership (both float channels, the untile diff,
+cross-output transfer, the leaving-scrolling loop, the two screen sweeps, the
+fullscreen-exit repair). The harness ran one output, one client class, no mode
+flips and no cross-output moves. None of those paths is reachable by a unit
+test either, because there is no linkable kwin-effect test target — which is
+the single highest-leverage gap in this subsystem's coverage.
 
 ### Still open
 

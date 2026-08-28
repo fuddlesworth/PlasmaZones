@@ -1781,15 +1781,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // does not exist for a Wayland column at all, and it is capped
                 // at a few asserts per rolling second besides.
                 //
-                // What genuinely wants live confirmation is narrower than the
-                // steady state: on a WORK-AREA CHANGE (a panel's auto-hide, an
-                // output resize) KWin re-maximizes every MaximizeFull window,
-                // and a MULTI-TILE column differs from the maximize area by
-                // its whole cross extent rather than by a monocle window's few
-                // gap pixels — so each tile would jump to full screen over its
-                // siblings until the corrective batch lands. That batch does
-                // arrive (availableGeometryChanged debounces into a retile),
-                // so the exposure is one debounce interval, not open-ended.
+                // The sharpest case is the WORK-AREA CHANGE, and it has been
+                // measured rather than argued: KWin re-maximizes every
+                // MaximizeFull window when the work area moves, and a
+                // MULTI-TILE column differs from the maximize area by its
+                // whole cross extent rather than by a monocle window's few gap
+                // pixels, so a re-assert there would put every tile full
+                // screen over its siblings.
+                //
+                // Driven in a nested compositor on a two-tile maximized column
+                // (both tiles at the full main extent, each holding half the
+                // cross extent, both carrying MaximizeFull) across a real
+                // logical-geometry change of 1600x900 to 1280x720: both tiles
+                // held their stacked column rects and neither took KWin's
+                // maximize area. The engine's apply lands last and wins.
                 if (KWin::Window* kw = snap.window->window(); kw && !snap.isColumnMaximized
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
                     && !kw->isRequestedFullScreen()) {

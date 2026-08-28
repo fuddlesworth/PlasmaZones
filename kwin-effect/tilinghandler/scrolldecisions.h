@@ -86,9 +86,19 @@ enum class MaximizeAction {
 /// marker to guard. A toggle is also not idempotent, so a marker that
 /// suppressed one arm could not be applied symmetrically anyway.
 ///
+/// Exercised on a live compositor: sixteen consecutive compositor-driven
+/// maximize and restore edges each converged to the requested state, in both
+/// directions, with no echo re-dispatching a second toggle.
+///
 /// @p flagOnWire     the batch entry's columnMaximized
 /// @p inSet          effect-side membership (m_columnMaximizedWindows)
-/// @p kwinMaximized  KWin's live maximizeMode() == MaximizeFull
+/// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm passes
+///                   requestedMaximizeMode(), not the committed maximizeMode():
+///                   the committed bit trails a client round trip on Wayland,
+///                   and reading it re-resolves to Apply on every batch that
+///                   lands inside that window. The interception passes the
+///                   COMMITTED mode instead, because there it is comparing
+///                   against what actually landed.
 inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized)
 {
     if (!flagOnWire) {
