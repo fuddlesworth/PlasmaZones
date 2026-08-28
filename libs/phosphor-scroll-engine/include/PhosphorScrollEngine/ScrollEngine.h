@@ -232,7 +232,13 @@ public:
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
-    void toggleMaximizeColumn(const QString& screenId);
+    /// Toggle the maximized state of a column on @p screenId. An empty
+    /// @p windowId targets the ACTIVE column (the keyboard shortcut's
+    /// meaning); a named window targets the column owning it and refuses when
+    /// the strip does not hold it, which is what the compositor's maximize
+    /// interception needs — that request names one window and the active
+    /// column is frequently a different one.
+    void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.

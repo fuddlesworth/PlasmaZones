@@ -692,6 +692,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
+        // Published so a consumer can tell "the user asked for this extent"
+        // from "this column cannot be any narrower" — columnExtentPx takes the
+        // max of the two and the answer is indistinguishable afterwards.
+        rc.extentPinnedByMinimum = columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
         // rewrites this rect from the shown tab's height intent.

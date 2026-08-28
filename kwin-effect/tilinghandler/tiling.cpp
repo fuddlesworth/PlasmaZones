@@ -1019,6 +1019,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         forgetWindowedFullscreen(wid);
                         releaseWindowedFullscreenState(wid);
                     }
+                    // The column mirror is in exactly the same position on
+                    // this exit, and for the same reason: no other owner
+                    // releases it here, and the window is leaving the strip
+                    // that would otherwise carry a cleared flag back. `win`
+                    // is the exact resolve from above and is non-null and
+                    // unminimized on this branch.
+                    releaseColumnMaximized(wid, win);
                 }
             }
         }
@@ -1657,9 +1664,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // The 3-way decision is pure and unit-tested (scrolldecisions.h);
             // this block only performs the chosen arm's side effects.
             if (KWin::Window* kwMax = snap.window->window()) {
+                // requestedMaximizeMode, not the committed maximizeMode: the
+                // committed bit trails a client round-trip on Wayland, the
+                // same lag the windowed-fullscreen arm above reads
+                // isRequestedFullScreen for and documents. On the committed
+                // value every batch landing inside that round-trip window
+                // re-resolves to Apply and re-issues maximize(MaximizeFull),
+                // each one carrying a moveResize to the maximize area that
+                // the geometry apply below immediately overwrites — and on a
+                // scrolling strip batches arrive at wheel-tick rate, so that
+                // window is crossed routinely rather than rarely.
                 const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveColumnMaximizeAction(
                     snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId),
-                    kwMax->maximizeMode() == KWin::MaximizeFull);
+                    kwMax->requestedMaximizeMode() == KWin::MaximizeFull);
                 if (maxAction == ScrollDecisions::MaximizeAction::Apply) {
                     // Membership BEFORE the compositor call, so a synchronous
                     // re-entry through maximize() (X11 emits
@@ -1674,11 +1691,34 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Membership still stands — the flag is a mirror, and the
                     // Apply arm re-runs on the next batch once the client
                     // leaves fullscreen.
-                    if (!kwMax->isFullScreen() && !kwMax->isRequestedFullScreen()) {
+                    //
+                    // The drag terms are the ones every other compositor-
+                    // touching block in this lambda carries (the tab-swap
+                    // install, the commanded-rect record, the strip offer):
+                    // maximize() moveResizes to the maximize area, and the
+                    // geometry apply that would override it defers mid-gesture
+                    // (applyWindowGeometry, allowDuringDrag=false), so a batch
+                    // arriving while the user drags would snap the window to
+                    // full size under the pointer with nothing committed
+                    // behind it until the gesture ends. Membership is still
+                    // taken above, so the decision resolves to Apply again
+                    // (inSet, not kwinMaximized) and re-applies for real: it
+                    // converges and cannot loop.
+                    //
+                    // What is NOT guaranteed is WHEN. The gesture end replays
+                    // geometry only; it does not re-enter this arm or request
+                    // a retile, and the engine emits on change, so a drag that
+                    // ends without changing the strip schedules no batch. The
+                    // window is then left un-maximized with the engine
+                    // believing otherwise until some later batch lands. That is
+                    // the accepted trade against snapping a window to the full
+                    // maximize area under the user's pointer mid-gesture.
+                    if (!kwMax->isFullScreen() && !kwMax->isRequestedFullScreen() && !snap.window->isUserMove()
+                        && !snap.window->isUserResize()) {
                         applyMaximizeSuppressed(kwMax, KWin::MaximizeFull);
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
-                    releaseColumnMaximized(snap.windowId, kwMax);
+                    releaseColumnMaximized(snap.windowId, snap.window);
                 }
             }
 
@@ -1728,16 +1768,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // membership, so the very first batch that maximizes a column
                 // does not clear the bit the arm below is about to set.
                 //
-                // The ballooning this clear exists to stop is a real risk on
-                // the exempt path and is NOT fully argued away here: KWin
-                // re-asserts maximize-area geometry for a MaximizeFull
-                // window, and a maximized column is the work area's full
-                // MAIN extent but keeps its gaps and, in a multi-tile column,
-                // only a share of the cross extent. The geometry apply below
-                // runs inside the same inGeometryApply guard the monocle arm
-                // relies on for exactly this, and the strip's counter-assert
-                // covers an external mover, but the pairing wants live
-                // confirmation on a multi-tile maximized column.
+                // The steady state is precedented rather than novel: the
+                // monocle arm directly below holds a window at MaximizeFull
+                // against a gapped, non-maximize-area rect and re-asserts it
+                // every batch, and has shipped that way. What protects both is
+                // that KWin's maximize-area re-assert is event-driven rather
+                // than continuous, and that the geometry apply lands last in
+                // this call stack inside the same inGeometryApply guard.
+                //
+                // The counter-assert is NOT part of that cover, contrary to an
+                // earlier reading: it is gated on !isWaylandClient(), so it
+                // does not exist for a Wayland column at all, and it is capped
+                // at a few asserts per rolling second besides.
+                //
+                // What genuinely wants live confirmation is narrower than the
+                // steady state: on a WORK-AREA CHANGE (a panel's auto-hide, an
+                // output resize) KWin re-maximizes every MaximizeFull window,
+                // and a MULTI-TILE column differs from the maximize area by
+                // its whole cross extent rather than by a monocle window's few
+                // gap pixels — so each tile would jump to full screen over its
+                // siblings until the corrective batch lands. That batch does
+                // arrive (availableGeometryChanged debounces into a retile),
+                // so the exposure is one debounce interval, not open-ended.
                 if (KWin::Window* kw = snap.window->window(); kw && !snap.isColumnMaximized
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
                     && !kw->isRequestedFullScreen()) {

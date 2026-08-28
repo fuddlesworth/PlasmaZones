@@ -457,12 +457,13 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // enumeration empty and releases nothing. Both such callers compensate
     // deliberately and say so at their own site — the bring-up fetch
     // (wiring.cpp) runs before any batch has populated the membership hash,
-    // and the bring-up drain (drainDeadSessionState) calls
-    // restoreAllWindowedFullscreen immediately BEFORE its
-    // setScrollingScreens({}, false). A future announceFlipped=false caller
-    // that can reach here with live membership must do the same, or resolve
-    // the leaving screens independently of the announce.
+    // and the bring-up drain (drainDeadSessionState) calls BOTH
+    // restoreAllWindowedFullscreen AND restoreAllColumnMaximized immediately
+    // BEFORE its setScrollingScreens({}, false). A future announceFlipped=false
+    // caller that can reach here with live membership owes both restores, or
+    // must resolve the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
+    QList<KWin::EffectWindow*> columnMaximizedLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -489,12 +490,28 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
                 forgetWindowedFullscreen(wid);
                 windowedFsLeavingScrolling.append(wid);
             }
+            // The column mirror leaves with the strip for the same reason,
+            // and is deferred past the managed-set write below on the same
+            // split: releaseColumnMaximized moveResizes, and doing that while
+            // m_scrollingScreens still names this screen would re-enter the
+            // scrolling paths for a screen that is mid-flip. The destination
+            // engine's first batch releases any window it TILES, but one it
+            // floats (over maxWindows, excluded, minimize-floated) never gets
+            // an entry — which is exactly the case this loop exists for.
+            if (m_columnMaximizedWindows.contains(wid)) {
+                columnMaximizedLeavingScrolling.append(it.key());
+            }
         }
     }
 
     m_scrollingScreens = newSet;
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
+    }
+    for (KWin::EffectWindow* w : std::as_const(columnMaximizedLeavingScrolling)) {
+        if (w && !w->isDeleted()) {
+            releaseColumnMaximized(m_effect->getWindowId(w), w);
+        }
     }
 
     // A screen LEAVING the scrolling set mid-leg must take its view spring

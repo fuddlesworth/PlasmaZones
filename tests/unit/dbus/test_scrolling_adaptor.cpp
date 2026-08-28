@@ -536,6 +536,10 @@ private Q_SLOTS:
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
+        // Same `!m_engine` conjunct, and the verb most likely to be called on
+        // the shutdown path: the KWin effect dispatches it from a user's
+        // maximize click, which can land while the daemon is going down.
+        m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's

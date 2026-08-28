@@ -296,9 +296,34 @@ private Q_SLOTS:
             m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
             QCOMPARE(activeColumn().width, widthBeforeGate);
             QCOMPARE(activeHeight(), heightBeforeGate);
+            // toggleMaximizeColumn takes the same per-context gate. It is the
+            // one verb in this adaptor with a real in-tree caller (the KWin
+            // effect's maximize interception), so a gate regression here is
+            // user-reachable in a way the four setters' is not.
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QCOMPARE(activeColumn().width, widthBeforeGate);
             m_adaptor->setContextGateProvider([](const QString&) {
                 return false;
             });
+        }
+
+        // toggleMaximizeColumn's ownership and boundary gates, on the same
+        // terms as the setters above: a foreign screen and an empty screen id
+        // must leave the width intent untouched. The windowId argument is
+        // deliberately NOT range-checked — empty means "the active column",
+        // which is what the keyboard shortcut sends — so the unknown-window
+        // refusal belongs to the strip and is pinned in the engine's own
+        // suite, not here.
+        {
+            const ColumnWidth beforeToggle = activeColumn().width;
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("HDMI-2"), QString());
+            m_adaptor->toggleMaximizeColumn(QString(), QString());
+            QCOMPARE(activeColumn().width, beforeToggle);
+            // And the accepted call does act, so the refusals above are
+            // genuine gates rather than a verb that never does anything.
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QVERIFY(activeColumn().width != beforeToggle);
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a

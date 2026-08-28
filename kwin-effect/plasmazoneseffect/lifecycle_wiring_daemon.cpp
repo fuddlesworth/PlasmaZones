@@ -363,8 +363,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // adopt-on-batch arm, so releasing here is safe AND mandatory — a
         // crashed daemon must not strand clients fullscreen at column rects.
         m_tilingHandler->restoreAllWindowedFullscreen();
-        // Same for the column-maximize mirror: a crashed daemon must not
-        // strand clients KWin-maximized at a dead column's width.
+        // Same for the column-maximize mirror, and AFTER the fullscreen
+        // release for the ordering reason the unload path documents: on X11
+        // the flip above has already landed, so a window holding both states
+        // gets a real restore rather than the fullscreen skip.
         m_tilingHandler->restoreAllColumnMaximized();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,

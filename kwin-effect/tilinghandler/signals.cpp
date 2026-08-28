@@ -319,8 +319,9 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 // The bracket swallowed any outputChanged this move emitted, so
                 // the detector never ran its own tracker write. Re-seed it,
                 // the same pairing rule the bracketed applies in the sibling
-                // files follow (screenschanged.cpp has two, state.cpp three;
-                // this file has only this one). For this branch the window is a windowed-
+                // files follow (screenschanged.cpp has two,
+                // windowedfullscreen.cpp four, pretilegeometry.cpp one; this
+                // file has only this one). For this branch the window is a windowed-
                 // fullscreen member and therefore normally strip-tracked, so
                 // the value read back is the engine-authoritative screen rather
                 // than a position re-detect. Where tracking has already lapsed
@@ -436,6 +437,15 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // the call cannot un-maximize a legitimate monocle tile, and it is
             // a no-op for any window that is not a member.
             unmaximizeMonocleWindow(windowId);
+            // The column mirror needs the identical repair, and now shares the
+            // shape that makes it work: releaseColumnMaximized also retains
+            // membership on its fullscreen skip, so a float taken during the
+            // hold leaves the window KWin-maximized with the ledger held and
+            // no reader — no batch reaches a window that stays floating. Same
+            // two guarantees as the call above make this safe: the branch is
+            // under !isFullScreen() and the window is confirmed floating, and
+            // it is a no-op for a non-member.
+            releaseColumnMaximized(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }

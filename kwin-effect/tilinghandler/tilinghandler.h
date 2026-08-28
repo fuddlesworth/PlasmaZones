@@ -345,11 +345,6 @@ public:
     /// snapshot-and-clear then release each, the restoreAllMonocleMaximized
     /// shape.
     void restoreAllWindowedFullscreen();
-    /// Bracketed maximize-mode write, the maximize twin of
-    /// applyFullScreenSuppressed: a counter rather than a bool because the
-    /// batch consumer and the interception arm both nest their own brackets.
-    void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
-
     /// The maximize INTERCEPTION. A scroll-managed window asked to maximize
     /// (titlebar button, Meta+PgUp, a client-side request) gets that request
     /// routed to the scrolling engine's maximize-column verb instead, so one
@@ -357,28 +352,19 @@ public:
     /// claimed; an unclaimed one is left entirely alone.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
 
-    /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p screenId.
-    /// Unlike dispatchWindowedFullscreenClear this needs no reply gate and no
-    /// in-flight marker — see resolveColumnMaximizeAction's contract note for
-    /// why the round trip cannot be raced.
-    void dispatchMaximizeColumnToggle(const QString& screenId);
-
     /// Hand back the KWin maximize bit this handler imposed for a maximized
-    /// column, and shed membership. @p kw may be null for a gone window (the
-    /// entry is dropped either way).
-    void releaseColumnMaximized(const QString& windowId, KWin::Window* kw);
+    /// column, and shed membership. @p w may be null for a gone window, in
+    /// which case the entry is dropped without a restore. Membership is
+    /// RETAINED while the window holds (or has requested) fullscreen, so a
+    /// later batch's Release arm can do the real restore — see the body.
+    ///
+    /// Public because the strip-exit funnels in the sibling TUs call it; the
+    /// bracketed write and the dispatch it uses are private mechanics.
+    void releaseColumnMaximized(const QString& windowId, KWin::EffectWindow* w);
 
     /// Bulk restore for daemon loss, effect unload, engine disable and daemon
     /// bring-up — the restoreAllWindowedFullscreen shape.
     void restoreAllColumnMaximized();
-
-    /// Whether this handler is holding the KWin maximize bit for @p windowId
-    /// because its column is maximized. Read by the effect's maximize-state
-    /// lambda, which must not treat our own writes as user intent.
-    bool holdsColumnMaximized(const QString& windowId) const
-    {
-        return m_columnMaximizedWindows.contains(windowId);
-    }
 
     /// True while this handler is inside its own bracketed maximize write.
     /// The effect's windowMaximizedStateChanged lambda consults it so the
@@ -947,6 +933,21 @@ private:
     // ═══════════════════════════════════════════════════════════════════
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
+
+    /// Bracketed maximize-mode write, the maximize twin of
+    /// applyFullScreenSuppressed: a counter rather than a bool because the
+    /// batch consumer and the interception arm both nest their own brackets.
+    void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
+
+    /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p windowId's column
+    /// on @p screenId. The window is named rather than left implicit because
+    /// the request can arrive for a window that is not the strip's active one
+    /// (a client's own maximize, a click under focus-follows-mouse), and the
+    /// engine must act on the column holding it.
+    /// Unlike dispatchWindowedFullscreenClear this needs no reply gate and no
+    /// in-flight marker — see resolveColumnMaximizeAction's contract note for
+    /// why the round trip cannot be raced.
+    void dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId);
 
     /// Announce, once per window per episode, that a window on a tracked
     /// scrolling screen lost its clip because the screen's physical output is
@@ -1535,7 +1536,18 @@ private:
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
     /// on the same terms as m_monocleMaximizedWindows: membership is shed
     /// only by an arm that actually hands the bit back, never merely because
-    /// the window's situation changed.
+    /// the window's situation changed. releaseColumnMaximized therefore
+    /// RETAINS membership when it skips a still-fullscreen window, so a later
+    /// batch can do the real restore.
+    ///
+    /// Every path that ends the strip's claim on a window must release it, and
+    /// the batch is not one of them for a window that LEAVES the strip: no
+    /// entry arrives to carry a cleared flag. The float funnels (both
+    /// channels), the untile diff, the demote and removed-screen sweeps, the
+    /// no-strip-left output-change arm, the leaving-scrolling loop and the
+    /// fullscreen-exit-while-floating repair all call it for that reason. The
+    /// scroll-to-scroll handoff deliberately does NOT: the destination strip
+    /// owns the bit and answers on its own first batch.
     ///
     /// Per window rather than per column because the wire is flat and the
     /// effect has no column identity — every tile of a maximized column is a

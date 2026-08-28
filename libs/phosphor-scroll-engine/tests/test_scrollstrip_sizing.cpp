@@ -56,6 +56,8 @@ private Q_SLOTS:
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
+    void maximizeToggleEntersOnRenderedWidthNotIntentKind();
+    void maximizeToggleRefusesAStaleFullWidthRestoreSlot();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -361,6 +363,67 @@ void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
     // the press comes back round to the widest entry.
     QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 797);
+}
+
+void TestScrollStripSizing::maximizeToggleEntersOnRenderedWidthNotIntentKind()
+{
+    // The toggle decides "is this column already maximized" in RESOLVED
+    // PIXELS, not on the ColumnWidth value. operator== compares kind first,
+    // so Fixed(<work area main>) is not == Proportion(1.0) even though the two
+    // render identically — and a Fixed full-width column is ordinary, not
+    // exotic: adjustActiveColumnWidth clamps to exactly that when a widen
+    // press hits the work area, and so does an interactive edge-drag's
+    // reconcile.
+    //
+    // On the old kind compare such a column took the MAXIMIZE arm: it stored
+    // the current width in the slot, wrote Proportion(1.0), rendered exactly
+    // the same pixels, and reported success. The user's press did nothing
+    // visible and the titlebar button snapped straight back.
+    const auto params = defaultParams();
+    const int workMain = Ax::mainLen(params.workArea);
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(workMain), ColumnDisplay::Normal, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), workMain);
+
+    // The press must UN-maximize, so the column has to get narrower.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < workMain,
+             "a Fixed full-width column must un-maximize, not silently re-store itself");
+
+    // And the press back returns it to full width, so the verb is a genuine
+    // toggle from this entry rather than a one-way trip.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), workMain);
+}
+
+void TestScrollStripSizing::maximizeToggleRefusesAStaleFullWidthRestoreSlot()
+{
+    // The stored pre-maximize intent is re-validated against the CURRENT work
+    // area rather than trusted. Nothing invalidates the slot when the output
+    // resizes, so a Fixed width captured on a WIDER work area resolves
+    // clamped back to full width on a narrower one — restoring it would spend
+    // the slot, move nothing, and report success.
+    ScrollLayoutParams params = defaultParams();
+    const int wideMain = Ax::mainLen(params.workArea);
+    ScrollStrip strip;
+    QVERIFY(
+        strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(wideMain - 100), ColumnDisplay::Normal, params));
+    // Maximize on the wide area: the slot now holds Fixed(wideMain - 100).
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), wideMain);
+
+    // The output shrinks below the stored width, so that intent now resolves
+    // to the full (narrower) work area.
+    const int narrowMain = wideMain - 400;
+    const int cross = Ax::crossLen(params.workArea);
+    params.workArea = Ax::vertical() ? QRect(0, 0, cross, narrowMain) : QRect(0, 0, narrowMain, cross);
+
+    // The un-maximize press must still leave the column NARROWER than the new
+    // work area, taking the default-width arm rather than consuming the slot
+    // on a value that renders full width.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < narrowMain,
+             "restoring a stale full-width slot must fall through to the default width");
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

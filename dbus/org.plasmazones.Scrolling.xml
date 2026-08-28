@@ -81,9 +81,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="toggleMaximizeColumn">
-            <annotation name="org.gtk.GDBus.DocString" value="Toggles the focused column between the work area's full extent along the strip and its previous width (niri maximize-column), the same verb the Scrolling maximize column shortcut drives. Called by the KWin effect when a scroll-managed window is asked to maximize, so the titlebar button, Meta+PgUp and a client-side maximize request all reach the engine's own maximize instead of KWin's. Same silent ownership and per-context gates as focusColumn, and a successful call raises the navigation OSD like the other resize verbs."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggles a column between the work area's full extent along the strip and its previous width (niri maximize-column), the same verb the Scrolling maximize column shortcut drives. Called by the KWin effect when a scroll-managed window is asked to maximize, so the titlebar button, Meta+PgUp and a client-side maximize request all reach the engine's own maximize instead of KWin's. Same silent ownership and per-context gates as focusColumn, and a successful call raises the navigation OSD like the other resize verbs."/>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused column to toggle. An empty string is ignored."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose column to toggle. An empty string is ignored."/>
+            </arg>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window naming the column to toggle. An empty string targets the focused column, which is what the keyboard shortcut wants. A named window targets the column holding it and is ignored when the strip does not hold that window, so a maximize request arriving for a window that never took focus cannot resize somebody else's column."/>
             </arg>
         </method>
 

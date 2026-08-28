@@ -359,7 +359,7 @@ private Q_SLOTS:
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
             "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
-            "\"windowedFullscreen\":true,\"tabFrom\":\"a|1\"},"
+            "\"windowedFullscreen\":true,\"columnMaximized\":true,\"tabFrom\":\"a|1\"},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
@@ -396,6 +396,18 @@ private Q_SLOTS:
         // absence on a|1 reads false.
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
+        // columnMaximized rides the same JSON hop, and needs pinning for the
+        // same reason the two above do: the key crosses two independent string
+        // literals (engine_apply.cpp writes it, tilingadaptor.cpp reads it) and
+        // a typo or a dropped parse line on either side yields false with no
+        // error. Nothing else in the suite would catch it — the engine smoke
+        // test reads its JSON directly and the wire tests never touch JSON.
+        // Paired with windowedFullscreen on b|2 deliberately: that combination
+        // is explicitly legal (they drive different compositor state, and a
+        // maximized column can hold a windowed-fullscreen tile), so this also
+        // pins that validationError does not reject the pair.
+        QCOMPARE(requests.at(1).columnMaximized, true);
+        QCOMPARE(requests.at(0).columnMaximized, false);
         // tabFrom parses through the same JSON hop on a tiled entry (key
         // spelling pinned against the engine producer), and its absence on
         // a|1 reads empty.

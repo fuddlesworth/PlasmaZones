@@ -206,6 +206,13 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // resolving the chain after it means the resolve sees the window's
     // final shape.
     unmaximizeMonocleWindow(windowId);
+    // The column mirror dies with the float for the reason this file already
+    // documents for the sibling states: floatWindowInternal takes the window
+    // OUT of the strip, so the batch its own relayout emits does not contain
+    // it and the per-entry Release in the tile batch never runs. Left held,
+    // the window stays KWin-maximized as a floater and a later re-tile
+    // resolves to None instead of Apply, silently never re-asserting.
+    releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
     // updateAllDecorations follow-up (daemon auto-float past maxWindows)
@@ -265,6 +272,15 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // below, per reconcileDecorationOnPlacementFlip's flip-facts-first
     // contract.
     clearWindowTiledAllScreens(windowId);
+    // The column mirror IS shed on this channel, unlike unmaximizeMonocleWindow
+    // above. The exclusion reasoning there does not carry: that one is refused
+    // because the monocle batch owns the membership and could re-drive it,
+    // whereas a float ENDS the strip's claim outright and no batch will ever
+    // carry a cleared flag for a window that is no longer in the strip. Left
+    // held, the window stays KWin-maximized as a floater for the session —
+    // this channel's whole reason for existing is that the active funnel
+    // never runs for its producers.
+    releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
     // relocation-delta entry makes a later snap on another screen paint the window

@@ -479,7 +479,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // Column maximize, for the effect to mirror onto KWin's maximize bit.
         // Measured on the RENDERED column rather than read off the strip's
         // pre-maximize slot: the slot says "we own a stored width to go back
-        // to", which is not the same question. toggleMaximizeActiveColumn has
+        // to", which is not the same question. toggleMaximizeColumnAt has
         // a deliberate arm for a column sitting at full width with NO stored
         // slot (maximized in an earlier session, or another column's maximize
         // discarded the single slot), and that column is maximized as far as
@@ -491,13 +491,27 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // tiles carry the REDUCED rects, so a maximized tabbed column would
         // measure under full width there.
         //
-        // The degenerate work area is guarded, matching the bail
-        // toggleMaximizeActiveColumn takes for it: with a zero main extent
-        // the compare reads true for every column, and the batch would tell
-        // the effect to maximize the whole strip against a viewport that does
-        // not exist.
+        // The degenerate work area is guarded belt-and-braces: applyLayout
+        // already returned on an invalid work area, so unlike
+        // toggleMaximizeColumnAt's bail — which IS reachable, since a verb
+        // can be driven at any time — this one cannot currently fire. Kept
+        // because the compare it protects reads true for every column at a
+        // zero main extent, which would tell the effect to maximize the whole
+        // strip against a viewport that does not exist.
+        //
+        // A column PINNED BY ITS MINIMUM is excluded. Its extent comes from
+        // its tiles' declared minimum rather than from any width the user
+        // chose, so when that floor alone reaches the work area the column
+        // renders full width whatever the intent says. Measured off the rect
+        // alone it would report maximized permanently: the titlebar button
+        // would latch with no way to un-latch it, and every toggle press
+        // would rewrite persisted intent invisibly while reporting success.
+        // The toggle itself is unaffected — it compares resolved INTENT — so
+        // this only keeps the published verdict honest about what the user
+        // can actually change.
         const int workAreaMain = params.axis.mainSize(params.workArea);
-        const bool columnMaximized = workAreaMain > 0 && params.axis.mainSize(column.rect) >= workAreaMain;
+        const bool columnMaximized =
+            workAreaMain > 0 && !column.extentPinnedByMinimum && params.axis.mainSize(column.rect) >= workAreaMain;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 columnHadSkippedTile.insert(column.columnIndex);

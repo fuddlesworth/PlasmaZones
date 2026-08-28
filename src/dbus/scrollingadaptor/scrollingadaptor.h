@@ -279,9 +279,14 @@ public Q_SLOTS:
      * Unlike the four setters above this one HAS an in-tree caller. Same
      * ownership and per-context gates as focusColumn.
      *
-     * @param screenId Screen whose focused column to toggle; empty is ignored
+     * @param screenId Screen whose column to toggle; empty is ignored
+     * @param windowId Window naming the column; empty targets the FOCUSED
+     *        column (the shortcut's meaning). A named window targets the
+     *        column holding it and is ignored when the strip does not hold
+     *        it, so a maximize request from a window that never took focus
+     *        cannot resize another column.
      */
-    void toggleMaximizeColumn(const QString& screenId);
+    void toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 
     /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)

@@ -244,6 +244,9 @@ private Q_SLOTS:
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
         QCOMPARE(entry.windowedFullscreen, true);
+        // Differs from windowedFullscreen beside it, so a transposition of the
+        // two adjacent bools fails here rather than passing by coincidence.
+        QCOMPARE(entry.columnMaximized, false);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDelta, -240);
@@ -259,6 +262,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
         QCOMPARE(defaultEntry.windowedFullscreen, false);
+        QCOMPARE(defaultEntry.columnMaximized, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDelta, 0);
@@ -309,6 +313,7 @@ private Q_SLOTS:
             QCOMPARE(got.monocle, sent.monocle);
             QCOMPARE(got.floating, sent.floating);
             QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
+            QCOMPARE(got.columnMaximized, sent.columnMaximized);
             QCOMPARE(got.stacking, sent.stacking);
             QCOMPARE(got.scrollEdge, sent.scrollEdge);
             QCOMPARE(got.viewDelta, sent.viewDelta);
@@ -320,16 +325,17 @@ private Q_SLOTS:
         };
 
         // TWO legal payloads, because no single legal payload can cover the
-        // three bool slots: validationError rejects windowedFullscreen
-        // beside either monocle or floating, so wf=true forces the other
-        // two false. Payload A (wf=true) catches a floating-for-wf or
+        // four bool slots: validationError rejects windowedFullscreen and
+        // columnMaximized beside either monocle or floating, so wf=true
+        // forces monocle and floating false. Payload A (wf=true,
+        // columnMaximized=true — a pair that IS legal, since the two drive
+        // different compositor state) catches a floating-for-wf or
         // monocle-for-wf transposition in either operator; payload B
         // (monocle=true) catches the monocle-for-floating swap A cannot
-        // see. Between them, a transposition introduced in EITHER operator
-        // alone fails loudly. (A matching swap in both operators is an
-        // identity round-trip no bus test can see — the realistic
-        // regression is the single-operator edit, and that is what these
-        // two payloads pin.)
+        // see, and clears columnMaximized both because monocle+cm is
+        // rejected and so that `false` crosses the bus for that bool too. Between them, a transposition introduced in
+        // EITHER operator alone fails loudly. (A matching swap in both operators is an identity round-trip no bus test
+        // can see — the realistic regression is the single-operator edit, and that is what these two payloads pin.)
         // (The signature probe above pins struct DECLARATION order via its
         // aggregate init; only these bus trips pin the two marshallers
         // agreeing.)
@@ -346,6 +352,7 @@ private Q_SLOTS:
         roundTrip(sent);
         sent.monocle = true;
         sent.windowedFullscreen = false;
+        sent.columnMaximized = false;
         sent.viewImmediate = false;
         roundTrip(sent);
 

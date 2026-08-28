@@ -430,8 +430,15 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // KWin fullscreen state with nothing left owning the flag.
         m_tilingHandler->restoreAllWindowedFullscreen();
         // And for the maximize bits mirrored for maximized columns, on the
-        // same obligation: the mirror only tracks engine state while this
-        // effect is loaded to drive it.
+        // same obligation. AFTER the fullscreen release, deliberately: the
+        // column restore skips a window that still holds fullscreen, and on
+        // X11 setFullScreen(false) above has already taken effect by the time
+        // this runs, so a window holding both states THROUGH OUR OWN windowed
+        // fullscreen gets a real restore rather than a skip. A window that
+        // went fullscreen on its own request is not in that ledger and is
+        // skipped on either platform. On Wayland the committed bit trails a
+        // client round-trip, so the skip applies there too — which is why it
+        // retains its ledger entry instead of dropping it.
         m_tilingHandler->restoreAllColumnMaximized();
         restoreAllRuleWindowLayers();
         clearAllDecorations();

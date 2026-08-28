@@ -3,8 +3,9 @@
 //
 // Pure-logic tests for the scroll-managed window decision helpers
 // (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
-// decision (with its clear-in-flight marker arm/consume contract) and the
-// counter-assert burst budget. Same header-only reach as test_anchor_uniforms:
+// decision (with its clear-in-flight marker arm/consume contract), the
+// column-maximize 3-way batch decision, and the counter-assert burst
+// budget. Same header-only reach as test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
 
@@ -97,7 +98,6 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(d.action), static_cast<int>(WfsAction::Adopt));
     }
 
-    // Counter-assert budget: matching frame never counters.
     // The full 8-row truth table over (flagOnWire, inSet, kwinMaximized).
     void columnMaximizeTruthTable_data()
     {
@@ -152,22 +152,63 @@ private Q_SLOTS:
     // here with a STALE batch landing mid-flight, asserting it is inert.
     void staleBatchDuringToggleIsInert()
     {
-        // Maximizing: not a member, bit cancelled back to restore. A batch
-        // the daemon emitted before it processed the toggle still says
-        // flag=false — and resolves to None, so nothing fights the click.
-        QCOMPARE(resolveColumnMaximizeAction(/*flagOnWire=*/false, /*inSet=*/false, /*kwinMaximized=*/false),
-                 MaximizeAction::None);
-        // The real echo then applies.
-        QCOMPARE(resolveColumnMaximizeAction(true, false, false), MaximizeAction::Apply);
+        // The state is THREADED through the walk rather than hand-written per
+        // call, the way markerRefusesAdoptionUntilConsumed threads its marker.
+        // Written as four independent calls this test asserted nothing the
+        // truth table above did not already cover — every triple was a row of
+        // it — so it could not fail unless the table failed too. Threading the
+        // membership means a wrong TRANSITION fails here even when every
+        // individual row is right, which is the property the no-marker
+        // argument actually rests on.
+        bool inSet = false;
+        bool kwinMax = false;
+        const auto step = [&inSet, &kwinMax](bool flagOnWire) {
+            const MaximizeAction action = resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax);
+            // MODELS what the batch arm does with the answer — it does not
+            // call it. kwin-effect has no linkable test target, so the arm's
+            // own bookkeeping cannot be driven from here; only a wrong
+            // resolver fails this test, not a wrong arm. Keep this lambda in
+            // step with tiling.cpp's Apply/Release block by hand. It models
+            // the UNCONDITIONAL path only, and knowingly diverges twice: the
+            // real arm skips the compositor call for a fullscreen window or
+            // one mid user move/resize, and releaseColumnMaximized RETAINS
+            // membership on its fullscreen skip. Neither divergence affects
+            // the resolver contract this test pins.
+            if (action == MaximizeAction::Apply) {
+                inSet = true;
+                kwinMax = true;
+            } else if (action == MaximizeAction::Release) {
+                inSet = false;
+                kwinMax = false;
+            }
+            return action;
+        };
 
-        // Un-maximizing: a member whose bit was re-asserted by the cancel. A
-        // stale flag=true batch is the steady state and does nothing.
-        QCOMPARE(resolveColumnMaximizeAction(/*flagOnWire=*/true, /*inSet=*/true, /*kwinMaximized=*/true),
-                 MaximizeAction::None);
-        // The real echo then releases.
-        QCOMPARE(resolveColumnMaximizeAction(false, true, true), MaximizeAction::Release);
+        // MAXIMIZING. The click is cancelled back to restore and dispatched;
+        // a batch the daemon emitted before it processed the toggle still
+        // says flag=false. It must not fight the click.
+        QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(!inSet);
+        // The answering batch applies, and the effect takes the bit.
+        QCOMPARE(static_cast<int>(step(true)), static_cast<int>(MaximizeAction::Apply));
+        QVERIFY(inSet);
+        // A SECOND stale batch from the same flight is now the steady state.
+        QCOMPARE(static_cast<int>(step(true)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(inSet);
+
+        // UN-MAXIMIZING, continuing from the maximized state above rather
+        // than from a fresh hand-written triple.
+        QCOMPARE(static_cast<int>(step(true)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(inSet);
+        QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::Release));
+        QVERIFY(!inSet);
+        // And the trailing stale batch after the release is inert too, rather
+        // than re-applying and re-maximizing what the user just restored.
+        QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(!inSet);
     }
 
+    // Counter-assert budget: matching frame never counters.
     void counterAssertNoOpOnMatchingFrame()
     {
         qint64 start = 0;

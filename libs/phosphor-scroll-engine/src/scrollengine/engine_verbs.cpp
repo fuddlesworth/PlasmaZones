@@ -143,9 +143,18 @@ void ScrollEngine::adjustColumnWidth(qreal deltaPercent, const QString& screenId
     P_SCROLL_VERB(screenId, state->strip().adjustActiveColumnWidth(deltaPercent, params), "resize", false, QString());
 }
 
-void ScrollEngine::toggleMaximizeColumn(const QString& screenId)
+void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
 {
-    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveColumn(params), "resize", false, QString());
+    // An empty windowId means "the active column", which is what the keyboard
+    // shortcut wants: it acts on whatever the user is looking at. A NAMED
+    // window aims at the column owning it, which is what the compositor's
+    // maximize interception needs — that request arrives for one specific
+    // window (titlebar click, a client's own request from a window that never
+    // took focus) and the active column is often a different one.
+    P_SCROLL_VERB(screenId,
+                  windowId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
+                                     : state->strip().toggleMaximizeColumnForWindow(windowId, params),
+                  "resize", false, QString());
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)

@@ -182,6 +182,10 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // restores flow through the rule path).
         clearWindowTiledAllScreens(windowId);
         unmaximizeMonocleWindow(windowId);
+        // The column mirror goes with them for the windowed-fullscreen arm's
+        // reason: this window's strip is ending, so no batch remains to carry
+        // a cleared flag back, and the bit would otherwise outlive the mode.
+        releaseColumnMaximized(windowId, w);
         // Drop stale zone-centering tracking so a later
         // frameGeometryChanged does not re-snap the window into an
         // old autotile zone.
@@ -373,6 +377,9 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
             continue;
         }
         unmaximizeMonocleWindow(m_effect->getWindowId(w));
+        // Same pairing as the demote arm above: the removed screen's strip is
+        // gone, so the column mirror has no later batch to un-flag it.
+        releaseColumnMaximized(m_effect->getWindowId(w), w);
     }
 
     // Clear autotile zone state for entries on REMOVED screens only.

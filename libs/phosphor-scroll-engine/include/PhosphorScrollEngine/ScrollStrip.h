@@ -281,6 +281,16 @@ public:
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
+    /// The same verb aimed at the column OWNING @p windowId rather than at the
+    /// active one. Refuses (false) when this strip does not hold the window.
+    ///
+    /// The distinction is load-bearing for the compositor's maximize
+    /// interception: that arrives for ONE named window (a titlebar click, a
+    /// client's own request from a window that never took focus) and the
+    /// active column is frequently a different one, so aiming at the active
+    /// column would cancel the clicked window's maximize and resize somebody
+    /// else's column.
+    bool toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params);
     /// Grow the active column into the on-screen MAIN-axis space not taken by
     /// the FULLY visible columns at the current view (niri
     /// expand-column-to-available-width).
@@ -666,6 +676,9 @@ private:
         m_viewDetached = false;
     }
     Column* activeColumnMutable();
+    /// Shared core of the two maximize-toggle entry points. Out-of-range
+    /// @p columnIndex (including columnOfWindow's -1 miss) refuses.
+    bool toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params);
     Tile* activeTileMutable();
     void clampActiveIndices();
 

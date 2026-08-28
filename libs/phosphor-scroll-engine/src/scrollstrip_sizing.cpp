@@ -170,10 +170,25 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
 
 bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
 {
-    Column* col = activeColumnMutable();
-    if (!col) {
+    return toggleMaximizeColumnAt(m_activeColumnIdx, params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params)
+{
+    // columnOfWindow answers -1 for a window this strip does not hold, which
+    // the index guard below turns into a refusal rather than an action on
+    // some other column. That is the whole point of the window-scoped entry:
+    // a maximize request arriving for a window the strip cannot place must do
+    // nothing, not maximize whichever column happens to be active.
+    return toggleMaximizeColumnAt(columnOfWindow(windowId), params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params)
+{
+    if (columnIndex < 0 || columnIndex >= m_columns.size()) {
         return false;
     }
+    Column* col = &m_columns[columnIndex];
     // Degenerate work area, the same bail its sibling width verbs (cycle,
     // adjust, equalize, minimize) take.
     // This one writes PERSISTED intent: with a zero main extent the
@@ -183,38 +198,70 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
     if (params.axis.mainSize(params.workArea) <= 0) {
         return false;
     }
+    // A column PINNED BY ITS MINIMUM cannot be made narrower, so neither arm
+    // below can move it. Refusing is the honest answer and the same shape the
+    // sibling width verbs take at their own floors: without it the press
+    // rewrites persisted intent, renders identical pixels, and still returns
+    // true — which costs a relayout and raises a "resize" success OSD for a
+    // press that did nothing, forever, on every press. This is the verb-side
+    // twin of the suppression engine_apply applies to the published flag for
+    // exactly the same class of column.
+    if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
+        return false;
+    }
     const ColumnWidth full = ColumnWidth::makeProportion(1.0);
-    if (m_preMaximizeColumnIdx == m_activeColumnIdx && col->width == full) {
+    // EVERY full-width test here compares RESOLVED PIXELS, never the intent
+    // value. ColumnWidth::operator== compares kind first, so Fixed(<work area
+    // main>), Preset(1.0) and Proportion(1.0) all render identically and only
+    // one of them is == full. That mattered little while this verb was the
+    // sole way to reach full width, but the batch now MEASURES the rendered
+    // column to publish columnMaximized, so every other route to a full-width
+    // column (adjustActiveColumnWidth clamping, preset cycling, expand,
+    // equalize, an interactive edge-drag's reconcile, a cross-screen handoff,
+    // expel, the minimize round trip, a restore from disk) lights the titlebar
+    // button up. On a value compare those columns took the "not full" arm,
+    // which re-stored the slot and wrote Proportion(1.0) — visually nothing,
+    // reported as success, and the button snapped straight back. The
+    // defaultIsFullWidth test below already worked in pixels for exactly this
+    // reason; the other two now agree with it.
+    const int workMain = params.axis.mainSize(params.workArea);
+    const auto rendersFullWidth = [&params, workMain](const ColumnWidth& w) {
+        return resolveColumnWidthPx(w, params) >= workMain;
+    };
+    if (!rendersFullWidth(col->width)) {
+        m_preMaximizeWidth = col->width;
+        m_preMaximizeColumnIdx = columnIndex;
+        col->width = full;
+        return true;
+    }
+    // The stored intent is re-validated against the CURRENT work area and
+    // axis, not trusted. The slot holds a raw ColumnWidth captured whenever
+    // the column was maximized, and nothing invalidates it when the output
+    // resizes or the strip flips axis — a Fixed(px) captured on a wider work
+    // area (or on the other axis) resolves clamped back to full width, so
+    // restoring it would consume the slot, change nothing visible, and report
+    // success. Falling through to the default-width arm in the same press is
+    // what keeps "the toggle always does something" true.
+    if (m_preMaximizeColumnIdx == columnIndex && !rendersFullWidth(m_preMaximizeWidth)) {
         col->width = m_preMaximizeWidth;
         m_preMaximizeColumnIdx = -1;
         return true;
     }
-    if (col->width == full) {
-        // Full-width without a stored intent for THIS column (maximized in
-        // an earlier session, or another column's maximize discarded the
-        // single stored slot): fall back to the default width so the toggle
-        // can always un-maximize instead of dead-ending.
-        //
-        // A user whose DEFAULT is itself full width would dead-end on that
-        // fallback, so take half the work area in that case. The point of the
-        // branch is that the toggle always does something.
-        //
-        // Compared in RESOLVED PIXELS, not on the intent value. ColumnWidth's
-        // operator== compares kind first, so a default spelled Fixed(<work
-        // area width>) is not == Proportion(1.0) even though it renders
-        // identically: the old value compare took the "not full" arm, left
-        // the column visually unchanged, and then reported TRUE — a false
-        // success OSD on the exact dead-end this branch exists to remove.
-        const bool defaultIsFullWidth =
-            resolveColumnWidthPx(params.defaultColumnWidth, params) >= params.axis.mainSize(params.workArea);
-        col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
-        // Unconditionally true: both arms leave the column narrower than the
-        // full width it had on entry, so the toggle always did something.
-        return true;
+    // Full width with no usable stored intent for THIS column (maximized in
+    // an earlier session, another column's maximize discarded the single
+    // stored slot, or the slot no longer resolves narrow): fall back to the
+    // default width so the toggle can always un-maximize instead of dead-
+    // ending. A user whose DEFAULT is itself full width would dead-end on
+    // that fallback, so take half the work area in that case.
+    const bool defaultIsFullWidth = rendersFullWidth(params.defaultColumnWidth);
+    col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
+    // A stale slot pointing at this column is spent either way — leaving it
+    // armed would make the NEXT maximize restore a width this press discarded.
+    if (m_preMaximizeColumnIdx == columnIndex) {
+        m_preMaximizeColumnIdx = -1;
     }
-    m_preMaximizeWidth = col->width;
-    m_preMaximizeColumnIdx = m_activeColumnIdx;
-    col->width = full;
+    // Unconditionally true: both arms leave the column narrower than the full
+    // width it had on entry, so the toggle always did something.
     return true;
 }
 
@@ -482,8 +529,11 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
             }
         }
     }
-    // Nothing is maximized once every column is at the default, so the slot
-    // would otherwise hand a stale intent to the next un-maximize. Only when
+    // Nothing is maximized once every column is at the default — unless the
+    // default itself renders at full width, in which case every column still
+    // measures maximized and toggleMaximizeColumnAt's no-slot arm is what
+    // gives the user a way back out. Either way the slot would otherwise hand
+    // a stale intent to the next un-maximize. Only when
     // widths were actually rewritten: under "the client decides" the widths
     // stay as they are, a maximized column stays maximized, and clearing the
     // slot would make the next un-maximize fall back to the half-width

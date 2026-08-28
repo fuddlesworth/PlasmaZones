@@ -795,12 +795,10 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // snapping screen no later tile batch exists to un-mirror it, and the
     // window would stay KWin-maximized for the session. Resolved through the
     // EffectWindow rather than dropped bare so the bit is actually handed
-    // back while the window is still alive; releaseColumnMaximized sheds
-    // membership first, so a synchronous re-entry from maximize() finds the
-    // entry already gone.
+    // back while the window is still alive, and so the release can re-seed
+    // the tracked-screen map after its own suppressed move.
     if (m_columnMaximizedWindows.contains(windowId)) {
-        KWin::EffectWindow* maxW = m_effect->findWindowByIdExact(windowId);
-        releaseColumnMaximized(windowId, maxW ? maxW->window() : nullptr);
+        releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
     }
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);

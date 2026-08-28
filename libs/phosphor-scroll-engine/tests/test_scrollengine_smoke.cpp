@@ -81,6 +81,7 @@ private Q_SLOTS:
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
     void columnMaximizeFlagRidesEveryTileOfTheColumn();
+    void columnMaximizeTargetsTheNamedWindowsColumn();
     void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
@@ -589,6 +590,10 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // A third window stays in its OWN column, so the "must not leak onto a
+    // sibling" half of the claim above has something to bite on. Without it
+    // the fixture held a single column and that clause was untested prose.
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
     // Two tiles in ONE column, so the "every tile" half of the claim has
     // something to bite on: a single-tile column would pass a per-column
     // emit just as well.
@@ -601,8 +606,9 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
     {
         const auto* st = stateFor(engine, QStringLiteral("S1"));
         QVERIFY(st);
-        QCOMPARE(st->strip().columnCount(), 1);
+        QCOMPARE(st->strip().columnCount(), 2);
         QCOMPARE(st->strip().columns().at(0).tiles.size(), 2);
+        QCOMPARE(st->strip().columns().at(1).tiles.size(), 1);
     }
 
     const auto flagsByWindow = [](const QSignalSpy& spy) {
@@ -625,17 +631,86 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
     QVERIFY2(flags.contains(QStringLiteral("app|b")), "the batch must carry the maximized column's second tile");
     QVERIFY2(flags.value(QStringLiteral("app|a")), "columnMaximized must ride the first tile");
     QVERIFY2(flags.value(QStringLiteral("app|b")), "columnMaximized must ride the SECOND tile too");
+    QVERIFY2(flags.contains(QStringLiteral("app|c")), "the batch must carry the sibling column's tile");
+    QVERIFY2(!flags.value(QStringLiteral("app|c")), "columnMaximized must NOT leak onto the sibling column");
 
     // Toggle back: the flag is absent again, so the effect's Release arm has
     // something to fire on. Absence rather than an explicit false — the emit
     // is gated on the flag being set, the way windowedFullscreen is.
+    //
+    // contains() FIRST on every window, then the value. value(k, false) alone
+    // would pass just as well if the batch stopped carrying these windows at
+    // all, which is the failure this leg most needs to catch: a Release the
+    // effect never sees is indistinguishable from a Release it sees as false.
     tiled.clear();
     engine->toggleMaximizeColumn(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QVERIFY(tiled.count() > 0);
     flags = flagsByWindow(tiled);
-    QVERIFY2(!flags.value(QStringLiteral("app|a"), false), "un-maximizing must drop the flag");
-    QVERIFY2(!flags.value(QStringLiteral("app|b"), false), "un-maximizing must drop it on every tile");
+    QVERIFY2(flags.contains(QStringLiteral("app|a")), "the un-maximizing batch must still carry the first tile");
+    QVERIFY2(flags.contains(QStringLiteral("app|b")), "the un-maximizing batch must still carry the second tile");
+    QVERIFY2(!flags.value(QStringLiteral("app|a")), "un-maximizing must drop the flag");
+    QVERIFY2(!flags.value(QStringLiteral("app|b")), "un-maximizing must drop it on every tile");
+}
+
+void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
+{
+    // The verb aims at the column owning the NAMED window, not at the active
+    // one. This is what the compositor's maximize interception needs: that
+    // request arrives for a single window — a client maximizing itself from
+    // the background, a titlebar click that does not raise first — and the
+    // active column is frequently a different one. Aimed at the active column
+    // it cancelled the clicked window's maximize and then resized somebody
+    // else's column, which is two wrong things at once.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    {
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(st);
+        QCOMPARE(st->strip().columnCount(), 2);
+        // The ACTIVE column is a's, so b's is deliberately not the one the
+        // screen-scoped spelling would have picked.
+        QCOMPARE(st->strip().activeWindowId(), QStringLiteral("app|a"));
+        QCOMPARE(st->strip().columnOfWindow(QStringLiteral("app|b")), 1);
+    }
+
+    // Asserted on the STRIP rather than on the emitted batch: which column the
+    // verb aims at is a strip fact, and reading it back through the wire would
+    // also make the test depend on the batch emit-gate, which legitimately
+    // stays silent when a width rewrite happens to move no rect.
+    const auto widthOf = [engine](const QString& windowId) {
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        const int idx = st->strip().columnOfWindow(windowId);
+        return st->strip().columns().at(idx).width;
+    };
+    const PhosphorScrollEngine::ColumnWidth aBefore = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBefore = widthOf(QStringLiteral("app|b"));
+
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBefore, "the NAMED window's column must be the one that changed");
+    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBefore, "the ACTIVE column must be left alone");
+
+    // A window this strip does not hold refuses outright rather than falling
+    // back to the active column — that fallback is exactly what made the
+    // screen-scoped spelling wrong, so it must not creep back in via an
+    // unknown id.
+    const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(QStringLiteral("app|b"));
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|missing"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBeforeMiss, "an unknown window must not touch the active column");
+    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeMiss, "an unknown window must not touch any other column");
+
+    // The EMPTY spelling still means the active column, which is what the
+    // keyboard shortcut sends.
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeMiss, "an empty windowId must still target the active column");
 }
 
 void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()

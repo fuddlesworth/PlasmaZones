@@ -810,6 +810,28 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
                 }
+                // The handler's OWN bracketed writes take the same skip, and
+                // must: on XWayland maximize() emits this signal synchronously
+                // with the counter still held, so the conjunct above is false
+                // and control used to fall through to the shader install
+                // below — the engine-authored column maximize played a
+                // WindowMaximize morph on X11 and not on Wayland, where the
+                // committed echo arrives with the counter at 0 and the
+                // interception claims it. Same deliberate skip, now on both
+                // platforms. The edge tracking and the rule-cache
+                // invalidation above have already run, so nothing else is
+                // lost by returning here.
+                //
+                // The counter is raised by every bracketed maximize write this
+                // handler makes, not only the column-maximize ones, so the
+                // monocle apply and unmaximize lose their X11 morph too. That
+                // is the same judgement applied consistently: motion this
+                // effect authored belongs to the strip's own transition, not
+                // to a maximize morph replayed over it.
+                if (m_tilingHandler && m_tilingHandler->isSuppressingMaximizeChanged()) {
+                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                    return;
+                }
                 // Drag-restore guard: KWin unmaximizes a window mid interactive
                 // move when the user grabs the maximized title bar and pulls
                 // ("restore on drag"). The drag already owns the visuals — the
