@@ -193,12 +193,12 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
                      {CD::scrollingStripAxisHorizontal(), "horizontal"_L1},
                      {CD::scrollingStripAxisVertical(), "vertical"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool,
-         QStringLiteral("When the strip holds a single column, center it even when the focused column is set never "
-                        "to center.")},
+         QStringLiteral("When the strip holds a single column, center it even when the focused column is set never to "
+                        "center.")},
         {CD::cropStraddlersKey(), CD::scrollingCropStraddlers(), QMetaType::Bool,
          QStringLiteral("Let a column at the screen edge keep its full size and be cut off there. Off, the column "
-                        "shrinks to fit, or slides away once too little of it is left. Cropping costs some "
-                        "efficiency in fullscreen video and games while any screen uses scrolling.")},
+                        "shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency "
+                        "in fullscreen video and games while any screen uses scrolling.")},
         // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,
         // 2 clientDecides, 3 preset} must never be static_cast to
         // ColumnWidth::Kind, whose 2 is Preset — the engine translates into
@@ -278,11 +278,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
                         "template. Only applies when the height kind is preset."),
          clampInt(0, CD::scrollingPresetIndexMax())},
         {CD::defaultTemplateKey(), CD::scrollingDefaultTemplate(), QMetaType::QString,
-         QStringLiteral("Layout template a screen uses until it is given one of its own. Empty uses the built-in "
-                        "width and height steps.")},
+         QStringLiteral("Layout template a screen uses until it is given one of its own. Empty uses the built-in width "
+                        "and height steps.")},
         {CD::wheelFocusEnabledKey(), CD::scrollingWheelFocusEnabled(), QMetaType::Bool,
-         QStringLiteral("Turn the wheel with a scroll key held to move along the strip. Off, both scroll keys are "
-                        "left to the compositor.")},
+         QStringLiteral("Turn the wheel with a scroll key held to move along the strip. Off, both scroll keys are left "
+                        "to the compositor.")},
         {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool,
          QStringLiteral("Scrolling down moves toward the start of the strip instead of the end, for both scroll "
                         "keys.")},
@@ -311,9 +311,8 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     };
     schema.groups[CD::scrollingWheelViewGroup()] = {
         {CD::triggersKey(), CD::scrollingWheelViewTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier held while turning the wheel to move the view along the strip without changing "
-                        "which column has focus. Each entry is a {modifier, mouseButton} "
-                        "pair."),
+         QStringLiteral("Modifier held while turning the wheel to move the view along the strip without changing which "
+                        "column has focus. Each entry is a {modifier, mouseButton} pair."),
          canonicalWheelTriggerList},
     };
 
@@ -344,8 +343,8 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::hideWhenSingleTabKey(), CD::scrollingTabIndicatorHideWhenSingleTab(), QMetaType::Bool,
          QStringLiteral("Leave a tabbed column unmarked while it holds only one window.")},
         {CD::placeWithinColumnKey(), CD::scrollingTabIndicatorPlaceWithinColumn(), QMetaType::Bool,
-         QStringLiteral("Shrink the windows to fit the indicator. Off, it is drawn beside the column and can "
-                        "overlap a neighbor or run off screen.")},
+         QStringLiteral("Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a "
+                        "neighbor or run off screen.")},
         // The gap floor is NEGATIVE on purpose: niri parity, where a negative
         // gap pulls the indicator on top of the window.
         {CD::gapKey(), CD::scrollingTabIndicatorGap(), QMetaType::Int,
@@ -405,8 +404,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::enabledKey(), CD::scrollingDropIndicatorEnabled(), QMetaType::Bool,
          QStringLiteral("Show where a dragged window will land in the strip.")},
         {CD::colorKey(), CD::scrollingDropIndicatorColor(), QMetaType::QString,
-         QStringLiteral("Colour filling the space the window will land in. Empty follows the colour "
-                        "scheme."),
+         QStringLiteral("Colour filling the space the window will land in. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
         {CD::borderColorKey(), CD::scrollingDropIndicatorBorderColor(), QMetaType::QString,
          QStringLiteral("Colour of the indicator's edge. Empty follows the colour scheme."),
@@ -432,13 +430,13 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool,
          QStringLiteral("Focus a window when it opens.")},
         {CD::triggersKey(), CD::scrollingDragInsertTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier and mouse-button combinations that insert a dragged window into the strip under "
-                        "the cursor. It becomes a new column, or stacks into the column it lands on. Each entry is "
-                        "a {modifier, mouseButton} pair."),
+         QStringLiteral("Modifier and mouse-button combinations that insert a dragged window into the strip under the "
+                        "cursor. It becomes a new column, or stacks into the column it lands on. Each entry is a "
+                        "{modifier, mouseButton} pair."),
          canonicalTriggerList},
         {CD::toggleActivationKey(), CD::scrollingDragInsertToggle(), QMetaType::Bool,
-         QStringLiteral("Tap the re-insert trigger to turn the strip preview on, and tap again to turn it off, "
-                        "instead of holding it down.")},
+         QStringLiteral("Tap the re-insert trigger to turn the strip preview on, and tap again to turn it off, instead "
+                        "of holding it down.")},
         {CD::releaseGraceMsKey(), CD::scrollingDragInsertGraceMs(), QMetaType::Int,
          QStringLiteral("How long the strip preview stays up after the trigger is released, so a brief slip does not "
                         "cancel the drop."),
@@ -480,20 +478,20 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         // convention. Scrolling previously had no home for this and read the
         // tiling value, which is the mode leak this entry closes.
         {CD::smartGapsKey(), CD::scrollingSmartGaps(), QMetaType::Bool,
-         QStringLiteral("Remove the outer gaps while the strip holds a single column, so that column sits against "
-                        "the screen edge at its own width.")},
+         QStringLiteral("Remove the outer gaps while the strip holds a single column, so that column sits against the "
+                        "screen edge at its own width.")},
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool,
-         QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, which can push "
-                        "other windows off screen.")},
+         QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, which can push other "
+                        "windows off screen.")},
         {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool,
-         QStringLiteral("When windows reopen after a restart, rebuild their columns with the same order, widths, "
-                        "and tab groups.")},
+         QStringLiteral("When windows reopen after a restart, rebuild their columns with the same order, widths, and "
+                        "tab groups.")},
         {CD::restoreFloatedOnLoginKey(), CD::scrollingRestoreFloatedWindowsOnLogin(), QMetaType::Bool,
-         QStringLiteral("When a floated window reopens, return it to the position and size it had before rather "
-                        "than letting the compositor place it. A rule can opt individual windows in or out.")},
+         QStringLiteral("When a floated window reopens, return it to the position and size it had before rather than "
+                        "letting the compositor place it. A rule can opt individual windows in or out.")},
         {CD::keepFloatingAboveKey(), CD::scrollingKeepFloatingAbove(), QMetaType::Bool,
-         QStringLiteral("Keep the windows you float stacked above the columns of the strip. A rule that sets a "
-                        "window layer takes precedence for the windows it matches.")},
+         QStringLiteral("Keep the windows you float stacked above the columns of the strip. A rule that sets a window "
+                        "layer takes precedence for the windows it matches.")},
         {CD::columnWidthStepPercentKey(), CD::scrollingColumnWidthStepPercent(), QMetaType::Int,
          QStringLiteral("How far the increase and decrease column width shortcuts resize a column per press, as a "
                         "share of the strip."),
@@ -578,8 +576,8 @@ void appendScrollingZoneSelectorSchema(PhosphorConfig::Schema& schema)
                         "the aspect ratio is unlocked."),
          clampInt(CD::previewHeightMin(), CD::previewHeightMax())},
         {CD::previewLockAspectKey(), CD::scrollingZoneSelectorPreviewLockAspect(), QMetaType::Bool,
-         QStringLiteral("Derive the preview height from its width using the screen's aspect ratio, so previews "
-                        "match the shape of the screen.")},
+         QStringLiteral("Derive the preview height from its width using the screen's aspect ratio, so previews match "
+                        "the shape of the screen.")},
     };
 }
 
@@ -622,8 +620,8 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Splits the focused window out of a shared column toward the start of the strip. A window "
                         "alone in its column merges into the previous column instead.")},
         {CD::consumeOrExpelRightKey(), CD::scrollingConsumeOrExpelRightShortcut(), QMetaType::QString,
-         QStringLiteral("Splits the focused window out of a shared column toward the end of the strip. A window "
-                        "alone in its column merges into the next column instead.")},
+         QStringLiteral("Splits the focused window out of a shared column toward the end of the strip. A window alone "
+                        "in its column merges into the next column instead.")},
         {CD::centerColumnKey(), CD::scrollingCenterColumnShortcut(), QMetaType::QString,
          QStringLiteral("Scrolls the view so the focused column sits centered on the screen.")},
         {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString,
@@ -642,13 +640,12 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString,
          QStringLiteral("Toggles the focused column between filling the work area and a smaller size.")},
         {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString,
-         QStringLiteral("Grows the focused column to fill the empty space visible on screen. Other columns keep "
-                        "their size.")},
+         QStringLiteral("Grows the focused column to fill the empty space visible on screen. Other columns keep their "
+                        "size.")},
         {CD::cycleWindowHeightKey(), CD::scrollingCycleWindowHeightShortcut(), QMetaType::QString,
          QStringLiteral("Steps the focused window through the screen's size presets within its column.")},
         {CD::cycleWindowHeightBackKey(), CD::scrollingCycleWindowHeightBackShortcut(), QMetaType::QString,
-         QStringLiteral("Steps the focused window through the screen's size presets within its column, in "
-                        "reverse.")},
+         QStringLiteral("Steps the focused window through the screen's size presets within its column, in reverse.")},
         {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString,
          QStringLiteral("Grows the focused window within its column by the configured step.")},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString,
@@ -663,11 +660,11 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::focusWindowBottomKey(), CD::scrollingFocusWindowBottomShortcut(), QMetaType::QString,
          QStringLiteral("Moves focus to the last window of the focused column.")},
         {CD::focusColumnLeftKey(), CD::scrollingFocusColumnLeftShortcut(), QMetaType::QString,
-         QStringLiteral("Moves focus one column toward the start of the strip and stops at the edge. The regular "
-                        "focus shortcut continues onto the next monitor instead.")},
+         QStringLiteral("Moves focus one column toward the start of the strip and stops at the edge. The regular focus "
+                        "shortcut continues onto the next monitor instead.")},
         {CD::focusColumnRightKey(), CD::scrollingFocusColumnRightShortcut(), QMetaType::QString,
-         QStringLiteral("Moves focus one column toward the end of the strip and stops at the edge. The regular "
-                        "focus shortcut continues onto the next monitor instead.")},
+         QStringLiteral("Moves focus one column toward the end of the strip and stops at the edge. The regular focus "
+                        "shortcut continues onto the next monitor instead.")},
         {CD::focusColumnLeftOrLastKey(), CD::scrollingFocusColumnLeftOrLastShortcut(), QMetaType::QString,
          QStringLiteral("Moves focus one column toward the start of the strip, wrapping to the last column at the "
                         "edge.")},
@@ -680,13 +677,12 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Returns the focused floating window to its column. Unlike the float toggle, it never "
                         "floats.")},
         {CD::viewPageBackKey(), CD::scrollingViewPageBackShortcut(), QMetaType::QString,
-         QStringLiteral("Scrolls the view toward the start of the strip by a whole screen. Focus stays where it "
-                        "is.")},
+         QStringLiteral("Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.")},
         {CD::viewPageForwardKey(), CD::scrollingViewPageForwardShortcut(), QMetaType::QString,
          QStringLiteral("Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.")},
         {CD::equalizeColumnWidthsKey(), CD::scrollingEqualizeColumnWidthsShortcut(), QMetaType::QString,
-         QStringLiteral("Gives every column fully on screen an equal share of the screen. Columns clipped at an "
-                        "edge are left alone.")},
+         QStringLiteral("Gives every column fully on screen an equal share of the screen. Columns clipped at an edge "
+                        "are left alone.")},
         {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused column to the smallest size preset.")},
     };

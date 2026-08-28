@@ -241,8 +241,8 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
     };
     schema.groups[CD::shadersAudioGroup()] = {
         {CD::enabledKey(), CD::enableAudioVisualizer(), QMetaType::Bool,
-         QStringLiteral("Capture system audio so the audio-reactive shader packs have a signal to follow. Off, "
-                        "those shaders render but stay still.")},
+         QStringLiteral("Capture system audio so the audio-reactive shader packs have a signal to follow. Off, those "
+                        "shaders render but stay still.")},
         {CD::barsKey(), CD::audioSpectrumBarCount(), QMetaType::Int,
          QStringLiteral("Number of frequency bands in the audio visualization."),
          clampInt(CD::audioSpectrumBarCountMin(), CD::audioSpectrumBarCountMax())},
@@ -306,23 +306,18 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // use); Settings resolves in the getters.
     schema.groups[CD::snappingZonesColorsGroup()] = {
         {CD::highlightKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
-         QStringLiteral("Colour of the zone under the cursor. Empty follows the colour "
-                        "scheme."),
+         QStringLiteral("Colour of the zone under the cursor. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
         {CD::inactiveKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
-         QStringLiteral("Colour of the zones not under the cursor. Empty follows the colour "
-                        "scheme."),
+         QStringLiteral("Colour of the zones not under the cursor. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
         {CD::borderKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
-         QStringLiteral("Colour of the zone borders. Empty follows the colour "
-                        "scheme."),
-         canonicalThemeFallbackColor},
+         QStringLiteral("Colour of the zone borders. Empty follows the colour scheme."), canonicalThemeFallbackColor},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
         {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString,
-         QStringLiteral("Colour of the zone label text. Empty follows the colour "
-                        "scheme."),
+         QStringLiteral("Colour of the zone label text. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString,
          QStringLiteral("Typeface for zone labels. Empty follows the system font."),
@@ -351,9 +346,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     };
 
     schema.groups[CD::snappingZonesBorderGroup()] = {
-        {CD::widthKey(), CD::borderWidth(), QMetaType::Int,
-         QStringLiteral("Thickness of zone borders in "
-                        "pixels."),
+        {CD::widthKey(), CD::borderWidth(), QMetaType::Int, QStringLiteral("Thickness of zone borders in pixels."),
          clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
         {CD::radiusKey(), CD::borderRadius(), QMetaType::Int, QStringLiteral("Corner rounding of zones in pixels."),
          clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
@@ -378,12 +371,12 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
                         "listed follows in its default order."),
          canonicalCommaList},
         {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString,
-         QStringLiteral("The order autotile algorithms appear in, as a comma-separated list of algorithm ids. "
-                        "Anything not listed follows in its default order."),
+         QStringLiteral("The order autotile algorithms appear in, as a comma-separated list of algorithm ids. Anything "
+                        "not listed follows in its default order."),
          canonicalCommaList},
         {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString,
-         QStringLiteral("The order scrolling templates appear in, as a comma-separated list of template ids. "
-                        "Anything not listed follows in its default order."),
+         QStringLiteral("The order scrolling templates appear in, as a comma-separated list of template ids. Anything "
+                        "not listed follows in its default order."),
          canonicalCommaList},
     };
 }
@@ -420,18 +413,17 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
     static PhosphorAnimation::CurveRegistry sSchemaRegistry;
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool,
-         QStringLiteral("Whether window transitions play at all. Off, windows appear and disappear with no "
-                        "motion.")},
+         QStringLiteral("Whether window transitions play at all. Off, windows appear and disappear with no motion.")},
         // Profile and ShaderProfileTree persist as nested JSON objects
         // (QVariantMap) so the on-disk config shows their structure
         // directly. Existing string-blob configs are migrated transparently
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap,
-         QStringLiteral("The active motion profile, holding its easing curve, duration, stagger interval, and "
-                        "sequence mode. The animations page writes this; it is not meant to be edited by hand.")},
+         QStringLiteral("The active motion profile, holding its easing curve, duration, stagger interval, and sequence "
+                        "mode. The animations page writes this, so it is not meant to be edited by hand.")},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
-                        "writes this; it is not meant to be edited by hand.")},
+                        "writes this, so it is not meant to be edited by hand.")},
     };
 }
 
@@ -922,8 +914,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
                         "the aspect ratio is unlocked."),
          clampInt(CD::previewHeightMin(), CD::previewHeightMax())},
         {CD::previewLockAspectKey(), CD::previewLockAspect(), QMetaType::Bool,
-         QStringLiteral("Derive the preview height from its width using the screen's aspect ratio, so previews "
-                        "match the shape of the screen.")},
+         QStringLiteral("Derive the preview height from its width using the screen's aspect ratio, so previews match "
+                        "the shape of the screen.")},
         {CD::gridColumnsKey(), CD::gridColumns(), QMetaType::Int, QStringLiteral("Number of layout previews per row."),
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
         {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int,
@@ -960,8 +952,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                         "dragged. Each entry is a {modifier, mouseButton} pair."),
          canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool,
-         QStringLiteral("Tap the trigger to turn the overlay on, and tap again to turn it off, instead of holding "
-                        "it down.")},
+         QStringLiteral("Tap the trigger to turn the overlay on, and tap again to turn it off, instead of holding it "
+                        "down.")},
         {CD::releaseGraceMsKey(), CD::dragActivationGraceMs(), QMetaType::Int,
          QStringLiteral("How long the overlay stays up after the trigger is released, so a brief slip does not cancel "
                         "the snap."),
@@ -1005,12 +997,11 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::MetaShift), "metaShift"_L1},
                      {static_cast<int>(DragModifier::CtrlMeta), "ctrlMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier and mouse-button combinations that span a drag across adjacent zones. Each entry "
-                        "is a {modifier, mouseButton} pair."),
+         QStringLiteral("Modifier and mouse-button combinations that span a drag across adjacent zones. Each entry is "
+                        "a {modifier, mouseButton} pair."),
          canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool,
-         QStringLiteral("Tap the span trigger to start spanning, and tap again to stop, instead of holding it "
-                        "down.")},
+         QStringLiteral("Tap the span trigger to start spanning, and tap again to stop, instead of holding it down.")},
         {CD::releaseGraceMsKey(), CD::zoneSpanGraceMs(), QMetaType::Int,
          QStringLiteral("How long spanning stays active after the trigger is released."),
          clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
@@ -1028,8 +1019,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::keepOnResolutionChangeKey(), CD::keepWindowsInZonesOnResolutionChange(), QMetaType::Bool,
          QStringLiteral("Move windows back to their zones after the screen resolution changes.")},
         {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool,
-         QStringLiteral("Snap every newly opened window into whichever zone you most recently snapped a window "
-                        "into.")},
+         QStringLiteral("Snap every newly opened window into whichever zone you most recently snapped a window into.")},
         {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool,
          QStringLiteral("Return a window to its original size when it is dragged out of a zone.")},
         {CD::stickyWindowHandlingKey(), CD::snappingStickyWindowHandling(), QMetaType::Int,
@@ -1042,27 +1032,27 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool,
-         QStringLiteral("When an app reopens, during the session or after a logout, return it to the zone it was "
-                        "last snapped in.")},
+         QStringLiteral("When an app reopens, during the session or after a logout, return it to the zone it was last "
+                        "snapped in.")},
         {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool,
-         QStringLiteral("When an unsnapped window reopens after a logout, return it to the position and monitor it "
-                        "was on. A rule can opt individual windows in or out.")},
+         QStringLiteral("When an unsnapped window reopens after a logout, return it to the position and monitor it was "
+                        "on. A rule can opt individual windows in or out.")},
         {CD::keepFloatingAboveKey(), CD::snappingKeepFloatingAbove(), QMetaType::Bool,
-         QStringLiteral("Keep the windows you float stacked above the windows snapped into zones. A rule that sets "
-                        "a window layer takes precedence for the windows it matches.")},
+         QStringLiteral("Keep the windows you float stacked above the windows snapped into zones. A rule that sets a "
+                        "window layer takes precedence for the windows it matches.")},
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool,
          QStringLiteral("When you unfloat a window that was never snapped, snap it to a fallback zone instead of "
-                        "leaving it floating. The fallback is the last used zone, then the first empty one, then "
-                        "the first zone.")},
+                        "leaving it floating. The fallback is the last used zone, then the first empty one, then the "
+                        "first zone.")},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool,
          QStringLiteral("Fill the first empty zone when a new window opens. When on, this overrides each layout's "
                         "individual auto-assign toggle and applies to every layout.")},
         {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool,
-         QStringLiteral("Snapping and tiling stay off until you assign a layout. A rule can re-enable the default "
-                        "per monitor.")},
+         QStringLiteral("Snapping and tiling stay off until you assign a layout. A rule can re-enable the default per "
+                        "monitor.")},
         {CD::defaultLayoutIdKey(), CD::defaultLayoutId(), QMetaType::QString,
-         QStringLiteral("Layout a screen uses until it is given one of its own. Empty picks the first layout that "
-                        "fits the screen.")},
+         QStringLiteral("Layout a screen uses until it is given one of its own. Empty picks the first layout that fits "
+                        "the screen.")},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool,
@@ -1143,8 +1133,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("How strongly the tint color blends over the window, where 0% keeps it untinted."),
          clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
         {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString,
-         QStringLiteral("Colour blended over matched windows. Empty follows the colour "
-                        "scheme."),
+         QStringLiteral("Colour blended over matched windows. Empty follows the colour scheme."),
          canonicalThemeFallbackColor},
     };
 }
@@ -1161,8 +1150,8 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
         {CD::innerGapKey(), CD::innerGap(), QMetaType::Int, QStringLiteral("Space between neighbouring windows."),
          clampInt(CD::innerGapMin(), CD::innerGapMax())},
         {CD::outerGapKey(), CD::outerGap(), QMetaType::Int,
-         QStringLiteral("Space between the windows and the edges of the screen. Ignored when per-side outer gaps "
-                        "are on."),
+         QStringLiteral("Space between the windows and the edges of the screen. Ignored when per-side outer gaps are "
+                        "on."),
          clampInt(CD::outerGapMin(), CD::outerGapMax())},
         {CD::usePerSideOuterGapKey(), CD::usePerSideOuterGap(), QMetaType::Bool,
          QStringLiteral("Set a different outer gap for each screen edge instead of one value for all four.")},
@@ -1202,9 +1191,8 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // flowing to configs that never customized those surfaces.
         {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
          QMetaType::QVariantMap,
-         QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window "
-                        "overrides. The decorations page writes this; it is not meant to be "
-                        "edited by hand.")},
+         QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window overrides. The "
+                        "decorations page writes this, so it is not meant to be edited by hand.")},
     };
     // Mostly what the decoration chain is allowed to keep redrawing (an animated
     // pack repaints every window carrying it on every vsync, which never lets the
@@ -1212,8 +1200,8 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
     // blur-scale multiplier.
     schema.groups[CD::decorationsPerformanceGroup()] = {
         {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool,
-         QStringLiteral("Run decoration animations only on the focused window. Unfocused windows keep their "
-                        "decoration but hold still.")},
+         QStringLiteral("Run decoration animations only on the focused window. Unfocused windows keep their decoration "
+                        "but hold still.")},
         {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool,
          QStringLiteral("Stop decoration animations while you are not interacting, and resume on the next input.")},
         // Clamped here, not in the UI. P_STORE_SET_INT delegates range enforcement

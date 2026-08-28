@@ -77,8 +77,8 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Maximum number of windows to tile."),
          clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
         {CD::perAlgorithmSettingsKey(), CD::autotilePerAlgorithmSettings(), QMetaType::QVariantMap,
-         QStringLiteral("Custom parameter values per algorithm, keyed by algorithm id. The tiling page writes this; it "
-                        "is not meant to be edited by hand."),
+         QStringLiteral("Custom parameter values per algorithm, keyed by algorithm id. The tiling page writes this, so "
+                        "it is not meant to be edited by hand."),
          sanitizePerAlgorithmSettings},
     };
 
@@ -99,11 +99,11 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::respectMinimumSizeKey(), CD::autotileRespectMinimumSize(), QMetaType::Bool,
          QStringLiteral("Stop windows being resized below their minimum size, which may leave gaps in the layout.")},
         {CD::restoreFloatedOnLoginKey(), CD::autotileRestoreFloatedWindowsOnLogin(), QMetaType::Bool,
-         QStringLiteral("Return a floated window to the position and monitor it was on when it reopens after a "
-                        "logout. A rule can opt individual windows in or out.")},
+         QStringLiteral("Return a floated window to the position and monitor it was on when it reopens after a logout. "
+                        "A rule can opt individual windows in or out.")},
         {CD::keepFloatingAboveKey(), CD::autotileKeepFloatingAbove(), QMetaType::Bool,
-         QStringLiteral("Keep the windows you float stacked above the tiled windows. A rule that sets a window "
-                        "layer takes precedence for the windows it matches.")},
+         QStringLiteral("Keep the windows you float stacked above the tiled windows. A rule that sets a window layer "
+                        "takes precedence for the windows it matches.")},
         {CD::stickyWindowHandlingKey(), CD::autotileStickyWindowHandling(), QMetaType::Int,
          QStringLiteral("How to treat windows that appear on every desktop."),
          validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
@@ -129,16 +129,15 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(AutotileOverflowBehavior::Float), "float"_L1},
                      {static_cast<int>(AutotileOverflowBehavior::Unlimited), "unlimited"_L1}})},
         {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString,
-         QStringLiteral("Screens whose tiling layout is locked, as a comma-separated list of screen "
-                        "ids."),
+         QStringLiteral("Screens whose tiling layout is locked, as a comma-separated list of screen ids."),
          canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier and mouse-button combinations that re-insert a dragged window into the stack at "
-                        "the cursor. Each entry is a {modifier, mouseButton} pair."),
+         QStringLiteral("Modifier and mouse-button combinations that re-insert a dragged window into the stack at the "
+                        "cursor. Each entry is a {modifier, mouseButton} pair."),
          canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool,
-         QStringLiteral("Tap the re-insert trigger to turn the stack preview on, and tap again to turn it off, "
-                        "instead of holding it down.")},
+         QStringLiteral("Tap the re-insert trigger to turn the stack preview on, and tap again to turn it off, instead "
+                        "of holding it down.")},
         {CD::releaseGraceMsKey(), CD::autotileDragInsertGraceMs(), QMetaType::Int,
          QStringLiteral("How long the stack preview stays up after the trigger is released, so a brief slip does not "
                         "cancel the drop."),
