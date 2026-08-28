@@ -512,6 +512,21 @@ void Daemon::initLayoutAndSettingsWiring()
         // the adaptor's mirror is seeded by the priming diffActiveAssignments()
         // in initEngines once the adaptor is up.
         diffActiveAssignments();
+
+        // Re-filter an open cheatsheet. The sheet picks its mode from the
+        // master switches (Daemon::modeEnabled), so a save that flips one
+        // leaves a visible sheet listing a mode nothing is running in, and
+        // turning the last one off leaves it up with no truthful filter at
+        // all — refreshCheatsheetIfVisible dismisses it in that case. One
+        // hook here rather than three xxxEnabledChanged wires: those covered
+        // autotile and scrolling but never snapping, which is exactly the
+        // switch whose stale filter this PR is about, and every setter that
+        // moves one of the three fires settingsChanged too (P_STORE_SET_BOOL
+        // emits both; Settings::load re-emits the property NOTIFY signals and
+        // this one). Runs after updateEngineScreens above, so the router the
+        // filter reads has already been recomputed. No-op when the sheet is
+        // hidden, which is the common case.
+        refreshCheatsheetIfVisible();
     }));
 
     // Resnap currently-snapped windows when a snapping gap/padding setting
