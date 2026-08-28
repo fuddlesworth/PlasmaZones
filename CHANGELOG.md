@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Scrolling windows can open at their own height**: Default width under Scrolling → New columns has always offered Window decides, which opens a column at the size the application asked for. Default height offered only the even split, a fixed pixel height and a preset. It now offers Window decides too, so a window joining a column keeps the height it asked for. As with the width, a per-window rule and a per-monitor setting still outrank it, and Retile leaves a window-decided height alone rather than pulling it back to the even split.
+- **Scrolling windows can open at their own height**: Default width under Scrolling → New columns has always offered Window decides, which opens a column at the size the application asked for. Default height offered only the even split, a fixed pixel height and a preset. It now offers Window decides too, so a window joining a column keeps the height it asked for. As with the width, a per-window rule and a per-monitor setting still outrank it, and Retile leaves a window-decided height alone rather than pulling it back to the even split ([#995](https://github.com/fuddlesworth/PlasmaZones/pull/995)).
 
 ### Fixed
 
