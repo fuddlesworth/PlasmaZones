@@ -51,8 +51,13 @@ namespace PhosphorScrollEngine {
 /// caller: the focus and move verbs, the inserts, an active column that
 /// vanished), the Always policy's own re-centering, or either centering verb
 /// re-attaches it and the policy takes the view back. A bystander's removal
-/// that leaves focus where it was does not. Detachment travels with the
-/// anchor through the mode-round-trip stash and the persisted blob for the
+/// that leaves focus where it was does not. One re-attach lives OUTSIDE this
+/// class, in ScrollEngine::windowFocused: a compositor report naming the
+/// window the strip already calls active reaches no re-anchor at all (it is
+/// refused, or it moves a tile inside the active column), and the engine
+/// clears the latch through `setViewDetached` there so the next layout pass
+/// lets the policy answer. Detachment travels with the anchor through the
+/// mode-round-trip stash and the persisted blob for the
 /// same reason the anchor does: restoring the position while dropping the
 /// detachment hands the view straight back to the policy that would move it.
 ///
@@ -472,6 +477,12 @@ public:
     /// Only meaningful alongside the anchor it was captured with, so a caller
     /// that drops that anchor (the stash's axis-mismatch arm) must drop this
     /// too, or the view stays pinned wherever the focus restore left it.
+    ///
+    /// Clearing it standalone is the engine-side re-attach the class doc
+    /// names (ScrollEngine::windowFocused): it hands the view to the policy
+    /// while leaving the anchor for the next updateViewForFocus to derive,
+    /// which is the one thing a re-anchor here could not do without a focus
+    /// change to derive from.
     void setViewDetached(bool detached)
     {
         m_viewDetached = detached;

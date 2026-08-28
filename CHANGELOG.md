@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Clicking the focused window brings it back into view**: scrolling the strip by hand takes the view out of the centering policy's hands, which is what lets a scrolled view stay put. Focusing a window hands it back, but a click on the window that already had focus was ignored entirely, and so was the one the compositor sends when you return to a desktop. So was a switch between two windows stacked in the same column. A window you had scrolled away from stayed off to one side no matter how many times you clicked it. All three now hand the view back, and under the two policies that only move the view when they have to, a scroll that left the window fully on screen is still left alone ([#992](https://github.com/fuddlesworth/PlasmaZones/pull/992)).
+
 ## [3.4.2] - 2026-08-27
 
 ### Fixed
