@@ -294,8 +294,18 @@ void TilingHandler::restoreAllColumnMaximized()
     for (const QString& wid : ids) {
         // EXACT resolve — the fuzzy appId fallback would un-maximize an
         // unrelated same-app sibling under suppression, invisibly.
+        //
+        // A MISS retains the entry, on the same terms as the fullscreen skip
+        // below: both mean "the bit was not handed back", and dropping one
+        // while retaining the other would make the ledger's record of what we
+        // owe depend on WHY we could not pay. The daemon-loss caller keeps the
+        // effect running, so a window whose id does not resolve this instant
+        // (the stale pre-restore-UUID window this file guards elsewhere) can
+        // still be reached by a later drain. At unload nothing survives to
+        // read either way.
         KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
         if (!w) {
+            m_columnMaximizedWindows.insert(wid);
             continue;
         }
         KWin::Window* kw = w->window();

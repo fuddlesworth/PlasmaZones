@@ -240,10 +240,16 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // makes KWin re-assert the maximize-area rect and defeat
             // the restore — the tile-request path clears it for the
             // same reason (discussion #461).
-            if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-                ++m_suppressMaximizeChanged;
-                kw->maximize(KWin::MaximizeRestore);
-                --m_suppressMaximizeChanged;
+            //
+            // Through the ledger when the ledger owns the bit, so
+            // membership and the bit move TOGETHER. A bare clear here
+            // would strip a column-maximize member's bit while leaving
+            // the effect recorded as still holding it, which is the
+            // exact split m_columnMaximizedWindows' contract forbids.
+            if (m_columnMaximizedWindows.contains(windowId)) {
+                releaseColumnMaximized(windowId, w);
+            } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
             }
             // Snap-out: leaving tile-managed sizing.
             m_effect->applyWindowGeometry(w, savedGeo.toRect(), /*allowDuringDrag=*/false,
@@ -582,13 +588,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         const auto geomGuard = qScopeGuard([this, prevInApply] {
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
-        // Same maximize-clear the inline restore branch carries: a window
-        // user-maximized before the hold keeps MaximizeFull through it, and
-        // KWin would re-assert the maximize-area rect over the restore.
-        if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-            ++m_suppressMaximizeChanged;
-            kw->maximize(KWin::MaximizeRestore);
-            --m_suppressMaximizeChanged;
+        // Same maximize-clear the inline restore branch carries, and the same
+        // ledger routing: membership and the bit move together, never one
+        // without the other.
+        if (m_columnMaximizedWindows.contains(it.key())) {
+            releaseColumnMaximized(it.key(), w);
+        } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+            applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }
         m_effect->applyWindowGeometry(w, it.value().toRect(), /*allowDuringDrag=*/false,
                                       /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowSnapOut);
