@@ -110,9 +110,10 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     // The width has a floor and the radius does not: a border scaled below one
     // device pixel stops being a thin border and becomes an absent one, while a
     // corner radius rounding away to square is the honest miniature of a small
-    // radius on a big screen.
+    // radius on a big screen. The floor keeps a thin border visible; it must
+    // not invent one, so a zone that asked for no border still gets none.
     const auto scaledBorderWidth = [pixelScale](qreal borderWidth) {
-        return qMax(1.0, borderWidth * pixelScale);
+        return borderWidth > 0.0 ? qMax(1.0, borderWidth * pixelScale) : 0.0;
     };
 
     if (zones.isEmpty()) {

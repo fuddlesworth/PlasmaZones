@@ -112,6 +112,10 @@ QString stripQmlComments(const QString& src)
 /// nested brace, so a Binding holding an inline JS object or a nested element
 /// evades it entirely and the guard passes on the very shape it exists to
 /// catch.
+/// The depth walk must be quote-aware for the same reason the comment stripper
+/// is: a brace inside a string literal (`value: "}"`) would close the span
+/// early and truncate it before the `property:` line, letting the violation
+/// through silently. Braces are counted only in Code state.
 QStringList bindingElementSpans(const QString& src)
 {
     QStringList spans;
@@ -120,16 +124,38 @@ QStringList bindingElementSpans(const QString& src)
     while (it.hasNext()) {
         const QRegularExpressionMatch m = it.next();
         const int open = src.indexOf(QLatin1Char('{'), m.capturedStart());
+        if (open < 0) {
+            continue;
+        }
         int depth = 0;
+        bool closed = false;
+        QChar quote; // null while in Code state, else the open delimiter
         for (int i = open; i < src.size(); ++i) {
-            if (src.at(i) == QLatin1Char('{')) {
+            const QChar c = src.at(i);
+            if (!quote.isNull()) {
+                if (c == QLatin1Char('\\')) {
+                    ++i; // skip the escaped character
+                } else if (c == quote) {
+                    quote = QChar();
+                }
+                continue;
+            }
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
+                quote = c;
+            } else if (c == QLatin1Char('{')) {
                 ++depth;
-            } else if (src.at(i) == QLatin1Char('}')) {
+            } else if (c == QLatin1Char('}')) {
                 if (--depth == 0) {
                     spans.append(src.mid(open, i - open + 1));
+                    closed = true;
                     break;
                 }
             }
+        }
+        // An unterminated Binding block must fail loudly rather than vanish
+        // from the sweep: a silently skipped span is a false pass.
+        if (!closed) {
+            spans.append(src.mid(open));
         }
     }
     return spans;
