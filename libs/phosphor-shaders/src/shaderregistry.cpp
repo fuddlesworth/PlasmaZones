@@ -487,6 +487,13 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param
     if (!param.wrap.isEmpty()) {
         map[QStringLiteral("wrap")] = param.wrap;
     }
+    // Carried into the map because the preview hosts scale px-denominated
+    // parameters by how much they shrink the surface, and they reach the
+    // parameter list through exactly this map (ShaderPreviewController's
+    // backend hands them shaderInfo()).
+    if (!param.unit.isEmpty()) {
+        map[QStringLiteral("unit")] = param.unit;
+    }
 
     // Only include optional values if they are valid
     if (!param.group.isEmpty()) {

@@ -44,7 +44,22 @@ public:
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
     /// Translate stored params to uniform names (delegates to the backend).
-    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params) const;
+    ///
+    /// @p previewWidth is the logical width the preview renders at. Pass it
+    /// and every px-denominated parameter the shader declares is scaled by
+    /// how much the preview shrinks the real screen (`previewWidth /
+    /// targetScreenSize().width()`), so a 4px border over a 300px pane reads
+    /// as the hairline a 4px border is on a 2560px screen instead of the slab
+    /// it would otherwise be. Pass 0 for the raw values the daemon uses.
+    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                  int previewWidth = 0) const;
+
+    /// The linear reduction a @p previewWidth-wide preview applies to the
+    /// backend's target screen, or 1.0 when either is unusable. Exposed
+    /// because zone geometry is scaled by this same factor
+    /// (zonesForShaderPreview) and a host drawing its own px-denominated
+    /// chrome over the preview has to agree with both.
+    Q_INVOKABLE double previewPixelScale(int previewWidth) const;
 
     /// Shader metadata map (delegates to the backend).
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;

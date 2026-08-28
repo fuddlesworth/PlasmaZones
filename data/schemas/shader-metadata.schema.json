@@ -60,6 +60,11 @@
                     "minimum": 0,
                     "maximum": 31,
                     "description": "Explicit UBO lane. 31 is the scalar-pool ceiling, and the color pool tops out at 15 with the image pool at 3, which the pack validator lints per type."
+                },
+                "unit": {
+                    "type": "string",
+                    "enum": ["px"],
+                    "description": "Unit the value is expressed in. Omit for a plain number. \"px\" declares logical pixels of the real surface the shader draws on, which a host rendering at reduced size (a settings preview) scales down by that reduction so the effect reads as a faithful miniature rather than one several times too coarse."
                 }
             }
         }

@@ -80,6 +80,14 @@ public:
         QVariant maxValue;
         bool useZoneColor = false; ///< Hint: consumer may bind to app-specific color
         QString wrap;
+        /// Unit the value is expressed in. Empty for a plain number; `"px"`
+        /// declares the value to be logical pixels of the real surface the
+        /// shader draws on. A host that renders the shader at reduced size — a
+        /// settings preview standing a 300px pane in for a 2560px screen —
+        /// scales such values by that reduction, so the effect reads as a
+        /// faithful miniature rather than an effect several times too coarse.
+        /// The runtime paths draw at true size and scale nothing.
+        QString unit;
 
         /// Convert slot to uniform name (e.g., slot 0 → "customParams1_x")
         QString uniformName() const;

@@ -7,6 +7,7 @@
 #include "phosphor_i18n.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorShaders/PixelUnits.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneDefaults.h>
@@ -20,6 +21,8 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -118,6 +121,12 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     const qreal screenW = qMax(1.0, static_cast<qreal>(screenSz.width()));
     const qreal screenH = qMax(1.0, static_cast<qreal>(screenSz.height()));
 
+    // How much this preview shrinks the screen, for the px-denominated
+    // appearance values below. Derived from the width alone, like
+    // previewPixelScale(): a preview whose aspect differs from the screen's
+    // has no single reduction, and the width is the one both agree to use.
+    const qreal pixelScale = qMin(1.0, resW / screenW);
+
     // Scale zone coordinates to preview pixel dimensions.
     // Relative zones: fractional 0-1 * preview size.
     // Fixed zones: pixel coords / screen size * preview size.
@@ -175,7 +184,13 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
                   .toReal()
             : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
 
-        writeZoneAppearance(out, fillColor, alpha, borderColor, borderRadius, borderWidth);
+        // Border width and radius are px on the SCREEN, and the zone rects
+        // above have just been scaled into a preview a fraction of its size.
+        // Passed through raw they would draw a border several times too thick
+        // and corners several times too round for the geometry they sit on —
+        // the same size-mismatch the shader's own px parameters get from
+        // translateShaderParams. `pixelScale` is that one factor.
+        writeZoneAppearance(out, fillColor, alpha, borderColor, borderRadius * pixelScale, borderWidth * pixelScale);
 
         result.append(out);
     }
@@ -183,9 +198,39 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     return result;
 }
 
-QVariantMap ShaderPreviewController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const
+double ShaderPreviewController::previewPixelScale(int previewWidth) const
 {
-    return m_backend ? m_backend->translateParams(shaderId, params) : QVariantMap();
+    if (!m_backend || previewWidth <= 0) {
+        return 1.0;
+    }
+    const int screenW = m_backend->targetScreenSize().width();
+    if (screenW <= 0) {
+        return 1.0;
+    }
+    // Capped at 1 for the same reason the zone geometry above is never
+    // magnified: a preview larger than the screen is still a preview OF that
+    // screen, and inflating px values past what the shader declares would show
+    // an effect the user cannot get.
+    return std::min(1.0, static_cast<double>(previewWidth) / static_cast<double>(screenW));
+}
+
+QVariantMap ShaderPreviewController::translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                           int previewWidth) const
+{
+    if (!m_backend) {
+        return QVariantMap();
+    }
+    const double scale = previewPixelScale(previewWidth);
+    if (qFuzzyCompare(scale, 1.0)) {
+        return m_backend->translateParams(shaderId, params);
+    }
+    // Scaled BEFORE translation, while the map is still keyed by parameter id:
+    // after translateParams the keys are UBO lane names and the metadata that
+    // says which of them are px no longer matches anything.
+    QVariantMap scaled = params;
+    PhosphorShaders::scalePixelParams(m_backend->shaderInfo(shaderId).value(QStringLiteral("parameters")).toList(),
+                                      scaled, scale);
+    return m_backend->translateParams(shaderId, scaled);
 }
 
 QVariantMap ShaderPreviewController::getShaderInfo(const QString& shaderId) const

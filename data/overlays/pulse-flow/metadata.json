@@ -119,7 +119,8 @@
             "slot": 10,
             "default": 8.0,
             "min": 2.0,
-            "max": 20.0
+            "max": 20.0,
+            "unit": "px"
         },
         {
             "id": "labelGlowSpread",

@@ -300,6 +300,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         param.maxValue = paramObj.value(QLatin1String("max")).toVariant();
         param.useZoneColor = paramObj.value(QLatin1String("use_zone_color")).toBool(false);
         param.wrap = paramObj.value(QLatin1String("wrap")).toString();
+        param.unit = paramObj.value(QLatin1String("unit")).toString();
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);

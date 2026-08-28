@@ -95,7 +95,8 @@
             "type": "float",
             "default": 30.0,
             "min": 5.0,
-            "max": 60.0
+            "max": 60.0,
+            "unit": "px"
         },
         {
             "id": "borderBrightness",
