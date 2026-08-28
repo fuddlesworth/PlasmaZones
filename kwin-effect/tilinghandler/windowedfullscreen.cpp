@@ -276,6 +276,65 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
     m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
 }
 
+TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString& windowId, KWin::EffectWindow* w,
+                                                                  ScrollDecisions::ClaimScope scope)
+{
+    using ScrollDecisions::Claim;
+    using ScrollDecisions::claimReleasesOn;
+
+    ClaimReleaseResult result;
+
+    // Order is claimReleaseOrder's, spelled out rather than sorted: three
+    // claims do not justify a sort, and writing them in order keeps the reason
+    // readable. Windowed fullscreen FIRST — both maximize releases skip a
+    // window that still holds fullscreen, and on X11 setFullScreen has already
+    // landed by the time they run, so this order is what lets a window holding
+    // both get a real restore instead of a skip.
+    static_assert(ScrollDecisions::claimReleaseOrder(Claim::WindowedFullscreen)
+                          < ScrollDecisions::claimReleaseOrder(Claim::MonocleMaximize)
+                      && ScrollDecisions::claimReleaseOrder(Claim::WindowedFullscreen)
+                          < ScrollDecisions::claimReleaseOrder(Claim::ColumnMaximize),
+                  "windowed fullscreen must be released before either maximize claim");
+
+    if (claimReleasesOn(Claim::WindowedFullscreen, scope)) {
+        // Membership OR a surviving layer snapshot — the guard
+        // applyPassiveFloatShed argued for, and the one place this funnel
+        // unifies rather than reproduces: a lone snapshot means membership was
+        // dropped by a path that never called the release, so the release is
+        // still owed. releaseWindowedFullscreenState is idempotent and
+        // deliberately does not consult membership, so re-driving it off the
+        // snapshot is safe everywhere, not only there.
+        const bool hadMembership = m_effect->m_windowedFullscreenWindows.contains(windowId);
+        // OUTSIDE the guard below, which is where both migrated sites had it:
+        // a marker outliving its hold can only refuse a future adopt, and the
+        // case that needs it most is exactly the one the guard rejects. On the
+        // close half of the untrack funnel slotWindowClosed has already removed
+        // membership and the release has already erased the snapshot, so the
+        // guard answers no while an armed marker is still sitting there — and
+        // window ids are appId-derived and reusable, so it would refuse the
+        // adopt of whatever reuses the id.
+        m_windowedFsClearInFlight.remove(windowId);
+        if (hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
+            if (hadMembership) {
+                forgetWindowedFullscreen(windowId);
+            }
+            releaseWindowedFullscreenState(windowId);
+            result.windowedFullscreen = true;
+        }
+    }
+    if (claimReleasesOn(Claim::MonocleMaximize, scope)) {
+        // Membership read BEFORE the call: the release is a no-op for a
+        // non-member, and callers key follow-up work on what was handed back.
+        result.monocle = m_monocleMaximizedWindows.contains(windowId);
+        unmaximizeMonocleWindow(windowId);
+    }
+    if (claimReleasesOn(Claim::ColumnMaximize, scope)) {
+        result.column = m_columnMaximizedWindows.contains(windowId);
+        releaseColumnMaximized(windowId, w);
+    }
+    return result;
+}
+
 void TilingHandler::restoreAllColumnMaximized()
 {
     if (m_columnMaximizedWindows.isEmpty()) {

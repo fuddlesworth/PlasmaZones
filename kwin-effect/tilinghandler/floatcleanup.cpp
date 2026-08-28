@@ -158,6 +158,12 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // setFullScreen(false) needs — on X11 it synchronously emits
     // windowFrameGeometryChanged, and no float call site holds the guard,
     // so an unbracketed drop re-enters the VS-crossing detector mid-cleanup.
+    // Windowed fullscreen releases HERE rather than in the funnel call below,
+    // and the split is deliberate. This one has to land before the geometry
+    // work between the two, while the maximize claims have to land after it —
+    // the comment at that call spells out why. Collapsing them into a single
+    // call would move one compositor write across that work, which is a
+    // behaviour change dressed as a cleanup.
     if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
         releaseWindowedFullscreenState(windowId);
     }
@@ -205,14 +211,20 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // exit path uses: the monocle unmaximize is a geometry change, and
     // resolving the chain after it means the resolve sees the window's
     // final shape.
-    unmaximizeMonocleWindow(windowId);
-    // The column mirror dies with the float for the reason this file already
-    // documents for the sibling states: floatWindowInternal takes the window
-    // OUT of the strip, so the batch its own relayout emits does not contain
-    // it and the per-entry Release in the tile batch never runs. Left held,
-    // the window stays KWin-maximized as a floater and a later re-tile
-    // resolves to None instead of Apply, silently never re-asserting.
-    releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
+    // Both maximize claims, at THIS position rather than beside the windowed-
+    // fullscreen release above: the monocle unmaximize is a geometry change,
+    // and the decoration resolve below must see the window's final shape. The
+    // windowed-fullscreen half already ran, so this call finds nothing left
+    // for it — the scope still names it, because what a path releases should
+    // not depend on which of its claims happened to be handled first.
+    //
+    // Both die with the float for the reason this file documents for the
+    // sibling states: floatWindowInternal takes the window OUT of the strip,
+    // so the batch its own relayout emits does not contain it and the
+    // per-entry Release in the tile batch never runs. Left held, the window
+    // stays KWin-maximized as a floater and a later re-tile resolves to None
+    // instead of Apply, silently never re-asserting.
+    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::StripExit);
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
     // updateAllDecorations follow-up (daemon auto-float past maxWindows)
@@ -250,15 +262,21 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // it protects is cheap and the next such path would be silent.) releaseWindowedFullscreenState is idempotent and
     // deliberately does not consult the membership hash, so re-driving it
     // off the snapshot is safe.
-    const bool hadMembership = m_effect->m_windowedFullscreenWindows.remove(windowId);
-    const bool released = hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId);
-    if (released) {
-        releaseWindowedFullscreenState(windowId);
-    }
-    // A stale clear-in-flight marker must not outlive the hold it guarded —
-    // same rationale as the untrack funnel (cleanupAutotileTracking) and the
-    // snap↔snap transfer belt.
-    m_windowedFsClearInFlight.remove(windowId);
+    // PassiveFloat is the scope whose blank is a genuine DECISION rather than
+    // an accident: monocle is excluded, for the reason spelled out above. The
+    // funnel carries the membership-OR-snapshot guard this site argued for,
+    // and the clear-in-flight drop that used to sit beside it.
+    //
+    // The column mirror DOES answer to this scope, unlike monocle. The
+    // exclusion reasoning above does not carry to it: monocle is refused
+    // because the monocle batch owns the membership and could re-drive it,
+    // whereas a float ENDS the strip's claim outright and no batch will ever
+    // carry a cleared flag for a window that is no longer in the strip. Left
+    // held, the window stays KWin-maximized as a floater for the session —
+    // this channel's whole reason for existing is that the active funnel
+    // never runs for its producers.
+    const ClaimReleaseResult claims =
+        releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::PassiveFloat);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
     m_effect->m_scrollOfferedColumn.remove(windowId);
@@ -272,15 +290,6 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // below, per reconcileDecorationOnPlacementFlip's flip-facts-first
     // contract.
     clearWindowTiledAllScreens(windowId);
-    // The column mirror IS shed on this channel, unlike unmaximizeMonocleWindow
-    // above. The exclusion reasoning there does not carry: that one is refused
-    // because the monocle batch owns the membership and could re-drive it,
-    // whereas a float ENDS the strip's claim outright and no batch will ever
-    // carry a cleared flag for a window that is no longer in the strip. Left
-    // held, the window stays KWin-maximized as a floater for the session —
-    // this channel's whole reason for existing is that the active funnel
-    // never runs for its producers.
-    releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
     // relocation-delta entry makes a later snap on another screen paint the window
@@ -305,7 +314,7 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // window was still fullscreen, so a snapshot-only release with no
     // follow-up reconcile here would leave the window undecorated until an
     // unrelated sweep.
-    if (released) {
+    if (claims.windowedFullscreen) {
         m_effect->reconcileDecorationOnPlacementFlip(windowId);
     }
 }

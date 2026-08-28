@@ -18,6 +18,9 @@
 
 #include "compositor/deferredwindowcommits.h"
 #include "compositor/scrolltabindicatorpainter.h"
+// ClaimScope is part of releaseAllClaims' signature; the header is pure and
+// header-only, so this costs nothing beyond the enum.
+#include "scrolldecisions.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorCompositor/TriggerParser.h>
@@ -361,6 +364,32 @@ public:
     /// window has ONE maximize authority. Answers whether the request was
     /// claimed; an unclaimed one is left entirely alone.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
+
+    /// What a releaseAllClaims call actually handed back. Callers gate
+    /// follow-up work on it — the passive float shed re-resolves decorations
+    /// only when the windowed-fullscreen claim released, because that is the
+    /// one whose exit changes shouldDecorateWindow's answer.
+    struct ClaimReleaseResult
+    {
+        bool windowedFullscreen = false;
+        bool monocle = false;
+        bool column = false;
+    };
+
+    /// Release EVERY compositor-state claim this handler holds on @p windowId
+    /// that answers to @p scope, in ScrollDecisions::claimReleaseOrder.
+    ///
+    /// The one door. Each claim used to be released by its own call at each
+    /// exit path, so every path had to remember every claim independently and
+    /// a forgotten one was an ABSENCE — it compiled, tested and reviewed clean
+    /// while stranding compositor state. Which claims answer to which scope is
+    /// a unit-tested table in scrolldecisions.h, so a blank is a cell with a
+    /// reason rather than a call nobody wrote.
+    ///
+    /// @p w may be null for a window that no longer resolves; each claim
+    /// handles that on its own terms.
+    ClaimReleaseResult releaseAllClaims(const QString& windowId, KWin::EffectWindow* w,
+                                        ScrollDecisions::ClaimScope scope);
 
     /// Hand back the KWin maximize bit this handler imposed for a maximized
     /// column, and shed membership. @p w may be null for a gone window, in

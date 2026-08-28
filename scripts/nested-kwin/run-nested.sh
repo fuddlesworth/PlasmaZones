@@ -46,9 +46,11 @@
 #     from the nested ones. Check the compositor's own output, not the
 #     journal.
 #   - Do not `pkill -f` a pattern that appears in your own command line.
-#   - The stock session bus D-Bus-activates the INSTALLED daemon the
-#     moment the effect connects; daemon.sh kills it and claims the name
-#     with the build-tree daemon.
+#   - A stock session bus D-Bus-activates the INSTALLED daemon the moment
+#     the effect connects, which then answers with the HOST's screens. This
+#     script shadows the service file so activation starts the build-tree
+#     daemon in-session instead; daemon.sh still evicts whoever holds the
+#     name, so the run has one daemon with a known pid and log.
 #   - Screenshots are NOT evidence of effect behaviour: ScreenShot2's
 #     CaptureScreen bypasses the effect chain entirely, and workspace
 #     captures run it with no output pass. Only committed geometry
@@ -168,6 +170,43 @@ export QT_LOGGING_RULES="plasmazones.*=true;kwin.effect.plasmazones.*=true"
 # nested ones and are not, so a run can be read completely backwards.
 export QT_FORCE_STDERR_LOGGING=1
 
+# D-BUS ACTIVATION, redirected to the build tree.
+#
+# The system ships /usr/share/dbus-1/services/org.plasmazones.service, so the
+# nested bus activates the INSTALLED daemon the moment the effect first calls
+# org.plasmazones. That daemon inherits the bus's environment — which names the
+# HOST compositor, not this session — so it connects to the wrong Wayland
+# display, answers queries with the host's screens, and outlives the nested bus
+# when it dies. They accumulate across runs, compete for the bus name, and
+# eventually make daemon.sh lose the race, at which point a run silently tests
+# the host session. That failure reads exactly like a behaviour change.
+#
+# Shadowing the service file ahead of the system one turns activation from a
+# hazard into the correct behaviour: the name resolves to the build-tree daemon
+# started inside this session. dbus-daemon takes the FIRST match while scanning
+# XDG_DATA_DIRS in order, so prepending the shadow leaves every other service
+# (kglobalaccel, the portals) resolving from /usr/share as before.
+SVC_DIR="$NEST/dbus-services/dbus-1/services"
+mkdir -p "$SVC_DIR"
+# The service file cannot carry environment, so it execs a wrapper that sources
+# the session's own env.sh first. env.sh is written just before kwin_wayland
+# execs, and activation can only happen after a client connects, so it is
+# always present by the time this runs.
+cat > "$NEST/activate-daemon.sh" <<ACTIVATE
+#!/bin/sh
+# D-Bus activation shim for the nested session. Never invoked by hand.
+set -eu
+. "$NEST/env.sh"
+exec "$REPO/$BUILD/bin/plasmazonesd"
+ACTIVATE
+chmod +x "$NEST/activate-daemon.sh"
+cat > "$SVC_DIR/org.plasmazones.service" <<SVC
+[D-BUS Service]
+Name=org.plasmazones
+Exec=$NEST/activate-daemon.sh
+SVC
+export XDG_DATA_DIRS="$NEST/dbus-services:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
 EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
 [ -n "$HEIGHT" ] && EXTRA_FLAGS="$EXTRA_FLAGS --height $HEIGHT"
@@ -193,6 +232,7 @@ exec dbus-run-session -- sh -c "
     echo \"export XDG_DATA_HOME='$XDG_DATA_HOME'\"
     echo \"export XDG_CACHE_HOME='$XDG_CACHE_HOME'\"
     echo \"export XDG_STATE_HOME='$XDG_STATE_HOME'\"
+    echo \"export XDG_DATA_DIRS='$XDG_DATA_DIRS'\"
     echo \"export QT_QPA_PLATFORM=wayland\"
     echo \"export QT_PLUGIN_PATH='$QT_PLUGIN_PATH'\"
     echo \"export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1\"
