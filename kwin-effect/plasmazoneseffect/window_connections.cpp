@@ -743,7 +743,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 const bool fullyMaximized = horizontal && vertical;
                 const bool wasFullyMaximized = m_shaderManager.m_lastFullyMaximized.value(window, false);
                 if (fullyMaximized == wasFullyMaximized) {
-                    return; // intermediate axis-only flip, no shader
+                    // Intermediate axis-only flip, so no shader — but on a
+                    // scroll-managed tile the bit still has to go back.
+                    //
+                    // A quick tile (Meta+Left and friends) sets ONE axis, which
+                    // never reaches the interception below, and nothing else
+                    // clears it: the batch arm that would only runs when a
+                    // batch arrives, and the engine emits on change, so a quick
+                    // tile that moves no column schedules none. The window then
+                    // sits half-maximized against the strip's rects with no
+                    // correction coming.
+                    //
+                    // CANCEL ONLY, never a dispatch. Routing this through
+                    // interceptMaximizeRequest would cancel and then toggle,
+                    // turning the user's quick tile into a column maximize (or,
+                    // on a member, into an un-maximize).
+                    m_tilingHandler->cancelAxisOnlyMaximize(window);
+                    return;
                 }
                 m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
                 // IsMaximized is a matchable rule field with the same

@@ -128,6 +128,50 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     kw->maximize(mode);
 }
 
+void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
+{
+    // The cancel half of interceptMaximizeRequest, with no dispatch.
+    //
+    // An axis-only maximize (KWin's quick tile) never reaches the interception,
+    // because the caller's edge filter only passes a change in the FULLY
+    // maximized state. On a scroll-managed tile nothing else takes the bit back
+    // either: the batch arm that clears a stray partial maximize needs a batch,
+    // and the engine emits on change, so a quick tile that moves no column
+    // schedules none. Put the bit back to whatever the engine last said and
+    // stop there — the engine has no half-maximize to express, so there is
+    // nothing to dispatch and asking it would turn a quick tile into a column
+    // maximize.
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (windowId.isEmpty() || !isTiledWindow(windowId)) {
+        return;
+    }
+    QString screenId = m_notifiedWindowScreens.value(windowId);
+    if (screenId.isEmpty()) {
+        screenId = m_effect->getWindowScreenId(w);
+    }
+    if (!isScrollingScreen(screenId)) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const KWin::MaximizeMode restored =
+        m_columnMaximizedWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+    if (kw->maximizeMode() == restored) {
+        return;
+    }
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
+    applyMaximizeSuppressed(kw, restored);
+}
+
 bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {

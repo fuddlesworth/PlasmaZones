@@ -506,12 +506,25 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // alone it would report maximized permanently: the titlebar button
         // would latch with no way to un-latch it, and every toggle press
         // would rewrite persisted intent invisibly while reporting success.
-        // The toggle takes the same exclusion at scrollstrip_sizing.cpp:240, so the two agree; what this suppression
-        // adds is — it compares resolved INTENT — so this only keeps the published verdict honest about what the user
-        // can actually change.
+        // The toggle takes the same exclusion at scrollstrip_sizing.cpp:240,
+        // so the verb and the published verdict agree about which columns are
+        // out of scope.
+        //
+        // A column is also excluded when the context's DEFAULT width itself
+        // renders full. Under such a setting every column on the strip spans
+        // the work area simply by existing, so a rect-only measure reports
+        // every one of them maximized in every batch, and the effect then
+        // asserts KWin MaximizeFull on every scroll-managed window on the
+        // screen with an is-maximized window rule firing strip-wide. That is
+        // not what the flag means. It names a column the user made full when
+        // full is not the norm, which is also the only case the toggle can
+        // undo — the un-maximize arm falls back to half the work area for
+        // exactly this configuration (scrollstrip_sizing.cpp:287).
         const int workAreaMain = params.axis.mainSize(params.workArea);
-        const bool columnMaximized =
-            workAreaMain > 0 && !column.extentPinnedByMinimum && params.axis.mainSize(column.rect) >= workAreaMain;
+        const bool defaultRendersFull =
+            workAreaMain > 0 && ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params) >= workAreaMain;
+        const bool columnMaximized = workAreaMain > 0 && !column.extentPinnedByMinimum && !defaultRendersFull
+            && params.axis.mainSize(column.rect) >= workAreaMain;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 columnHadSkippedTile.insert(column.columnIndex);

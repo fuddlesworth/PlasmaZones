@@ -369,6 +369,17 @@ public:
     /// claimed; an unclaimed one is left entirely alone.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
 
+    /// Put a scroll-managed tile's KWin maximize bit back after an AXIS-ONLY
+    /// flip, with no dispatch to the engine.
+    ///
+    /// interceptMaximizeRequest sits behind the caller's fully-maximized edge
+    /// filter, so a quick tile (one axis) never reaches it, and nothing else
+    /// clears the bit: the batch arm that would needs a batch, and the engine
+    /// emits on change, so a quick tile that moves no column schedules none.
+    /// Cancel only — the engine has no half-maximize to express, and routing
+    /// this through the interception would toggle the column instead.
+    void cancelAxisOnlyMaximize(KWin::EffectWindow* w);
+
     /// What a releaseAllClaims call actually handed back. Callers gate
     /// follow-up work on it — the passive float shed re-resolves decorations
     /// only when the windowed-fullscreen claim released, because that is the

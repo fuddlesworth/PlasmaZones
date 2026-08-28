@@ -1569,6 +1569,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+            // The rect this entry actually OFFERED the client, which is not
+            // snap.geometry whenever the size-continuity pass below re-centres
+            // a Wayland client's held size inside its column. The commanded
+            // rect at the tail of this lambda records what we asked for, and
+            // recording the raw column instead makes the counter-assert
+            // compare the centred commit against a rect that was never
+            // offered — they differ BY CONSTRUCTION for exactly the
+            // population that pass exists for, so it would yank such a client
+            // back into its column on repeat. Null when this entry took no
+            // committing path.
+            QRect scrollDeliveredRect;
             {
                 // Stored as the column's strip POSITION and SIZE, not as a
                 // precomputed translation from the batch's park rect. The paint
@@ -1896,6 +1907,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
                                           << "holding=" << committedSize << "offer=" << geo;
                     }
+                    // AFTER the re-centring, so this is the rect the apply
+                    // below actually offers.
+                    scrollDeliveredRect = geo;
                 }
 
                 // For Wayland windows being retiled to the same zone, skip the
@@ -2450,8 +2464,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // that was never offered, and it would yank a self-
                     // fullscreened client back into its column ~3x/s.
                     if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()
-                        && !fullscreenBailSkippedCommit) {
-                        m_effect->m_scrollCommandedRects.insert(snap.windowId, {snap.geometry, 0, 0});
+                        && !fullscreenBailSkippedCommit && !scrollDeliveredRect.isNull()) {
+                        m_effect->m_scrollCommandedRects.insert(snap.windowId, {scrollDeliveredRect, 0, 0});
                     }
                     // A STRIP entry never takes the reactive centring pass.
                     //
