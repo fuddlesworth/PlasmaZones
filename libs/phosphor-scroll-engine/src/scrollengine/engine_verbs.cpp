@@ -151,9 +151,19 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // maximize interception needs — that request arrives for one specific
     // window (titlebar click, a client's own request from a window that never
     // took focus) and the active column is often a different one.
+    //
+    // CANONICALIZE the named id first, the way every other window-keyed entry
+    // point on this engine does (clearWindowedFullscreen and
+    // reapplyWindowGeometry below, windowMinSizeUpdated, the navigation and
+    // reopen paths). The strip keys on the id frozen at first contact, so a
+    // re-reported id compares unequal, columnOfWindow answers -1 and the verb
+    // refuses — silently, after the compositor has already cancelled KWin's
+    // own maximize, so the click does nothing at all. Empty in, empty out, so
+    // the active-column spelling above is untouched.
+    const QString canonicalId = canonicalizeForLookup(windowId);
     P_SCROLL_VERB(screenId,
-                  windowId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
-                                     : state->strip().toggleMaximizeColumnForWindow(windowId, params),
+                  canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
+                                        : state->strip().toggleMaximizeColumnForWindow(canonicalId, params),
                   "resize", false, QString());
 }
 

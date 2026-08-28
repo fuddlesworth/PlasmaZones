@@ -57,12 +57,18 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // KWin's maximize() has NO fullscreen conditional: called on a
     // still-fullscreen window it takes both "no longer maximized" branches
     // and moveResizes to geometryRestore, shrinking a fullscreen game or
-    // video out of its presentation. Skip while the window holds (or has
-    // requested) fullscreen — requested included for the same committed-lag
-    // reason releaseWindowedFullscreenState and isEligibleForTilingNotify take
-    // the union: on Wayland the committed bit trails a client round-trip, and a
-    // restore landing inside our own enter gap would still shrink the surface
-    // out from under the pending commit.
+    // video out of its presentation. Skip on the REQUESTED bit alone, not on
+    // the union with the committed one.
+    //
+    // The union looked safer and was not. This project is Wayland-only, where
+    // the committed bit trails a client round-trip, so after our own
+    // setFullScreen(false) the requested bit reads false while the committed
+    // one is still true. A union skips the whole exit gap, which is exactly
+    // the window in which the maximize restore is owed and correct. The enter
+    // gap is still covered: there the requested bit is true first, so this
+    // guard fires before the surface ever commits, and a genuinely presenting
+    // client has both bits set and skips too. Requested-false means fullscreen
+    // is going away no matter who asked, and that is when we want the bit back.
     //
     // MEMBERSHIP IS RETAINED ON THIS ARM, deliberately, and it is why the
     // remove above became a contains. Shedding it here while the window is
@@ -73,7 +79,7 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // maximized, so "the next batch re-establishes membership" is false.
     // Holding the entry means the next call on a non-fullscreen window does
     // the real restore.
-    if (kw->isFullScreen() || kw->isRequestedFullScreen()) {
+    if (kw->isRequestedFullScreen()) {
         return;
     }
     m_monocleMaximizedWindows.remove(windowId);
@@ -250,11 +256,11 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
     // in slotWindowFullScreenChanged, or until a teardown restore. Retaining
     // is still the better half of that trade — the old shed left the same bit
     // stranded with nothing even recording that we owed it.
-    if (kw->isFullScreen() || kw->isRequestedFullScreen()) {
+    if (kw->isRequestedFullScreen()) {
         return;
     }
     m_columnMaximizedWindows.remove(windowId);
-    if (kw->maximizeMode() == KWin::MaximizeRestore) {
+    if (kw->requestedMaximizeMode() == KWin::MaximizeRestore) {
         return;
     }
     // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY and moves to
@@ -375,11 +381,11 @@ void TilingHandler::restoreAllColumnMaximized()
         // that bit with nothing owning it. It matters on the daemon-loss
         // caller, where the effect keeps running and a later arm can still do
         // the real restore; at unload nothing survives to care either way.
-        if (kw && (kw->isFullScreen() || kw->isRequestedFullScreen())) {
+        if (kw && kw->isRequestedFullScreen()) {
             m_columnMaximizedWindows.insert(wid);
             continue;
         }
-        if (kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+        if (kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore) {
             // Through the shared bracket rather than an inline ++/maximize/--:
             // three hand-rolled copies of this write had drifted apart, and
             // this one was the copy missing nothing but easy to break next.
@@ -417,7 +423,7 @@ void TilingHandler::restoreAllMonocleMaximized()
             // its restore rect. Membership was cleared before the loop, so a
             // skipped member loses it here — which is right, because this IS
             // the effect giving up ownership.
-            if (kw && !kw->isFullScreen() && !kw->isRequestedFullScreen()) {
+            if (kw && !kw->isRequestedFullScreen()) {
                 kw->maximize(KWin::MaximizeRestore);
                 // Same tracker re-seed as unmaximizeMonocleWindow, and more
                 // load-bearing here: the daemon-loss caller has no apply

@@ -1724,9 +1724,29 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
             if (snap.isMonocle) {
                 if (KWin::Window* kw = snap.window->window()) {
-                    const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+                    // REQUESTED, not committed, for the reason the column arm
+                    // above spells out: on Wayland the committed bit trails a
+                    // client round trip, so a batch landing inside that window
+                    // reads a user-imposed maximize as absent, takes membership
+                    // for a bit the effect never set, and later hands back a
+                    // maximize it never owned.
+                    const bool wasAlreadyMaximized = (kw->requestedMaximizeMode() == KWin::MaximizeFull);
                     ++m_suppressMaximizeChanged;
-                    kw->maximize(KWin::MaximizeFull);
+                    // Same two guards the column arm above carries, and for the
+                    // same reasons. maximize() has no fullscreen conditional, so
+                    // on a presenting surface it moveResizes down to the restore
+                    // rect; and mid-gesture it snaps the window to full size
+                    // under the pointer, because the geometry apply below defers
+                    // during a drag while this call does not.
+                    //
+                    // The membership insert stays OUTSIDE the gate, matching the
+                    // column arm: a maximize claim legitimately stands while the
+                    // bit is not yet held, so a later batch can pay it, and
+                    // unmaximizeMonocleWindow is itself guarded and cannot hand
+                    // back a bit it never took.
+                    if (!kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                        kw->maximize(KWin::MaximizeFull);
+                    }
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
@@ -2426,7 +2446,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Not armed mid-gesture, matching the X11 leg's own
                     // deferred-commit predicate: countering a live drag or
                     // resize would fight the user's hand.
-                    if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    // fullscreenBailSkippedCommit is the third term for the same
+                    // reason the X11 leg and the sibling offered-column write
+                    // both carry it: applyWindowGeometry's non-member fullscreen
+                    // bail commits NOTHING for this entry, so recording a rect
+                    // as commanded would arm the counter-assert against a rect
+                    // that was never offered, and it would yank a self-
+                    // fullscreened client back into its column ~3x/s.
+                    if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()
+                        && !fullscreenBailSkippedCommit) {
                         m_effect->m_scrollCommandedRects.insert(snap.windowId, {snap.geometry, 0, 0});
                     }
                     // A STRIP entry never takes the reactive centring pass.

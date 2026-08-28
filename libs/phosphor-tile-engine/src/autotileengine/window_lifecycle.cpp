@@ -585,6 +585,20 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             // own state-lifecycle migration around it.
             m_states.migrate(windowId, oldKey, currentKeyForScreen(screenId));
             migrateWindowBetweenKeys(windowId, oldKey, screenId);
+        } else if (!isKnownScreen(screenId)) {
+            // The screen does not exist. Do NOTHING rather than read this as a
+            // move to a non-autotile screen.
+            //
+            // This branch is reachable from the wire: Tiling.notifyWindowFocused
+            // validates only that screenId is non-empty, and the adaptor's
+            // engine lookup falls back to the first pipeline engine when no
+            // engine claims the named screen. Without this guard any session-bus
+            // peer could untrack an arbitrary tiled window, permanently, by
+            // naming a screen that does not exist — the removal below has no
+            // repair path on the focus channel. A REAL non-autotile screen is
+            // known, so the genuine cross-screen move still takes the arm below.
+            qCDebug(PhosphorTileEngine::lcTileEngine)
+                << "Ignoring focus report for unknown screen" << screenId << "on" << windowId;
         } else {
             // Genuine cross-screen move to a non-autotile screen — remove
             // tracking entirely. Leaving a stale entry pointing at a snap screen
