@@ -2403,6 +2403,32 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // because the reactive centring is deliberately re-entrant-
                 // driven and the reordering has not been exercised.
                 if (isScrollingScreen(snap.screenId)) {
+                    // A COLUMN-MAXIMIZED Wayland window arms the counter-assert,
+                    // which is otherwise X11-only. The exclusion below is about
+                    // the X11 SELF-mover — a client repositioning itself through
+                    // ConfigureRequests, which no Wayland client can do — but
+                    // the maximize mirror introduces a second external mover
+                    // that exists on both platforms: KWin re-runs its
+                    // maximize-area placement for a MaximizeFull window and
+                    // overwrites the column rect with the ungapped work area.
+                    // Observed live on a cross-output move: the window sat at
+                    // the full output while its column stayed gapped, until the
+                    // next batch happened to move a rect.
+                    //
+                    // The COMMANDED rect is recorded here rather than the
+                    // committed frame the X11 leg uses, because a Wayland
+                    // commit lands a round trip later and recording the frame
+                    // now would capture the pre-commit rect. That substitution
+                    // is only safe for this population: a maximized column is
+                    // the full work-area extent, so unlike an ordinary column
+                    // no client can settle narrower than it for a minimum-size
+                    // reason and be fought forever.
+                    // Not armed mid-gesture, matching the X11 leg's own
+                    // deferred-commit predicate: countering a live drag or
+                    // resize would fight the user's hand.
+                    if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                        m_effect->m_scrollCommandedRects.insert(snap.windowId, {snap.geometry, 0, 0});
+                    }
                     // A STRIP entry never takes the reactive centring pass.
                     //
                     // That pass is an autotile repair: it re-centres a Wayland
@@ -2508,8 +2534,11 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
 
     const QString windowId = m_effect->getWindowId(w);
 
-    // Counter-assert for scroll-managed X11 windows an EXTERNAL mover
-    // relocated. Any frame change landing here outside our own apply
+    // Counter-assert for a scroll-managed window an EXTERNAL mover relocated.
+    // X11 clients for the self-mover reason below; column-maximize members on
+    // either platform, because KWin's own maximize-area re-assert is an
+    // external mover the self-mover reasoning does not cover.
+    // Any frame change landing here outside our own apply
     // bracket was not ours: X11 clients can reposition themselves through
     // ConfigureRequests KWin honors, and a Wine game re-asserting its
     // saved window position was seen live pulling its frame back on-screen
@@ -2536,7 +2565,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // tiled member with no recorded screen — the helper resolves that
     // (fail-closed either way; the helper just fails closed for the right
     // set).
-    if (!w->isWaylandClient() && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
+    // Wayland is excluded for the SELF-mover reason above, with one exception:
+    // a column-maximize member has an external mover that exists on both
+    // platforms — KWin's own maximize-area re-assert. That population arms a
+    // commanded rect at the apply site for exactly this, and nothing else
+    // reaches it, so the general exclusion and its reasoning stand.
+    const bool externallyMovable = !w->isWaylandClient() || m_columnMaximizedWindows.contains(windowId);
+    if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
             && !(m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
@@ -2554,7 +2589,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // re-entrant code is undefined the day anything mutates
                     // the map from inside that window.
                     const QRect commanded = cit->rect;
-                    qCInfo(lcEffect) << "Countering external move of scroll-managed X11 window" << windowId << "from"
+                    qCInfo(lcEffect) << "Countering external move of scroll-managed window" << windowId << "from"
                                      << actual << "back to" << commanded;
                     // Bracketed like every sibling moveResize site: the
                     // synchronous re-entry must not fall through to the
