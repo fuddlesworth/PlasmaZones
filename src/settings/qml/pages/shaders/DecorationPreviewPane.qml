@@ -141,11 +141,11 @@ Item {
             CheckBox {
                 id: focusToggle
 
-                // Starts UNFOCUSED, matching the browser cards. That is the
-                // state that shows what a focus-reactive pack does: focus-fade
-                // is inert when focused, and the border family's inactive
-                // colour never appears. Ticking it is the comparison.
-                checked: false
+                // Starts FOCUSED, matching the browser cards. That is the pack
+                // at full strength, the way its author intended it to be seen.
+                // Unticking it is the comparison: focus-fade's wash and the
+                // border family's inactive colour only appear from there.
+                checked: true
                 text: i18nc("@option:check decoration preview", "Focused")
             }
 

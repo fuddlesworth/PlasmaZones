@@ -116,6 +116,13 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
     // from the live palette plus the user's highlight / inactive settings, so a
     // theme-reactive pack previews in the colours it will actually render in
     // rather than in its raw metadata defaults.
+    // Parameters are used AS DECLARED — no scaling to stand in for a larger
+    // real window. The preview composes on a fixed canvas
+    // (DecorationChainPreview._canvasSize) which IS the surface the pack is
+    // judged on, and shrinking a pack's features to represent a bigger window
+    // makes them illegible in the browser thumbnail that draws that canvas at
+    // 60%. The zone/overlay preview is the opposite case and does scale, see
+    // ShaderPreviewController::translateShaderParams.
     QVariantMap resolved = friendlyParams;
     const QPalette pal = QGuiApplication::palette();
     const QColor highlight =

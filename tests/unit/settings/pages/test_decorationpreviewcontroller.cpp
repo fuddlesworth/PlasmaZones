@@ -148,6 +148,16 @@ private Q_SLOTS:
                         {QStringLiteral("parameters"),
                          QJsonArray{floatParam(QStringLiteral("blurRadius"), 12.0, 1.0, 64.0)}}}));
 
+        // Padding-requesting pack with several parameters, the shape of the
+        // glow / shadow family: one parameter doubles as the outer-margin
+        // request, so the preview has to reserve room for a halo it also draws.
+        QVERIFY(writePack(root, QStringLiteral("pixels"),
+                          QJsonObject{{QStringLiteral("paddingParam"), QStringLiteral("haloSize")},
+                                      {QStringLiteral("parameters"),
+                                       QJsonArray{floatParam(QStringLiteral("haloSize"), 40.0, 0.0, 64.0),
+                                                  floatParam(QStringLiteral("cornerRadius"), 8.0, 0.0, 64.0),
+                                                  floatParam(QStringLiteral("strength"), 0.5, 0.0, 1.0)}}}));
+
         // Theme-reactive pack, the border family's shape: it declares the two
         // colour params the resolver writes and opts into the system accent.
         // Declaration order is slot order and the colour slot keys are 1-based,
@@ -164,6 +174,7 @@ private Q_SLOTS:
         QVERIFY(m_registry.hasEffect(QStringLiteral("glow")));
         QVERIFY(m_registry.hasEffect(QStringLiteral("frost")));
         QVERIFY(m_registry.hasEffect(QStringLiteral("accented")));
+        QVERIFY(m_registry.hasEffect(QStringLiteral("pixels")));
     }
 
     // ── previewChain ─────────────────────────────────────────────────
@@ -247,6 +258,86 @@ private Q_SLOTS:
         QCOMPARE(huge, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
         const double negative = c.previewOuterPadding(QStringLiteral("glow"), {{QStringLiteral("glowSize"), -50.0}});
         QCOMPARE(negative, 0.0);
+    }
+
+    /// The same identity check against the SHIPPING packs rather than the
+    /// fixtures above, because the fixtures are all `float` and the real packs
+    /// are not: mosaic's cellSize and the blur family's blurRadius are `int`,
+    /// and they reach the shader by different routes (the generated p_<id>
+    /// preamble versus a raw buffer-pass lane). A card that composes those
+    /// differently from the dialog shows a different effect in the browser.
+    void shipping_packs_compose_identically_from_an_empty_map()
+    {
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPath(QStringLiteral(P_SOURCE_DIR "/data/surface"), PhosphorFsLoader::LiveReload::Off);
+        QVERIFY2(registry.hasEffect(QStringLiteral("mosaic")), "shipping packs must be discoverable");
+        DecorationPreviewController c(&registry, nullptr);
+
+        for (const QString& packId : {QStringLiteral("mosaic"), QStringLiteral("frosted-glass"), QStringLiteral("blur"),
+                                      QStringLiteral("glow")}) {
+            QVariantMap declared;
+            for (const QVariant& p : c.packInfo(packId).value(QStringLiteral("parameters")).toList()) {
+                const QVariantMap info = p.toMap();
+                if (info.value(QStringLiteral("default")).isValid())
+                    declared.insert(info.value(QStringLiteral("id")).toString(), info.value(QStringLiteral("default")));
+            }
+            const QVariantMap card = c.previewChain(packId, {}).value(0).toMap();
+            const QVariantMap pane = c.previewChain(packId, declared).value(0).toMap();
+            QVERIFY2(!card.isEmpty(), qPrintable(packId));
+            QCOMPARE(card.value(QStringLiteral("preamble")).toString(),
+                     pane.value(QStringLiteral("preamble")).toString());
+            QCOMPARE(card.value(QStringLiteral("params")).toMap(), pane.value(QStringLiteral("params")).toMap());
+        }
+
+        // And the value the mosaic pack's cell size actually reaches the
+        // shader with, from an empty map: its declared default, not zero.
+        const QVariantMap card = c.previewChain(QStringLiteral("mosaic"), {}).value(0).toMap();
+        qDebug().noquote() << "mosaic preamble:" << card.value(QStringLiteral("preamble")).toString();
+        qDebug().noquote() << "mosaic params:" << card.value(QStringLiteral("params")).toMap();
+    }
+
+    /// The browser card passes an EMPTY parameter map and the detail pane
+    /// passes an explicit copy of every declared default (it seeds _liveParams
+    /// from the pack's own metadata). Those two must compose to byte-identical
+    /// stages, or the same pack renders differently in the two places it is
+    /// shown even when both are handed identical geometry.
+    void an_empty_map_and_the_declared_defaults_compose_identically()
+    {
+        DecorationPreviewController c(&m_registry, nullptr);
+
+        for (const QString& packId : {QStringLiteral("pixels"), QStringLiteral("border"), QStringLiteral("accented"),
+                                      QStringLiteral("glow"), QStringLiteral("frost")}) {
+            // What the dialog does: every declared parameter, at its default.
+            QVariantMap declared;
+            const QVariantList params = c.packInfo(packId).value(QStringLiteral("parameters")).toList();
+            QVERIFY2(!params.isEmpty(), qPrintable(packId));
+            for (const QVariant& p : params) {
+                const QVariantMap info = p.toMap();
+                if (info.value(QStringLiteral("default")).isValid())
+                    declared.insert(info.value(QStringLiteral("id")).toString(), info.value(QStringLiteral("default")));
+            }
+
+            const QVariantList fromCard = c.previewChain(packId, {});
+            const QVariantList fromPane = c.previewChain(packId, declared);
+            QCOMPARE(fromCard.size(), fromPane.size());
+            for (qsizetype i = 0; i < fromCard.size(); ++i) {
+                const QVariantMap cardStage = fromCard.at(i).toMap();
+                const QVariantMap paneStage = fromPane.at(i).toMap();
+                const QVariantMap cardParams = cardStage.value(QStringLiteral("params")).toMap();
+                const QVariantMap paneParams = paneStage.value(QStringLiteral("params")).toMap();
+                for (auto it = paneParams.constBegin(); it != paneParams.constEnd(); ++it) {
+                    QVERIFY2(cardParams.contains(it.key()),
+                             qPrintable(packId + QStringLiteral(": card stage is missing ") + it.key()));
+                    QVERIFY2(cardParams.value(it.key()) == it.value(),
+                             qPrintable(packId + QStringLiteral(": ") + it.key() + QStringLiteral(" card=")
+                                        + cardParams.value(it.key()).toString() + QStringLiteral(" pane=")
+                                        + it.value().toString()));
+                }
+                QCOMPARE(cardParams.keys(), paneParams.keys());
+                QCOMPARE(cardStage.value(QStringLiteral("preamble")), paneStage.value(QStringLiteral("preamble")));
+            }
+            QCOMPARE(c.previewOuterPadding(packId, {}), c.previewOuterPadding(packId, declared));
+        }
     }
 
     // ── packInfo ─────────────────────────────────────────────────────
