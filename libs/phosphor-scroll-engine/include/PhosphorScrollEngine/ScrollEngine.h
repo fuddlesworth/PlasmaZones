@@ -875,8 +875,11 @@ public:
 
 Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
-    /// as AutotileEngine::windowsTiled ({windowId, screenId, x, y, width,
-    /// height}). Float transitions are signalled separately via
+    /// as AutotileEngine::windowsTiled. The field list and semantics live
+    /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
+    /// which is the single source: an inline copy here named six of the
+    /// fourteen fields actually emitted and drifted every time one was
+    /// added. Float transitions are signalled separately via
     /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same

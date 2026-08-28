@@ -267,7 +267,7 @@ public Q_SLOTS:
     void setWindowHeightPixels(const QString& screenId, int px);
 
     /**
-     * @brief Toggle the focused column's maximize (compositor-driven)
+     * @brief Toggle a column's maximize (compositor-driven)
      *
      * The KWin effect calls this when a scroll-managed window is asked to
      * maximize (titlebar button, Meta+PgUp, a client-side request), so that

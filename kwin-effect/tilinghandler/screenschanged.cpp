@@ -308,7 +308,16 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
             // KWin property — restoring the border here would remove it
             // on OTHER desktops where the window is still autotiled.
             // Only restore when autotile is fully disabled.
-            if ((w->isOnAllDesktops() || w->desktops().size() > 1) && !newScreens.isEmpty()) {
+            //
+            // Activities carry the identical hazard and the demote pass
+            // already spells it out: an empty activities() means
+            // all-activities, and a multi-activity window may be tiled in
+            // another activity's live session. Without these terms such a
+            // window has its border restored and its tracking dropped here
+            // while the other activity still autotiles it.
+            if ((w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
+                 || w->activities().size() > 1)
+                && !newScreens.isEmpty()) {
                 continue;
             }
             windowsOnRemovedScreens.insert(m_effect->getWindowId(w));

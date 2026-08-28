@@ -48,8 +48,11 @@ class WindowTrackingAdaptor;
  * All engine→adaptor signal connections are made at the composition root
  * (init_engines.cpp), not by the adaptor itself. Most land on a relay entry
  * point that gates or reshapes the payload before the D-Bus signal goes out.
- * tilingChanged and focusWindowRequested are the exceptions: they are direct
- * signal→signal forwards from each engine, because there is nothing to gate.
+ * focusWindowRequested is the exception, and the only unconditional direct
+ * signal-to-signal forward from both engines, because there is nothing to
+ * gate. tilingChanged is a direct forward from the autotile engine but a
+ * GATED relay from the scroll engine, which drops the tick while edge
+ * auto-scroll is running (see the connect in init_engines.cpp).
  */
 class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
 {

@@ -378,9 +378,10 @@ public:
     /// TALLER going forward, nearest shorter going back, wrapping at each
     /// end), measured off a fresh relayout so an AUTO tile enters the cycle
     /// at what it currently renders rather than always at the first entry.
-    /// A TABBED column cycles too: the shown tab's intent sizes the whole
-    /// column (tabbedColumnCrossPx), so the press moves the column's cross
-    /// extent. The measurement then reads the column rather than the tile,
+    /// A TABBED column cycles too, in two steps: the press first CLAIMS
+    /// extent ownership for the shown tab, and the OWNER's intent then sizes
+    /// the whole column (tabbedColumnCrossPx), so the press moves the
+    /// column's cross extent. The measurement then reads the column rather than the tile,
     /// since the indicator's reservation sits between the two.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
@@ -659,8 +660,9 @@ private:
     /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
     /// share the floor would overrule is never written as if it could render.
     int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
-    /// Pixel CROSS extent of TABBED column @p c: the shown tab's own height
-    /// intent, resolved exactly the way the stack branch resolves a single
+    /// Pixel CROSS extent of TABBED column @p c: the height intent of the
+    /// tab that OWNS the extent (Column::heightOwnerId), not the tab on show,
+    /// resolved exactly the way the stack branch resolves a single
     /// tile's Fixed/Preset height, so an entry of the preset vocabulary lands
     /// on the same pixels whichever display the column is in. Auto means the
     /// whole work area, which is what a tabbed column used to be pinned at.

@@ -320,7 +320,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 // the detector never ran its own tracker write. Re-seed it,
                 // the same pairing rule the bracketed applies in the sibling
                 // files follow (screenschanged.cpp has two,
-                // windowedfullscreen.cpp four, pretilegeometry.cpp one; this
+                // windowedfullscreen.cpp five, pretilegeometry.cpp one; this
                 // file has only this one). For this branch the window is a windowed-
                 // fullscreen member and therefore normally strip-tracked, so
                 // the value read back is the engine-authoritative screen rather

@@ -269,10 +269,10 @@ private Q_SLOTS:
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
         // MinPeerApiVersion tracks ApiVersion exactly, so every unreleased
-        // step collapses into the current number. See the v6 and v7 entries in
-        // ServiceConstants.h for what they cover: v6 widened TileRequestEntry
-        // with columnMaximized, v7 gave Scrolling.toggleMaximizeColumn its
-        // windowId argument.
+        // step collapses into the current number. See the v6 entry in
+        // ServiceConstants.h for what it covers: it widened TileRequestEntry
+        // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
+        // windowId argument, in one step, because neither form ever shipped.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened
         // struct or method signature does leave a stale peer's slot simply
@@ -281,8 +281,8 @@ private Q_SLOTS:
         // demarshals perfectly and then misbehaves. The handshake is the only
         // thing refusing it, which is why this must not be "optimized away"
         // later.
-        QCOMPARE(Service::ApiVersion, 7);
-        QCOMPARE(Service::MinPeerApiVersion, 7);
+        QCOMPARE(Service::ApiVersion, 6);
+        QCOMPARE(Service::MinPeerApiVersion, 6);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

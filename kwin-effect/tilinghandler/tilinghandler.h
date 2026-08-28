@@ -1272,8 +1272,9 @@ private:
     void applyScrollFocusScrollBlockedWindows(const QStringList& windowIds);
     void fetchActiveLayouts();
     /// The cursor-screen resolution and ownership gate both wheel chords
-    /// share, and the one place the inversion setting is applied (it flips
-    /// @p delta in place). Empty when the cursor is not over a screen the
+    /// share. It takes no arguments and touches no delta: the inversion
+    /// setting is applied by handleWheelChord, which flips the step before
+    /// spending it. Empty when the cursor is not over a screen the
     /// scrolling engine owns, which the caller reads as "do not act, and do
     /// not consume".
     ///
@@ -1448,7 +1449,7 @@ private:
     /// drop a screen's records wholesale. Readers that need a window's rect
     /// regardless of which screen it was captured under (a VS config change
     /// can re-resolve the notified screen without moving the bucket) scan
-    /// ALL buckets — see the desktop-switch Pass-2 scan in signals.cpp and
+    /// ALL buckets — see the desktop-switch Pass-2 scan in screenschanged.cpp and
     /// the cross-monitor snapshot in handleWindowOutputChanged.
     QHash<QString, QHash<QString, QRectF>> m_preTileGeometries;
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile

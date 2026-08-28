@@ -17,7 +17,7 @@ dispatch); the other two arms are design work, not plumbing.
 
 Maximize is internal engine state, held per mode. For scrolling that state is
 `ScrollStrip::m_preMaximizeWidth` + `m_preMaximizeColumnIdx`
-(`ScrollStrip.h:681`), a single focused-column slot whose index is fixed up on
+(`ScrollStrip.h:741`), a single focused-column slot whose index is fixed up on
 every insert / move / remove in `scrollstrip_structure.cpp`. The scrolling
 engine never sets KWin's own `MaximizeFull` bit, and column geometry is
 engine-authoritative: the next apply batch overwrites whatever KWin wrote.
@@ -52,7 +52,7 @@ there, after its per-axis edge filter; do not add a second connect to the same
 signal.
 
 The neighbouring `windowMaximizedStateAboutToChange` (connected at
-`window_connections.cpp:743`) is the morph's departure-rect capture and is NOT
+`window_connections.cpp:713`) is the morph's departure-rect capture and is NOT
 the hook: it fires pre-commit, so the cancel would race the very state change
 it is trying to replace. The post-commit signal lets the interception read
 what actually landed and write the engine's answer over it.
@@ -87,7 +87,7 @@ unmaximize.
 
 **Transport.** `ScrollingAdaptor` has no `toggleMaximizeColumn` — the verb is
 shortcut-only today, `ShortcutManager::scrollMaximizeColumnRequested` →
-`ScrollEngine::toggleMaximizeColumn` (`scrolling_init.cpp:163`,
+`ScrollEngine::toggleMaximizeColumn` (`src/daemon/daemon/scrolling_init.cpp:162`,
 `engine_verbs.cpp`). Add:
 
 - method in `dbus/org.plasmazones.Scrolling.xml`
@@ -112,7 +112,7 @@ the two entry points disagree about the same state.
 
 **Predicate.** There is no public "is the active column maximized" getter, and
 the honest answer is not a bare boolean. `toggleMaximizeColumnAt`
-(`scrollstrip_sizing.cpp:171`) has a fallback branch for a column at full
+(`scrollstrip_sizing.cpp:217`) has a fallback branch for a column at full
 width with **no** stored slot (maximized in an earlier session, or another
 column's maximize discarded the single slot). Decide and write down which
 definition the echo carries:
@@ -208,7 +208,7 @@ written.
 
 ### What landed
 
-**Wire (v6 → v7).** `Scrolling.toggleMaximizeColumn` gained a `windowId`
+**Wire (v5 → v6).** `Scrolling.toggleMaximizeColumn` gained a `windowId`
 argument, `(s)` → `(ss)`, so the verb acts on the column holding the named
 window rather than on whichever column happens to be active. An empty id keeps
 the shortcut's "active column" meaning. A method signature change breaks a
@@ -352,7 +352,7 @@ The engine's apply lands last and wins.
 In a nested `kwin_wayland --virtual` session running the build-tree effect and
 daemon:
 
-- the v6/v7 handshake gate refuses a mismatched peer, with the installed
+- the v6 handshake gate refuses a mismatched peer, with the installed
   daemon rejected by version before the build-tree pair registered at 7
 - a maximize aimed at a NON-focused window grows that window's column and
   leaves the focused column untouched, which is the whole point of the

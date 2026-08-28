@@ -506,8 +506,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // alone it would report maximized permanently: the titlebar button
         // would latch with no way to un-latch it, and every toggle press
         // would rewrite persisted intent invisibly while reporting success.
-        // The toggle itself is unaffected — it compares resolved INTENT — so
-        // this only keeps the published verdict honest about what the user
+        // The toggle takes the same exclusion at scrollstrip_sizing.cpp:240, so the two agree; what this suppression
+        // adds is — it compares resolved INTENT — so this only keeps the published verdict honest about what the user
         // can actually change.
         const int workAreaMain = params.axis.mainSize(params.workArea);
         const bool columnMaximized =

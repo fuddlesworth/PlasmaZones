@@ -486,6 +486,16 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // redundant resize, not a lost relocation — but it is why this is
             // not the whole answer for such a caller.
             m_effect->m_scrollOfferedColumn.remove(wid);
+            // The other two per-window scroll companions go with it, the way
+            // every other teardown funnel sheds all three together. Leaving
+            // them behind lets a flip BACK to scrolling, before the new
+            // engine's first batch, re-arm the dead session's park relocation
+            // and counter-assert a rect the strip no longer owns. The
+            // relocation is a paint input, so its removal carries damage.
+            m_effect->m_scrollCommandedRects.remove(wid);
+            if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
             if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
                 forgetWindowedFullscreen(wid);
                 windowedFsLeavingScrolling.append(wid);

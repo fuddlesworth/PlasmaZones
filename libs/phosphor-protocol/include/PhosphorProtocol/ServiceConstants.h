@@ -350,21 +350,24 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       to" rather than "is this column maximized". Same doctrine as tabFrom:
 //       the engine names what it did instead of leaving the compositor to
 //       infer it from rect coincidence.
-//   v7: Scrolling.toggleMaximizeColumn gains a windowId argument, (s) -> (ss).
-//       A method signature change, so it breaks a mismatched peer the same way
-//       a widened struct does and takes the same bump.
 //
-//       v6 shipped the verb screen-scoped, acting on the strip's ACTIVE
-//       column, while the effect dispatches it from ONE window's maximize
-//       request. Those are the same column only when the requesting window is
+//       Scrolling.toggleMaximizeColumn gains a windowId argument in the same
+//       step, (s) -> (ss). A method signature change breaks a mismatched peer
+//       the same way a widened struct does, and it folds in here rather than
+//       taking a bump of its own for the reason v5 states above: neither form
+//       ever shipped, so no released peer spoke an intermediate version.
+//
+//       The first form of the verb was screen-scoped, acting on the strip's
+//       ACTIVE column, while the effect dispatches it from ONE window's
+//       maximize request. Those are the same column only when the requesting window is
 //       already focused. A client's own maximize request from a background
 //       window, and a titlebar click that does not raise first, both cancelled
 //       the clicked window's maximize and then resized a different column.
 //       The window is now named on the wire so the engine can act on the
 //       column holding it. An empty windowId keeps the old meaning (the active
-//       column), which is what the keyboard shortcut sends.
-inline constexpr int ApiVersion = 7;
-inline constexpr int MinPeerApiVersion = 7;
+//       column), which is the in-process spelling the keyboard shortcut uses.
+inline constexpr int ApiVersion = 6;
+inline constexpr int MinPeerApiVersion = 6;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -116,7 +116,11 @@ struct CompositorClaim {
 // One call per exit path, replacing 26 scattered ones:
 void releaseAllClaims(const QString& windowId, KWin::EffectWindow* w, ClaimScope scope);
 // Teardown, in declared order:
-void restoreAllClaims();
+void restoreAllClaims(); // NOT IMPLEMENTED: the teardown half of this
+                         // proposal never landed. The bulk restores
+                         // (restoreAllWindowedFullscreen and friends) are
+                         // per-set and cannot be expressed as a per-window
+                         // funnel call, so teardown still calls them directly.
 ```
 
 `ClaimScope` is what keeps the deliberate blanks deliberate. A path declares

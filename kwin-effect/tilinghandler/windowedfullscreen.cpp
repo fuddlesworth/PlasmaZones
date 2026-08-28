@@ -342,14 +342,20 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         }
     }
     if (claimReleasesOn(Claim::MonocleMaximize, scope)) {
-        // Membership read BEFORE the call: the release is a no-op for a
-        // non-member, and callers key follow-up work on what was handed back.
-        result.monocle = m_monocleMaximizedWindows.contains(windowId);
+        // What was HANDED BACK, not what was held: both maximize releases
+        // RETAIN membership when they skip a still-fullscreen window, so a
+        // pre-read contains() reports true for a claim the effect is still
+        // holding. The struct documents itself as what the call actually
+        // released, and a caller gating a repaint or a decoration re-resolve
+        // on it would act on a bit that never moved.
+        const bool hadMonocle = m_monocleMaximizedWindows.contains(windowId);
         unmaximizeMonocleWindow(windowId);
+        result.monocle = hadMonocle && !m_monocleMaximizedWindows.contains(windowId);
     }
     if (claimReleasesOn(Claim::ColumnMaximize, scope)) {
-        result.column = m_columnMaximizedWindows.contains(windowId);
+        const bool hadColumn = m_columnMaximizedWindows.contains(windowId);
         releaseColumnMaximized(windowId, w);
+        result.column = hadColumn && !m_columnMaximizedWindows.contains(windowId);
     }
     return result;
 }
