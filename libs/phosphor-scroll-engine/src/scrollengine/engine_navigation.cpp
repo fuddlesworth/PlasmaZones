@@ -582,6 +582,13 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         // happened; applyLayout below is the geometry apply it must precede.
         Q_EMIT windowOutputMoveExpected(windowId, target);
         targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
+        // A non-Auto height claims the destination column's extent when that
+        // column is tabbed, and unlike the unfloat and drag-cancel paths this
+        // one carries no prior-ownership flag to restore. None is wanted: the
+        // move focuses the window on arrival, so it IS the tab on show, and
+        // the tab on show owning the column is the same rule the flip into
+        // tabbed follows.
+        //
         // Re-stated VERBATIM, not rescaled to the target's cross extent, the
         // same way the column width above crosses unrescaled. A Fixed intent
         // is a number the user (or the client) asked for, and this engine

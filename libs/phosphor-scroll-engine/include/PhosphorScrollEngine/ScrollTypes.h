@@ -793,10 +793,52 @@ struct Column
     int activeTileIdx = 0;
     ColumnWidth width;
     ColumnDisplay display = ColumnDisplay::Normal;
+    /// Which tab's height intent decides a TABBED column's cross extent, by
+    /// window id. Meaningless while the column is Normal, where every tile's
+    /// own height governs its slice of the stack.
+    ///
+    /// A tabbed column shows one tab at a time, so its extent cannot be "the
+    /// shown tab's height" — that would resize the column on every tab switch
+    /// and break the compositor's cross-fade, which is built on the arriving
+    /// tab occupying the rect the outgoing one vacated. One tab therefore owns
+    /// the extent for as long as the column is tabbed.
+    ///
+    /// Held as an ID rather than an index because tiles are inserted, removed
+    /// and reordered underneath it (an index would need re-clamping at every
+    /// one of those sites, which is precisely the bookkeeping that rots), and
+    /// because an id that no longer names a live tile is self-describing: the
+    /// resolver falls back rather than pointing at whatever moved into the
+    /// slot. Empty means "no tab has claimed it", which resolves to the
+    /// deterministic scan tabbedColumnCrossPx documents.
+    ///
+    /// This is the ONE place the ownership lives. It used to be inferred —
+    /// every height writer rewrote its siblings to Auto so a scan for the
+    /// first non-Auto tab would find the right one. That destroyed the
+    /// siblings' intents irrecoverably on a tab toggle, and it could not be
+    /// maintained at all while the column was Normal, so a Normal column with
+    /// several sized tiles handed its extent to whichever tile sat first in
+    /// the stack the moment it was tabbed.
+    QString heightOwnerId;
 
     bool isEmpty() const
     {
         return tiles.isEmpty();
+    }
+    /// The tile whose height decides this column's cross extent while tabbed,
+    /// or nullptr when no live non-minimized tab owns it. Minimized tabs are
+    /// refused: they are dropped from the layout entirely, so a height they
+    /// carry must not size a column they do not appear in.
+    const Tile* heightOwner() const
+    {
+        if (heightOwnerId.isEmpty()) {
+            return nullptr;
+        }
+        for (const Tile& tile : tiles) {
+            if (tile.windowId == heightOwnerId) {
+                return tile.minimized ? nullptr : &tile;
+            }
+        }
+        return nullptr;
     }
     /// True when every tile is minimized — the column occupies no strip MAIN
     /// extent.

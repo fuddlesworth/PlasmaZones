@@ -346,10 +346,9 @@ public:
     /// case every column keeps the width it has and only display and
     /// heights are reset. The height is std::nullopt on the same terms (the
     /// ClientDecides height kind with no rule pinning one), and then every
-    /// tile keeps the height it has, single-owner tabbed columns included:
-    /// the forced-Auto pass used to collapse a multi-owner tabbed column as a
-    /// side effect and this arm deliberately does not, for the reason
-    /// toggleActiveColumnTabbed records.
+    /// tile keeps the height it has. A column the display write turns Tabbed
+    /// still resolves to one extent, because the transition names an owner
+    /// rather than flattening the tabs that do not own it.
     /// Returns true when any intent changed. Clears the single pre-maximize
     /// slot whenever a default width was supplied, since nothing is maximized
     /// once every column is back at that default — including when no column
@@ -441,6 +440,14 @@ public:
     /// has to read it before the take destroys the tile, and each had grown
     /// its own column-then-tile walk to do so.
     WindowHeight windowHeightIntent(const QString& windowId) const;
+
+    /// Make @p windowId's tab the one whose height decides its TABBED column's
+    /// cross extent. The restore seam for that ownership: the mode-round-trip
+    /// stash and the persisted blob both carry it, because the tabs that do
+    /// not own it keep their own heights and a fallback scan would hand the
+    /// column to a different tab than held it. No-op for an unknown window or
+    /// a Normal column. Returns whether the owner moved.
+    bool setTabbedHeightOwner(const QString& windowId);
 
     /// Strip indices of the columns currently intersecting the viewport, in
     /// strip order — a viewport-intersection helper, NOT the zone-number
@@ -602,21 +609,29 @@ private:
     /// tile is dropped from the relayout entirely). Shortcut-rate path, not
     /// per-frame — both height verbs call it once per press.
     int activeTileCrossPx(const ScrollLayoutParams& params) const;
-    /// Make tile @p tileIdx of TABBED column @p c the column's sole height
-    /// owner, by clearing every other tab's intent back to Auto. niri's
-    /// convert_heights_to_auto, applied to the one case that needs it here:
-    /// tabbedColumnCrossPx resolves the column from the ONE non-Auto tab, so
-    /// without this a second tab carrying an old intent would decide the
-    /// column's extent depending on which tab happened to be focused.
+    /// Make @p tileIdx the tab whose height decides @p c's cross extent, when
+    /// @p c is tabbed and @p incoming is a height worth owning it for. Writes
+    /// only Column::heightOwnerId — no tile's height is touched, so the tabs
+    /// that lose the claim keep their intents and untabbing restores the
+    /// stack.
     ///
-    /// No-op unless @p c is tabbed AND @p incoming is non-Auto: a write of
-    /// Auto claims nothing, and wiping the siblings for it would discard a
-    /// height the user set on another tab. Answers whether any sibling
-    /// actually changed, which is a layout change in its own right even when
-    /// the target tile's own intent is untouched. Auto siblings keep their
-    /// WEIGHT: it does nothing while tabbed and is what the stack branch
-    /// distributes by once the column is untabbed.
+    /// No-op unless @p c is tabbed AND @p incoming is non-Auto. A write of
+    /// Auto means "I am not sizing this tab", which is not a bid for the
+    /// column: letting it claim would hand the whole work area to a tab that
+    /// asked for nothing and drop the extent a sibling had been given. The
+    /// DISPLAY transition may still name an Auto owner (applyColumnDisplay
+    /// does, for the tab on show) — that is a deliberate choice of owner
+    /// rather than a side effect of writing a height.
+    ///
+    /// Also a no-op when @p tileIdx already owns it. Returns whether the owner
+    /// moved, which is a layout change in its own right: the column resolves
+    /// through the owner, so moving the pointer moves the column.
     static bool claimTabbedHeightOwnership(Column& c, int tileIdx, const WindowHeight& incoming);
+    /// Set @p c's display, maintaining the extent ownership across the
+    /// transition: entering Tabbed hands it to the tab on show, leaving Tabbed
+    /// drops it. The ONE way display is written for an existing column, so the
+    /// invariant cannot be skipped at a call site. Returns whether it changed.
+    static bool applyColumnDisplay(Column& c, ColumnDisplay display);
 
     // scrollstrip_structure.cpp
     void removeColumnAt(int columnIndex);

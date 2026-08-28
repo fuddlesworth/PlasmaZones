@@ -352,6 +352,8 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
+        // Rides with the display it belongs to; see StashedColumn.
+        sc.heightOwnerId = col.heightOwnerId;
         // Clamped, not value(): an out-of-range activeTileIdx would record an
         // EMPTY active id and the restore's tab re-assertion would silently
         // no-op. Every mutation site clamps today, so this is the belt — but
@@ -599,6 +601,11 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         if (stash[colIdx].activeWindowId == claimedCandidate) {
             stash[colIdx].activeWindowId = windowId;
         }
+        // Remapped on the same terms as the shown tab: a same-app window
+        // inheriting a dead one's slot inherits whether it sized the column.
+        if (stash[colIdx].heightOwnerId == claimedCandidate) {
+            stash[colIdx].heightOwnerId = windowId;
+        }
     };
     // Captured BEFORE the insert, for the view re-assert below: whether the
     // stashed focus has already been claimed (so the restore has landed once
@@ -676,6 +683,13 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (const QString tab = stash.at(colIdx).activeWindowId;
         !tab.isEmpty() && tab != windowId && state->strip().columnOfWindow(tab) >= 0) {
         state->strip().focusWindow(tab, params);
+    }
+    // The stashed EXTENT owner, a different question from the shown tab and
+    // allowed to name a different window. Skipped until it is on the strip:
+    // the restore arrives one window at a time.
+    if (const QString owner = stash.at(colIdx).heightOwnerId;
+        !owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
+        state->strip().setTabbedHeightOwner(owner);
     }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and

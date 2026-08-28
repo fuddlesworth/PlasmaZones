@@ -55,6 +55,7 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     const Column& column = strip.columns().at(columnIdx);
     slot.width = column.width;
     slot.display = column.display;
+    slot.ownedTabbedHeight = column.display == ColumnDisplay::Tabbed && column.heightOwnerId == windowId;
     const QSize minSize = strip.windowMinimumSize(windowId);
     slot.minWidth = minSize.width();
     slot.minHeight = minSize.height();
@@ -99,7 +100,14 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         if (slot.column >= 0 || slot.tileIndex >= 0) {
             strip.setWindowHeightIntent(windowId, slot.height);
             // Same tile-captured gate: an Escape must hand back windowed
-            // fullscreen exactly as it hands back the height intent.
+            // fullscreen and the tabbed extent ownership exactly as it hands
+            // back the height intent. The ownership is not implied by that
+            // write — it claims nothing for an Auto intent — so a cancelled
+            // drag of the owning tab would otherwise leave the column at the
+            // height of whichever tab replaced it.
+            if (slot.ownedTabbedHeight) {
+                strip.setTabbedHeightOwner(windowId);
+            }
             if (slot.windowedFullscreen) {
                 strip.setWindowedFullscreen(windowId, true);
             }

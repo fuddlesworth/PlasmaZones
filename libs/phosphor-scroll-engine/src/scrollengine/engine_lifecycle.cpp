@@ -516,11 +516,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // width twin's reach ends too: that arm passes the width to
     // insertWindowIntoActiveColumn, which honours it only on the empty-strip
     // fallback, so a joining window keeps its host column's shape. Committing
-    // a height there is not merely redundant, it is destructive — the intent
-    // is Fixed, so on a TABBED host setWindowHeightIntent's
-    // claimTabbedHeightOwnership clears every sibling's intent, and on a
-    // Normal host the relayout renormalizes the siblings down to fit the
-    // newcomer. A joining tile takes the column's even split, as before.
+    // a height there is not merely redundant, it is disruptive — the intent
+    // is Fixed, so on a TABBED host setWindowHeightIntent hands the arrival
+    // the column's extent and resizes every tab to a window that just showed
+    // up, and on a Normal host the relayout renormalizes the siblings down to
+    // fit the newcomer. A joining tile takes the column's even split, as
+    // before.
     //
     // Placed AFTER the insert rather than folded into params.defaultWindowHeight
     // because the insert is what puts the tile in the strip: unlike the
