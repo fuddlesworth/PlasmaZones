@@ -277,7 +277,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Default height")
                     searchAnchor: "defaultWindowHeightKind"
-                    description: i18n("How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors.")
+                    description: i18n("How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors. With Window decides, it opens at the height the application asked for.")
 
                     WideComboBox {
                         Accessible.name: i18n("Default window height")
@@ -294,7 +294,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Fixed height")
                     searchAnchor: "defaultWindowHeightFixed"
-                    description: i18n("How many pixels a new window takes across the strip")
+                    description: i18n("How much space a new window takes inside its column, in pixels")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindFixed
                     visible: true
 

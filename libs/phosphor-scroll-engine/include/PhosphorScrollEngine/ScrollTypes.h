@@ -489,8 +489,8 @@ enum class DefaultHeightKind : int {
     Fixed = 1,
     Preset = 2,
     /// New windows join their column at the client's own cross extent, the
-    /// height twin of DefaultWidthKind::ClientDecides. Appended as 3 — the
-    /// three below are load-bearing wire values in stored configs.
+    /// height twin of DefaultWidthKind::ClientDecides. Appended as 3 because
+    /// the other three are load-bearing wire values in stored configs.
     ClientDecides = 3,
 };
 

@@ -4,7 +4,7 @@
 #pragma once
 
 // Shared fixture helpers for the PhosphorScrollEngine suites that fixture
-// against a screen — the two strip-model files and the nine engine files.
+// against a screen — the four strip-model files and the ten engine files.
 // (test_stripaxis and test_scrollpark stand alone: they exercise the mapper
 // and the park geometry directly and need no screen fixture.) One definition of the
 // 1200x800 geometry, because a work area that drifts between files quietly
@@ -290,8 +290,9 @@ using GeometryFn = std::function<QRect(const QString&)>;
 /// (a panel inset) when the test needs to tell the work area apart from the
 /// screen rect, which is what the parking bounds are measured against.
 /// @p windowTracker is null for every suite but the behaviour one: the sticky
-/// gate and the client-decides width short-circuit on a null tracker, so
-/// those two paths need a stub (scrollstubtracking.h) to be observable at all.
+/// gate and the client-decides width and height all short-circuit on a null
+/// tracker, so those paths need a stub (scrollstubtracking.h) to be
+/// observable at all.
 inline PhosphorScrollEngine::ScrollEngine*
 makeProviderEngine(QObject* parent, const QSet<QString>& screens, GeometryFn screenGeometry = {},
                    GeometryFn availableGeometry = {}, PhosphorEngine::IWindowTrackingService* windowTracker = nullptr)

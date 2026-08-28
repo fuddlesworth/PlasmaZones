@@ -486,13 +486,24 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
                 }
             }
         }
+        // Note the nullopt-height arm leaves a column the display write just
+        // turned Tabbed holding several non-Auto tiles, where the forced-Auto
+        // pass used to collapse them as a side effect. That is the same
+        // pre-existing single-owner gap toggleActiveColumnTabbed documents,
+        // and it is left alone here for the same reasons: the available claim
+        // discards the siblings' intents irrecoverably, which contradicts this
+        // arm's whole promise to leave heights as they are, and it no-ops when
+        // the active tile is Auto.
     }
     // Nothing is maximized once every column is at the default, so the slot
-    // would otherwise hand a stale intent to the next un-maximize. Only when
-    // widths were actually rewritten: under "the client decides" the widths
-    // stay as they are, a maximized column stays maximized, and clearing the
-    // slot would make the next un-maximize fall back to the half-width
-    // proportion instead of the width the user had before.
+    // would otherwise hand a stale intent to the next un-maximize. Keyed on a
+    // default width being SUPPLIED, not on one having been written: a column
+    // already sitting at a full-width default needs no write and is still
+    // un-maximized afterwards, which is the case resetToDefaultsClearsThe-
+    // PreMaximizeSlot pins. Under "the client decides" there is no default,
+    // the widths stay as they are, a maximized column stays maximized, and
+    // clearing the slot would make the next un-maximize fall back to the
+    // half-width proportion instead of the width the user had before.
     if (defaultWidth) {
         m_preMaximizeColumnIdx = -1;
     }
@@ -528,11 +539,17 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
+    // activeCol is dereferenced unguarded below, on the same by-construction
+    // reasoning adjustActiveWindowHeight spells out: activeTileMutable answers
+    // a tile only when activeColumnMutable answered a column, so the !tile
+    // bail already covers the null case. Kept as one story rather than
+    // guarding here and not there, which reads as a real nullability
+    // difference between two halves of the same function.
     Column* activeCol = activeColumnMutable();
     // A tabbed column sizes ITSELF from this tile's intent
     // (tabbedColumnCrossPx), so the press works there as well; what changes is
     // the space the comparison happens in. See the reservation below.
-    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
+    const bool tabbed = activeCol->display == ColumnDisplay::Tabbed;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area, the sibling verbs' bail
@@ -563,11 +580,9 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     // resolve past it and the walk could pick one that renders identically
     // to the current height.
     int visibleTiles = 0;
-    if (activeCol) {
-        for (const Tile& t : activeCol->tiles) {
-            if (!t.minimized) {
-                ++visibleTiles;
-            }
+    for (const Tile& t : activeCol->tiles) {
+        if (!t.minimized) {
+            ++visibleTiles;
         }
     }
     // A tabbed column stacks nothing, so it spends no inner gaps and its
@@ -696,6 +711,17 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     }
     activeCol->tiles[ti].height = result;
     return true;
+}
+
+WindowHeight ScrollStrip::windowHeightIntent(const QString& windowId) const
+{
+    const int ci = columnOfWindow(windowId);
+    if (ci < 0) {
+        return {};
+    }
+    const Column& col = m_columns.at(ci);
+    const int ti = col.indexOfWindow(windowId);
+    return ti >= 0 ? col.tiles.at(ti).height : WindowHeight{};
 }
 
 bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHeight& height)

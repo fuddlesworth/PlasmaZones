@@ -1491,6 +1491,51 @@ private Q_SLOTS:
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("; "))));
     }
 
+    /// The height kind has no coercion table to test (its value key serves
+    /// Fixed alone, so there is no jointly-impossible pair to repair the way
+    /// the dual-kind width value has), but it does have a setter, and until
+    /// ClientDecides was appended nothing exercised it at all. Pins the two
+    /// things that setter owes: it stores every legal kind including the
+    /// newest, and it emits once per EFFECTIVE change and not at all for a
+    /// write of the value already held.
+    void heightKindStoresEveryKindAndEmitsOnce()
+    {
+        Settings settings;
+        QSignalSpy kindSpy(&settings, &Settings::scrollingDefaultWindowHeightKindChanged);
+
+        const QList<int> ladder{ConfigDefaults::scrollingHeightKindAuto(), ConfigDefaults::scrollingHeightKindFixed(),
+                                ConfigDefaults::scrollingHeightKindPreset(),
+                                ConfigDefaults::scrollingHeightKindClientDecides()};
+        // Start away from the first rung so the opening write is a real flip
+        // whichever kind the shipped default happens to be.
+        settings.setScrollingDefaultWindowHeightKind(ConfigDefaults::scrollingHeightKindPreset());
+        kindSpy.clear();
+
+        int expectedEmits = 0;
+        int previous = ConfigDefaults::scrollingHeightKindPreset();
+        QStringList failures;
+        for (const int kind : ladder) {
+            settings.setScrollingDefaultWindowHeightKind(kind);
+            if (kind != previous) {
+                ++expectedEmits;
+            }
+            previous = kind;
+            if (settings.scrollingDefaultWindowHeightKind() != kind) {
+                failures.append(QStringLiteral("kind %1 did not read back").arg(kind));
+            }
+            if (kindSpy.count() != expectedEmits) {
+                failures.append(
+                    QStringLiteral("kind %1: %2 emits, expected %3").arg(kind).arg(kindSpy.count()).arg(expectedEmits));
+            }
+            // A second write of the same kind must be silent.
+            settings.setScrollingDefaultWindowHeightKind(kind);
+            if (kindSpy.count() != expectedEmits) {
+                failures.append(QStringLiteral("kind %1 re-write emitted").arg(kind));
+            }
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("; "))));
+    }
+
     // ── normalizeScrollingColumnWidthValue ──────────────────────────────
     //
     // The width VALUE and KIND are two independent keys, and the schema's

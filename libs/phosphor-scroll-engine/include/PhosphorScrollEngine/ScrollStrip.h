@@ -336,24 +336,31 @@ public:
     /// whose minimum size already pins it at or above the target refuses too.
     bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
     /// Every column back to @p defaultWidth and @p defaultDisplay, and every
-    /// tile back to the even auto-split: the scrolling half of the Retile
-    /// shortcut, whose other modes re-apply their layout the same way. Both
-    /// defaults are arguments because the engine resolves them per screen:
+    /// tile back to @p defaultHeight: the scrolling half of the Retile
+    /// shortcut, whose other modes re-apply their layout the same way. All
+    /// three defaults are arguments because the engine resolves them per
+    /// screen:
     /// the display is not carried in params at all, and the width is
     /// std::nullopt when the context's default is "the client decides" (the
     /// engine's ClientDecides kind with no rule pinning a width), in which
     /// case every column keeps the width it has and only display and
     /// heights are reset. The height is std::nullopt on the same terms (the
     /// ClientDecides height kind with no rule pinning one), and then every
-    /// tile keeps the height it has. Returns true when any intent changed.
-    /// Clears the single pre-maximize slot, since no column is maximized
-    /// afterwards.
+    /// tile keeps the height it has, single-owner tabbed columns included:
+    /// the forced-Auto pass used to collapse a multi-owner tabbed column as a
+    /// side effect and this arm deliberately does not, for the reason
+    /// toggleActiveColumnTabbed records.
+    /// Returns true when any intent changed. Clears the single pre-maximize
+    /// slot whenever a default width was supplied, since nothing is maximized
+    /// once every column is back at that default — including when no column
+    /// needed rewriting. Under a std::nullopt width a maximized column stays
+    /// maximized and keeps its restore slot.
     bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
                          const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                          const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
     /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
-    /// the restore paths' setWindowHeightIntent, and the absolute
+    /// the restore and open paths' setWindowHeightIntent, and the absolute
     /// set-window-height verb. Callers own validation. The height is the
     /// tile's extent ACROSS the strip.
     bool setActiveWindowHeight(const WindowHeight& height);
@@ -420,10 +427,20 @@ public:
     bool isWindowedFullscreen(const QString& windowId) const;
 
     /// Direct height-intent write for @p windowId (any tile, not just the
-    /// active one) — the mode-round-trip restore path re-applies stashed
-    /// heights through this. Returns false for an unknown window or an
-    /// unchanged intent.
+    /// active one). The mode-round-trip restore path re-applies stashed
+    /// heights through this, the open path commits a client-decided height
+    /// and a migration re-states the height the window carried over, and the
+    /// per-window open-height rule resolves through it too. Returns false for
+    /// an unknown window or an unchanged intent.
     bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
+
+    /// The height intent @p windowId's tile carries, or a default-constructed
+    /// (Auto) one for an unknown window. The reader half of
+    /// setWindowHeightIntent: every caller that hands a window's height across
+    /// a structural boundary — the cross-output move, the context migration —
+    /// has to read it before the take destroys the tile, and each had grown
+    /// its own column-then-tile walk to do so.
+    WindowHeight windowHeightIntent(const QString& windowId) const;
 
     /// Strip indices of the columns currently intersecting the viewport, in
     /// strip order — a viewport-intersection helper, NOT the zone-number

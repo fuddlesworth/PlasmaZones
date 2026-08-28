@@ -234,6 +234,21 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         // unfloated came back at Auto instead of the configured default.
         if (restore.column >= 0 || restore.tileIndex >= 0) {
             state->strip().setWindowHeightIntent(windowId, restore.height);
+        } else {
+            // A seeded entry has no remembered height, so the tile carries the
+            // context default the fresh insert seeded. Under "the client
+            // decides" that default is the concrete Auto fallback the kind
+            // leaves behind, and the commit that gives the window its own
+            // height lives on the open path, which an unfloat does not run —
+            // so a window floated at open and then unfloated came back sharing
+            // its column, the one shape the setting exists to avoid.
+            // Post-insert params, for the reason the open path's own call
+            // documents: with smart gaps the outer gaps switch off at exactly
+            // one column, so an unfloat that takes the strip 0->1 or 1->2
+            // changes the work area the bound is measured against, and these
+            // are persisted pixels that do not self-heal.
+            commitClientDecidedHeight(state->strip(), windowId, contextScreen, overridesForScreen(contextScreen),
+                                      layoutParamsForScreen(contextScreen, state->strip().columnCount()));
         }
         state->strip().focusWindow(windowId, params);
         // No setFloatingHasFocus(false) here: removeFloating already cleared

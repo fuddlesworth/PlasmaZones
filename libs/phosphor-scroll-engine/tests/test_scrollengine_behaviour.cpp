@@ -5,6 +5,12 @@
 // config-seeded behaviour globals rather than over the width/height defaults
 // (those are test_scrollengine_perscreen's subject).
 //
+// The two ClientDecides kinds are the deliberate exception and live here, not
+// there. What they need is the window TRACKER (a client-decided size is read
+// off it), and this is the only suite wired with one — see the stub's own
+// note. Their sibling's concern is the kind trio's per-screen resolution;
+// theirs is a verdict that changes where the size comes from at all.
+//
 // One case per key, and each *OverrideIsPerScreen case drives TWO screens
 // off the same engine: the screen carrying the override and a screen
 // carrying none. That pairing is the point. (Two rejection cases — the
@@ -84,6 +90,9 @@ private Q_SLOTS:
     void heightClientDecidesOverrideIsPerScreen();
     void outOfRangeHeightRuleDoesNotSuppressClientDecides();
     void retileKeepsClientDecidedHeightsUnlessARulePinsOne();
+    void clientDecidedHeightYieldsToARuleAndToAJoin();
+    void clientDecidedHeightBoundsAndDeclinesUnusableClientSizes();
+    void clientDecidedHeightSurvivesAMigrationAndReachesAnUnfloat();
     void retileKeepsClientDecidedWidthsUnlessARulePinsOne();
     void wrongTypedBehaviourOverridesAreRejected();
     void focusScrollLimitNamesTheWindowsPastTheCap();
@@ -428,8 +437,17 @@ void TestScrollEngineBehaviour::outOfRangeHeightRuleDoesNotSuppressClientDecides
     tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
     ScrollEngine* engine = makeEngine(&owner, settings, tracker);
 
-    engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::defaultWindowHeight(), 1.5));
-    engine->applyPerScreenConfig(kS2, onlyKey(ScrollPerScreenKeys::defaultWindowHeight(), 0.25));
+    // Kind AND value per screen, the shape the width twin uses: with the kind
+    // only on the global, a regression that let a co-present per-screen VALUE
+    // beat the per-screen KIND read would go unseen here.
+    QVariantMap s1;
+    s1.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::ClientDecides));
+    s1.insert(ScrollPerScreenKeys::defaultWindowHeight(), 1.5);
+    QVariantMap s2;
+    s2.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::ClientDecides));
+    s2.insert(ScrollPerScreenKeys::defaultWindowHeight(), 0.25);
+    engine->applyPerScreenConfig(kS1, s1);
+    engine->applyPerScreenConfig(kS2, s2);
 
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
@@ -441,6 +459,18 @@ void TestScrollEngineBehaviour::outOfRangeHeightRuleDoesNotSuppressClientDecides
     const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
     QCOMPARE(rulePinned.size(), 1);
     QCOMPARE(Ax::crossLen(rulePinned.first()), qRound(0.25 * ScrollTestUtils::kCrossExtent));
+
+    // A fraction BELOW MinWindowHeightFraction is rejected on the same terms
+    // as one above 1.0, which is what makes the floor worth having: it would
+    // otherwise both suppress the client-sized open and pin a sliver of a
+    // tile, where the identical width value is refused outright.
+    QVariantMap tiny;
+    tiny.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::ClientDecides));
+    tiny.insert(ScrollPerScreenKeys::defaultWindowHeight(), 0.01);
+    engine->applyPerScreenConfig(kS1, tiny);
+    engine->windowClosed(QStringLiteral("app|a"));
+    engine->windowOpened(QStringLiteral("app|tiny"), kS1, 0, 0);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 400);
 }
 
 void TestScrollEngineBehaviour::retileKeepsClientDecidedHeightsUnlessARulePinsOne()
@@ -470,14 +500,173 @@ void TestScrollEngineBehaviour::retileKeepsClientDecidedHeightsUnlessARulePinsOn
     QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
     QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS2).first()), 300);
 
-    // ClientDecides with no rule: the height the user set stays.
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+    // ClientDecides with no rule: the height the user set stays, and with
+    // nothing else off its default the verb reports no_target rather than a
+    // success that changed nothing — the width twin pins the same pair, and
+    // without it a resetToDefaults that returned true off the untouched-height
+    // path would pass every geometry assertion here.
     engine->resetStripToDefaults(kS1);
     QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("retile"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
 
     // ClientDecides with a rule height: there IS a default to go back to, and
     // it is the even split — a lone tile then fills its column's cross extent.
     engine->resetStripToDefaults(kS2);
     QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS2).first()), ScrollTestUtils::kCrossExtent);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+}
+
+void TestScrollEngineBehaviour::clientDecidedHeightYieldsToARuleAndToAJoin()
+{
+    // The gate's remaining terms, none of which the geometry cases above
+    // reach. A per-window openWindowHeight rule outranks the kind, and a
+    // window that JOINS an existing column takes the column's share rather
+    // than its own client height — the width twin never reaches a join
+    // either (insertWindowIntoActiveColumn honours a width only on its
+    // empty-strip fallback), and committing there would squeeze the sibling
+    // it landed beside.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    settings->focusNewWindows = true;
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+
+    // A per-window rule fraction wins over the client's own size.
+    engine->setOpenParamsResolver([](const QString& windowId, const QString&) {
+        ScrollOpenParams params;
+        if (windowId == QStringLiteral("app|ruled")) {
+            params.heightFraction = 0.25;
+        }
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|ruled"), kS1, 0, 0);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), qRound(0.25 * ScrollTestUtils::kCrossExtent));
+
+    // A joining window: the client-decided commit must not fire, or the
+    // Fixed intent would renormalize its sibling down to fit.
+    engine->setOpenParamsResolver({});
+    engine->windowOpened(QStringLiteral("app|host"), kS2, 0, 0);
+    settings->insertPosition = static_cast<int>(ScrollInsertPosition::IntoActiveColumn);
+    engine->refreshConfigFromSettings();
+    engine->windowOpened(QStringLiteral("app|joiner"), kS2, 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS2));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 1);
+    // The host opened a fresh column, so the commit DID pin it at its own
+    // cross extent. The joiner is the one that must carry no intent: a Fixed
+    // intent there claims tabbed ownership or renormalizes the host down.
+    QCOMPARE(state->strip().windowHeightIntent(QStringLiteral("app|host")), WindowHeight::makeFixed(400));
+    QCOMPARE(state->strip().windowHeightIntent(QStringLiteral("app|joiner")).kind, WindowHeight::Auto);
+    QCOMPARE(engine->visibleTileRects(kS2).size(), 2);
+
+    // The consume-rule arm reaches the same join through a different route
+    // (an openColumnPlacement rule rather than the insert-position config),
+    // and it too must leave the arrival unpinned.
+    settings->insertPosition = static_cast<int>(ScrollInsertPosition::RightOfActive);
+    engine->refreshConfigFromSettings();
+    engine->setOpenParamsResolver([](const QString& windowId, const QString&) {
+        ScrollOpenParams params;
+        if (windowId == QStringLiteral("app|consumed")) {
+            params.consume = true;
+        }
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|consumed"), kS2, 0, 0);
+    QCOMPARE(state->strip().columnCount(), 1);
+    QCOMPARE(state->strip().windowHeightIntent(QStringLiteral("app|consumed")).kind, WindowHeight::Auto);
+}
+
+void TestScrollEngineBehaviour::clientDecidedHeightBoundsAndDeclinesUnusableClientSizes()
+{
+    // The commit's bounds. An absurd client extent is clamped to the work
+    // area's cross extent rather than persisted as an intent no column can
+    // hold, and a degenerate one is DECLINED so the tile keeps the context
+    // default instead of becoming a standing 1px sliver. Also pins the
+    // per-window contract: a sizing intent must be read exactOnly, or it can
+    // be minted from a same-app sibling's remembered rect.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 100000));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+
+    engine->windowOpened(QStringLiteral("app|huge"), kS1, 0, 0);
+    auto* s1 = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(s1);
+    // The INTENT, not the rendered extent: relayout clamps a Fixed height to
+    // the column at paint time, so a rendered-extent assertion reads
+    // kCrossExtent whether the commit bounded the value or persisted 100000.
+    // The whole point of the bound is that the STORED intent is sane.
+    QCOMPARE(s1->strip().windowHeightIntent(QStringLiteral("app|huge")),
+             WindowHeight::makeFixed(ScrollTestUtils::kCrossExtent));
+    QVERIFY2(tracker->lastExactOnly, "a sizing intent must be read exactOnly");
+
+    // No record at all: the tile falls back to the context default, which
+    // under ClientDecides is the even split, and nothing is pinned.
+    tracker->unmanagedGeometry = QRect();
+    engine->windowOpened(QStringLiteral("app|nogeo"), kS2, 0, 0);
+    auto* sNo = static_cast<ScrollState*>(engine->stateForScreen(kS2));
+    QVERIFY(sNo);
+    QCOMPARE(sNo->strip().windowHeightIntent(QStringLiteral("app|nogeo")).kind, WindowHeight::Auto);
+}
+
+void TestScrollEngineBehaviour::clientDecidedHeightSurvivesAMigrationAndReachesAnUnfloat()
+{
+    // Two legs that re-run the open path, or skip it, and so get the client
+    // size wrong in opposite directions.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    settings->focusNewWindows = true;
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+
+    // MIGRATION: a window that moves screen re-enters through the open path,
+    // so the client-decides commit would fire a second time and overwrite a
+    // height the user had set. A migration is a move, not an open — the
+    // height the window already carries outranks the open-time default.
+    engine->windowOpened(QStringLiteral("app|mover"), kS1, 0, 0);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 400);
+    engine->windowFocused(QStringLiteral("app|mover"), kS1);
+    engine->setWindowHeight(WindowHeight::makeFixed(300), kS1);
+    QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
+    engine->windowOpened(QStringLiteral("app|mover"), kS2, 0, 0); // same id, new screen
+    auto* s2 = static_cast<ScrollState*>(engine->stateForScreen(kS2));
+    QVERIFY(s2);
+    QVERIFY(s2->strip().containsWindow(QStringLiteral("app|mover")));
+    QCOMPARE(s2->strip().windowHeightIntent(QStringLiteral("app|mover")), WindowHeight::makeFixed(300));
+
+    // UNFLOAT of a window floated AT OPEN. It must be floated by the engine
+    // at open time, not by the user afterwards: a window that was ever a tile
+    // carries a real remembered height and comes back through the ordinary
+    // restore, so it would pass this assertion with no client-decides arm at
+    // all. A rule-floated open writes a SEEDED entry with no height, and the
+    // fresh insert then seeds only the concrete Auto fallback — the open
+    // path's commit never runs for it, because an unfloat is not an open.
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
+        return windowId == QStringLiteral("app|floater");
+    });
+    engine->windowOpened(QStringLiteral("app|floater"), kS1, 0, 0);
+    auto* s1 = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(s1);
+    QVERIFY(s1->isFloating(QStringLiteral("app|floater")));
+    QVERIFY(!s1->strip().containsWindow(QStringLiteral("app|floater")));
+    // The predicate is a rule that can stop matching; the unfloat is the user
+    // re-tiling the window afterwards.
+    engine->setFloatPredicate({});
+    engine->windowFocused(QStringLiteral("app|floater"), kS1);
+    engine->moveFocusedToTiling(kS1);
+    QVERIFY(s1->strip().containsWindow(QStringLiteral("app|floater")));
+    QCOMPARE(s1->strip().windowHeightIntent(QStringLiteral("app|floater")), WindowHeight::makeFixed(400));
 }
 
 void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne()
@@ -632,7 +821,13 @@ void TestScrollEngineBehaviour::focusScrollLimitNamesTheWindowsPastTheCap()
     }
 
     // The cap is monotone: relaxing it can only ever refuse fewer windows.
+    // The non-empty guard is load-bearing — a subset assertion alone is
+    // satisfied by an empty list, so an arm that answered {} for every
+    // positive percent would pass the loop while refusing nothing at all.
+    // With four half-width columns and the focus centred, the far ones still
+    // cost a scroll at 50%.
     const QStringList half = engine->windowsBeyondFocusScrollLimit(kS1, 50);
+    QVERIFY(!half.isEmpty());
     for (const QString& windowId : half) {
         QVERIFY2(none.contains(windowId), qPrintable(windowId));
     }

@@ -60,8 +60,10 @@ public:
     }
     /// Closed-set validity check for the D-Bus registry guard. The schema's
     /// validIntOr closed set is spelled SEPARATELY (settingsschema_scrolling
-    /// builds its own list, in places from the engine enumerators), so the
-    /// two lists are maintained IN PARALLEL and adding an enum value means
+    /// builds its own MEMBERSHIP list; for CenterFocusedColumn, ColumnDisplay
+    /// and the two ZoneSelector enums it spells the engine enumerators too,
+    /// while the rest reuse these same accessors and so cannot drift in
+    /// VALUE), so the two lists are maintained IN PARALLEL and adding an enum value means
     /// editing both — forgetting one lets the D-Bus guard accept a value the
     /// schema snaps back to default, or the reverse. (A range check would be
     /// worse still: it silently accepts any hole a future enum leaves.) The

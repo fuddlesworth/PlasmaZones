@@ -439,11 +439,6 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
     return m_defaultColumnWidth;
 }
 
-bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
-{
-    return effectiveWidthClientDecides(overridesForScreen(screenId));
-}
-
 std::optional<ColumnWidth> ScrollEngine::resetDefaultColumnWidthFor(const QVariantMap& overrides,
                                                                     const ScrollLayoutParams& params) const
 {
@@ -494,6 +489,14 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
     // Through the shared helper, so the open path's ClientDecides gate asks
     // the SAME question this resolver answers (the width twin documents why a
     // presence test is the wrong question).
+    //
+    // One divergence the helper cannot carry: the rule is applied only when
+    // the work area HAS a cross extent, because the answer is Fixed pixels of
+    // it, whereas a width rule is a Proportion and needs no extent. So on a
+    // degenerate work area the gate sees "a rule pinned a height" while this
+    // resolver falls through to the global. Nothing lays out at zero extent,
+    // and the alternative — teaching the helper an extent it has no business
+    // knowing — would couple the gate to the layout params.
     const int crossExtent = axis.crossSize(workArea);
     if (crossExtent > 0) {
         if (const auto ruleFraction = ruleWindowHeightFraction(overrides)) {
@@ -546,16 +549,18 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
 std::optional<qreal> ScrollEngine::ruleWindowHeightFraction(const QVariantMap& overrides)
 {
     qreal fraction = 0.0;
-    if (overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction) && fraction > 0.0
-        && fraction <= 1.0) {
+    // Floored at MinWindowHeightFraction, which exists as the height twin of
+    // the MinColumnWidthFraction the width version above uses. A bare > 0.0
+    // admitted a fraction no height producer would honour (the open-rule arm
+    // qBounds to this floor and the preset parser passes it), and this
+    // predicate now also decides whether a client-sized open is SUPPRESSED —
+    // so a 0.0001 rule would have both refused the client's height and pinned
+    // a 1px tile, where the identical width value is rejected outright.
+    if (overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
+        && fraction >= MinWindowHeightFraction && fraction <= 1.0) {
         return fraction;
     }
     return std::nullopt;
-}
-
-bool ScrollEngine::effectiveHeightClientDecides(const QString& screenId) const
-{
-    return effectiveHeightClientDecides(overridesForScreen(screenId));
 }
 
 bool ScrollEngine::effectiveHeightClientDecides(const QVariantMap& overrides) const
@@ -570,11 +575,56 @@ bool ScrollEngine::effectiveHeightClientDecides(const QVariantMap& overrides) co
     return m_defaultHeightClientDecides;
 }
 
+bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& windowId, const QString& screenId,
+                                             const QVariantMap& overrides, const ScrollLayoutParams& params)
+{
+    if (!m_windowTracker || !effectiveHeightClientDecides(overrides)
+        || ruleWindowHeightFraction(overrides).has_value()) {
+        return false;
+    }
+    // exactOnly: a tile height is a PER-WINDOW contract, and the non-exact
+    // default admits a same-app SIBLING's record (the interface documents that
+    // sharing as being for free POSITIONS). Minting one window's sizing intent
+    // out of another instance's remembered rect gives it a height it never
+    // asked for.
+    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
+    if (!geo) {
+        // Not the common case for a genuine spawn — the effect records the
+        // pre-tile geometry before it announces the open — but a window the
+        // capture skipped falls back to the context default with nothing to
+        // tell it apart from the setting being off.
+        qCDebug(lcScrollEngine) << "client-decided height unavailable for" << windowId << "on" << screenId
+                                << "— no free-geometry record; using the context default";
+        return false;
+    }
+    // CROSS extent, decoded by role like everything else that reads this rect:
+    // a window height divides the within-column stack, which runs across the
+    // strip whichever way the strip runs. Reading .height() unconditionally
+    // would feed the client's MAIN extent into the tile's cross intent on a
+    // vertical strip.
+    const int clientCross = params.axis.crossSize(geo->size());
+    const int crossExtent = params.axis.crossSize(params.workArea);
+    if (clientCross < 1 || crossExtent <= 0) {
+        // A degenerate report must not become a standing 1px intent.
+        qCDebug(lcScrollEngine) << "client-decided height declined for" << windowId << "on" << screenId
+                                << "— unusable extents, client cross" << clientCross << "work area cross"
+                                << crossExtent;
+        return false;
+    }
+    return strip.setWindowHeightIntent(windowId, WindowHeight::makeFixed(qMin(clientCross, crossExtent)));
+}
+
 std::optional<WindowHeight> ScrollEngine::resetDefaultWindowHeightFor(const QVariantMap& overrides) const
 {
-    // A rule's height outranks the kind (effectiveDefaultWindowHeight folds
-    // it in first), so only a ClientDecides verdict with NO rule height means
-    // "there is no default height to go back to".
+    // A rule's height outranks the kind at OPEN time
+    // (effectiveDefaultWindowHeight folds it in first), so only a
+    // ClientDecides verdict with NO rule height means "there is no default
+    // height to go back to". Note this is not the width twin's shape: there,
+    // the non-nullopt answer is params.defaultColumnWidth, which carries the
+    // rule fraction, so Retile under a rule width restores that width. Here
+    // the answer is deliberately the even split even when a rule pinned a
+    // height — see the return below for why, and the CHANGELOG entry states
+    // the same carve-out.
     if (effectiveHeightClientDecides(overrides) && !ruleWindowHeightFraction(overrides).has_value()) {
         return std::nullopt;
     }

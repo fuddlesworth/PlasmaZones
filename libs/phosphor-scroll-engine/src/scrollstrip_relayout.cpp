@@ -694,7 +694,9 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
-        // rewrites this rect from the shown tab's height intent.
+        // rewrites this rect from the column's one non-Auto tab's height
+        // intent (see tabbedColumnCrossPx — the OWNER, which is not
+        // necessarily the tab on show).
         rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
 
         QVector<int> visible;
@@ -706,8 +708,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         }
 
         if (rc.tabbed) {
-            // A tabbed column takes its CROSS extent from the shown tab's own
-            // height intent (niri parity: a tabbed column may be shorter than
+            // A tabbed column takes its CROSS extent from its one non-Auto
+            // tab's height intent — the OWNER the height writers maintain
+            // through claimTabbedHeightOwnership, not whichever tab is on
+            // show (niri parity: a tabbed column may be shorter than
             // the work area), so the rect the full-cross default above wrote
             // is replaced before anything derives from it. Everything below —
             // the indicator rect, the content rect the tabs are committed at —

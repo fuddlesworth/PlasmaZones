@@ -82,7 +82,7 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // tail note explains why P_SCROLL_RESOLVE deliberately is not.
 // The hand-expanded verbs are the ones the macro cannot express:
 // consumeOrExpelWindow (two ops, one feedback), resetStripToDefaults (the
-// override map resolved once for two defaults), scrollViewByPercent (params
+// override map resolved once for three defaults), scrollViewByPercent (params
 // needed before the op), the windowed-fullscreen trio (background-context
 // guards) and the float-layer verbs at the tail (feedback branches differ per
 // arm, not just per outcome).

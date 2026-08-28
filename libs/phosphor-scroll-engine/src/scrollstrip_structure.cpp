@@ -916,6 +916,18 @@ bool ScrollStrip::toggleActiveColumnTabbed()
         return false;
     }
     col->display = (col->display == ColumnDisplay::Tabbed) ? ColumnDisplay::Normal : ColumnDisplay::Tabbed;
+    // The single-owner height contract is deliberately NOT asserted here.
+    // While a column is Normal the height verbs cannot maintain it
+    // (claimTabbedHeightOwnership returns early on a non-Tabbed column), so
+    // two tiles can legitimately hold non-Auto intents when this flip lands,
+    // and tabbedColumnCrossPx then sizes the column from whichever it scans
+    // first rather than from the tab on show. Claiming ownership here would
+    // trade that for something worse: the claim rewrites every other tile to
+    // Auto with no saved copy, so one toggle would permanently discard the
+    // siblings' heights, and it no-ops entirely when the active tab is itself
+    // Auto — the common mixed case. Fixing this properly means either
+    // remembering the pre-tab intents or having tabbedColumnCrossPx prefer
+    // the ACTIVE tab, both of which change shipped sizing behaviour.
     return true;
 }
 

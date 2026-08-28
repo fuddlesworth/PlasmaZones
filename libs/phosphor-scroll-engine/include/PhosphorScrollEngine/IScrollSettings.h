@@ -75,6 +75,11 @@ public:
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
     /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
     /// or pixels) + the preset index the Preset kind resolves.
+    /// Values 2 and 3 mean the OPPOSITE of what they mean in the height
+    /// vocabulary below. Both numberings are load-bearing wire values in
+    /// stored configs (each kind was appended when it was added, to a
+    /// different existing set), so the mismatch is deliberate and neither
+    /// side can be renumbered to match the other.
     virtual int scrollingDefaultColumnWidthKind() const = 0;
     virtual qreal scrollingDefaultColumnWidthValue() const = 0;
     virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
