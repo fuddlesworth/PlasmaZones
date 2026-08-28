@@ -156,9 +156,10 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
-    /// OSD shown when a surface keyed to the screen's mode is asked for in a
-    /// MODELESS context: every placement mode's master switch is off, so no
-    /// mode's shortcuts or overlays would be truthful.
+    /// OSD shown when the cheatsheet is summoned in a MODELESS context:
+    /// every placement mode's master switch is off, so no mode's shortcuts
+    /// would be truthful. Written for any future surface keyed to the
+    /// screen's mode, but the cheatsheet show path is its only caller today.
     void showModelessOsd(const QString& screenId);
     /// Whether @p mode's global master switch is on. The mode toggle's cycle
     /// asks the same question (daemon/autotile_init.cpp).
@@ -193,18 +194,23 @@ public:
     static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
     // Shortcut cheatsheet overlay (impls in daemon/cheatsheet.cpp).
-    /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
-    /// screen's tiling mode, the two feature gates, the engine layouts
-    /// capability and the shortcut catalog, and pushes them all into the
+    /// Toggle the cheatsheet on the cursor's screen. Show path resolves an
+    /// ENABLED tiling mode for the screen (@ref modeEnabled, not the routed
+    /// mode raw), the two feature gates, the engine layouts capability and
+    /// the shortcut catalog, and pushes them all into the
     /// overlay (daemon-mediated push), dismisses any other Escape-consuming
     /// modal first (picker / snap assist — at most one Escape grab consumer
-    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
+    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab. With
+    /// every master switch off it posts @ref showModelessOsd instead of
+    /// showing a sheet.
     void toggleCheatsheet();
     /// Re-push catalog + mode + gates + layouts capability into a visible
     /// cheatsheet — live refilter on mode switches, rebinds, feature-gate
-    /// flips and context switches. No-op when hidden. Everything is
-    /// re-resolved for the screen the sheet is BOUND to (not the cursor's
-    /// current screen).
+    /// flips and context switches. No-op when hidden, and a DISMISSAL when
+    /// the last master switch has gone off (no truthful filter is left, and
+    /// an unprompted OSD would be noise on a refresh the user did not ask
+    /// for). Everything is re-resolved for the screen the sheet is BOUND to
+    /// (not the cursor's current screen).
     void refreshCheatsheetIfVisible();
     /// Release the cheatsheet's Escape ad-hoc grab. Connected to
     /// OverlayService::cheatsheetDismissed in shortcuts_wiring.cpp
@@ -1438,14 +1444,6 @@ private:
     // m_rotateDebounce above. One timer for both ops: rapid alternation
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
-    /// Per-start connections outside stop()'s per-sender sweep and outside
-    /// m_restartScopedConnections: the two m_settings→this cheatsheet
-    /// refilters, on autotileEnabled and scrollingEnabled. m_settings is
-    /// swept only by teardownIdleConnections, whose ctor/init connections
-    /// must survive, so these per-start ones are severed here by handle. The WTA-to-drag-adaptor fan-out is instead
-    /// kept unique with Qt::UniqueConnection, and the layout/overlay connections are tracked in
-    /// m_restartScopedConnections and cleared at the top of connectLayoutSignals().
-    QVector<QMetaObject::Connection> m_perStartConnections;
 
     // Last TILING-FAMILY window order per (screen, desktop, activity),
     // captured when a screen leaves autotile OR scrolling and shared by

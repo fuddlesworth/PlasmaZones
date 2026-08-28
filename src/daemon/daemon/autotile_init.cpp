@@ -270,9 +270,8 @@ void Daemon::handleTilingModeToggle()
     // Feature gate: only cycle INTO a mode whose master switch is
     // on (Daemon::modeEnabled, shared with the cheatsheet's show gate so the
     // two cannot disagree about what "enabled" means). Disabled modes are
-    // skipped, so with scrolling off the
-    // cycle degrades to the historical two-state flip; with every
-    // other mode off the toggle is a no-op.
+    // skipped, so with scrolling off the cycle degrades to the historical
+    // two-state flip; with every other mode off the toggle is a no-op.
     Mode target = nextInCycle(currentMode);
     while (target != currentMode && !modeEnabled(target)) {
         target = nextInCycle(target);

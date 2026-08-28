@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **The shortcut cheatsheet lists the mode you are actually using**: the sheet picked its shortcuts using the mode assigned to the screen, without checking whether that mode was switched on. A screen still assigned to snapping with snapping turned off listed the snapping keys, which do nothing, and hid the tiling and scrolling ones. With tiling turned off as well, a screen assigned to tiling showed no mode's shortcuts at all. The sheet now picks a mode that is turned on. If you have all three turned off there is nothing to list, so it says so instead of opening ([#993](https://github.com/fuddlesworth/PlasmaZones/pull/993)).
+- **The shortcut cheatsheet lists the mode you are actually using**: the sheet picked its shortcuts using the mode assigned to the screen, without checking whether that mode was switched on. A screen still assigned to snapping with snapping turned off listed the snapping keys, which do nothing, and hid the tiling and scrolling ones. With tiling turned off as well, a screen assigned to tiling showed no mode's shortcuts at all. The sheet now picks a mode that is turned on. If you have all three turned off there is nothing to list, so it says so instead of opening. An open sheet also follows the switches now, including the ones changed from System Settings, and closes when you turn the last mode off ([#993](https://github.com/fuddlesworth/PlasmaZones/pull/993)).
 
 ## [3.4.2] - 2026-08-27
 
