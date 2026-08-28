@@ -19,6 +19,10 @@
 #include <QVector4D>
 
 #include "daemon/rendering/surfaceshaderitem.h"
+#include "daemon/rendering/zoneshaderitem.h"
+#include <PhosphorRendering/ZoneLabelTexture.h>
+#include "daemon/rendering/zoneshaderitem.h"
+#include <PhosphorRendering/ZoneLabelTexture.h>
 
 using namespace PlasmaZones;
 
@@ -213,9 +217,11 @@ Item {
     /// its no-backdrop appearance. (`Binding on wallpaperTexture { ... }` is
     /// worse still: it never writes at all.) A direct binding on the item
     /// delivers the image intact, so this pins the two hosts to that shape.
-    /// Neighbouring Bindings for labelsTexture are fine and deliberately not
-    /// swept: ZoneLabelTexture is a QML-registered value type, a bare QImage
-    /// is not.
+    /// labelsTexture is swept for the same reason even though its payload
+    /// type does survive a Binding: the settings and editor previews hand that
+    /// property a QImage and rely on the registered converter, and a QImage
+    /// does not survive. audioSpectrum next to it is safe and not swept, since
+    /// a QVariantList comes through intact.
     void testSurfaceShaderItem_noQmlDrivesTheWallpaperThroughABindingElement()
     {
         const QStringList hosts{QStringLiteral(P_SOURCE_DIR "/src/shared/SurfaceDecoration.qml"),
@@ -232,12 +238,76 @@ Item {
             src.remove(blockComment);
             src.remove(lineComment);
 
-            QVERIFY2(!src.contains(QLatin1String("Binding on wallpaperTexture")), qPrintable(path));
-            static const QRegularExpression bindingElement(
-                QStringLiteral("Binding\\s*\\{[^}]*property:\\s*[\"']wallpaperTexture[\"'][^}]*\\}"),
-                QRegularExpression::DotMatchesEverythingOption);
-            QVERIFY2(!bindingElement.match(src).hasMatch(), qPrintable(path));
+            for (const QString& prop : {QStringLiteral("wallpaperTexture"), QStringLiteral("labelsTexture")}) {
+                const QString where = QStringLiteral("%1 (%2)").arg(path, prop);
+                QVERIFY2(!src.contains(QStringLiteral("Binding on ") + prop), qPrintable(where));
+                const QRegularExpression bindingElement(
+                    QStringLiteral("Binding\\s*\\{[^}]*property:\\s*[\"']%1[\"'][^}]*\\}").arg(prop),
+                    QRegularExpression::DotMatchesEverythingOption);
+                QVERIFY2(!bindingElement.match(src).hasMatch(), qPrintable(where));
+            }
         }
+    }
+
+    /// The zone labels must survive the trip through QML too, from BOTH shapes
+    /// the hosts produce: the daemon passes a ZoneLabelTexture payload, while
+    /// the settings and editor shader previews pass a full QImage and rely on
+    /// the QImage→ZoneLabelTexture converter registered in the item.
+    ///
+    /// The payload happens to survive a Binding element; a QImage does not, so
+    /// the previews drew their zones with no numbers on them. Only the QImage
+    /// case ever failed, so both are pinned here rather than the interesting
+    /// one alone.
+    void testZoneShaderItem_qmlDeliversLabelsAsAPayloadAndAsAnImage()
+    {
+        qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZonesTest", 1, 0, "ZoneShaderItem");
+
+        QImage glyphs(16, 16, QImage::Format_ARGB32_Premultiplied);
+        glyphs.fill(Qt::white);
+        const PhosphorRendering::ZoneLabelTexture payload = PhosphorRendering::ZoneLabelTexture::fromImage(glyphs);
+        QVERIFY(!payload.isEmpty());
+
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("testPayload"), QVariant::fromValue(payload));
+        engine.rootContext()->setContextProperty(QStringLiteral("testImage"), QVariant::fromValue(glyphs));
+
+        QQmlComponent component(&engine);
+        component.setData(R"QML(
+import QtQuick
+import PlasmaZonesTest 1.0
+Item {
+    property alias fromPayload: a
+    property alias fromImage: b
+    ZoneShaderItem { id: a; labelsTexture: testPayload }
+    ZoneShaderItem { id: b; labelsTexture: testImage }
+}
+)QML",
+                          QUrl(QStringLiteral("qrc:/test_labels_binding.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.create());
+        QVERIFY(root);
+
+        for (const char* which : {"fromPayload", "fromImage"}) {
+            auto* item = root->property(which).value<PlasmaZones::ZoneShaderItem*>();
+            QVERIFY2(item, which);
+            QVERIFY2(!item->labelsTexture().isEmpty(), which);
+            QCOMPARE(item->labelsTexture().size, glyphs.size());
+        }
+    }
+
+    /// A host with no labels passes null, which means "no numbers" and must
+    /// clear the payload rather than warn or leave the previous one up.
+    void testZoneShaderItem_aNullValueClearsTheLabels()
+    {
+        QImage glyphs(4, 4, QImage::Format_ARGB32_Premultiplied);
+        glyphs.fill(Qt::white);
+
+        PlasmaZones::ZoneShaderItem item;
+        item.setProperty("labelsTexture", QVariant::fromValue(glyphs));
+        QVERIFY(!item.labelsTexture().isEmpty());
+
+        item.setProperty("labelsTexture", QVariant());
+        QVERIFY(item.labelsTexture().isEmpty());
     }
 
     /// The no-backdrop state is ordinary, not an error: a host with nothing

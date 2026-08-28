@@ -62,7 +62,7 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
     // Labels payload (sparse pre-rendered zone-number glyph tiles for shader pass)
-    Q_PROPERTY(PhosphorRendering::ZoneLabelTexture labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY
+    Q_PROPERTY(QVariant labelsTexture READ labelsTextureVariant WRITE setLabelsTextureVariant NOTIFY
                    labelsTextureChanged FINAL)
 
 public:
@@ -93,7 +93,22 @@ public:
 
     // Labels texture getter/setter
     PhosphorRendering::ZoneLabelTexture labelsTexture() const;
+
+    /// QML-facing form of `labelsTexture`, and the reason the Q_PROPERTY is a
+    /// QVariant rather than the payload type.
+    ///
+    /// The payload itself survives a QML `Binding`, but a QImage does not, and
+    /// the settings and editor shader previews hand this property a full
+    /// QImage and lean on the registered QImage→ZoneLabelTexture converter
+    /// (see the converter's registration in the constructor). Through a
+    /// Binding element that image arrived as an invalid QVariant and the
+    /// labels silently vanished, so those previews drew their zones with no
+    /// numbers on them. Converting here accepts every shape any host produces.
+    QVariant labelsTextureVariant() const;
     void setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels);
+    /// Accepts the payload, a QImage (converted as a single full-size tile),
+    /// or null / undefined for "no labels".
+    void setLabelsTextureVariant(const QVariant& labels);
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering

@@ -3,6 +3,7 @@
 
 #include "daemon/rendering/zoneshaderitem.h"
 
+#include <QJSValue>
 #include <QMutexLocker>
 
 namespace PlasmaZones {
@@ -94,6 +95,36 @@ void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture&
     }
     Q_EMIT labelsTextureChanged();
     update();
+}
+
+QVariant ZoneShaderItem::labelsTextureVariant() const
+{
+    return QVariant::fromValue(labelsTexture());
+}
+
+void ZoneShaderItem::setLabelsTextureVariant(const QVariant& labels)
+{
+    // Unwrapped before converting, for the reason
+    // ShaderEffect::setWallpaperTextureVariant documents: QML delivers this in
+    // several shapes, and a QJSValue or a QVariant nested one level answers
+    // null to value<T>() rather than the payload. A host passing nothing at
+    // all (null, undefined, an invalid QVariant) means "no labels", which is
+    // an ordinary state and yields an empty payload.
+    QVariant unwrapped = labels;
+    if (unwrapped.metaType().id() == qMetaTypeId<QJSValue>()) {
+        unwrapped = unwrapped.value<QJSValue>().toVariant();
+    }
+    for (int depth = 0; depth < 4 && unwrapped.metaType().id() == QMetaType::QVariant; ++depth) {
+        unwrapped = unwrapped.value<QVariant>();
+    }
+
+    // The payload as-is, or a QImage through the converter registered in the
+    // constructor (the settings and editor previews still produce one).
+    if (unwrapped.canConvert<PhosphorRendering::ZoneLabelTexture>()) {
+        setLabelsTexture(unwrapped.value<PhosphorRendering::ZoneLabelTexture>());
+        return;
+    }
+    setLabelsTexture({});
 }
 
 } // namespace PlasmaZones

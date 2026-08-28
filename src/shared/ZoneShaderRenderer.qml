@@ -83,8 +83,11 @@ Item {
         iResolution: root.safeConfig.iResolution || Qt.size(width, height)
         iMouse: root.safeConfig.iMouse || Qt.point(0, 0)
         useWallpaper: root.safeConfig.useWallpaper ?? false
-        // See the note where the old Binding for this lived, below.
+        // Both of these are assigned DIRECTLY, deliberately not through a
+        // Binding element like audioSpectrum below. See the note under this
+        // item.
         wallpaperTexture: root.safeConfig.wallpaperTexture
+        labelsTexture: root.safeConfig.labelsTexture
         useDepthBuffer: root.safeConfig.useDepthBuffer ?? false
         bufferWraps: root.safeConfig.bufferWraps || []
         bufferFilter: root.safeConfig.bufferFilter || "linear"
@@ -105,22 +108,20 @@ Item {
         when: root.safeConfig.audioSpectrum !== undefined
     }
 
-    Binding {
-        target: zoneShaderItem
-        property: "labelsTexture"
-        value: root.safeConfig.labelsTexture || null
-        when: root.safeConfig.labelsTexture !== undefined && root.safeConfig.labelsTexture !== null
-    }
-
-    // wallpaperTexture is assigned DIRECTLY on the item above, deliberately
-    // not through a Binding element like its neighbours here.
+    // wallpaperTexture and labelsTexture are assigned DIRECTLY on the item
+    // above, deliberately not through a Binding element like audioSpectrum.
     //
-    // A `Binding { property: "wallpaperTexture"; value: <a QImage> }` delivers
-    // an INVALID QVariant to the setter — the image does not survive the trip
-    // through Binding's own `value` property, and nothing is logged. The
-    // labelsTexture binding above is unaffected because ZoneLabelTexture is a
-    // QML-registered value type; a bare QImage is not. A direct binding on the
-    // item's own property hands the image over intact, and the property takes
-    // a QVariant (ShaderEffect::setWallpaperTextureVariant), so an absent
-    // config key resolves to "no wallpaper" instead of warning.
+    // A `Binding { property: "..."; value: <a QImage> }` delivers an INVALID
+    // QVariant to the setter. The image does not survive the trip through
+    // Binding's own `value` property, and nothing is logged. That silently
+    // emptied the wallpaper for every pack that samples it, and emptied the
+    // labels for the settings and editor previews, which hand a full QImage to
+    // labelsTexture and rely on the registered converter. The daemon's own
+    // labels were spared only because it passes the ZoneLabelTexture payload,
+    // which does survive.
+    //
+    // audioSpectrum is fine where it is: a QVariantList and a QVector<float>
+    // both come through a Binding intact. Both properties here take a QVariant
+    // and convert (setWallpaperTextureVariant / setLabelsTextureVariant), so an
+    // absent config key means "nothing to show" rather than a warning.
 }
