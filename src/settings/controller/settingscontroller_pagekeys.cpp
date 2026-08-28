@@ -114,9 +114,12 @@ int SettingsController::workspaceSlotCount() const
 // discardPage("workspaces-named") revert exactly those keys to the committed
 // baseline alongside its own.
 //
-// The record is never cleared on Save, and does not need to be: discardKeys
-// reverts to the committed baseline, and after a Save that baseline already
-// carries the rename, so a stale entry reverts nothing.
+// The record only ever covers UNCOMMITTED renames. Every path that re-takes
+// the committed baseline clears it (save() on a written config,
+// adoptOnDiskState() for load / global Discard / import, defaults()). Left in
+// place across a Save it would misfire: the user could hand-edit that slot on
+// the Shortcuts page and then discard the Named page for an unrelated staged
+// edit, and the cascade arm would revert the Shortcuts edit along with it.
 void SettingsController::renameWorkspaceSlotTargets(const QString& previousName, const QString& newName)
 {
     const QString from = previousName.trimmed();

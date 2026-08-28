@@ -213,6 +213,15 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
             // against KWin rather than sitting on a state this refresh was
             // supposed to correct. The VALUE is unchanged on purpose; it is the
             // notification that was lost, not the number.
+            //
+            // Consumers do more than re-diff on this: the daemon's handler
+            // also cancels any in-flight drag-insert previews, so a refresh
+            // that gives up during a live drag ends that drag's previews. That
+            // is ACCEPTED rather than routed around with a separate failure
+            // signal — the previews are resolved against desktop state this
+            // refresh has just failed, several times over, to confirm, and
+            // dropping them is the conservative answer. It costs the user one
+            // re-drag in a session where KWin is already not answering.
             Q_EMIT desktopCountChanged(m_desktopCount);
         }
         return;

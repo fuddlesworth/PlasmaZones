@@ -183,6 +183,14 @@ private:
         QString desktopId; ///< Remove/SetCurrent target
         QString screenId; ///< Create owner / SetCurrent screen
         int sliceIndex = 0; ///< Create insertion point
+        /// Create only: the GLOBAL position the request asked KWin to insert
+        /// at (WorkspaceMap::globalPositionForInsert at request time). The
+        /// settle path matches open Creates against the new id's index in
+        /// KWin's list with it, because the ledger's order (oldest request
+        /// first) and the settled list's order (KWin position) are independent
+        /// rankings and disagree whenever the screen that asked second owns an
+        /// earlier slice.
+        int globalPosition = 0;
         QString name; ///< Create name (named workspaces)
         qint64 deadline = 0;
     };
@@ -198,13 +206,18 @@ private:
     int pendingCreateCount() const;
     /// Drop every open ledger entry that targets this desktop id.
     void retireLedgerFor(const QString& desktopId);
-    /// Realize a desktop that is NEW in a settled list against the oldest open
-    /// Create op — the same FIFO order onKwinDesktopCreated matches in — for
-    /// the case where the settle beat (or replaced) the id-only echo. Consumes
-    /// the op and inserts on the requesting screen. Returns false when there
-    /// was no open Create, or when its planned screen is gone (the op is
-    /// consumed either way), leaving the caller to adopt normally.
-    bool realizeSettledCreate(const QString& desktopId);
+    /// Realize a desktop that is NEW in a settled list against the open Create
+    /// whose requested global position is nearest `newIndex` (the id's 0-based
+    /// index in the settled list), for the case where the settle beat (or
+    /// replaced) the id-only echo. Position, not ledger order: the echo path
+    /// can match FIFO because KWin echoes creations in the order it performed
+    /// them, but a settled list is ordered by POSITION, and with two Creates
+    /// open the screen that asked second can own the earlier slot. Consumes
+    /// the chosen op and inserts on its requesting screen. Returns false when
+    /// there was no open Create, or when the chosen op's planned screen is
+    /// gone (the op is consumed either way), leaving the caller to adopt
+    /// normally.
+    bool realizeSettledCreate(const QString& desktopId, int newIndex);
     /// Trailing-empty + slice-never-empty repair for every screen.
     void maintainInvariants();
     void maintainScreen(const QString& screenId);

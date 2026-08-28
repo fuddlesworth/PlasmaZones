@@ -106,6 +106,12 @@ public:
 
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
+    /// The desktop count changed — and, once per failed episode, a re-announce
+    /// of the UNCHANGED count when a desktop-list refresh exhausts its retries,
+    /// so consumers re-diff instead of sitting on state the lost refresh was
+    /// meant to correct. Handlers that do more than re-diff (the daemon also
+    /// cancels drag-insert previews here) run on that re-announce too; see
+    /// applyDesktopListReply for why that is accepted.
     void desktopCountChanged(int count);
     /// A single screen's current virtual desktop changed (per-output virtual
     /// desktops). The primary trigger the daemon's per-screen desktop handler

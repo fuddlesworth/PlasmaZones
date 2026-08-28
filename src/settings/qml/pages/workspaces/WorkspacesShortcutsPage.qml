@@ -83,7 +83,7 @@ SettingsFlickable {
                     // unless the text says so. Worded without naming the KDE
                     // System Settings module, which the portable
                     // (USE_KDE_FRAMEWORKS=OFF) build does not have.
-                    text: i18n("Each slot carries two keys. One jumps to the workspace in that position and the other sends the active window there. Both are registered under PlasmaZones and can be changed in your desktop's keyboard shortcut settings.")
+                    text: i18n("Each slot carries two keys. One jumps to the workspace assigned to that slot and the other sends the active window there. Both are registered under PlasmaZones and can be changed in your desktop's keyboard shortcut settings.")
                 }
 
                 Repeater {

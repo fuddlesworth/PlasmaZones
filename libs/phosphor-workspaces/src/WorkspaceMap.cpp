@@ -154,6 +154,12 @@ bool WorkspaceMap::remove(const QString& desktopId)
     // calls this, sees "not found", and then overwrites the row anyway — so a
     // surviving row would have the desktop counted under the OLD owner by
     // consistentWith and takeSlice while the new slice really holds it.
+    //
+    // Still false, and the repair is deliberately silent: no slice lost an
+    // entry, so the serialized map is byte-identical and there is nothing for
+    // a generation bump to announce. The return value answers "did the
+    // published map change", not "did this call touch anything" — see the
+    // header.
     qCWarning(lcWorkspaceMap) << "owner index named" << owner << "for desktop" << desktopId
                               << "which that slice does not hold — dropping the stale row";
     m_ownerOf.remove(desktopId);

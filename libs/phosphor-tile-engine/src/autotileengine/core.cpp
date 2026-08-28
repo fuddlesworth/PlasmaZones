@@ -329,6 +329,22 @@ void AutotileEngine::connectSignals()
                     for (const QString& windowId : std::as_const(releasedWindows)) {
                         m_states.removeWindow(windowId);
                     }
+                    // Drop the orphaned VS ids from the active set BEFORE the
+                    // emit, for the same reason the removed-screen prune does:
+                    // the daemon's windowsReleased handler tells a context
+                    // prune from a genuine release by asking isActiveOnScreen,
+                    // and this handler can run before the daemon's own
+                    // updateEngineScreens re-derives the set. A stale claim
+                    // would make every window on a vanished sub-screen skip its
+                    // float clear and snap restore. Same predicate as the
+                    // m_context sweep below: ids the new topology no longer has.
+                    for (auto it = m_autotileScreens.begin(); it != m_autotileScreens.end();) {
+                        const QString& sid = *it;
+                        const bool gone = PhosphorIdentity::VirtualScreenId::isVirtual(sid)
+                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) == physicalScreenId
+                            && !newVsSet.contains(sid);
+                        it = gone ? m_autotileScreens.erase(it) : std::next(it);
+                    }
                     if (!releasedWindows.isEmpty()) {
                         Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }

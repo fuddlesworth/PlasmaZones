@@ -325,6 +325,14 @@ void Daemon::initializeWorkspaces()
                     // the other one's window order. The shifted key is the one
                     // the engines just renumbered to, so it wins and the
                     // unmapped duplicate is dropped.
+                    //
+                    // On the live path the collision below does not arise: the
+                    // reap arm has already erased every key on a REMOVED
+                    // desktop, and no surviving number is both unmapped and a
+                    // renumber target. It is kept as defence in depth for a
+                    // producer that ever hands over a partial map, or a reap
+                    // that does not precede the renumber — the alternative is
+                    // a silent random winner for a live context's window order.
                     for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
                         if (it.key().desktop <= 0 || !oldToNew.contains(it.key().desktop)) {
                             continue;

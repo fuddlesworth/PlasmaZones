@@ -203,6 +203,10 @@ ExpandableRowDelegate {
             valueRole: "value"
             Accessible.name: i18n("Pinned monitor")
             model: row.screenOptions
+            // The two halves read different sources on purpose. `storedValue`
+            // wants the value the row was built with, which is what selects the
+            // matching combo entry, while the fallback below has to follow a
+            // live edit and so reads the mirror.
             storedValue: row.entry.output
             // A monitor that is currently unplugged is not in `screenOptions`,
             // and WideComboBox clamps an unresolved storedValue to index 0 —

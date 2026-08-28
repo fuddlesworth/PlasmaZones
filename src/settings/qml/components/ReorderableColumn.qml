@@ -323,7 +323,10 @@ Item {
                 // the move did not happen: disarm. Guarded on the id as well,
                 // because a synchronous rebuild may already have claimed and
                 // cleared it, and re-clearing then would be harmless but the
-                // guard keeps the two halves honest.
+                // guard keeps the two halves honest. The `items` check MUST
+                // stay first: on a committed move this delegate is already
+                // destroyed, and `&&` short-circuits before the second half
+                // dereferences a dead object.
                 if (root.items === snapshot && root.pendingFocusId === delegateRoot._itemId)
                     root.pendingFocusId = "";
             }

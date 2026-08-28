@@ -490,7 +490,6 @@ void SettingsController::discardPage(const QString& page)
     if (it != manifest.constEnd()) {
         {
             const ScopedFlag loadingScope(m_loading);
-            m_settings.discardKeys(*it);
             // The Named Workspaces page's rename cascade writes quick-slot
             // Target keys, which the workspaces-shortcuts manifest owns (the
             // one-owner invariant forbids listing them here as well). Without
@@ -498,15 +497,21 @@ void SettingsController::discardPage(const QString& page)
             // it left on the sibling page had no reachable Discard. Scoped to
             // the slots renameWorkspaceSlotTargets actually rewrote, so a
             // target the user set on the Shortcuts page itself is untouched.
+            //
+            // Appended to a copy of the manifest list rather than discarded in
+            // a second call: each discardKeys re-snapshots the whole settings
+            // surface and can emit settingsChanged, so one call is both
+            // cheaper and a single transition for the listeners.
             if (page == QLatin1String("workspaces-named") && !m_renamedWorkspaceSlots.isEmpty()) {
-                Settings::ConfigKeyList slotKeys;
-                slotKeys.reserve(m_renamedWorkspaceSlots.size());
+                Settings::ConfigKeyList keys = *it;
+                keys.reserve(keys.size() + m_renamedWorkspaceSlots.size());
                 for (const int slot : std::as_const(m_renamedWorkspaceSlots)) {
-                    slotKeys.append(
-                        {ConfigDefaults::workspacesSlotsGroup(), ConfigDefaults::workspaceSlotTargetKey(slot)});
+                    keys.append({ConfigDefaults::workspacesSlotsGroup(), ConfigDefaults::workspaceSlotTargetKey(slot)});
                 }
-                m_settings.discardKeys(slotKeys);
+                m_settings.discardKeys(keys);
                 m_renamedWorkspaceSlots.clear();
+            } else {
+                m_settings.discardKeys(*it);
             }
         }
         // Every owned key is back at the committed baseline, so the page is

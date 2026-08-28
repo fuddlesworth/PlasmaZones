@@ -3,6 +3,7 @@
 
 #include "workspacecontroller.h"
 
+#include <PhosphorEngine/PerScreenStates.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
@@ -83,7 +84,12 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
                 for (int desktop : removed) {
                     Q_EMIT desktopReapRequested(desktop);
                 }
-                if (!oldToNew.isEmpty()) {
+                // The engine-side stores refuse a poisoned mapping WHOLE
+                // (PhosphorEngine::desktopRenumberMappingIsValid), but the
+                // fan-out below this signal walks three more stores entry by
+                // entry, one of them persisted. Ask the same question here so
+                // every tier refuses together instead of drifting apart.
+                if (!oldToNew.isEmpty() && PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
                     Q_EMIT desktopRenumberRequested(oldToNew);
                 }
             });
@@ -200,7 +206,12 @@ void WorkspaceController::wireVirtualDesktops()
                 if (desktop <= 0) {
                     return;
                 }
-                watchWindowMove(windowId, target);
+                // A sticky window was never displaced (it is on every
+                // workspace), so no re-route is issued and no hint is raised
+                // on its account.
+                if (!watchWindowMove(windowId, target)) {
+                    return;
+                }
                 Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"));
                 if (!*hinted) {
                     *hinted = true;

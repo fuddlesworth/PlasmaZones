@@ -123,8 +123,9 @@ public:
     }
     // The reorder pair above keeps Meta+Ctrl+Shift+PgUp/PgDown: the stock
     // window-to-desktop quad is arrow-only, so the page keys on that tier are
-    // free. These two are the arrow members of the family and move up a tier
-    // for the reason the banner gives.
+    // free. The two move-to-monitor verbs below ship UNBOUND: their natural
+    // chord, Meta+Ctrl+Shift+Arrow, is stock KWin's "Window One Desktop"
+    // family, which the takeover does not release. The user binds them.
     static QString workspaceMoveToMonitorLeftShortcut()
     {
         return QString();

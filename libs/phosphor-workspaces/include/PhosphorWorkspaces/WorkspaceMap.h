@@ -71,10 +71,20 @@ public:
     /// must not be owned elsewhere; a duplicate insert is repaired by removal
     /// from the previous owner first, and the map logs that repair itself.
     void insert(const QString& screenId, int sliceIndex, const WorkspaceEntry& entry);
-    /// Remove a desktop from whatever slice owns it. Returns false if unowned,
-    /// and also if the owner index named a slice that does not actually hold
-    /// the id — that row is dropped (with a warning) rather than kept, since a
-    /// row naming a slice without the entry can only mislead later lookups.
+    /// Remove a desktop from whatever slice owns it. Returns true only when a
+    /// slice entry was actually taken out, which is the answer callers use to
+    /// decide whether anything OBSERVABLE changed.
+    ///
+    /// Returns false if the desktop was unowned, and also if the owner index
+    /// named a slice that does not actually hold the id — that stale row is
+    /// dropped (with a warning) rather than kept, since a row naming a slice
+    /// without the entry can only mislead later lookups. That drop is
+    /// deliberately SILENT: the serialized map (toJson) is built from the
+    /// screen order and the slices alone, so repairing the inverse index
+    /// changes nothing any consumer of the published generation can see, and
+    /// announcing it would bump the generation for a payload that is
+    /// byte-identical. Per-desktop bookkeeping a caller keeps beside the map
+    /// must therefore not be gated on this return value.
     bool remove(const QString& desktopId);
     /// Move a desktop within its owner's slice to newSliceIndex (clamped).
     bool reorderWithinSlice(const QString& desktopId, int newSliceIndex);

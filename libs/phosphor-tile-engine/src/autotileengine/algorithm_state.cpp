@@ -786,6 +786,16 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
         m_activeScreen.clear();
     }
     m_context.removeScreensIf(matches);
+    // Drop the dead output from the active set BEFORE the emit, the same way
+    // the scroll twin does it (engine_context.cpp): the daemon's screenRemoved
+    // path never runs updateEngineScreens, so until the next recompute
+    // isActiveOnScreen would keep answering true for an output that is gone.
+    // The windowsReleased handler asks exactly that question to tell a context
+    // prune (engine still runs there) from a genuine release, so a stale claim
+    // makes every unplugged autotile window skip its float clear and restore.
+    for (auto it = m_autotileScreens.begin(); it != m_autotileScreens.end();) {
+        it = matches(*it) ? m_autotileScreens.erase(it) : std::next(it);
+    }
     if (!releasedWindows.isEmpty()) {
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
     }

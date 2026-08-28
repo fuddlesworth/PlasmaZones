@@ -199,28 +199,45 @@ void WorkspaceReconciler::retireLedgerFor(const QString& desktopId)
     }
 }
 
-bool WorkspaceReconciler::realizeSettledCreate(const QString& desktopId)
+bool WorkspaceReconciler::realizeSettledCreate(const QString& desktopId, int newIndex)
 {
+    // Nearest requested position wins. The ledger is oldest-request-first and
+    // the settled list is KWin-position-ordered; those rankings agree only when
+    // the screens happen to have asked in slice order. Screens [A,B] where B's
+    // population change fires first puts Create(B) at the head of the ledger
+    // while A's new desktop sits EARLIER in KWin's list, so a first-in-ledger
+    // match hands each desktop to the other screen's slice — and nothing
+    // corrects it, because both screens still end in a trailing empty and look
+    // repaired.
+    int best = -1;
+    int bestDistance = 0;
     for (int i = 0; i < m_ledger.size(); ++i) {
         if (m_ledger.at(i).kind != PendingOp::Kind::Create) {
             continue;
         }
-        const PendingOp op = m_ledger.takeAt(i);
-        if (m_ledger.isEmpty()) {
-            m_ledgerTimer.stop();
+        const int distance = qAbs(m_ledger.at(i).globalPosition - newIndex);
+        if (best < 0 || distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
         }
-        if (!m_map.knowsScreen(op.screenId)) {
-            qCWarning(lcWorkspaceRec) << "settled create" << desktopId << "whose planned screen" << op.screenId
-                                      << "is gone — adopting instead";
-            return false;
-        }
-        WorkspaceEntry entry;
-        entry.desktopId = desktopId;
-        entry.name = op.name;
-        m_map.insert(op.screenId, op.sliceIndex, entry);
-        return true;
     }
-    return false;
+    if (best < 0) {
+        return false;
+    }
+    const PendingOp op = m_ledger.takeAt(best);
+    if (m_ledger.isEmpty()) {
+        m_ledgerTimer.stop();
+    }
+    if (!m_map.knowsScreen(op.screenId)) {
+        qCWarning(lcWorkspaceRec) << "settled create" << desktopId << "whose planned screen" << op.screenId
+                                  << "is gone — adopting instead";
+        return false;
+    }
+    WorkspaceEntry entry;
+    entry.desktopId = desktopId;
+    entry.name = op.name;
+    m_map.insert(op.screenId, op.sliceIndex, entry);
+    return true;
 }
 
 // ── KWin echoes ─────────────────────────────────────────────────────────────
@@ -291,8 +308,16 @@ void WorkspaceReconciler::onKwinDesktopRemoved(const QString& desktopId)
     }
     // External removal: KWin is the source of truth — follow, then repair
     // invariants when the list settles (slice-never-empty, trailing-empty).
-    if (m_map.remove(desktopId)) {
-        m_population.remove(desktopId);
+    //
+    // The population is dropped whatever remove() answers: the desktop is gone
+    // from KWin either way, so its window count is dead bookkeeping, and
+    // remove() also answers false for the silent stale-owner-row repair (a
+    // case where the map really did change, just not observably). Only the
+    // generation bump follows the return value, because that is the question
+    // it answers — did the PUBLISHED map change.
+    const bool sliceChanged = m_map.remove(desktopId);
+    m_population.remove(desktopId);
+    if (sliceChanged) {
         bumpGeneration();
     }
 }
@@ -578,12 +603,13 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
         // id-only echo already arrived was realized (and its op consumed) in
         // onKwinDesktopCreated, so it is owned and never reaches this loop; a
         // create the settle answered first is an unowned NEW id, and it
-        // consumes the oldest open Create here — the same FIFO order the echo
-        // path uses. Counting the size delta instead retired a second op per
-        // landed desktop, which left the survivor's echo with no ledger entry
-        // to match (adopting onto the focused screen rather than the screen
-        // that asked) and let maintainScreen request a duplicate.
-        if (!previousIds.contains(id) && realizeSettledCreate(id)) {
+        // consumes the open Create whose requested global position is nearest
+        // this id's position in the settled list. Counting the size delta
+        // instead retired a second op per landed desktop, which left the
+        // survivor's echo with no ledger entry to match (adopting onto the
+        // focused screen rather than the screen that asked) and let
+        // maintainScreen request a duplicate.
+        if (!previousIds.contains(id) && realizeSettledCreate(id, ids.indexOf(id))) {
             continue;
         }
         adoptExternal(id);
@@ -772,13 +798,17 @@ void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceInde
         return;
     }
     m_capHintShown = false;
+    const uint globalPosition = m_map.globalPositionForInsert(screenId, sliceIndex);
     PendingOp op;
     op.kind = PendingOp::Kind::Create;
     op.screenId = screenId;
     op.sliceIndex = sliceIndex;
+    // Recorded so realizeSettledCreate can match by position rather than by
+    // ledger order; the two rankings disagree with concurrent Creates.
+    op.globalPosition = static_cast<int>(globalPosition);
     op.name = name;
     ledgerAdd(op);
-    Q_EMIT requestCreateDesktop(m_map.globalPositionForInsert(screenId, sliceIndex), name);
+    Q_EMIT requestCreateDesktop(globalPosition, name);
 }
 
 void WorkspaceReconciler::maintainScreen(const QString& screenId)

@@ -63,12 +63,17 @@ private Q_SLOTS:
     void screenAdded_freshScreenGetsItsOwnDesktop();
     void create_secondPendingSurvivesTheFirstsSettle();
     void create_settledBeforeEchoLandsOnRequestingScreen();
+    void create_settledMatchesByPositionNotRequestOrder();
 
 private:
     /// Two screens, each occupied and each therefore owing a trailing-empty
     /// create, with BOTH Creates open in the ledger at once. A owns {d1}
     /// (occupied), B owns {d2} (occupied); nothing has landed yet.
-    void openTwoConcurrentCreates(WorkspaceReconciler& rec, QSignalSpy& createSpy)
+    /// `populateBFirst` flips which screen's population change fires first, and
+    /// so which Create heads the ledger. The screen ORDER is [A,B] either way,
+    /// so B-first is the case where oldest-request order and KWin-position
+    /// order disagree.
+    void openTwoConcurrentCreates(WorkspaceReconciler& rec, QSignalSpy& createSpy, bool populateBFirst = false)
     {
         rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
         rec.setFocusedScreen(QStringLiteral("A"));
@@ -79,8 +84,13 @@ private:
         rec.adoptAll({id(1), id(2)}, current);
         QCOMPARE(createSpy.count(), 0);
 
-        rec.onPopulationChanged(id(1), 1);
-        rec.onPopulationChanged(id(2), 1);
+        if (populateBFirst) {
+            rec.onPopulationChanged(id(2), 1);
+            rec.onPopulationChanged(id(1), 1);
+        } else {
+            rec.onPopulationChanged(id(1), 1);
+            rec.onPopulationChanged(id(2), 1);
+        }
         QCOMPARE(createSpy.count(), 2);
     }
 
@@ -836,6 +846,27 @@ void TestWorkspaceReconciler::create_settledBeforeEchoLandsOnRequestingScreen()
     QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
     QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
     // Both ops were consumed, so maintenance is quiet again.
+    QCOMPARE(createSpy.count(), 2);
+}
+
+void TestWorkspaceReconciler::create_settledMatchesByPositionNotRequestOrder()
+{
+    // Same settle-beats-the-echo race, but B's population change fires first,
+    // so the ledger reads [Create(B), Create(A)] while KWin's list still puts
+    // A's new desktop (d3, index 1) ahead of B's (d4, index 3). Matching the
+    // oldest request first would hand d3 to B and d4 to A — each desktop in
+    // the wrong screen's slice, and invisible afterwards because both screens
+    // still end in a trailing empty. The match is by requested POSITION.
+    WorkspaceReconciler rec;
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    openTwoConcurrentCreates(rec, createSpy, /*populateBFirst=*/true);
+
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(4)});
+
+    QCOMPARE(rec.map().ownerOf(id(3)), QStringLiteral("A"));
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
     QCOMPARE(createSpy.count(), 2);
 }
 

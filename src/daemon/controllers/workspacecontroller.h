@@ -204,7 +204,12 @@ private:
     /// expectation and warn when no census arrival confirms it in time — the
     /// op itself is already dropped (nothing retries), the log is the
     /// diagnosis. Arrival confirmation lives in onMetadataChanged.
-    void watchWindowMove(const QString& windowId, const QString& targetDesktopId);
+    ///
+    /// Returns false when the move must not be issued at all: a sticky window
+    /// is on every workspace already and the adaptor drops the desktop move,
+    /// so arming a watch for it only buys a spurious "saw no arrival" warning.
+    /// Every caller uses the answer to skip its own emit.
+    [[nodiscard]] bool watchWindowMove(const QString& windowId, const QString& targetDesktopId);
     QHash<QString, QString> m_pendingWindowMoves; ///< windowId → expected desktopId
     /// windowId → the sequence of the watch that owns the entry above, so a
     /// superseded watch's timer cannot retire its successor's expectation.

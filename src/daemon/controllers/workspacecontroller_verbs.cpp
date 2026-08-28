@@ -28,8 +28,18 @@ namespace {
 constexpr int WindowMoveTimeoutMs = 2000;
 }
 
-void WorkspaceController::watchWindowMove(const QString& windowId, const QString& targetDesktopId)
+bool WorkspaceController::watchWindowMove(const QString& windowId, const QString& targetDesktopId)
 {
+    // Sticky refusal, checked HERE so every move verb inherits it: a window on
+    // all desktops is already on the target, and the adaptor's move slot drops
+    // the request outright (crossmode.cpp). Arming a watch for an arrival that
+    // can never come warned two seconds later. The callers skip their emit on
+    // a false answer.
+    if (m_windowStickyPredicate && m_windowStickyPredicate(windowId)) {
+        qCInfo(lcWorkspaceCtl) << "workspace move for window" << windowId << "to desktop" << targetDesktopId
+                               << "skipped: window is sticky, already on every workspace";
+        return false;
+    }
     // Sequence token per watch, not just the target id: two moves of the same
     // window to the same desktop (a repeated chord, a reunion following a
     // displacement) are indistinguishable by target, so the FIRST timer would
@@ -50,6 +60,7 @@ void WorkspaceController::watchWindowMove(const QString& windowId, const QString
                                       << "saw no arrival (effect not loaded, window closed, or handoff refused)";
         }
     });
+    return true;
 }
 
 void WorkspaceController::runWhenQuiet(std::function<void()> fn)
@@ -143,7 +154,9 @@ void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const Q
         if (desktop <= 0) {
             return;
         }
-        watchWindowMove(windowId, target);
+        if (!watchWindowMove(windowId, target)) {
+            return;
+        }
         Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop,
                                             delta < 0 ? QStringLiteral("up") : QStringLiteral("down"));
     });
@@ -163,7 +176,9 @@ void WorkspaceController::moveWindowToWorkspaceAt(const QString& screenId, const
         if (desktop <= 0) {
             return;
         }
-        watchWindowMove(windowId, target);
+        if (!watchWindowMove(windowId, target)) {
+            return;
+        }
         Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, QStringLiteral("down"));
     });
 }
@@ -187,7 +202,11 @@ void WorkspaceController::moveColumnToWorkspace(const QString& screenId, const Q
         // handoffReceive re-forms the column on the target strip in arrival
         // order (same contract the monitor-crossing column moves rely on).
         for (const QString& windowId : columnWindows) {
-            watchWindowMove(windowId, target);
+            // Per window: a sticky member of the column is refused on its own
+            // and the rest of the column still moves.
+            if (!watchWindowMove(windowId, target)) {
+                continue;
+            }
             Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, direction);
         }
     });
@@ -236,7 +255,11 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
             // handoff verb re-homes each one's engine state and geometry on
             // the target screen (same desktop int).
             for (const QString& windowId : riders) {
-                watchWindowMove(windowId, movedId);
+                // A sticky rider is on the moved desktop already and stays
+                // put; the remaining riders still cross to the new output.
+                if (!watchWindowMove(windowId, movedId)) {
+                    continue;
+                }
                 Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, direction);
             }
             // niri semantics: the moved workspace gains focus on its new
@@ -341,19 +364,13 @@ bool WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const
     if (desktop <= 0) {
         return false;
     }
-    // A sticky window is on every workspace already, and the adaptor's move
-    // slot refuses it outright (crossmode.cpp: the effect drops the desktop
-    // move for an on-all-desktops window). Emitting anyway armed a watchdog
-    // for an arrival that could never come, which warned two seconds later.
-    // TRUE, not false: the rule asked for the window to be on that
-    // workspace and it is, so the positional RouteToDesktop fallback would
-    // be refused for the very same reason.
-    if (m_windowStickyPredicate && m_windowStickyPredicate(windowId)) {
-        qCInfo(lcWorkspaceCtl) << "route to named workspace" << name << ": window" << windowId
-                               << "is sticky, already on every workspace";
+    // A sticky refusal (watchWindowMove answering false) reports TRUE, not
+    // false: the rule asked for the window to be on that workspace and it
+    // already is, so the positional RouteToDesktop fallback would be refused
+    // for the very same reason.
+    if (!watchWindowMove(windowId, target)) {
         return true;
     }
-    watchWindowMove(windowId, target);
     Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"));
     return true;
 }
@@ -372,15 +389,9 @@ void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const 
         if (desktop <= 0) {
             return;
         }
-        // Same sticky refusal as routeWindowToNamedWorkspace: the adaptor
-        // drops the move, so arming the watchdog only buys a spurious
-        // "saw no arrival" warning two seconds later.
-        if (m_windowStickyPredicate && m_windowStickyPredicate(windowId)) {
-            qCInfo(lcWorkspaceCtl) << "move to named workspace" << name << ": window" << windowId
-                                   << "is sticky, already on every workspace";
+        if (!watchWindowMove(windowId, target)) {
             return;
         }
-        watchWindowMove(windowId, target);
         Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop,
                                             QStringLiteral("down"));
     });

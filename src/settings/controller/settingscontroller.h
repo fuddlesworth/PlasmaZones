@@ -353,9 +353,8 @@ public:
     int workspacesDesktopCap() const;
     int workspaceSlotCount() const;
 
-    /// Carry a named-workspace rename through the quick-slot targets, keeping
-    /// a record of the slots it rewrote so the Named page's own Discard can
-    /// undo them. Ownership seam it closes: settingscontroller_pagekeys.cpp.
+    /// Carry a named-workspace rename through the quick-slot targets — see
+    /// settingscontroller_pagekeys.cpp for the ownership seam and the record.
     Q_INVOKABLE void renameWorkspaceSlotTargets(const QString& previousName, const QString& newName);
 
     /// The default snapping layout and default scrolling template:
@@ -1156,8 +1155,8 @@ private:
     bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
-    /// 1-based quick-slot numbers a named-workspace rename rewrote this
-    /// session, read by discardPage("workspaces-named").
+    /// 1-based quick-slot numbers an UNCOMMITTED named-workspace rename
+    /// rewrote; every path that re-takes the committed baseline clears it.
     QSet<int> m_renamedWorkspaceSlots;
     /// Depth counter for deferred dirtyPagesChanged emission. While > 0 the
     /// reconcile helpers mutate m_dirtyPages but record the NOTIFY in
