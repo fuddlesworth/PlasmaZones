@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
@@ -80,9 +81,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const int minWidth = qMax(0, minWidthIn);
     const int minHeight = qMax(0, minHeightIn);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    // ONE fetch for the whole open path. Four effective* values are resolved
-    // out of this map below (sticky handling, default display, the
-    // client-decides verdict and the insert position) plus the template
+    // ONE fetch for the whole open path. Five effective* values are resolved
+    // out of this map below (sticky handling, default display, the two
+    // client-decides verdicts and the insert position) plus the template
     // blueprint, and the screenId-taking wrappers would each rebuild it.
     const QVariantMap screenOverrides = overridesForScreen(screenId);
 
@@ -205,7 +206,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
+        // exactOnly: a column width is a PER-WINDOW contract, and the
+        // non-exact default admits a same-app SIBLING's record (the interface
+        // documents that sharing as being for free POSITIONS). Minting one
+        // window's sizing intent out of another instance's remembered rect
+        // opens the column at a size this window never asked for.
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true)) {
             // The tracked geometry is a PHYSICAL rect from the compositor, so
             // it has to be decoded by role. Reading .width() unconditionally
             // would, on a vertical strip, feed the client's cross extent into
@@ -264,6 +270,15 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // focus and re-anchor the view (insertWindow does both, insertWindowAt and
     // insertWindowIntoActiveColumn do neither), so an arrival that lands
     // off-screen is diagnosable only by naming the arm that placed it.
+    // Whether the insert APPENDED to a column that already existed rather
+    // than creating one. Derived from the column count, not from which arm
+    // ran: insertWindowIntoActiveColumn delegates to insertWindow when there
+    // is no active column and still returns true, so an arm-keyed flag would
+    // call that a join. The client-decides height gate below excludes joins —
+    // a joining window shares its host column's shape, which is why the width
+    // twin never reaches these arms either (insertWindowIntoActiveColumn
+    // honours @p width only on its empty-strip fallback).
+    const int columnsBeforeInsert = state->strip().columnCount();
     const char* insertArm = "none";
     // Whether the tile came back out of the mode-round-trip stash. The height
     // commit at the tail reads it: a stash restore rebuilds the remembered
@@ -490,6 +505,37 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                                                  WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent))));
         }
     }
+    // "The client decides" default HEIGHT, the twin of the width gate above
+    // the insert. Every term of that gate applies here for its own reason:
+    // a stash restore's remembered shape outranks an open-time default (the
+    // rule arm just above documents that precedence), a per-window
+    // openWindowHeight rule outranks the kind and is handled there, and a
+    // per-screen rule height means the resolver already pinned one.
+    //
+    // A window that JOINED an existing column is excluded, which is where the
+    // width twin's reach ends too: that arm passes the width to
+    // insertWindowIntoActiveColumn, which honours it only on the empty-strip
+    // fallback, so a joining window keeps its host column's shape. Committing
+    // a height there is not merely redundant, it is disruptive — the intent
+    // is Fixed, so on a TABBED host setWindowHeightIntent hands the arrival
+    // the column's extent and resizes every tab to a window that just showed
+    // up, and on a Normal host the relayout renormalizes the siblings down to
+    // fit the newcomer. A joining tile takes the column's even split, as
+    // before.
+    //
+    // Placed AFTER the insert rather than folded into params.defaultWindowHeight
+    // because the insert is what puts the tile in the strip: unlike the
+    // width, which the insert takes as an argument, a tile's height is
+    // written by the insert from params and can only be re-stated through
+    // setWindowHeightIntent afterwards.
+    const bool joinedExistingColumn = inserted && state->strip().columnCount() == columnsBeforeInsert;
+    if (inserted && !restoredFromStash && !joinedExistingColumn && !openParams.heightFraction) {
+        // Re-resolved after the insert for the rule arm's reason: with smart
+        // gaps the work area depends on the strip's column count, and the
+        // committed pixels are PERSISTED intent that would not self-heal.
+        commitClientDecidedHeight(state->strip(), windowId, screenId, screenOverrides,
+                                  layoutParamsForScreen(screenId, state->strip().columnCount()));
+    }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
         // A refusal is still an OUTCOME, and the seed's "consumed on every
@@ -607,6 +653,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
     }
     bool migratedWindowedFs = false;
+    std::optional<WindowHeight> migratedHeight;
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
         // context's per-window bookkeeping goes with it: a stale
@@ -619,6 +666,25 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // silently default false; read it off the old tile before takeWindow
         // destroys it (the boundary-crossing verb carries it the same way).
         migratedWindowedFs = oldState->strip().isWindowedFullscreen(windowId);
+        // The tile's HEIGHT intent is carried the same way and for a sharper
+        // reason: the insert below re-runs the whole open path, so a
+        // ClientDecides screen would re-stamp the window with its recorded
+        // client extent and discard whatever height the user had given it on
+        // the old context. A migration is a move, not an open — the height
+        // the window already had outranks the open-time default. Carried
+        // verbatim, Auto included, so a window the user never resized keeps
+        // sharing its column rather than acquiring an intent on every hop.
+        // Only from a real TILE. A window that was FLOATING on the old
+        // context is not in its strip, and windowHeightIntent answers a
+        // default-constructed Auto for a window it does not hold — an engaged
+        // optional carrying a height that never belonged to a tile, which the
+        // re-apply below would then stamp over the client-decided height the
+        // new screen's open path just committed. The windowed-fullscreen twin
+        // gets away with the unconditional read because a false flag is a
+        // no-op write; an Auto height is not.
+        if (oldState->strip().containsWindow(windowId)) {
+            migratedHeight = oldState->strip().windowHeightIntent(windowId);
+        }
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
         m_floatRestore.remove(windowId);
@@ -702,6 +768,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
                                       << "— migrated windowed-fullscreen state dropped";
         }
         return;
+    }
+    // Re-state the migrated height intent on the fresh tile, overwriting
+    // whatever the open path just seeded (a ClientDecides screen re-stamps
+    // the client extent there, which on a migration would discard the user's
+    // height). Guarded on the window actually being a tile: insertOpenedWindow
+    // returns true on its float exits too, and a float has no tile to carry.
+    if (migratedHeight && state->strip().containsWindow(windowId)) {
+        state->strip().setWindowHeightIntent(windowId, *migratedHeight);
     }
     // Hand the migrated windowed-fullscreen flag to the fresh tile (captured
     // above, before takeWindow destroyed the old one). insertOpenedWindow
@@ -1004,19 +1078,64 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // whether or not the strip's own focus slot moves below.
     state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-    if (state->strip().focusWindow(windowId, params)) {
-        // The focus change may scroll the viewport; never re-activate here
-        // (the compositor initiated this focus). Background-context guard:
-        // see windowClosed.
-        if (key == currentKeyForScreen(key.screenId)) {
-            applyLayout(key.screenId, false);
-        }
-        // Focus and view anchor are persisted (serializeStripState), and
-        // placementChanged is the only thing that marks DirtyScrollStrips.
-        // Emitted for a background context too: the strip that changed is
-        // serialized whether or not it is the one on screen right now.
-        Q_EMIT placementChanged(key.screenId);
+    // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
+    // screen owns the view for the rest of the hold, and picking the dragged
+    // window up activates it. Handing the view back here would slide the
+    // layout under a stationary cursor, the hazard applyLayout's own
+    // dragPreviewSteersView guard exists for. screensMatch, not ==, for that
+    // guard's reason. Read before the focus move so both outcomes below share
+    // one answer.
+    const bool dragPreviewSteersView = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId);
+    const bool focusMoved = state->strip().focusWindow(windowId, params);
+    // A view still detached AFTER the focus move is one no re-anchor took
+    // back, and there are two ways to arrive here holding one. focusWindow
+    // REFUSED the report, because it names the window the strip already calls
+    // active (scrollstrip_navigation.cpp's same-column, same-tile bail); or it
+    // accepted a same-COLUMN tile move, which re-anchors nothing because no
+    // strip geometry moved. Both are right about the focus SLOT and wrong
+    // about the VIEW. A pan detaches the view from the centering policy, and
+    // the re-anchor that re-attaches it (reanchorAfterFocusChange) is reached
+    // from focusWindow on a COLUMN change and on nothing else, so neither of
+    // these two outcomes gets there. No later pass revisits the question
+    // either: updateViewForFocus returns early while detached, so even the
+    // applyLayout a desktop return runs cannot re-derive the anchor. The
+    // result was that clicking the focused window, or switching away from its
+    // desktop and back, did nothing at all — the whole report was dropped,
+    // latch and all.
+    //
+    // Re-attach and let the POLICY answer, rather than re-anchoring outright.
+    // Under Never/OnOverflow updateViewForFocus leaves a fully-visible column
+    // alone, so a pan that kept the focused column on screen survives an
+    // incidental activation — KWin re-fires windowActivated on restacking,
+    // fullscreen exit and desktop switches, not only on real focus moves.
+    // Under Always it re-centres, which is what that setting asks for.
+    //
+    // The report must NAME the active window: a minimized tile in the active
+    // column is refused by focusWindow without becoming the column's active
+    // tile, and that report has no claim on the view.
+    const bool handBackView =
+        state->strip().viewDetached() && state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
+    if (!focusMoved && !handBackView) {
+        return;
     }
+    if (handBackView) {
+        state->strip().setViewDetached(false);
+    }
+    // The focus change may scroll the viewport; never re-activate here (the
+    // compositor initiated this focus). Background-context guard: see
+    // windowClosed. The latch is cleared for a background context too (it is
+    // persisted state), but only the on-screen context re-derives the anchor
+    // now — a background one re-derives on the applyLayout its own desktop
+    // return runs, which is the pass that used to return early.
+    if (key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
+    // Focus and view anchor are persisted (serializeStripState), and
+    // placementChanged is the only thing that marks DirtyScrollStrips.
+    // Emitted for a background context too: the strip that changed is
+    // serialized whether or not it is the one on screen right now.
+    Q_EMIT placementChanged(key.screenId);
 }
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the

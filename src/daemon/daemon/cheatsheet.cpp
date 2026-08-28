@@ -100,6 +100,14 @@ void Daemon::showCheatsheetOnCursorScreen()
         m_overlayService->hideSnapAssist();
     }
 
+    // With every mode switched off the context is modeless: there is no mode
+    // whose shortcuts would be truthful, so say that rather than draw a sheet
+    // filtered by a mode nothing is running in.
+    if (!anyModeEnabled()) {
+        showModelessOsd(screenId);
+        return;
+    }
+
     const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
     m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), push.modeString,
                                      push.autotileAvailable, push.scrollingAvailable, push.layoutsAvailable,
@@ -134,9 +142,64 @@ void Daemon::refreshCheatsheetIfVisible()
     if (screenId.isEmpty()) {
         return;
     }
+    // Same modeless condition as the show path. No OSD here: the user
+    // pressed nothing, so an unprompted card would be noise.
+    if (!anyModeEnabled()) {
+        m_overlayService->hideCheatsheet();
+        return;
+    }
     const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
     m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), push.modeString, push.autotileAvailable,
                                         push.scrollingAvailable, push.layoutsAvailable, push.layoutsAreTemplates);
+}
+
+bool Daemon::modeEnabled(PhosphorZones::AssignmentEntry::Mode mode) const
+{
+    // The master switches, keyed by mode. Same mapping the mode toggle's
+    // cycle uses to skip disabled modes (daemon/autotile_init.cpp); kept as
+    // a Daemon member because the cheatsheet needs the identical question
+    // and a second open-coded switch is one settings rename away from
+    // disagreeing with the toggle.
+    if (!m_settings) {
+        return false;
+    }
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return m_settings->snappingEnabled();
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return m_settings->autotileEnabled();
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return m_settings->scrollingEnabled();
+    }
+    return false;
+}
+
+bool Daemon::anyModeEnabled() const
+{
+    return modeEnabled(PhosphorZones::AssignmentEntry::Snapping)
+        || modeEnabled(PhosphorZones::AssignmentEntry::Autotile)
+        || modeEnabled(PhosphorZones::AssignmentEntry::Scrolling);
+}
+
+void Daemon::showModelessOsd(const QString& screenId)
+{
+    // Structural twin of showNotAssignedOsd (daemon/osd.cpp): same suppress
+    // gate, same style branch, same preview-then-text fallback.
+    if (shouldSuppressOsd(screenId)) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    const QString text = PhosphorI18n::tr("No placement mode is turned on");
+    if (style == OsdStyle::Preview && m_overlayService) {
+        m_overlayService->showDisabledOsd(text, screenId);
+        qCInfo(lcDaemon) << "Cheatsheet: modeless context, preview OSD screen=" << screenId;
+        return;
+    }
+    showKdeTextOsd(QStringLiteral("dialog-cancel"), text);
+    qCInfo(lcDaemon) << "Cheatsheet: modeless context, text OSD screen=" << screenId;
 }
 
 Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screenId) const
@@ -144,10 +207,60 @@ Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screen
     // Single resolver for everything both cheatsheet push sites hand the
     // overlay: show and refresh MUST agree (a divergence shows up as a sheet
     // whose filter changes on refresh), so neither site open-codes the set.
-    const LayoutSupport support = layoutSupportForScreen(screenId);
-    return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+
+    // ScreenModeRouter answers placement ROUTING, not feature enablement: its
+    // catch-all is Snapping (screenmoderouter.cpp), returned even with
+    // snapping switched off, and the "autotile:none" sentinel pins a screen to
+    // Autotile regardless of the tiling switch. Taking that answer raw filtered
+    // the sheet by a mode the user had turned off, which listed that mode's
+    // dead keys and hid every other group. Resolve to an enabled mode, in the
+    // same cycle order the mode toggle skips disabled modes in
+    // (daemon/autotile_init.cpp). Callers gate on anyModeEnabled(), so the loop
+    // always finds one.
+    Mode mode = currentModeFor(screenId);
+    if (!modeEnabled(mode)) {
+        for (const Mode candidate : {Mode::Snapping, Mode::Autotile, Mode::Scrolling}) {
+            if (modeEnabled(candidate)) {
+                mode = candidate;
+                break;
+            }
+        }
+    }
+
+    // Layout capability follows the mode the sheet is FILTERED by. On the
+    // fallback path that differs from the routed one, and reading the routed
+    // engine would tag scrolling's template rows with placement wording.
+    const LayoutSupport support = layoutSupportForCheatsheetMode(mode, screenId);
+    return {cheatsheetModeString(mode), m_settings && m_settings->autotileEnabled(),
             m_settings && m_settings->scrollingEnabled(), support != LayoutSupport::None,
             support == LayoutSupport::Templates};
+}
+
+PhosphorEngine::IPlacementEngine::LayoutSupport
+Daemon::layoutSupportForCheatsheetMode(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId) const
+{
+    // Routed mode: defer to the router-backed resolver so the common path
+    // keeps its exact behaviour, shutdown-window fallback included.
+    if (mode == currentModeFor(screenId)) {
+        return layoutSupportForScreen(screenId);
+    }
+    const PhosphorEngine::PlacementEngineBase* engine = nullptr;
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        engine = m_autotileEngine.get();
+        break;
+    case PhosphorZones::AssignmentEntry::Snapping:
+        engine = m_snapEngine.get();
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        engine = m_scrollEngine.get();
+        break;
+    }
+    if (!engine) {
+        return layoutSupportForScreen(screenId);
+    }
+    return engine->layoutSupport();
 }
 
 void Daemon::onCheatsheetDismissed()

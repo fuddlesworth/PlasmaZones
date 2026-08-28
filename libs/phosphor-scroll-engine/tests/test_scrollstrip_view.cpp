@@ -345,7 +345,7 @@ void TestScrollStripView::resetToDefaultsRestoresEveryIntent()
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeProportion(1.0));
 
-    QVERIFY(strip.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Normal, params));
+    QVERIFY(strip.resetToDefaults(params.defaultColumnWidth, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
     for (const Column& col : strip.columns()) {
         QCOMPARE(col.width, params.defaultColumnWidth);
         QCOMPARE(col.display, ColumnDisplay::Normal);
@@ -362,21 +362,76 @@ void TestScrollStripView::resetToDefaultsRestoresEveryIntent()
     QCOMPARE(strip.columns().at(0).width, params.defaultColumnWidth);
 
     // Already at the defaults: refuses.
-    QVERIFY(!strip.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Normal, params));
+    QVERIFY(!strip.resetToDefaults(params.defaultColumnWidth, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
 
     // No default width at all ("the client decides"): the widths are left
-    // exactly as they are, and only the display and heights reset.
+    // exactly as they are, and only the display and heights reset. The height
+    // is pushed off Auto first, or the "heights reset" half of that claim
+    // would ride on a fixture where every tile was already Auto.
     ScrollStrip clientSized;
     QVERIFY(clientSized.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(640), ColumnDisplay::Normal, params));
     QVERIFY(clientSized.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(480), ColumnDisplay::Normal, params));
+    QVERIFY(clientSized.setActiveWindowHeight(WindowHeight::makeFixed(300)));
     QVERIFY(clientSized.toggleActiveColumnTabbed());
-    QVERIFY(clientSized.resetToDefaults(std::nullopt, ColumnDisplay::Normal, params));
+    QVERIFY(clientSized.resetToDefaults(std::nullopt, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
     QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeFixed(640));
     QCOMPARE(clientSized.columns().at(1).width, ColumnWidth::makeFixed(480));
     QCOMPARE(clientSized.columns().at(1).display, ColumnDisplay::Normal);
+    QCOMPARE(clientSized.columns().at(1).tiles.at(0).height, WindowHeight::makeAuto());
     // And with nothing but widths off their (absent) default, there is
     // nothing to reset.
-    QVERIFY(!clientSized.resetToDefaults(std::nullopt, ColumnDisplay::Normal, params));
+    QVERIFY(!clientSized.resetToDefaults(std::nullopt, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
+
+    // No default HEIGHT either ("the client decides" on the cross axis): the
+    // tile heights are left exactly as they are, while the width and display
+    // still reset. The two absences are independent — this strip has a width
+    // default and no height one.
+    ScrollStrip clientTall;
+    QVERIFY(clientTall.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(clientTall.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(clientTall.focusColumn(0, params));
+    QVERIFY(clientTall.consumeWindowIntoColumn(params)); // b joins a
+    QVERIFY(clientTall.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(clientTall.setActiveColumnWidth(ColumnWidth::makeFixed(640)));
+    const QList<WindowHeight> heightsBefore = [&] {
+        QList<WindowHeight> out;
+        for (const Tile& tile : clientTall.columns().at(0).tiles) {
+            out.append(tile.height);
+        }
+        return out;
+    }();
+    QCOMPARE(heightsBefore.size(), 2);
+    QVERIFY(clientTall.resetToDefaults(params.defaultColumnWidth, std::nullopt, ColumnDisplay::Normal, params));
+    QCOMPARE(clientTall.columns().at(0).width, params.defaultColumnWidth);
+    // The count first: a reset that dropped or reordered tiles while leaving
+    // the surviving prefix intact would otherwise index out of range rather
+    // than fail an assertion.
+    QCOMPARE(clientTall.columns().at(0).tiles.size(), heightsBefore.size());
+    for (int i = 0; i < heightsBefore.size(); ++i) {
+        QCOMPARE(clientTall.columns().at(0).tiles.at(i).height, heightsBefore.at(i));
+    }
+    // Nothing but the height off its (absent) default: nothing to reset.
+    QVERIFY(!clientTall.resetToDefaults(params.defaultColumnWidth, std::nullopt, ColumnDisplay::Normal, params));
+
+    // BOTH absent, which is the screen "the client decides" makes reachable on
+    // each axis at once: only the display is left to reset, and the verb must
+    // report exactly that rather than a success that changed nothing (a
+    // spurious retile) or a refusal that discarded a display change.
+    ScrollStrip clientBoth;
+    QVERIFY(clientBoth.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(640), ColumnDisplay::Normal, params));
+    QVERIFY(clientBoth.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(480), ColumnDisplay::Normal, params));
+    QVERIFY(clientBoth.focusColumn(0, params));
+    QVERIFY(clientBoth.consumeWindowIntoColumn(params));
+    QVERIFY(clientBoth.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(clientBoth.toggleActiveColumnTabbed());
+    QVERIFY(clientBoth.resetToDefaults(std::nullopt, std::nullopt, ColumnDisplay::Normal, params));
+    QCOMPARE(clientBoth.columns().at(0).width, ColumnWidth::makeFixed(640));
+    QCOMPARE(clientBoth.columns().at(0).display, ColumnDisplay::Normal);
+    const int owner = clientBoth.columns().at(0).activeTileIdx;
+    QCOMPARE(clientBoth.columns().at(0).tiles.at(owner).height, WindowHeight::makeFixed(300));
+    // Everything it can reset is now at its default, so a second press
+    // refuses.
+    QVERIFY(!clientBoth.resetToDefaults(std::nullopt, std::nullopt, ColumnDisplay::Normal, params));
 
     // Intent compare, not pixels: a Fixed that renders to the default's
     // extent is still reset, because it would not follow a later work-area
@@ -384,13 +439,13 @@ void TestScrollStripView::resetToDefaultsRestoresEveryIntent()
     ScrollStrip fixed;
     const int defaultPx = ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params);
     QVERIFY(fixed.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(defaultPx), ColumnDisplay::Normal, params));
-    QVERIFY(fixed.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Normal, params));
+    QVERIFY(fixed.resetToDefaults(params.defaultColumnWidth, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
     QCOMPARE(fixed.columns().at(0).width, params.defaultColumnWidth);
 
     // The display default is an argument, and a Tabbed default is honoured.
     ScrollStrip tabbed;
     QVERIFY(tabbed.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(tabbed.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Tabbed, params));
+    QVERIFY(tabbed.resetToDefaults(params.defaultColumnWidth, WindowHeight::makeAuto(), ColumnDisplay::Tabbed, params));
     QCOMPARE(tabbed.columns().at(0).display, ColumnDisplay::Tabbed);
 }
 
@@ -703,7 +758,7 @@ void TestScrollStripView::resetToDefaultsClearsThePreMaximizeSlot()
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeProportion(1.0));
     // Nothing but the slot is off its default, so the reset reports no
     // change, and still clears the slot.
-    QVERIFY(!strip.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Normal, params));
+    QVERIFY(!strip.resetToDefaults(params.defaultColumnWidth, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeProportion(0.5));
 
@@ -715,7 +770,7 @@ void TestScrollStripView::resetToDefaultsClearsThePreMaximizeSlot()
     QVERIFY(
         clientSized.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
     QVERIFY(clientSized.toggleMaximizeActiveColumn(params)); // slot = 0.3
-    QVERIFY(!clientSized.resetToDefaults(std::nullopt, ColumnDisplay::Normal, params));
+    QVERIFY(!clientSized.resetToDefaults(std::nullopt, WindowHeight::makeAuto(), ColumnDisplay::Normal, params));
     QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(1.0));
     QVERIFY(clientSized.toggleMaximizeActiveColumn(params));
     QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(0.3));

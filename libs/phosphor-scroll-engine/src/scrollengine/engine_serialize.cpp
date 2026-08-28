@@ -100,6 +100,10 @@ inline QLatin1String kDisplay()
 {
     return QLatin1String("display");
 }
+inline QLatin1String kHeightOwner()
+{
+    return QLatin1String("heightOwner");
+}
 inline QLatin1String kActiveWindow()
 {
     return QLatin1String("activeWindow");
@@ -297,6 +301,13 @@ QJsonObject ScrollEngine::serializeStripState() const
             c.insert(kTiles(), tiles);
             c.insert(kWidth(), widthToJson(col.width));
             c.insert(kDisplay(), static_cast<int>(col.display));
+            // Which tab owns a tabbed column's cross extent. Persisted because
+            // it is no longer inferable: the non-owning tabs keep their own
+            // heights, so a restore that fell back to "the first non-Auto tab"
+            // would hand the column to a different tab than the one that had
+            // it. An absent key (a blob written before this field) still takes
+            // that fallback, which is what it always did.
+            c.insert(kHeightOwner(), col.heightOwnerId);
             c.insert(kActiveWindow(), col.activeWindowId);
             columns.append(c);
         }
@@ -559,6 +570,12 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
             col.display = colObj.value(kDisplay()).toInt(0) == static_cast<int>(ColumnDisplay::Tabbed)
                 ? ColumnDisplay::Tabbed
                 : ColumnDisplay::Normal;
+            // Not filtered against the surviving tiles the way activeWindowId
+            // is below: the restore's re-assert already refuses an owner that
+            // is not on the strip, and an unclaimed owner then leaves the
+            // column on the deterministic scan — the same answer a blob
+            // written before this key gets.
+            col.heightOwnerId = colObj.value(kHeightOwner()).toString();
             const QJsonArray tiles = colObj.value(kTiles()).toArray();
             for (const QJsonValue& tileVal : tiles) {
                 if (col.tiles.size() >= kMaxRestoredTilesPerColumn) {

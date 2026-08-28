@@ -54,6 +54,8 @@ private Q_SLOTS:
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
+    void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
+    void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
@@ -268,10 +270,12 @@ void TestScrollStripSizing::switchingTabsDoesNotResizeATabbedColumn()
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), resized);
 }
 
-// The write half of that invariant: a height press claims ownership, clearing
-// every other tab back to Auto (niri's convert_heights_to_auto). Without the
-// claim two tabs would hold intents at once and the resolver would answer with
-// whichever it met first, which is a layout that depends on tile order.
+// The write half of that invariant: a height press takes ownership of the
+// column's extent. Ownership is an explicit pointer (Column::heightOwnerId),
+// so the tab that loses it KEEPS its own height — the column is decided by one
+// tab without the others' intents being destroyed to arrange it. Without the
+// claim the resolver would fall back to whichever non-Auto tab it met first,
+// which is a layout that depends on tile order.
 void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
 {
     ScrollLayoutParams params = defaultParams();
@@ -295,12 +299,136 @@ void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
     // One owner, and it is the tab that was pressed.
     const Column* col = strip.activeColumn();
     QVERIFY(col);
-    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Auto);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
     QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height.kind, WindowHeight::Fixed);
+    // "b" is no longer the owner, but its own intent is untouched — losing the
+    // claim is not losing the height. This is what makes the tab toggle
+    // reversible: untabbing hands "b" back the height it had.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Fixed);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
 
     // So switching back to "b" still shows the column "a" set.
     QVERIFY(strip.focusAdjacentTile(1));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
+}
+
+// The tab toggle is REVERSIBLE, which is the whole reason ownership is a
+// pointer rather than a wipe. A Normal column legitimately holds several sized
+// tiles — nothing arbitrates a stack, so the height verbs cannot maintain a
+// single owner there — and the flip into tabbed has to choose one of them
+// WITHOUT destroying the rest, or untabbing returns a stack the user never
+// built. It also has to choose the tab on show: picking by stack order hands
+// the column to whichever tile sits first, regardless of what was in front of
+// the user when they pressed the key.
+void TestScrollStripSizing::tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // Two sized tiles in a NORMAL column, which is ordinary: each governs its
+    // own slice of the stack, so both intents are legitimate at once.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(200)));
+    QVERIFY(strip.focusAdjacentTile(1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height, WindowHeight::makeFixed(300));
+
+    // "b" is the tab on show when the flip lands, so "b" owns the extent —
+    // NOT "a", which is the tile stack order would have handed it to.
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 300);
+
+    // Nothing was destroyed to arrange that: "a" still carries its own height
+    // while "b" owns the column.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+
+    // So untabbing gives the stack back exactly as it was, and the ownership
+    // is dropped rather than left to go stale.
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QVERIFY(col->heightOwnerId.isEmpty());
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height, WindowHeight::makeFixed(300));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 200);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 300);
+
+    // An owner named at the TRANSITION may legitimately be Auto, and then the
+    // column takes the whole work area rather than scanning past it to a sized
+    // sibling — the tab on show asked for full height, so that is the answer.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeAuto()));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), ScrollTestUtils::kCrossExtent);
+
+    // But WRITING Auto is not a bid for the column. "b" takes it with a real
+    // height, and a later Auto write on "a" must not seize it back and blow
+    // the column up to full height. This is the rule that stops every
+    // arrival — a cross-output move, an unfloat, a drag cancel, a stash
+    // restore, each of which re-states a tile's intent — from resizing a
+    // tabbed column it merely joined.
+    QVERIFY(strip.focusAdjacentTile(1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(250)));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QVERIFY(strip.focusAdjacentTile(-1));
+    strip.setActiveWindowHeight(WindowHeight::makeAuto());
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 250);
+}
+
+// The owner is a window id, so a tab leaving the column would otherwise leave
+// it dangling. The resolver would still answer (it falls back to a scan), but
+// by STACK ORDER — so closing a neighbour could resize the column to a tab the
+// user is not looking at. The ownership follows the tab on show instead.
+void TestScrollStripSizing::closingTheOwningTabHandsTheExtentToTheTabOnShow()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+
+    // "a" is sized and sits FIRST, so it is what a stack-order fallback would
+    // pick. "c" is sized too and is the tab on show.
+    QVERIFY(strip.focusAdjacentTile(-1)); // c -> b
+    QVERIFY(strip.focusAdjacentTile(-1)); // b -> a
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(200)));
+    QVERIFY(strip.focusAdjacentTile(1)); // a -> b
+    QVERIFY(strip.focusAdjacentTile(1)); // b -> c
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("c"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("c"))), 300);
+
+    // Close the owner. "b" is the tab that comes on show, and it is Auto, so
+    // the column takes the whole work area — NOT "a"'s 200, which is what the
+    // stack-order fallback would have answered.
+    QVERIFY(strip.removeWindow(QStringLiteral("c"), params));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), ScrollTestUtils::kCrossExtent);
+    // "a" kept its height throughout, so untabbing still restores the stack.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
 }
 
 // The grow side's budget invariant. Deliberately NOT an exact ceiling

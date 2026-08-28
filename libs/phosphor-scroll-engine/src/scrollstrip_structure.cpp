@@ -135,6 +135,13 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
     Column col;
     col.width = width;
     col.display = display;
+    // A column opening straight into tabbed presentation has exactly one tab,
+    // so it owns the extent by construction. Named rather than left to the
+    // resolver's fallback scan, so the ownership is stated wherever a tabbed
+    // column comes into existence.
+    if (display == ColumnDisplay::Tabbed) {
+        col.heightOwnerId = windowId;
+    }
     Tile tile;
     tile.windowId = windowId;
     tile.minWidth = minWidth;
@@ -194,13 +201,6 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
         return insertWindow(windowId, width, displayOverride.value_or(ColumnDisplay::Normal), params, minWidth,
                             minHeight);
     }
-    Tile tile;
-    tile.windowId = windowId;
-    tile.minWidth = minWidth;
-    tile.minHeight = minHeight;
-    tile.height = params.defaultWindowHeight;
-    col->tiles.append(tile);
-    col->activeTileIdx = col->tiles.size() - 1;
     // The arrival joins an EXISTING column: the column's width intent is
     // the host's and deliberately stays (an open-rule width override would
     // resize every sibling in the stack). Display is column-level
@@ -208,9 +208,22 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     // disengaged override (plain consume-open) keeps the host's display —
     // overwriting with the config default would silently un-tab a column
     // the user toggled.
-    if (displayOverride && *displayOverride != col->display) {
-        col->display = *displayOverride;
+    //
+    // Applied BEFORE the tile joins, so an openTabbed rule that turns the host
+    // tabbed hands the extent to the tab already on show. Run after the
+    // append it would name the ARRIVAL, whose height is the context default —
+    // so a rule-tabbed open would resize the column to a window that asked for
+    // nothing and drop the extent its residents had.
+    if (displayOverride) {
+        applyColumnDisplay(*col, *displayOverride);
     }
+    Tile tile;
+    tile.windowId = windowId;
+    tile.minWidth = minWidth;
+    tile.minHeight = minHeight;
+    tile.height = params.defaultWindowHeight;
+    col->tiles.append(tile);
+    col->activeTileIdx = col->tiles.size() - 1;
     // No re-anchor and no re-clamp, unlike every sibling insert verb: the
     // arrival joins the column that is ALREADY active, so no column index
     // shifts and the active column does not change. The strip's total width
@@ -259,6 +272,13 @@ bool ScrollStrip::insertWindowAt(int columnIndex, const QString& windowId, const
     Column col;
     col.width = width;
     col.display = display;
+    // A column opening straight into tabbed presentation has exactly one tab,
+    // so it owns the extent by construction. Named rather than left to the
+    // resolver's fallback scan, so the ownership is stated wherever a tabbed
+    // column comes into existence.
+    if (display == ColumnDisplay::Tabbed) {
+        col.heightOwnerId = windowId;
+    }
     Tile tile;
     tile.windowId = windowId;
     // Restore callers overwrite this via setWindowHeightIntent; a fresh
@@ -322,6 +342,19 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     col.tiles.removeAt(tileIdx);
     if (col.activeTileIdx > tileIdx || col.activeTileIdx >= col.tiles.size()) {
         col.activeTileIdx = qMax(0, col.activeTileIdx - 1);
+    }
+    // The tab that owned this column's extent just left it (closed, taken for
+    // a float, expelled, or moved to another output). Hand the ownership to
+    // the tab now on show, which is the same rule the flip into tabbed
+    // follows. Leaving the id dangling would work — the resolver falls back to
+    // a scan for the first sized tab — but the fallback answers by stack
+    // order, so the column would resize to a tab the user is not looking at
+    // the moment its neighbour closes. Done here because this is the one
+    // chokepoint every removal reaches (takeWindow delegates to it).
+    if (col.heightOwnerId == windowId) {
+        col.heightOwnerId = col.display == ColumnDisplay::Tabbed && !col.tiles.isEmpty()
+            ? col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId
+            : QString();
     }
 
     bool columnClosed = false;
@@ -915,7 +948,13 @@ bool ScrollStrip::toggleActiveColumnTabbed()
     if (!col) {
         return false;
     }
-    col->display = (col->display == ColumnDisplay::Tabbed) ? ColumnDisplay::Normal : ColumnDisplay::Tabbed;
+    // Through applyColumnDisplay, which is what carries the extent ownership
+    // across the flip: a Normal column can legitimately hold several sized
+    // tiles (nothing arbitrates a stack), so entering Tabbed has to name an
+    // owner or the column would size itself from whichever tile happens to sit
+    // first. The tab on show takes it, and leaving Tabbed drops it again with
+    // every tile's own height still intact.
+    applyColumnDisplay(*col, col->display == ColumnDisplay::Tabbed ? ColumnDisplay::Normal : ColumnDisplay::Tabbed);
     return true;
 }
 

@@ -3,13 +3,13 @@
 
 #pragma once
 
-// A headless IWindowTrackingService for the two engine paths that are
+// A headless IWindowTrackingService for the three engine paths that are
 // unreachable without one: the STICKY insertion gate (which asks the tracker
-// whether a window is sticky) and the CLIENT-DECIDES default width (which
-// opens a column at the tracker's reported unmanaged geometry). Both are
-// per-screen rule slots, so without this stub their per-screen resolution has
-// no observable at all — the engine short-circuits on the null tracker before
-// the resolved value is ever used.
+// whether a window is sticky) and the CLIENT-DECIDES default width and height
+// (which open a column, and size a tile, from the tracker's reported
+// unmanaged geometry). All are per-screen rule slots, so without this stub
+// their per-screen resolution has no observable at all — the engine
+// short-circuits on the null tracker before the resolved value is ever used.
 //
 // Everything else answers the empty/false/no-op value. The placement store is
 // a real (empty) WindowPlacementStore: the open path consults it for a
@@ -41,10 +41,17 @@ public:
 
     /// Windows the sticky gate must see as sticky.
     QSet<QString> stickyWindows;
-    /// What validatedUnmanagedGeometry answers — the client's own size, which
-    /// the ClientDecides width opens the column at. Invalid means "no size on
-    /// record", the case that falls back to the resolved default.
+    /// What validatedUnmanagedGeometry answers — the client's own size. The
+    /// ClientDecides width opens the column at its MAIN extent and the
+    /// ClientDecides height sizes the tile from its CROSS extent. Invalid
+    /// means "no size on record", the case that falls back to the resolved
+    /// default.
     QRect unmanagedGeometry;
+    /// The exactOnly flag of the last validatedUnmanagedGeometry call. Both
+    /// sizing arms must pass true (a sizing intent is a per-window contract,
+    /// and the non-exact default admits a same-app sibling's record), which
+    /// is otherwise unobservable from here.
+    mutable bool lastExactOnly = false;
 
     QObject* asQObject() override
     {
@@ -151,8 +158,9 @@ public:
         const int sep = anyWindowId.indexOf(QLatin1Char('|'));
         return sep > 0 ? anyWindowId.left(sep) : QString();
     }
-    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool) const override
+    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool exactOnly) const override
     {
+        lastExactOnly = exactOnly;
         if (!unmanagedGeometry.isValid()) {
             return std::nullopt;
         }

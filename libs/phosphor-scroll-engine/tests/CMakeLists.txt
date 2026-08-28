@@ -135,8 +135,8 @@ pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrolls
 # leave an entry spent.
 pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
-# sticky gate and the client-decides width both short-circuit on a null
-# tracker, so their per-screen resolution is unobservable without one.
+# sticky gate and the client-decides width and height all short-circuit on a
+# null tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)

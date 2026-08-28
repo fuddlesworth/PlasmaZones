@@ -85,6 +85,14 @@ struct StashedColumn
     /// arriving tile its column's active one, so a restore without it
     /// shows whichever sibling happened to announce last.
     QString activeWindowId;
+    /// Which tab owns a TABBED column's cross extent, by window id. Carried
+    /// for the same reason it is persisted to disk: the tabs that do not own
+    /// it keep their own heights, so a restore without it falls back to the
+    /// first non-Auto tab and can hand the column to a different one than
+    /// held it. Distinct from activeWindowId on purpose — the shown tab and
+    /// the sizing owner are allowed to differ, which is what keeps a tab
+    /// switch from resizing the column.
+    QString heightOwnerId;
 };
 
 /// One stashed strip: the structural columns plus the focus/view pair
@@ -203,6 +211,13 @@ struct FloatRestore
     int column = -1;
     ColumnWidth width;
     ColumnDisplay display = ColumnDisplay::Normal;
+    /// Whether this window was the tab that decided its TABBED column's cross
+    /// extent when it left. Carried because leaving hands the ownership to the
+    /// tab that came on show, so coming back has to take it again or the
+    /// column keeps the substitute's height — a float round trip (which the
+    /// effect's minimize machinery drives) or a cancelled drag would otherwise
+    /// resize the column and leave it resized.
+    bool ownedTabbedHeight = false;
     /// The tile slot inside a SHARED column (-1 when the window had its
     /// own column). A stacked tile's float round-trip re-enters its
     /// surviving stack instead of spawning a new column at the index.
