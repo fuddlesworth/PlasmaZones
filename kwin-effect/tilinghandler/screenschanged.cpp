@@ -713,22 +713,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     } else if (!m_notifiedWindows.contains(windowId)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from
-                        // the source desktop. Only apply when the source screen
-                        // matches the destination — saved rects are in absolute
-                        // coordinates of the source monitor and would land off-
-                        // target on a different screen after a cross-desktop +
-                        // cross-screen move.
-                        auto savedIt = m_savedPreTileForDesktopMove.find(windowId);
-                        if (savedIt != m_savedPreTileForDesktopMove.end()) {
-                            if (savedIt.value().first == screenId) {
-                                m_preTileGeometries[screenId][windowId] = savedIt.value().second;
-                            } else {
-                                qCDebug(lcEffect)
-                                    << "Desktop switch: dropping cross-screen pre-autotile rect for" << windowId
-                                    << "source=" << savedIt.value().first << "dest=" << screenId;
-                            }
-                            m_savedPreTileForDesktopMove.erase(savedIt);
-                        }
+                        // the source desktop. Shared with the windowDesktopsChanged
+                        // arrival arm, the other re-add path that has to consume this
+                        // stash; see restorePreTileForDesktopMove for the
+                        // cross-screen decline.
+                        restorePreTileForDesktopMove(windowId, screenId);
                         qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
                                          << screenId;
                         // RE-ADD (desktop return): this window's current frame is
