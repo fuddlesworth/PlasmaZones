@@ -74,6 +74,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/IUboProfile.h
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
+    include/PhosphorShaders/PixelUnits.h
     include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
     include/PhosphorShaders/ShaderParamPreamble.h
@@ -88,6 +89,7 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUboProfile
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
+    include/PhosphorShaders/PixelUnits
     include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
     include/PhosphorShaders/ShaderParamPreamble
@@ -96,6 +98,7 @@ set(phosphorshaders_camelcase_HDRS
 
 set(phosphorshaders_SRCS
     src/baseuniformprofile.cpp
+    src/pixelunits.cpp
     src/shaderentrypoint.cpp
     src/shaderincluderesolver.cpp
     src/shaderparampreamble.cpp

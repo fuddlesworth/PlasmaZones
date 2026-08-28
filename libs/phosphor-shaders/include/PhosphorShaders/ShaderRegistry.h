@@ -80,6 +80,14 @@ public:
         QVariant maxValue;
         bool useZoneColor = false; ///< Hint: consumer may bind to app-specific color
         QString wrap;
+        /// Unit the value is expressed in. Empty for a plain number; `"px"`
+        /// declares the value to be logical pixels of the real surface the
+        /// shader draws on. A host that renders the shader at reduced size — a
+        /// settings preview standing a 300px pane in for a 2560px screen —
+        /// scales such values by that reduction, so the effect reads as a
+        /// faithful miniature rather than an effect several times too coarse.
+        /// The runtime paths draw at true size and scale nothing.
+        QString unit;
 
         /// Convert slot to uniform name (e.g., slot 0 → "customParams1_x")
         QString uniformName() const;
@@ -125,6 +133,13 @@ public:
         {
             // isNoneShader(id) is just id.isEmpty(), which the first conjunct
             // already excludes, so the "none" shader is never valid here.
+            //
+            // This says the metadata is WELL-FORMED, not that the pack will
+            // load: `shaderUrl` is built from the declared fragment path
+            // without a filesystem check, so a pack naming a frag that is not
+            // there still reports valid. The live scan re-checks existence
+            // before compiling; an offline caller has to check the file itself
+            // (the shader validator reports it as its own lint).
             return !id.isEmpty() && shaderUrl.isValid();
         }
     };
@@ -227,11 +242,11 @@ public:
     /// on the GPU. A refused `sourcePath` comes back EMPTY, and a refused entry
     /// drops the whole `bufferShaderPaths` list (they are positionally aligned
     /// with the per-buffer wrap/filter overrides, so compacting one out would
-    /// shift the rest onto the wrong buffer). Image params are NOT part of this
-    /// parse — they are resolved, and containment-checked, in
-    /// `translateParamsToUniforms`.
-    /// Parse a pack's metadata.json into a ShaderInfo (id, paths, parameters
-    /// with auto-slot assignment).
+    /// shift the rest onto the wrong buffer). Pack-declared image PRESET values
+    /// ARE containment-checked here, with the Reject policy, because their
+    /// provenance is only known to be the pack at parse time; a refused entry
+    /// is dropped from the preset. Image PARAM values are a separate matter and
+    /// are resolved, and containment-checked, in `translateParamsToUniforms`.
     ///
     /// @param validateSchema when true (the default), the metadata is first run
     /// through the shared shader-metadata JSON schema and REJECTED on any

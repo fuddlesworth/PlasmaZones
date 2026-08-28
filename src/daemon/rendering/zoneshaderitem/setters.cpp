@@ -3,6 +3,8 @@
 
 #include "daemon/rendering/zoneshaderitem.h"
 
+#include "core/platform/logging.h"
+
 #include <QMutexLocker>
 
 namespace PlasmaZones {
@@ -94,6 +96,53 @@ void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture&
     }
     Q_EMIT labelsTextureChanged();
     update();
+}
+
+QVariant ZoneShaderItem::labelsTextureVariant() const
+{
+    return QVariant::fromValue(labelsTexture());
+}
+
+void ZoneShaderItem::setLabelsTextureVariant(const QVariant& labels)
+{
+    // Unwrapped before converting, using the shared peel
+    // ShaderEffect::setWallpaperTextureVariant also calls: a QJSValue or a
+    // QVariant nested one level answers null to value<T>() rather than the
+    // payload. Both are belt-and-braces here rather than shapes we have
+    // measured a host produce.
+    const QVariant unwrapped = PhosphorRendering::peelQmlVariant(labels);
+
+    // Measured (Qt 6.11.2): QML `null` arrives as a VALID std::nullptr_t,
+    // while QML `undefined`, an ABSENT key on a JS object, an undefined
+    // `property var`, and BOTH `Binding` shapes ALL arrive as an INVALID
+    // QVariant. A host letting its source go absent is the ordinary way to say
+    // "no labels", and the setter cannot tell that apart from a Binding's
+    // delivery — which is why the QML-source sweep test, not this code, is the
+    // guard against a host driving one property from both a direct assignment
+    // and a Binding. Invalid clears, silently: an absent key is expected, not
+    // an error, and warning would spam the daemon overlay path.
+    if (!unwrapped.isValid()) {
+        setLabelsTexture({});
+        return;
+    }
+
+    // The payload as-is, or a QImage through the converter registered in the
+    // constructor (the settings and editor previews still produce one).
+    if (unwrapped.canConvert<PhosphorRendering::ZoneLabelTexture>()) {
+        setLabelsTexture(unwrapped.value<PhosphorRendering::ZoneLabelTexture>());
+        return;
+    }
+
+    const int typeId = unwrapped.metaType().id();
+    if (typeId != QMetaType::Nullptr && typeId != QMetaType::Void) {
+        // Valid but unconvertible (a QString, a QUrl, a number). Clearing is
+        // still the honest answer, but it must not happen silently — that is
+        // the failure class this path exists to close.
+        qCWarning(lcOverlay) << "ZoneShaderItem: labelsTexture written with an unconvertible value of type"
+                             << unwrapped.metaType().name() << "— clearing the labels";
+    }
+    // Host passed null / undefined: an ordinary "no labels" state.
+    setLabelsTexture({});
 }
 
 } // namespace PlasmaZones

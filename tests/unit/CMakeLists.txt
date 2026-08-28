@@ -942,7 +942,13 @@ target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6:
 add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 
 add_executable(test_surface_shader_item ui/zones/test_surface_shader_item.cpp)
-target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+# Qt6::Qml as well as Quick: one slot drives the item's wallpaperTexture from a
+# real QML binding, which is the only shape that reproduces the silent write
+# failure a QImage-typed property had.
+target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+# P_SOURCE_DIR: one slot sweeps the two QML hosts to keep them off the binding
+# shapes that silently drop a QImage on the way to the item.
+target_compile_definitions(test_surface_shader_item PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph

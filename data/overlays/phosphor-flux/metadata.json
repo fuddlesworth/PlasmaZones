@@ -104,7 +104,8 @@
             "type": "float",
             "default": 14.0,
             "min": 6.0,
-            "max": 40.0
+            "max": 40.0,
+            "unit": "px"
         },
         {
             "id": "shellOpacity",
