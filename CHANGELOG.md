@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Windows moved to another desktop are placed there**: dropping a window onto a different desktop from the pager or the Overview left it where it landed. On a tiling or scrolling screen it sat on top of the stack without joining it, and it stayed on the desktop it came from as far as PlasmaZones was concerned, until you left the desktop and came back. A window arriving on the desktop you are looking at now joins the stack the same way a newly opened one does. On a snapping screen it floats, which is what snapping does with any window you have not dropped into a zone yourself, unless the layout fills its zones automatically, in which case the window takes the first empty one ([#996](https://github.com/fuddlesworth/PlasmaZones/pull/996)).
+
 ### Fixed
 
 - **Clicking the focused window brings it back into view**: scrolling the strip by hand takes the view out of the centering policy's hands, which is what lets a scrolled view stay put. Focusing a window hands it back, but a click on the window that already had focus was ignored entirely, and so was the one the compositor sends when you return to a desktop. So was a switch between two windows stacked in the same column. A window you had scrolled away from stayed off to one side no matter how many times you clicked it. All three now hand the view back, and under the two policies that only move the view when they have to, a scroll that left the window fully on screen is still left alone ([#992](https://github.com/fuddlesworth/PlasmaZones/pull/992)).
