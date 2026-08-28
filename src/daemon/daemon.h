@@ -156,6 +156,16 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
+    /// OSD shown when a surface keyed to the screen's mode is asked for in a
+    /// MODELESS context: every placement mode's master switch is off, so no
+    /// mode's shortcuts or overlays would be truthful.
+    void showModelessOsd(const QString& screenId);
+    /// Whether @p mode's global master switch is on. The mode toggle's cycle
+    /// asks the same question (daemon/autotile_init.cpp).
+    bool modeEnabled(PhosphorZones::AssignmentEntry::Mode mode) const;
+    /// Whether ANY placement mode is switched on. False means the context is
+    /// modeless — see @ref showModelessOsd.
+    bool anyModeEnabled() const;
     /// Which user-facing OSD toggle a caller gated its announcement on.
     /// Carried into the deferred strip-preview dispatch so it re-reads the
     /// SAME setting the caller checked: the two are gated differently, and
@@ -220,6 +230,11 @@ private:
         bool layoutsAreTemplates = false;
     };
     CheatsheetPushState cheatsheetPushStateFor(const QString& screenId) const;
+    /// Layout capability of @p mode's engine on @p screenId. Equals
+    /// layoutSupportForScreen() for the routed mode; the cheatsheet's
+    /// enabled-mode resolution is the only caller that asks about another.
+    PhosphorEngine::IPlacementEngine::LayoutSupport
+    layoutSupportForCheatsheetMode(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId) const;
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *

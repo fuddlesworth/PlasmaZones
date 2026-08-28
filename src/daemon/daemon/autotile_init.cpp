@@ -256,17 +256,6 @@ void Daemon::handleTilingModeToggle()
     // unclaimed/downgraded scrolling context cycles from Snapping,
     // matching what the user actually sees on screen.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
-    const auto modeEnabled = [this](Mode m) {
-        switch (m) {
-        case Mode::Snapping:
-            return m_settings->snappingEnabled();
-        case Mode::Autotile:
-            return m_settings->autotileEnabled();
-        case Mode::Scrolling:
-            return m_settings->scrollingEnabled();
-        }
-        return false;
-    };
     const auto nextInCycle = [](Mode m) {
         switch (m) {
         case Mode::Snapping:
@@ -279,7 +268,9 @@ void Daemon::handleTilingModeToggle()
         return Mode::Snapping;
     };
     // Feature gate: only cycle INTO a mode whose master switch is
-    // on. Disabled modes are skipped, so with scrolling off the
+    // on (Daemon::modeEnabled, shared with the cheatsheet's show gate so the
+    // two cannot disagree about what "enabled" means). Disabled modes are
+    // skipped, so with scrolling off the
     // cycle degrades to the historical two-state flip; with every
     // other mode off the toggle is a no-op.
     Mode target = nextInCycle(currentMode);
