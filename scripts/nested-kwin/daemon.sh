@@ -44,6 +44,32 @@ if [ -n "${BUSPID:-}" ]; then
     kill "$BUSPID" 2>/dev/null || true
     sleep 1
 fi
+
+# Reap daemons stranded on a DEAD nested bus. run-nested.sh now shadows the
+# D-Bus service file so activation starts the build-tree daemon in-session
+# rather than the installed one on the host, but a session started before that
+# fix — or killed hard enough to orphan its activation — leaves one behind.
+# They are invisible to the bus check above (their own bus is gone), they
+# accumulate across runs, and once several are competing the eviction here
+# starts losing the race and a run silently answers with the HOST's screens.
+#
+# Matched on the bus address in the process environment, so only daemons that
+# belong to a pz-nested bus can be hit. The user's real session daemon has the
+# login bus address and is never matched.
+for pid in $(pgrep -x plasmazonesd 2>/dev/null || true); do
+    [ "$pid" = "${BUSPID:-}" ] && continue
+    peer_bus=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
+        | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p') || true
+    case "$peer_bus" in
+        *"/tmp/dbus-"*)
+            # A pz-nested bus socket that no longer exists means the session it
+            # belonged to is gone and this daemon is stranded.
+            sock=${peer_bus#unix:path=}
+            sock=${sock%%,*}
+            [ -S "$sock" ] || kill "$pid" 2>/dev/null || true
+            ;;
+    esac
+done
 BUILD="${PZ_NESTED_BUILD:-build}"
 nohup "$PZ_NESTED_REPO/$BUILD/bin/plasmazonesd" > "$NEST/daemon.log" 2>&1 &
 echo $! > "$NEST/daemon.pid"
