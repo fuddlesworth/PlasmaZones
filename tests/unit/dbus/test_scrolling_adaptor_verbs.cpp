@@ -324,6 +324,43 @@ private Q_SLOTS:
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
             QVERIFY(activeColumn().width != beforeToggle);
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            // The round trip lands back where it started, which is the whole
+            // promise of a toggle and was previously unasserted here.
+            QCOMPARE(activeColumn().width, beforeToggle);
+        }
+
+        // The windowId is FORWARDED, not swallowed.
+        //
+        // ScrollEngine::toggleMaximizeColumn defaults that argument, so an
+        // adaptor that dropped it would compile and silently revert to the
+        // screen-scoped v5 behaviour — acting on whichever column happens to
+        // be active rather than the one holding the named window, which is
+        // exactly the defect the wire argument was added to fix. Every other
+        // call in this file passes an empty id, so nothing else here can tell
+        // the two spellings apart. The engine-side targeting test does not
+        // cross this boundary.
+        {
+            using PhosphorScrollEngine::ColumnWidth;
+            m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+            auto* st =
+                static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
+            QVERIFY(st);
+            const auto widthOfWindow = [st](const QString& id) -> ColumnWidth {
+                const int idx = st->strip().columnOfWindow(id);
+                return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
+            };
+            // Focus the OTHER column, so "the named window's column" and "the
+            // active column" are different answers.
+            m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+            QVERIFY2(st->strip().columnOfWindow(QStringLiteral("app|a"))
+                         != st->strip().columnOfWindow(QStringLiteral("app|b")),
+                     "the two windows must be in different columns, or this proves nothing");
+            const ColumnWidth aBefore = widthOfWindow(QStringLiteral("app|a"));
+            const ColumnWidth bBefore = widthOfWindow(QStringLiteral("app|b"));
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|b"));
+            QVERIFY2(widthOfWindow(QStringLiteral("app|b")) != bBefore,
+                     "the NAMED window's column must be the one that changed");
+            QCOMPARE(widthOfWindow(QStringLiteral("app|a")), aBefore);
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a

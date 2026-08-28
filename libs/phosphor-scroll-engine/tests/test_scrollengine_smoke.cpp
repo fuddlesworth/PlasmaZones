@@ -83,6 +83,7 @@ private Q_SLOTS:
     void columnMaximizeFlagRidesEveryTileOfTheColumn();
     void columnMaximizeTargetsTheNamedWindowsColumn();
     void minSizeOutgrowingWorkAreaFloatsTheWindow();
+    void minPinnedFullWidthColumnDoesNotPublishMaximized();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -771,6 +772,58 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
         QCOMPARE(Ax::entryMainLen(o), 900);
     }
     QVERIFY2(sawA, "the batch must carry the window whose minimum grew");
+}
+
+void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
+{
+    // extentPinnedByMinimum is the whole reason the published columnMaximized
+    // flag is not just "the rect fills the work area", and nothing exercised
+    // it: deleting that term from the conjunction left the entire suite green.
+    // What it prevents is a column whose TILES' declared minimum alone reaches
+    // the work area reporting maximized forever — the titlebar button latches
+    // with no way to un-latch, because the verb refuses the same column.
+    //
+    // The band is exactly one value. Below kMainExtent the column does not
+    // render full and the flag is false for an ordinary reason; above it the
+    // oversized verdict floats the window out of the strip before any of this
+    // matters (the float test above pins that at 1300). Only a minimum equal
+    // to the work area's main extent is both full-width and still tiled.
+    //
+    // Set BY ROLE, never symmetrically: passing (1200, 1200) would set a cross
+    // minimum of 1200 against an 800 cross extent on the horizontal arm and
+    // float the window instead, silently testing nothing.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    const QSize minFull = Ax::t(QSize(ScrollTestUtils::kMainExtent, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), minFull.width(), minFull.height());
+    QCoreApplication::processEvents();
+
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY2(!state->isFloating(QStringLiteral("app|a")),
+             "a minimum EQUAL to the work area must stay tiled, or this test proves nothing");
+    QVERIFY2(tiled.count() > 0, "the min-size update must produce a batch to inspect");
+
+    const QJsonArray arr = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    bool sawA = false;
+    for (const QJsonValue& v : arr) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("windowId")).toString() != QLatin1String("app|a")) {
+            continue;
+        }
+        sawA = true;
+        // Renders full width...
+        QCOMPARE(Ax::entryMainLen(o), ScrollTestUtils::kMainExtent);
+        // ...and still must not claim to be maximized, because the user chose
+        // none of it and the toggle cannot undo it.
+        QVERIFY2(!o.contains(QLatin1String("columnMaximized")),
+                 "a column pinned full width by its minimum must not publish columnMaximized");
+    }
+    QVERIFY2(sawA, "the batch must carry the pinned window");
 }
 
 void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
