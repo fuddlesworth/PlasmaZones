@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
@@ -1004,19 +1005,64 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // whether or not the strip's own focus slot moves below.
     state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-    if (state->strip().focusWindow(windowId, params)) {
-        // The focus change may scroll the viewport; never re-activate here
-        // (the compositor initiated this focus). Background-context guard:
-        // see windowClosed.
-        if (key == currentKeyForScreen(key.screenId)) {
-            applyLayout(key.screenId, false);
-        }
-        // Focus and view anchor are persisted (serializeStripState), and
-        // placementChanged is the only thing that marks DirtyScrollStrips.
-        // Emitted for a background context too: the strip that changed is
-        // serialized whether or not it is the one on screen right now.
-        Q_EMIT placementChanged(key.screenId);
+    // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
+    // screen owns the view for the rest of the hold, and picking the dragged
+    // window up activates it. Handing the view back here would slide the
+    // layout under a stationary cursor, the hazard applyLayout's own
+    // dragPreviewSteersView guard exists for. screensMatch, not ==, for that
+    // guard's reason. Read before the focus move so both outcomes below share
+    // one answer.
+    const bool dragPreviewSteersView = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId);
+    const bool focusMoved = state->strip().focusWindow(windowId, params);
+    // A view still detached AFTER the focus move is one no re-anchor took
+    // back, and there are two ways to arrive here holding one. focusWindow
+    // REFUSED the report, because it names the window the strip already calls
+    // active (scrollstrip_navigation.cpp's same-column, same-tile bail); or it
+    // accepted a same-COLUMN tile move, which re-anchors nothing because no
+    // strip geometry moved. Both are right about the focus SLOT and wrong
+    // about the VIEW. A pan detaches the view from the centering policy, and
+    // the re-anchor that re-attaches it (reanchorAfterFocusChange) is reached
+    // from focusWindow on a COLUMN change and on nothing else, so neither of
+    // these two outcomes gets there. No later pass revisits the question
+    // either: updateViewForFocus returns early while detached, so even the
+    // applyLayout a desktop return runs cannot re-derive the anchor. The
+    // result was that clicking the focused window, or switching away from its
+    // desktop and back, did nothing at all — the whole report was dropped,
+    // latch and all.
+    //
+    // Re-attach and let the POLICY answer, rather than re-anchoring outright.
+    // Under Never/OnOverflow updateViewForFocus leaves a fully-visible column
+    // alone, so a pan that kept the focused column on screen survives an
+    // incidental activation — KWin re-fires windowActivated on restacking,
+    // fullscreen exit and desktop switches, not only on real focus moves.
+    // Under Always it re-centres, which is what that setting asks for.
+    //
+    // The report must NAME the active window: a minimized tile in the active
+    // column is refused by focusWindow without becoming the column's active
+    // tile, and that report has no claim on the view.
+    const bool handBackView =
+        state->strip().viewDetached() && state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
+    if (!focusMoved && !handBackView) {
+        return;
     }
+    if (handBackView) {
+        state->strip().setViewDetached(false);
+    }
+    // The focus change may scroll the viewport; never re-activate here (the
+    // compositor initiated this focus). Background-context guard: see
+    // windowClosed. The latch is cleared for a background context too (it is
+    // persisted state), but only the on-screen context re-derives the anchor
+    // now — a background one re-derives on the applyLayout its own desktop
+    // return runs, which is the pass that used to return early.
+    if (key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
+    // Focus and view anchor are persisted (serializeStripState), and
+    // placementChanged is the only thing that marks DirtyScrollStrips.
+    // Emitted for a background context too: the strip that changed is
+    // serialized whether or not it is the one on screen right now.
+    Q_EMIT placementChanged(key.screenId);
 }
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the
