@@ -18,6 +18,7 @@
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -109,6 +110,46 @@ private Q_SLOTS:
     // =================================================================
     // D-Bus types: PhosphorProtocol::PreTileGeometryEntry roundtrip
     // =================================================================
+
+    /// The only two REGISTERED wire types with no signature probe anywhere in
+    /// the repo, which made them the only two whose registration could be
+    /// deleted with the whole suite still green. That is not a coverage nit:
+    /// the comment above P_REGISTER_DBUS_TYPE states the consequence of an
+    /// unregistered adaptor parameter type is a RUNTIME DISPATCH CRASH, so a
+    /// one-line deletion shipped a crash. DragPolicy also carries the only
+    /// marshaller in the family that TRANSFORMS a field (bypassReason through
+    /// toWireString / bypassReasonFromWireString) with its shape declared
+    /// nowhere but a comment.
+    ///
+    /// A signature probe needs no bus and no peer — it writes into an
+    /// in-process QDBusArgument — so the "needs full D-Bus transport"
+    /// reasoning that kept these two uncovered applies to a round trip, not
+    /// to this.
+    void testDragTypesAreRegisteredAndPinned()
+    {
+        PhosphorProtocol::registerWireTypes();
+
+        PhosphorProtocol::DragPolicy policy;
+        policy.streamDragMoved = true;
+        policy.showOverlay = false;
+        policy.grabKeyboard = true;
+        policy.captureGeometry = false;
+        policy.immediateFloatOnStart = true;
+        policy.screenId = QStringLiteral("DP-1");
+        policy.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
+        QCOMPARE(dbusSignature(policy), QStringLiteral("(bbbbbss)"));
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(qMetaTypeId<PhosphorProtocol::DragPolicy>())) != nullptr);
+
+        PhosphorProtocol::DragOutcome outcome;
+        outcome.action = PhosphorProtocol::DragOutcome::ApplySnap;
+        outcome.windowId = QStringLiteral("app|1");
+        outcome.zoneId = QStringLiteral("{zone}");
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(qMetaTypeId<PhosphorProtocol::DragOutcome>())) != nullptr);
+        // Shape pinned against the struct rather than the comment: the tail is
+        // an EmptyZoneList, whose own entry signature is pinned by
+        // testEmptyZoneEntryRoundtrip.
+        QCOMPARE(dbusSignature(outcome), QStringLiteral("(issiiiisbba(siiiiiibsssdd))"));
+    }
 
     void testPreTileGeometryEntryRoundtrip()
     {

@@ -701,10 +701,23 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // unknown id.
     const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(QStringLiteral("app|a"));
     const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(QStringLiteral("app|b"));
+    // The VERDICT, not just the geometry. Asserting rects alone leaves the
+    // refusal's return value unpinned, and that bool is what the verb macro
+    // keys three side effects on: the relayout, placementChanged, and a
+    // navigationFeedback whose success arm raises a "Resized" OSD naming the
+    // ACTIVE window — for a request about a window this strip does not hold.
+    // Flipping the out-of-range arm to return true leaves every rect
+    // assertion above green, so without these two spies the mutation ships.
+    QSignalSpy refusalFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
+    QSignalSpy refusalBatches(engine, &PhosphorScrollEngine::ScrollEngine::windowsTiled);
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|missing"));
     QCoreApplication::processEvents();
     QVERIFY2(widthOf(QStringLiteral("app|a")) == aBeforeMiss, "an unknown window must not touch the active column");
     QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeMiss, "an unknown window must not touch any other column");
+    QCOMPARE(refusalFeedback.count(), 1);
+    QCOMPARE(refusalFeedback.at(0).at(0).toBool(), false);
+    QCOMPARE(refusalFeedback.at(0).at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(refusalBatches.count(), 0);
 
     // The EMPTY spelling still means the active column, which is what the
     // keyboard shortcut sends.

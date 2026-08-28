@@ -504,13 +504,30 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
                                   QString(), screen);
         return;
     }
+    // The float layer holds focus, so the focused window is already floating
+    // and this per-window verb must not answer by acting on the strip's stale
+    // active tile. Same guard and same token as moveFocusedToFloating, whose
+    // mirror in moveFocusedToTiling inverts the identical test; the source
+    // slot names the floating window that actually holds focus, so the OSD
+    // refers to what the user is looking at.
+    if (state->floatingHasFocus()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_target"),
+                                  state->lastFloatingFocus(), QString(), screen);
+        return;
+    }
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().toggleActiveWindowedFullscreen();
     if (changed) {
         // The flag never moves a rect; applyLayout's emit-on-change gate has
         // its own windowed-fullscreen leg (m_lastAppliedWindowedFs) so the
         // flip reaches the compositor on an otherwise motionless strip.
-        applyLayout(screen, true);
+        //
+        // focusAfter FALSE, per the doctrine at the head of this file: a
+        // display verb has no business yanking focus, and applyLayout's focus
+        // arm also clears floatingHasFocus, so passing true would rewrite the
+        // float layer's focus memory. Nothing is lost by declining it — the
+        // op targets activeWindowId(), which is already the active tile.
+        applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
     }
     // The success reason carries the RESULTING state, read back from the

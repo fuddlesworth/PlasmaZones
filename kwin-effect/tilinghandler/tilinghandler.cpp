@@ -27,6 +27,7 @@
 #include <QDBusPendingReply>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QTimer>
 #include <QtMath>
 
@@ -70,9 +71,14 @@ void TilingHandler::applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen)
     // consumer nest their own brackets, and a plain set/clear here would hand
     // an outer scope back an un-suppressed window (the save/restore rule the
     // inGeometryApply guards follow for the same reason).
+    // RAII, matching applyMaximizeSuppressed. The counter's failure mode is
+    // silent and permanent: leak one increment and the paired
+    // isSuppressing... predicate answers true for the rest of the session.
     ++m_suppressFullScreenChanged;
+    const auto suppressGuard = qScopeGuard([this] {
+        --m_suppressFullScreenChanged;
+    });
     kw->setFullScreen(fullScreen);
-    --m_suppressFullScreenChanged;
 }
 
 void TilingHandler::suppressFfmUntilCursorMoves()

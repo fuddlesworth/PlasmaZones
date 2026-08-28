@@ -95,9 +95,7 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     const auto geomGuard = qScopeGuard([this, prevInApply] {
         m_effect->m_daemonGate.inGeometryApply = prevInApply;
     });
-    ++m_suppressMaximizeChanged;
-    kw->maximize(KWin::MaximizeRestore);
-    --m_suppressMaximizeChanged;
+    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
     // The gate suppressed the VS-crossing detectors, whose early return sits
     // BEFORE their m_trackedScreenPerWindow write — and unlike a daemon
     // apply this move is not transient, so the tracker must be re-seeded

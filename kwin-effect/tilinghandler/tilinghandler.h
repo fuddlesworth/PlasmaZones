@@ -335,8 +335,12 @@ public:
     /// Write @p kw's fullscreen state with slotWindowFullScreenChanged
     /// suppressed for the duration of the call.
     ///
-    /// For effect-owned fullscreen flips made OUTSIDE this handler — today the
-    /// OpenFullscreen rule's one-shot at windowAdded. On XWayland
+    /// For every effect-owned fullscreen flip. It originated for the ones made
+    /// OUTSIDE this handler (the OpenFullscreen rule's one-shot at
+    /// windowAdded), but the in-handler writes route through it too — the
+    /// bracket is identical either way, and three hand-rolled copies had
+    /// already drifted before they were consolidated. Its maximize twin is
+    /// likewise called from inside this handler. On XWayland
     /// setFullScreen emits the state signal SYNCHRONOUSLY, so an unbracketed
     /// call re-enters slotWindowFullScreenChanged from inside
     /// slotWindowAdded, where its never-tracked exit arm announces a window
@@ -976,6 +980,9 @@ private:
     /// Bracketed maximize-mode write, the maximize twin of
     /// applyFullScreenSuppressed: a counter rather than a bool because the
     /// batch consumer and the interception arm both nest their own brackets.
+    /// Both helpers serve in-handler and out-of-handler callers alike; the
+    /// only bracket deliberately NOT routed through this one is the monocle
+    /// apply's, which spans the geometry apply as well as the maximize.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
     /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p windowId's column

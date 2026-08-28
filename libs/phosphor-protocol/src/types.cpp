@@ -94,6 +94,33 @@ QString TileRequestEntry::validationError() const
     if (!floating && (width == 0 || height == 0)) {
         return QStringLiteral("TileRequestEntry: tiled request requires non-zero size (windowId=%1)").arg(windowId);
     }
+    // Upper bounds, so the consumer's QRect arithmetic cannot overflow. The
+    // effect builds a QRect from these, whose x/y/w/h constructor computes
+    // x + w - 1 — signed overflow, and undefined, before its own `<= 0` guard
+    // ever runs, so that guard is not a defence. The precedent is viewDelta
+    // and visualX/visualY, which this boundary already clamps for the same
+    // reason.
+    //
+    // Deliberately generous, and deliberately NOT a screen-bounds check: the
+    // scrolling engine parks off-screen columns entirely outside their
+    // screen rect, so a legitimate park origin sits far outside every output.
+    // An over-strict validator here has already broken that once, dropping
+    // every vertical park at its own validationError. These limits are orders
+    // of magnitude past any real display and only catch garbling.
+    constexpr int kMaxWireExtent = 100000;
+    constexpr int kMaxWireOrigin = 1000000;
+    if (width > kMaxWireExtent || height > kMaxWireExtent) {
+        return QStringLiteral("TileRequestEntry: implausible size (windowId=%1 w=%2 h=%3)")
+            .arg(windowId)
+            .arg(width)
+            .arg(height);
+    }
+    if (qAbs(x) > kMaxWireOrigin || qAbs(y) > kMaxWireOrigin) {
+        return QStringLiteral("TileRequestEntry: implausible origin (windowId=%1 x=%2 y=%3)")
+            .arg(windowId)
+            .arg(x)
+            .arg(y);
+    }
     // stacking is optional (empty = non-overlap layout). A non-empty value
     // must be one of the two declared directions: the effect engages its
     // overlap restack on ANY non-empty value and treats unknown strings as

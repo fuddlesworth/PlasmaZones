@@ -1486,9 +1486,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // same-session arriving tab takes Refresh, which does
                         // not move the frame.
                         kwFs->moveResize(QRectF(snap.geometry));
-                        ++m_suppressFullScreenChanged;
-                        kwFs->setFullScreen(true);
-                        --m_suppressFullScreenChanged;
+                        applyFullScreenSuppressed(kwFs, true);
                     }
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (wfs.action == ScrollDecisions::WfsAction::DeferredReconcile) {
@@ -1818,9 +1816,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (KWin::Window* kw = snap.window->window(); kw && !snap.isColumnMaximized
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
                     && !kw->isRequestedFullScreen()) {
-                    ++m_suppressMaximizeChanged;
-                    kw->maximize(KWin::MaximizeRestore);
-                    --m_suppressMaximizeChanged;
+                    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 QRect geo = snap.geometry;
 
