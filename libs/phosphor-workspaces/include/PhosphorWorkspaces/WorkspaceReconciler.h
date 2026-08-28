@@ -45,6 +45,13 @@ public:
 
     static constexpr int LedgerTimeoutMs = 2000;
     static constexpr int DestroyDebounceMs = 300;
+    /// How many times a removal KWin never answered is re-armed before the
+    /// desktop is left alone. A genuinely refused removal (KWin declining to
+    /// drop that desktop) would otherwise re-arm, re-issue, expire and resync
+    /// forever; after this many rounds the surplus empty desktop simply stays.
+    /// The budget is restored the moment the desktop's population changes or
+    /// the desktop actually goes away.
+    static constexpr int MaxRemovalRefusals = 3;
     /// KWin's desktop ceiling (VirtualDesktopManager::maximum() in current
     /// KWin). Shared by the daemon's gate and the settings app's cap badge;
     /// setDesktopCap adjusts after live probing.
@@ -88,7 +95,8 @@ public:
     void adoptAll(const QStringList& ids, const QHash<QString, QString>& currentDesktopIdByScreen);
 
     /// Reconcile the declared named workspaces against the map (called after
-    /// adoption and on every declaration change). Per declaration, in order:
+    /// adoption and on every declaration change; implemented in
+    /// WorkspaceReconcilerNamed.cpp). Per declaration, in order:
     /// an entry already carrying the name is kept (transferred to its pinned
     /// output when needed); else an unnamed desktop whose KWin name matches
     /// (`kwinNames` is aligned with the settled id list) is claimed; else a
@@ -190,6 +198,13 @@ private:
     int pendingCreateCount() const;
     /// Drop every open ledger entry that targets this desktop id.
     void retireLedgerFor(const QString& desktopId);
+    /// Realize a desktop that is NEW in a settled list against the oldest open
+    /// Create op — the same FIFO order onKwinDesktopCreated matches in — for
+    /// the case where the settle beat (or replaced) the id-only echo. Consumes
+    /// the op and inserts on the requesting screen. Returns false when there
+    /// was no open Create, or when its planned screen is gone (the op is
+    /// consumed either way), leaving the caller to adopt normally.
+    bool realizeSettledCreate(const QString& desktopId);
     /// Trailing-empty + slice-never-empty repair for every screen.
     void maintainInvariants();
     void maintainScreen(const QString& screenId);
@@ -232,6 +247,22 @@ private:
     /// Remove is open — the signal is an edge, not a level, so every further
     /// population increment on the same doomed desktop must stay quiet.
     QSet<QString> m_racedDesktops;
+    struct NamePush
+    {
+        QString name;
+        qint64 deadline = 0;
+    };
+    /// desktopId → the KWin name we last pushed for it and when that push
+    /// stops being assumed in flight. applyNamedWorkspaces runs on every
+    /// settle, so without this an identical push re-fires each time KWin
+    /// declines the rename or its name list simply lags. Cleared the moment
+    /// KWin's names agree, when the name reverts to dynamic, and when the
+    /// desktop goes away.
+    QHash<QString, NamePush> m_namePushes;
+    /// desktopId → how many of our Removes for it expired unanswered. Bounds
+    /// the re-arm below MaxRemovalRefusals; cleared on the desktop's removal,
+    /// on any population change, and when the id leaves KWin's list.
+    QHash<QString, int> m_removalRefusals;
 };
 
 } // namespace PhosphorWorkspaces

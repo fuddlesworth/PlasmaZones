@@ -46,6 +46,7 @@
 #include <QStringView>
 #include <QVector>
 
+#include <algorithm>
 #include <optional>
 
 #ifdef USE_KDE_FRAMEWORKS
@@ -242,6 +243,51 @@ void Daemon::initializeWorkspaces()
                         });
                     }
                 }
+                // Daemon-side per-context order cache keyed by desktop NUMBER.
+                // Left behind, the dead desktop's key survives the renumber
+                // untouched (it is absent from oldToNew) and a survivor
+                // shifted into that number would land on an identical key.
+                if (!m_lastEngineOrders.isEmpty()) {
+                    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
+                        if (it.key().desktop == desktop) {
+                            it = m_lastEngineOrders.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+                // Same story for the per-mode disabled-desktop gates: the
+                // count-based sweep in start.cpp stands down while the
+                // controller lives, so this is the only cleanup they get.
+                // Composite entries are "screenId/desktopNumber" and virtual
+                // screen ids contain '/' themselves, so the number is the
+                // segment after the LAST one (the split the renumber arm
+                // below uses).
+                if (m_settings) {
+                    bool anyChanged = false;
+                    for (const auto mode : PhosphorZones::allModes()) {
+                        QStringList disabled = m_settings->disabledDesktops(mode);
+                        const auto removed =
+                            std::remove_if(disabled.begin(), disabled.end(), [desktop](const QString& entry) {
+                                const int slash = entry.lastIndexOf(QLatin1Char('/'));
+                                if (slash < 0) {
+                                    return false;
+                                }
+                                bool ok = false;
+                                const int entryDesktop = QStringView(entry).mid(slash + 1).toInt(&ok);
+                                return ok && entryDesktop == desktop;
+                            });
+                        if (removed == disabled.end()) {
+                            continue;
+                        }
+                        disabled.erase(removed, disabled.end());
+                        m_settings->setDisabledDesktops(mode, disabled);
+                        anyChanged = true;
+                    }
+                    if (anyChanged) {
+                        m_settings->save();
+                    }
+                }
             });
     connect(m_workspaceController.get(), &WorkspaceController::desktopRenumberRequested, wiring,
             [this, forEachEngine](const QHash<int, int>& oldToNew) {
@@ -271,12 +317,33 @@ void Daemon::initializeWorkspaces()
                 if (!m_lastEngineOrders.isEmpty()) {
                     QHash<TilingStateKey, QStringList> remapped;
                     remapped.reserve(m_lastEngineOrders.size());
+                    // Two passes so a SHIFTED key always beats a key the map
+                    // says nothing about. An unmapped key keeps its number
+                    // verbatim, and a survivor shifted into that number
+                    // produces an identical key; inserting in hash order would
+                    // pick a winner at random and could hand a live context
+                    // the other one's window order. The shifted key is the one
+                    // the engines just renumbered to, so it wins and the
+                    // unmapped duplicate is dropped.
                     for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
-                        TilingStateKey key = it.key();
-                        if (key.desktop > 0) {
-                            key.desktop = oldToNew.value(key.desktop, key.desktop);
+                        if (it.key().desktop <= 0 || !oldToNew.contains(it.key().desktop)) {
+                            continue;
                         }
+                        TilingStateKey key = it.key();
+                        key.desktop = oldToNew.value(key.desktop);
                         remapped.insert(key, it.value());
+                    }
+                    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
+                        if (it.key().desktop > 0 && oldToNew.contains(it.key().desktop)) {
+                            continue;
+                        }
+                        if (remapped.contains(it.key())) {
+                            qCWarning(lcDaemon)
+                                << "dropping stale window order for desktop" << it.key().desktop << "on screen"
+                                << it.key().screenId << "- a renumbered desktop now owns that number";
+                            continue;
+                        }
+                        remapped.insert(it.key(), it.value());
                     }
                     m_lastEngineOrders = remapped;
                 }
@@ -393,7 +460,11 @@ void Daemon::initializeWorkspaces()
     // Owner-wins snap-back hint (plain prose; toggleable).
     connect(m_workspaceController.get(), &WorkspaceController::snapBackOccurred, wiring,
             [this](const QString& screenId) {
-                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService) {
+                // Its own toggle layered ON TOP of the shared navigation gate
+                // (OSD style None, global suppression, the per-context rule) —
+                // this family was consulting only the toggle.
+                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService
+                    && navigationOsdAllowed(screenId)) {
                     m_overlayService->showDisabledOsd(
                         PhosphorI18n::tr("That workspace is on another monitor.", "OSD hint"), screenId);
                 }
@@ -403,7 +474,8 @@ void Daemon::initializeWorkspaces()
     // the owner's current workspace (plan §4.3 destroy step 4) — hint it.
     connect(m_workspaceController.get(), &WorkspaceController::windowDisplacedByRemoval, wiring,
             [this](const QString& screenId) {
-                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService) {
+                if (m_settings && m_settings->workspacesSnapBackOsdHint() && m_overlayService
+                    && navigationOsdAllowed(screenId)) {
                     m_overlayService->showDisabledOsd(
                         PhosphorI18n::tr("That workspace closed. The window moved to the current one.", "OSD hint"),
                         screenId);
@@ -575,21 +647,31 @@ void Daemon::initializeWorkspaces()
     // re-issuing the consent write + reconfigure; without it, warn — the
     // controller keeps running and KWin's next reconfigure resolves it.
     if (m_windowTrackingAdaptor) {
+        const auto handleModeReport = [this](bool enabled) {
+            if (enabled) {
+                return;
+            }
+            if (m_settings->workspacesManageKWinPerOutput()) {
+                qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
+                                       "workspaces are active; re-applying the consented kwinrc write";
+                enableKWinPerOutputDesktops();
+            } else {
+                qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
+                                       "workspaces are active; kwinrc and the running KWin disagree "
+                                       "(missing reconfigure?)";
+            }
+        };
         connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::perOutputDesktopsModeReported, wiring,
-                [this](bool enabled) {
-                    if (enabled) {
-                        return;
-                    }
-                    if (m_settings->workspacesManageKWinPerOutput()) {
-                        qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
-                                               "workspaces are active; re-applying the consented kwinrc write";
-                        enableKWinPerOutputDesktops();
-                    } else {
-                        qCWarning(lcDaemon) << "compositor reports per-output virtual desktops OFF while dynamic "
-                                               "workspaces are active; kwinrc and the running KWin disagree "
-                                               "(missing reconfigure?)";
-                    }
-                });
+                handleModeReport);
+        // The signal is change-gated, so a wiring built AFTER the effect
+        // already reported (a runtime enable, or consent granted mid-session)
+        // never hears the report that matters and the self-heal above never
+        // runs. Replay the adaptor's stored answer once here. nullopt means
+        // the effect has not reported at all, which is not a divergence —
+        // only a stored false is.
+        if (m_windowTrackingAdaptor->perOutputDesktopsMode() == std::optional<bool>(false)) {
+            handleModeReport(false);
+        }
     }
 
     // ── Stock KWin desktop-shortcut takeover (Phase 5) ─────────────────────
@@ -690,6 +772,22 @@ void Daemon::initializeWorkspaces()
             }
         }
         return QString();
+    });
+
+    // Sticky predicate for the named-workspace verbs: the SAME answer the
+    // adaptor's move slot refuses on (crossmode.cpp asks
+    // WindowTrackingService::isWindowSticky after shadowWindowId, and
+    // shadowWindowId is that service's own canonicalizeForLookup, so the
+    // single call here lands on the identical key). Read through the daemon
+    // on every call rather than captured, so a torn-down service cannot be
+    // dereferenced; no service means "cannot tell" and the verbs keep their
+    // pre-check behaviour.
+    m_workspaceController->setWindowStickyPredicate([this](const QString& windowId) {
+        if (!m_windowTrackingAdaptor) {
+            return false;
+        }
+        auto* service = m_windowTrackingAdaptor->service();
+        return service && service->isWindowSticky(windowId);
     });
 
     m_workspaceController->start();

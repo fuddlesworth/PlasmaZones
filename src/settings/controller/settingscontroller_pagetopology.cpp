@@ -251,8 +251,18 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // Only the quick-slot TARGETS: the page assigns the workspace
              // each slot sends the window to. The slot chords themselves
              // (and the general workspace verb chords) are daemon globals
-             // edited in the system Shortcuts settings, like every other PZ
-             // chord — no settings page owns them.
+             // edited in the desktop's keyboard shortcut settings, like every
+             // other PZ chord — no settings page owns them.
+             //
+             // These Target keys are ALSO written from the Named Workspaces
+             // page, whose rename cascade follows a renamed workspace into the
+             // slots pointing at it. The one-owner invariant above forbids
+             // listing them under workspaces-named as well, so that page does
+             // not own them: it goes through
+             // SettingsController::renameWorkspaceSlotTargets, which records
+             // the slots it rewrote, and discardPage("workspaces-named")
+             // reverts exactly those keys alongside its own. A target the user
+             // edits HERE stays this page's to revert.
              Settings::ConfigKeyList keys;
              for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
                  keys.append({CD::workspacesSlotsGroup(), CD::workspaceSlotTargetKey(slot)});

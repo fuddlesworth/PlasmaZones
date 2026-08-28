@@ -71,7 +71,10 @@ public:
     /// must not be owned elsewhere; a duplicate insert is repaired by removal
     /// from the previous owner first, and the map logs that repair itself.
     void insert(const QString& screenId, int sliceIndex, const WorkspaceEntry& entry);
-    /// Remove a desktop from whatever slice owns it. Returns false if unowned.
+    /// Remove a desktop from whatever slice owns it. Returns false if unowned,
+    /// and also if the owner index named a slice that does not actually hold
+    /// the id — that row is dropped (with a warning) rather than kept, since a
+    /// row naming a slice without the entry can only mislead later lookups.
     bool remove(const QString& desktopId);
     /// Move a desktop within its owner's slice to newSliceIndex (clamped).
     bool reorderWithinSlice(const QString& desktopId, int newSliceIndex);

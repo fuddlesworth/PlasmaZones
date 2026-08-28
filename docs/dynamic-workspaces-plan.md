@@ -510,11 +510,11 @@ Layered gate, no single point of trust:
 | focus-workspace-down / up | `Meta+Ctrl+Down` / `Meta+Ctrl+Up` (KWin stock for global switch — deliberately taken over when `rebindKWinDesktopShortcuts` is on; unset otherwise) |
 | focus-workspace 1..9 | unset by default (dynamic `persistent=false` binds, quick-layout-slot style) |
 | focus named workspace *name* | unset; per-entry dynamic row |
-| move-window-to-workspace down/up | `Meta+Ctrl+Shift+Down` / `Up` |
+| move-window-to-workspace down/up | unbound by default (stock KWin binds `Meta+Ctrl+Shift+Arrow` to "Window One Desktop", which we do not rebind) |
 | move-window-to-workspace 1..9 / named | unset; dynamic |
-| move-column-to-workspace down/up | `Meta+Ctrl+Alt+Down` / `Up` (scrolling screens only; no-op elsewhere with OSD hint) |
+| move-column-to-workspace down/up | `Meta+Ctrl+Alt+PgDown` / `PgUp` (the arrow tier is the swap-window quad; scrolling screens only; no-op elsewhere with OSD hint) |
 | move-workspace-up/down (reorder) | `Meta+Ctrl+Shift+PgUp` / `PgDn` |
-| move-workspace-to-monitor left/right | `Meta+Ctrl+Shift+Left` / `Right` |
+| move-workspace-to-monitor left/right | unbound by default (same `Meta+Ctrl+Shift+Arrow` collision with stock KWin "Window One Desktop") |
 
 Stock-shortcut handling (Phase 5): with the feature + rebind toggle on, the daemon
 re-binds KWin's "Switch One Desktop Down/Up/Left/Right" and "Walk Through Desktops"

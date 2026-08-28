@@ -35,9 +35,10 @@ SettingsFlickable {
     // nothing it reads would ever make it re-evaluate. The Connections below
     // re-read it whenever a state that can change it from OUR side flips. An
     // external kwinrc edit is picked up the next time this page is built.
-    property bool _kwinPerOutput: false
-
-    Component.onCompleted: _kwinPerOutput = settingsController.kwinPerOutputDesktopsEnabled()
+    // The seed lives in the declaration rather than in Component.onCompleted
+    // because a `false` start paints one frame of the wrong consent banner for
+    // anyone who already has the KWin setting on.
+    property bool _kwinPerOutput: settingsController.kwinPerOutputDesktopsEnabled()
 
     Connections {
         function onWorkspacesEnabledChanged() {

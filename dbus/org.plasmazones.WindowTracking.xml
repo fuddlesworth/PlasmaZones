@@ -259,7 +259,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="workspaceMapChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the dynamic-workspaces ownership map changes (per-monitor workspace slices over KWin's shared desktop pool). Change-gated: only fires on an actual payload difference. The KWin effect caches the payload for the future overview; a late-loading effect replays via workspaceMap()."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the dynamic-workspaces ownership map changes (per-monitor workspace slices over KWin's shared desktop pool). Change-gated: only fires on an actual payload difference. The KWin effect caches the payload for the future overview; a late-loading effect replays via workspaceMap(). An empty string means the feature is off (a runtime disable sends one) and tells a cache holder to drop what it has."/>
             <arg name="mapJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Versioned JSON object: {v, generation, screenOrder, slices: {screenId: [{id, index, name?, current?}]}}. Desktop identity is the KWin UUID string in id; index is the live 1-based global desktop number for effects->desktops() addressing."/>
             </arg>

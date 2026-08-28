@@ -264,8 +264,10 @@ void TestScreenContextTracker::guards_rejectDesktopsBelowOne()
     t.setStickyPin(QStringLiteral("S2"), -2);
     QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 5); // existing pin intact
 
-    // A renumber must not write what those setters refuse: a poisoned target
-    // leaves the value on its current desktop.
+    // A renumber must not write what those setters refuse, and the refusal is
+    // WHOLE-mapping: honouring 5→2 while 3 and 4 stay put would land the pin on
+    // a number a stranded sibling could still be holding. Every value survives
+    // untouched, including the one whose own target was valid.
     QHash<int, int> poisoned;
     poisoned.insert(3, 0);
     poisoned.insert(4, -1);
@@ -273,7 +275,14 @@ void TestScreenContextTracker::guards_rejectDesktopsBelowOne()
     t.renumberDesktops(poisoned);
     QCOMPARE(t.currentDesktop(), 3);
     QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 4);
-    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 2); // valid target still applies
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 5);
+
+    // The same mapping with its poisoned entries dropped applies in full.
+    QHash<int, int> clean;
+    clean.insert(5, 2);
+    t.renumberDesktops(clean);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("S2")), 2);
+    QCOMPARE(t.currentDesktop(), 3); // absent = unchanged
 }
 
 QTEST_MAIN(TestScreenContextTracker)

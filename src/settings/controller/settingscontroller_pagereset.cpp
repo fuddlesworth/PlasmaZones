@@ -16,6 +16,7 @@
 
 #include "settingscontroller.h"
 
+#include "config/configdefaults.h"
 #include "settings/pages/animationpagescope.h"
 #include "settings/pages/decorationpagescope.h"
 #include "settings/utils/dbusutils.h"
@@ -32,6 +33,8 @@
 #include <QSet>
 #include <QStringList>
 #include <QVariant>
+
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -488,9 +491,33 @@ void SettingsController::discardPage(const QString& page)
         {
             const ScopedFlag loadingScope(m_loading);
             m_settings.discardKeys(*it);
+            // The Named Workspaces page's rename cascade writes quick-slot
+            // Target keys, which the workspaces-shortcuts manifest owns (the
+            // one-owner invariant forbids listing them here as well). Without
+            // this arm the page could not undo its own cascade and the badge
+            // it left on the sibling page had no reachable Discard. Scoped to
+            // the slots renameWorkspaceSlotTargets actually rewrote, so a
+            // target the user set on the Shortcuts page itself is untouched.
+            if (page == QLatin1String("workspaces-named") && !m_renamedWorkspaceSlots.isEmpty()) {
+                Settings::ConfigKeyList slotKeys;
+                slotKeys.reserve(m_renamedWorkspaceSlots.size());
+                for (const int slot : std::as_const(m_renamedWorkspaceSlots)) {
+                    slotKeys.append(
+                        {ConfigDefaults::workspacesSlotsGroup(), ConfigDefaults::workspaceSlotTargetKey(slot)});
+                }
+                m_settings.discardKeys(slotKeys);
+                m_renamedWorkspaceSlots.clear();
+            }
         }
-        // Every owned key is back at the committed baseline, so the page is clean.
-        reconcilePageDirty(page);
+        // Every owned key is back at the committed baseline, so the page is
+        // clean. The cascade above also moved keys the SIBLING shortcuts page
+        // owns, whose badge only clears once its own value-based dirty state
+        // is re-read, so that page is reconciled in the same batch.
+        if (page == QLatin1String("workspaces-named")) {
+            reconcilePagesDirty({page, QStringLiteral("workspaces-shortcuts")});
+        } else {
+            reconcilePageDirty(page);
+        }
         return;
     }
 

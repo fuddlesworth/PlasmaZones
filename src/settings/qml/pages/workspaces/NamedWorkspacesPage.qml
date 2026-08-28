@@ -55,12 +55,20 @@ SettingsFlickable {
         return options;
     }
 
-    function _normalizedStored() {
+    /// Build the staged shape from the store, with a fresh uid per row.
+    ///
+    /// `uidBase` is where this call's uids start. _loadEntries builds a
+    /// candidate first and keeps it only when it differs from the staged copy,
+    /// so most calls are echoes of our own commit whose result is thrown away.
+    /// Passing the base in rather than incrementing the page counter lets the
+    /// caller advance `_uidSeq` only for the copy it actually adopts, so the
+    /// counter tracks rows issued instead of running away with every echo.
+    function _normalizedStored(uidBase) {
         var stored = appSettings.workspacesNamedEntries;
         var copy = [];
         for (var i = 0; i < stored.length; ++i)
             copy.push({
-                "uid": "ws" + (root._uidSeq++),
+                "uid": "ws" + (uidBase + i),
                 "name": stored[i].name || "",
                 "output": stored[i].output || "",
                 "position": stored[i].position !== undefined ? stored[i].position : -1,
@@ -93,9 +101,10 @@ SettingsFlickable {
         // every commit from THIS page echoes back through the change signal,
         // and reassigning the array would rebuild all row delegates (issuing
         // fresh uids), collapsing whichever row the user is editing.
-        var copy = _normalizedStored();
+        var copy = _normalizedStored(root._uidSeq);
         if (JSON.stringify(_wireEntries(copy)) === JSON.stringify(_wireEntries(_entries)))
             return;
+        root._uidSeq += copy.length;
         _entries = copy;
         _namesTick++;
     }
@@ -104,30 +113,17 @@ SettingsFlickable {
         appSettings.workspacesNamedEntries = _wireEntries(_entries);
     }
 
-    /// Carry a rename through the quick-shortcut slot targets.
-    ///
-    /// The workspace NAME is the wire value everywhere downstream: the
-    /// reconciler matches declarations by name, and a quick slot stores the
-    /// name it sends the window to (Workspaces.Slots/TargetN, resolved at
-    /// press time by WorkspaceController::moveWindowToNamedWorkspace). So a
-    /// rename here silently makes every slot pointing at the old name inert —
-    /// Settings deliberately never validates a target, precisely so the two
-    /// can be edited in any order. Following the rename is what the user
-    /// means: the slot still points at the workspace they renamed.
-    ///
-    /// Rules are NOT carried along. A RouteToWorkspace action stores the name
-    /// too, but rules live in their own store outside this page's staging, and
-    /// rewriting them from here would edit a document the user has open
-    /// elsewhere. Such a rule goes dormant until its action is re-pointed.
-    function _renameSlotTargets(previousName, newName) {
-        var from = ("" + (previousName || "")).trim();
-        var to = ("" + (newName || "")).trim();
-        if (from === "" || to === "" || from === to)
-            return;
-        for (var slot = 0; slot < settingsController.workspaceSlotCount; ++slot)
-            if (appSettings.workspaceSlotTarget(slot) === from)
-                appSettings.setWorkspaceSlotTarget(slot, to);
-    }
+    // Renaming a workspace carries through to the quick-shortcut slot targets
+    // that point at the old name.
+    //
+    // The cascade itself runs in the controller
+    // (SettingsController::renameWorkspaceSlotTargets), not here. The slot
+    // Target keys belong to the workspaces-shortcuts page's manifest, and a
+    // manifest key has exactly one owner, so writing them straight from this
+    // page left an edit only the OTHER page's Discard could revert. The
+    // controller records which slots it rewrote and this page's own Discard
+    // arm reverts them. The rationale for cascading at all, and for leaving
+    // rules out of it, is written up at that definition.
 
     // Bumped whenever any entry's name changes. A rename is applied IN PLACE
     // (see onFieldEdited), so `_entries` itself does not change identity and
@@ -332,7 +328,7 @@ SettingsFlickable {
                             root._entries[index][field] = value;
                             if (field === "name") {
                                 root._namesTick++;
-                                root._renameSlotTargets(previousName, value);
+                                settingsController.renameWorkspaceSlotTargets(previousName, value);
                             }
                             root._commitEntries();
                         }

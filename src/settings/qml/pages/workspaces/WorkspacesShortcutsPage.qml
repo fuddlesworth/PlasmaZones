@@ -77,7 +77,13 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     wrapMode: Text.WordWrap
                     opacity: 0.6
-                    text: i18n("Assign named workspaces to keyboard shortcuts for quick switching.")
+                    // Names BOTH verbs and where the keys live. The page only
+                    // assigns which workspace a slot acts on, so a user who
+                    // wants a different chord has nowhere to go from here
+                    // unless the text says so. Worded without naming the KDE
+                    // System Settings module, which the portable
+                    // (USE_KDE_FRAMEWORKS=OFF) build does not have.
+                    text: i18n("Each slot carries two keys. One jumps to the workspace in that position and the other sends the active window there. Both are registered under PlasmaZones and can be changed in your desktop's keyboard shortcut settings.")
                 }
 
                 Repeater {

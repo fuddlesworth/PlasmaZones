@@ -529,6 +529,11 @@ void WorkspaceController::setWindowScreenResolver(std::function<QString(const QS
     m_windowScreenResolver = std::move(resolver);
 }
 
+void WorkspaceController::setWindowStickyPredicate(std::function<bool(const QString&)> predicate)
+{
+    m_windowStickyPredicate = std::move(predicate);
+}
+
 void WorkspaceController::reuniteWindowWithOwner(const QString& instanceId, const QString& desktopId)
 {
     // Owner-wins, second arm (plan §4.7): the window follows its desktop's
@@ -657,8 +662,16 @@ void WorkspaceController::onWindowDisappeared(const QString& instanceId)
     // A closed window also leaves the removal-race snapshots. Otherwise the
     // deferred re-route emits a move for a window that no longer exists, and
     // the watchdog then warns about the arrival that was never coming.
-    for (auto it = m_displacedByRemoval.begin(); it != m_displacedByRemoval.end(); ++it) {
+    // A record whose last window just went away has nothing left to re-route,
+    // so drop it here rather than waiting for the kwinDesktopRemoved arm that
+    // normally consumes it — that signal may never land for this desktop.
+    for (auto it = m_displacedByRemoval.begin(); it != m_displacedByRemoval.end();) {
         it.value().windowIds.removeAll(instanceId);
+        if (it.value().windowIds.isEmpty()) {
+            it = m_displacedByRemoval.erase(it);
+        } else {
+            ++it;
+        }
     }
 
     adjustPopulationById(m_windowCensusDesktopId.take(instanceId), -1);

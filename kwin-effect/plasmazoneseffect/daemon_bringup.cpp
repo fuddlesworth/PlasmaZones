@@ -921,6 +921,18 @@ void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
     // bringup replay is an async query whose reply can land after a live
     // push — the payload's generation counter decides which is newer, and an
     // older map never overwrites a newer one.
+    if (mapJson.isEmpty()) {
+        // Not malformed: the interface promises an empty payload while
+        // dynamic workspaces are off or not yet adopted, and the daemon sends
+        // exactly that on a runtime disable (daemon/workspaces.cpp, the
+        // stop arm). Drop the cache AND the generation floor so a later
+        // re-enable — which restarts its counter from a fresh controller — is
+        // accepted by the empty-cache arm below instead of being rejected as
+        // older than the dead cycle's last generation.
+        m_workspaceMapJson.clear();
+        m_workspaceMapGeneration = 0;
+        return;
+    }
     const QJsonDocument doc = QJsonDocument::fromJson(mapJson.toUtf8());
     if (!doc.isObject()) {
         // Caching an unparseable payload verbatim would publish it as the

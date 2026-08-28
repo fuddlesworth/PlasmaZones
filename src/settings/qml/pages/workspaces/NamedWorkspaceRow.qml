@@ -209,7 +209,13 @@ ExpandableRowDelegate {
             // which is "Any monitor", so the pin would read as if it had been
             // dropped. Show the stored output id instead, the same fallback
             // the rules editors and the quick-shortcut combo use.
-            displayText: (row.entry.output !== "" && indexOfValue(row.entry.output) < 0) ? row.entry.output : currentText
+            // Read through the header mirror, not `entry.output`: the page
+            // commits a field edit IN PLACE on the same map object, which
+            // changes no property and re-evaluates no binding. `headerOutput`
+            // is the mirror that exists to carry that edit (see the class
+            // comment), so the fallback follows the pin instead of freezing on
+            // whatever the row was built with.
+            displayText: (row.headerOutput !== "" && indexOfValue(row.headerOutput) < 0) ? row.headerOutput : currentText
             onActivated: {
                 row.headerOutput = currentValue;
                 row.fieldEdited(row.entryIndex, "output", currentValue);

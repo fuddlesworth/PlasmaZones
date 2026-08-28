@@ -56,6 +56,12 @@ VirtualDesktopManager::~VirtualDesktopManager()
 bool VirtualDesktopManager::init()
 {
     initKWinDBus();
+    if (m_useKWinDBus) {
+        // Bind-time seed, blocking and bounded: init() runs before anything is
+        // driving an event loop, and every caller of desktopIds()/desktopCount()
+        // between here and start() would otherwise read an empty cache.
+        refreshFromKWin();
+    }
 
     // KWin absent right now is not a permanent verdict: the daemon can start
     // before the compositor, and KWin can restart under a running daemon.
@@ -65,8 +71,14 @@ bool VirtualDesktopManager::init()
                                                 QDBusServiceWatcher::WatchForRegistration, this);
         connect(m_kwinWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
             qCWarning(lcVirtualDesktops) << "KWin appeared on the bus; (re)binding the virtual-desktop interface";
+            // Bind only. A re-bind drops the old proxy's subscriptions, so a
+            // RUNNING manager re-subscribes and re-reads here; a STOPPED one
+            // must not, or stop()'s contract ("takes no further KWin events")
+            // would quietly lapse on the next KWin restart and every event
+            // would then take the blocking refresh path.
             initKWinDBus();
             if (m_useKWinDBus && m_running) {
+                subscribeKWinSignals(true);
                 refreshFromKWin();
             }
         });
@@ -96,9 +108,10 @@ void VirtualDesktopManager::initKWinDBus()
     }
 
     m_useKWinDBus = true;
-    subscribeKWinSignals(true);
     refreshRowsFromKWin();
-    refreshFromKWin();
+    // Subscribing and refreshing are NOT part of binding: this is also the
+    // KWin-restart path, and a stopped manager must come out of it bound but
+    // silent. init() seeds the cache and start() subscribes.
 }
 
 void VirtualDesktopManager::subscribeKWinSignals(bool subscribe)
@@ -190,6 +203,17 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
             m_refreshRetryTimer.start();
         } else {
             qCWarning(lcVirtualDesktops) << "desktop list refresh kept failing; giving up until the next KWin event";
+            // Hand the budget back. The next KWin event is a different episode
+            // and deserves its own retries; leaving the counter at the ceiling
+            // gave every later transient failure zero attempts.
+            m_refreshRetries = 0;
+            // desktopCreated / desktopRemoved announce nothing themselves — the
+            // count and the per-screen clamp ride the settled list, which just
+            // failed. Re-announce the count we still hold so consumers re-diff
+            // against KWin rather than sitting on a state this refresh was
+            // supposed to correct. The VALUE is unchanged on purpose; it is the
+            // notification that was lost, not the number.
+            Q_EMIT desktopCountChanged(m_desktopCount);
         }
         return;
     }

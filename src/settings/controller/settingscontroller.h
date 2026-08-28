@@ -346,10 +346,17 @@ public:
     /// WorkspaceReconciler::DefaultDesktopCap and
     /// ConfigDefaults::WorkspaceSlotCount, mirrored because QML has no other
     /// way to read a C++ constant and would otherwise hardcode both.
+    /// workspacesDesktopCap is the DEFAULT cap, not the reconciler's probed
+    /// one — see its definition in settingscontroller_pagekeys.cpp.
     Q_PROPERTY(int workspacesDesktopCap READ workspacesDesktopCap CONSTANT)
     Q_PROPERTY(int workspaceSlotCount READ workspaceSlotCount CONSTANT)
     int workspacesDesktopCap() const;
     int workspaceSlotCount() const;
+
+    /// Carry a named-workspace rename through the quick-slot targets, keeping
+    /// a record of the slots it rewrote so the Named page's own Discard can
+    /// undo them. Ownership seam it closes: settingscontroller_pagekeys.cpp.
+    Q_INVOKABLE void renameWorkspaceSlotTargets(const QString& previousName, const QString& newName);
 
     /// The default snapping layout and default scrolling template:
     /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
@@ -1149,6 +1156,9 @@ private:
     bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
+    /// 1-based quick-slot numbers a named-workspace rename rewrote this
+    /// session, read by discardPage("workspaces-named").
+    QSet<int> m_renamedWorkspaceSlots;
     /// Depth counter for deferred dirtyPagesChanged emission. While > 0 the
     /// reconcile helpers mutate m_dirtyPages but record the NOTIFY in
     /// m_dirtyEmitPending instead of firing it, so a delegated Reset/Discard

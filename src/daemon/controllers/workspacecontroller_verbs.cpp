@@ -9,6 +9,8 @@
 
 #include "workspacecontroller.h"
 
+#include "config/configdefaults.h"
+
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 #include <QLoggingCategory>
@@ -259,9 +261,9 @@ void WorkspaceController::applyNamedDeclarations(const QVariantList& entries)
         for (const QVariant& value : std::as_const(m_namedEntries)) {
             const QVariantMap map = value.toMap();
             PhosphorWorkspaces::NamedWorkspace decl;
-            decl.name = map.value(QStringLiteral("name")).toString().trimmed();
-            decl.outputId = map.value(QStringLiteral("output")).toString();
-            decl.position = map.value(QStringLiteral("position"), -1).toInt();
+            decl.name = map.value(ConfigDefaults::namedEntryNameField()).toString().trimmed();
+            decl.outputId = map.value(ConfigDefaults::namedEntryOutputField()).toString();
+            decl.position = map.value(ConfigDefaults::namedEntryPositionField(), -1).toInt();
             declarations.append(decl);
         }
         // rawDesktopNames, NOT desktopNames: this is the IDENTITY path, and it
@@ -339,6 +341,18 @@ bool WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const
     if (desktop <= 0) {
         return false;
     }
+    // A sticky window is on every workspace already, and the adaptor's move
+    // slot refuses it outright (crossmode.cpp: the effect drops the desktop
+    // move for an on-all-desktops window). Emitting anyway armed a watchdog
+    // for an arrival that could never come, which warned two seconds later.
+    // TRUE, not false: the rule asked for the window to be on that
+    // workspace and it is, so the positional RouteToDesktop fallback would
+    // be refused for the very same reason.
+    if (m_windowStickyPredicate && m_windowStickyPredicate(windowId)) {
+        qCInfo(lcWorkspaceCtl) << "route to named workspace" << name << ": window" << windowId
+                               << "is sticky, already on every workspace";
+        return true;
+    }
     watchWindowMove(windowId, target);
     Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"));
     return true;
@@ -356,6 +370,14 @@ void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const 
         }
         const int desktop = m_vdm->desktopIndexOf(target);
         if (desktop <= 0) {
+            return;
+        }
+        // Same sticky refusal as routeWindowToNamedWorkspace: the adaptor
+        // drops the move, so arming the watchdog only buys a spurious
+        // "saw no arrival" warning two seconds later.
+        if (m_windowStickyPredicate && m_windowStickyPredicate(windowId)) {
+            qCInfo(lcWorkspaceCtl) << "move to named workspace" << name << ": window" << windowId
+                                   << "is sticky, already on every workspace";
             return;
         }
         watchWindowMove(windowId, target);

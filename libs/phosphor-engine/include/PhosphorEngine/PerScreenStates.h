@@ -16,10 +16,29 @@
 
 namespace PhosphorEngine {
 
+/// Whether a desktop renumber mapping may be applied at all. KWin desktops are
+/// 1-based, so a mapped value below 1 is a poisoned mapping — and rejecting
+/// only the offending ENTRY is worse than rejecting nothing: the key it names
+/// stays on its old desktop while its siblings move onto that same number,
+/// manufacturing exactly the collision the callers' injectivity precondition
+/// exists to rule out. So the verdict is all-or-nothing, for every consumer of
+/// the mapping, and a refusal leaves every map untouched.
+inline bool desktopRenumberMappingIsValid(const QHash<int, int>& oldToNew)
+{
+    for (auto it = oldToNew.constBegin(); it != oldToNew.constEnd(); ++it) {
+        if (it.value() < 1) {
+            qWarning("PhosphorEngine: refusing a desktop renumber mapping with a target below 1 (%d -> %d)", it.key(),
+                     it.value());
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Rewrite the desktop dimension of a PlacementStateKey-keyed hash per
-/// `oldToNew` (absent = unchanged; a mapped value below 1 is treated as
-/// absent — KWin desktops are >= 1 and a poisoned target would corrupt the
-/// key). Companion to PerScreenStates::renumberDesktops for the engines'
+/// `oldToNew` (absent = unchanged). A mapping carrying any target below 1 is
+/// refused WHOLE (desktopRenumberMappingIsValid), never per entry.
+/// Companion to PerScreenStates::renumberDesktops for the engines'
 /// auxiliary per-context maps (stash, overrides, burst flags).
 /// Take-then-reinsert so shifted keys never collide. No `skip` predicate,
 /// unlike PerScreenStates::renumberDesktops: the aux maps engines pass here
@@ -29,13 +48,13 @@ namespace PhosphorEngine {
 template<typename ValueT>
 void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHash<int, int>& oldToNew)
 {
-    if (oldToNew.isEmpty()) {
+    if (oldToNew.isEmpty() || !desktopRenumberMappingIsValid(oldToNew)) {
         return;
     }
     QList<std::pair<PlacementStateKey, ValueT>> moved;
     for (auto it = hash.begin(); it != hash.end();) {
         const auto mapped = oldToNew.constFind(it.key().desktop);
-        if (mapped != oldToNew.constEnd() && mapped.value() >= 1) {
+        if (mapped != oldToNew.constEnd()) {
             PlacementStateKey newKey = it.key();
             newKey.desktop = mapped.value();
             moved.append({newKey, std::move(it.value())});
@@ -260,12 +279,13 @@ public:
     }
 
     /// Rewrite the desktop dimension of every key per `oldToNew` (1-based ints;
-    /// keys whose desktop is absent from the mapping are untouched, as is a
-    /// mapped value below 1 — KWin desktops are >= 1, so a poisoned target is
-    /// rejected here rather than written into a key). Both maps move
-    /// atomically: forward entries are taken out first so a shifted key can
-    /// never collide with a not-yet-shifted one. `skip` exempts sentinel keys
-    /// (the snap engine's empty-screenId globals) from the rewrite.
+    /// keys whose desktop is absent from the mapping are untouched). A mapping
+    /// carrying ANY target below 1 is refused whole and nothing moves — see
+    /// desktopRenumberMappingIsValid for why a per-entry refusal is unsafe.
+    /// Both maps move atomically: forward entries are taken out first so a
+    /// shifted key can never collide with a not-yet-shifted one. `skip` exempts
+    /// sentinel keys (the snap engine's empty-screenId globals) from the
+    /// rewrite.
     ///
     /// `oldToNew` must be INJECTIVE over the desktops actually present, and no
     /// mapped-to desktop may already be held by an unmapped (or skipped) key.
@@ -276,12 +296,12 @@ public:
     void renumberDesktops(const QHash<int, int>& oldToNew,
                           const std::function<bool(const PlacementStateKey&)>& skip = nullptr)
     {
-        if (oldToNew.isEmpty()) {
+        if (oldToNew.isEmpty() || !desktopRenumberMappingIsValid(oldToNew)) {
             return;
         }
         const auto shifts = [&oldToNew, &skip](const PlacementStateKey& key, int& newDesktop) {
             const auto mapped = oldToNew.constFind(key.desktop);
-            if (mapped == oldToNew.constEnd() || mapped.value() < 1 || (skip && skip(key))) {
+            if (mapped == oldToNew.constEnd() || (skip && skip(key))) {
                 return false;
             }
             newDesktop = mapped.value();

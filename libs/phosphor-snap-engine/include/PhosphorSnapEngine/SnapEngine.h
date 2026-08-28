@@ -1020,6 +1020,18 @@ private:
     /// unplugged output) — a silent drop there strands every consumer on a
     /// placement that no longer exists. MUST run before the state removal:
     /// unassignWindow resolves the owning store through the reverse map.
+    ///
+    /// On the DESKTOP and ACTIVITY axes the window survives on the same
+    /// screen, so "unsnap without re-homing" is a deliberate choice, not an
+    /// oversight. A zone id is only meaningful inside the layout of the
+    /// (screen, desktop, activity) it was assigned in, and the desktop the
+    /// compositor relocates the window to carries its own layout in which
+    /// that id generally does not exist — there is nothing to re-home the
+    /// assignment TO. The engine also does not know the destination context
+    /// at prune time: the relocation is reported afterwards, through the
+    /// ordinary desktop-change path, which places the window in its new
+    /// context from scratch. The float bit is dropped for the same reason,
+    /// float being per (mode, context).
     void releaseWindowsForDyingStates(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& matches);
 
     /// Canonicalize a raw windowId to its stable first-seen composite via the

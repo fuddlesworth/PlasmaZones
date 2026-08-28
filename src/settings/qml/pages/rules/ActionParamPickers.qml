@@ -138,11 +138,13 @@ QtObject {
             // Nothing to choose until a workspace is declared, and the action
             // validator refuses a blank name (hasNonBlankStringWithin, in
             // ruleaction_builtins_engine.cpp), so there is no empty value to
-            // offer as a fallback either. Disabled with a tooltip saying where
-            // to go, rather than a dropdown that opens onto nothing. The same
-            // shape as the zone-name picker's Add button next door.
-            enabled: workspaceCombo._names.length > 0
-            ToolTip.visible: !enabled && hovered
+            // offer as a fallback either. The combo stays ENABLED with an
+            // empty model all the same: disabling it puts an already-stored
+            // name out of reach, and a disabled QQC2 Control receives no hover
+            // events, so the tooltip that says where to declare one would
+            // never appear. The display text carries the same guidance for
+            // anyone who does not hover.
+            ToolTip.visible: workspaceCombo._names.length === 0 && hovered
             ToolTip.text: i18n("Add a named workspace under Settings → Workspaces → Named Workspaces first.")
             currentIndex: {
                 var target = row.action[_param.key];
@@ -152,7 +154,15 @@ QtObject {
                 }
                 return -1;
             }
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] ? ("" + row.action[_param.key]) : i18n("Choose a workspace…"))
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                if (row.action[_param.key])
+                    return "" + row.action[_param.key];
+                if (workspaceCombo._names.length === 0)
+                    return i18n("Add a named workspace first");
+                return i18n("Choose a workspace…");
+            }
             Accessible.name: _param.label
             onActivated: function (index) {
                 if (currentValue !== row.action[_param.key])

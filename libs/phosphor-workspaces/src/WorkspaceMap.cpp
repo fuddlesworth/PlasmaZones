@@ -149,6 +149,14 @@ bool WorkspaceMap::remove(const QString& desktopId)
             return true;
         }
     }
+    // The row named a slice that does not hold the id: garbage by definition,
+    // and leaving it costs more than dropping it. insert()'s duplicate repair
+    // calls this, sees "not found", and then overwrites the row anyway — so a
+    // surviving row would have the desktop counted under the OLD owner by
+    // consistentWith and takeSlice while the new slice really holds it.
+    qCWarning(lcWorkspaceMap) << "owner index named" << owner << "for desktop" << desktopId
+                              << "which that slice does not hold — dropping the stale row";
+    m_ownerOf.remove(desktopId);
     return false;
 }
 

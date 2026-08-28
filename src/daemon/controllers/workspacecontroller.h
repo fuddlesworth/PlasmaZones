@@ -65,6 +65,13 @@ public:
     /// half — the desktop's owner screen is where its windows belong).
     void setWindowScreenResolver(std::function<QString(const QString& windowId)> resolver);
 
+    /// Inject the sticky (on-all-desktops) predicate, backed by the same
+    /// WindowTrackingService answer the adaptor's move slot refuses on. The
+    /// named-workspace verbs consult it before arming a move watchdog for a
+    /// move the adaptor is going to refuse. Unset means "cannot tell", and
+    /// every caller then behaves exactly as it did before the check existed.
+    void setWindowStickyPredicate(std::function<bool(const QString& windowId)> predicate);
+
     /// Current wire payload (for the adaptor's replay query).
     QString currentMapJson() const;
 
@@ -211,6 +218,8 @@ private:
     /// window sits on, issue the cross-screen move that reunites them.
     void reuniteWindowWithOwner(const QString& instanceId, const QString& desktopId);
     std::function<QString(const QString&)> m_windowScreenResolver;
+    /// Sticky predicate (see setWindowStickyPredicate). Null until wired.
+    std::function<bool(const QString&)> m_windowStickyPredicate;
     /// Per-window reunion cooldown stamps (ms since epoch): a reunion is an
     /// output move on an unchanged desktop, so no census arrival clears it —
     /// the cooldown is what stops a slow effect from drawing repeat issues.

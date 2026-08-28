@@ -311,6 +311,21 @@ Item {
                 // the same row rather than nowhere.
                 root.pendingFocusId = delegateRoot._itemId;
                 root.moveRequested(from, to);
+                // A consumer may DECLINE the move: every one of them range-
+                // checks the indices against its own model first and returns
+                // without touching it. No rebuild follows a decline, so no
+                // delegate can ever claim the arm, and the prune above only
+                // drops an id that has left `items` — this one is still there.
+                // The arm would sit until some later, unrelated rebuild
+                // claimed it and yanked focus to that row. A commit always
+                // REPLACES `items` (that is what resets the Repeater and makes
+                // the whole restore necessary), so an unchanged array means
+                // the move did not happen: disarm. Guarded on the id as well,
+                // because a synchronous rebuild may already have claimed and
+                // cleared it, and re-clearing then would be harmless but the
+                // guard keeps the two halves honest.
+                if (root.items === snapshot && root.pendingFocusId === delegateRoot._itemId)
+                    root.pendingFocusId = "";
             }
 
             RowLayout {

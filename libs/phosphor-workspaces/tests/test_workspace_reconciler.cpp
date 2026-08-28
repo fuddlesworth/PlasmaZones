@@ -61,8 +61,29 @@ private Q_SLOTS:
     void named_explicitPositionStaysBeforeTrailingEmpty();
     void settled_emptyListIsIgnored();
     void screenAdded_freshScreenGetsItsOwnDesktop();
+    void create_secondPendingSurvivesTheFirstsSettle();
+    void create_settledBeforeEchoLandsOnRequestingScreen();
 
 private:
+    /// Two screens, each occupied and each therefore owing a trailing-empty
+    /// create, with BOTH Creates open in the ledger at once. A owns {d1}
+    /// (occupied), B owns {d2} (occupied); nothing has landed yet.
+    void openTwoConcurrentCreates(WorkspaceReconciler& rec, QSignalSpy& createSpy)
+    {
+        rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
+        rec.setFocusedScreen(QStringLiteral("A"));
+
+        QHash<QString, QString> current;
+        current.insert(QStringLiteral("A"), id(1));
+        current.insert(QStringLiteral("B"), id(2));
+        rec.adoptAll({id(1), id(2)}, current);
+        QCOMPARE(createSpy.count(), 0);
+
+        rec.onPopulationChanged(id(1), 1);
+        rec.onPopulationChanged(id(2), 1);
+        QCOMPARE(createSpy.count(), 2);
+    }
+
     /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
     /// With an empty census both slices already end in an empty dynamic
     /// desktop, so adoption alone requests nothing; occupying each current
@@ -766,6 +787,56 @@ void TestWorkspaceReconciler::named_createEchoFifoMismatchHealedByKWinNames()
     rec.applyNamedWorkspaces(declarations, kwinNames);
     QCOMPARE(rec.map().entryFor(id(8)).name, QStringLiteral("chat"));
     QVERIFY(rec.map().entryFor(id(7)).name.isEmpty());
+}
+
+void TestWorkspaceReconciler::create_secondPendingSurvivesTheFirstsSettle()
+{
+    // Two Creates open at once, one landing. The settle must retire ONLY the
+    // op the landed desktop answered: retiring a second by arithmetic (the id
+    // count grew by one, so "one create landed") left B's echo with no ledger
+    // entry, which adopted B's desktop onto the FOCUSED screen and let
+    // maintainScreen request a duplicate in the meantime.
+    WorkspaceReconciler rec;
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    openTwoConcurrentCreates(rec, createSpy);
+
+    // A's create lands: echo first, then the settled list.
+    rec.onKwinDesktopCreated(id(3));
+    QCOMPARE(rec.map().ownerOf(id(3)), QStringLiteral("A"));
+    rec.onDesktopListSettled({id(1), id(3), id(2)});
+
+    // B's Create is still open: no duplicate request, and B's slice is
+    // untouched while it waits.
+    QCOMPARE(createSpy.count(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 1);
+
+    // B's echo lands on the screen that ASKED, not on the focused screen.
+    rec.onKwinDesktopCreated(id(4));
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(4)});
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
+    QCOMPARE(createSpy.count(), 2);
+}
+
+void TestWorkspaceReconciler::create_settledBeforeEchoLandsOnRequestingScreen()
+{
+    // The other order: both creates land and the settled list arrives with no
+    // id-only echo at all (KWin's desktopCreated lost, or the refresh simply
+    // won the race). Each new id consumes the oldest open Create — the same
+    // FIFO order the echo path uses — and lands on the requesting screen
+    // instead of being adopted onto the focused one.
+    WorkspaceReconciler rec;
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+    openTwoConcurrentCreates(rec, createSpy);
+
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(4)});
+
+    QCOMPARE(rec.map().ownerOf(id(3)), QStringLiteral("A"));
+    QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
+    QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
+    // Both ops were consumed, so maintenance is quiet again.
+    QCOMPARE(createSpy.count(), 2);
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)

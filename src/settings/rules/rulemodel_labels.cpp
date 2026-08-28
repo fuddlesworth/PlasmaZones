@@ -413,7 +413,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (name.isEmpty() || name.size() > PhosphorRules::MaxWorkspaceNameLength) {
             return PhosphorI18n::tr("Open on workspace");
         }
-        return PhosphorI18n::tr("Open on workspace “%1”", "%1 is the quoted workspace name").arg(name);
+        return PhosphorI18n::tr("Open on workspace “%1”").arg(name);
     }
     if (action.type == ActionType::RouteToDesktop) {
         // Both ends of the descriptor's bound, not just the floor: a

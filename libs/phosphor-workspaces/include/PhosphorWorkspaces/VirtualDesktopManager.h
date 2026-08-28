@@ -25,10 +25,17 @@ public:
     explicit VirtualDesktopManager(QObject* parent = nullptr);
     ~VirtualDesktopManager() override;
 
-    /// Bind to KWin's D-Bus VirtualDesktopManager. Returns true when the
-    /// interface answered; false when KWin is absent (a service watcher then
-    /// binds as soon as KWin appears, so a false here is not permanent).
+    /// Bind to KWin's D-Bus VirtualDesktopManager and seed the desktop cache.
+    /// Returns true when the interface answered; false when KWin is absent.
+    ///
+    /// The return is ADVISORY and deliberately not [[nodiscard]]: a false is
+    /// never a permanent verdict, because a service watcher binds as soon as
+    /// KWin appears and start() picks it up from there. Callers that only want
+    /// the manager running (the daemon's startup path) correctly ignore it;
+    /// the value exists for a caller that wants to log or report whether the
+    /// compositor was there at that instant.
     bool init();
+    /// Subscribe to KWin's signals and refresh. Idempotent while running.
     void start();
     /// Drop KWin's signal subscriptions and any pending refresh retry. A
     /// stopped manager takes no further KWin events; start() re-subscribes.
@@ -124,6 +131,9 @@ private Q_SLOTS:
     void onKWinDesktopRowsChanged();
 
 private:
+    /// Bind (or re-bind after a KWin restart) the D-Bus proxy and re-read the
+    /// grid rows. Binding ONLY: it neither subscribes nor refreshes the list,
+    /// so it is safe on a stopped manager. init() seeds, start() subscribes.
     void initKWinDBus();
     /// Connect (or disconnect) KWin's VirtualDesktopManager signals.
     void subscribeKWinSignals(bool subscribe);

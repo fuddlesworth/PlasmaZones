@@ -370,25 +370,44 @@ void TestPerScreenStates::renumberDesktops_defaultSkipShiftsSentinels()
 
 void TestPerScreenStates::renumberDesktops_rejectsTargetsBelowOne()
 {
-    // Desktops are 1-based; a mapping target below 1 is treated as absent so a
-    // poisoned reconciler cannot write a key no lookup can ever resolve.
+    // Desktops are 1-based; a mapping target below 1 poisons the WHOLE mapping,
+    // which is then refused entirely. Rejecting only the offending entry would
+    // strand desktop 3 on 3 while its sibling 4→3 moved on top of it, which is
+    // the very collision the injectivity precondition rules out.
     PerScreenStates<FakeState> states;
     FakeState* s = makeState(QStringLiteral("S1"));
+    FakeState* sibling = makeState(QStringLiteral("S1"));
     states.insertState(key(QStringLiteral("S1"), 3), s);
+    states.insertState(key(QStringLiteral("S1"), 4), sibling);
     states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+    states.setKeyForWindow(QStringLiteral("w4"), key(QStringLiteral("S1"), 4));
 
     QHash<int, int> poisoned;
     poisoned.insert(3, 0);
+    poisoned.insert(4, 3); // valid on its own, and must NOT be applied alone
     states.renumberDesktops(poisoned);
     QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 3)), s);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 4)), sibling);
     QCOMPARE(states.keyForWindow(QStringLiteral("w3")).desktop, 3);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w4")).desktop, 4);
 
     // Same rule in the aux-map helper.
     QHash<PlacementStateKey, QString> aux;
     aux.insert(key(QStringLiteral("S1"), 3), QStringLiteral("a"));
+    aux.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
     PhosphorEngine::renumberDesktopKeyedHash(aux, poisoned);
     QCOMPARE(aux.value(key(QStringLiteral("S1"), 3)), QStringLiteral("a"));
-    QCOMPARE(aux.size(), 1);
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 4)), QStringLiteral("b"));
+    QCOMPARE(aux.size(), 2);
+
+    // Drop the poisoned entry and the rest applies, collision-free.
+    QHash<PlacementStateKey, QString> auxClean;
+    auxClean.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
+    QHash<int, int> clean;
+    clean.insert(4, 3);
+    PhosphorEngine::renumberDesktopKeyedHash(auxClean, clean);
+    QCOMPARE(auxClean.value(key(QStringLiteral("S1"), 3)), QStringLiteral("b"));
+    QCOMPARE(auxClean.size(), 1);
 }
 
 void TestPerScreenStates::renumberDesktopKeyedHash_auxMaps()

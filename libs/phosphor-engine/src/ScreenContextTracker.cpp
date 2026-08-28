@@ -3,6 +3,8 @@
 
 #include <PhosphorEngine/ScreenContextTracker.h>
 
+#include <PhosphorEngine/PerScreenStates.h>
+
 namespace PhosphorEngine {
 
 PlacementStateKey ScreenContextTracker::currentKeyForScreen(const QString& screenId) const
@@ -187,16 +189,17 @@ void ScreenContextTracker::renumberDesktops(const QHash<int, int>& oldToNew)
     // values are untouched (their desktop did not shift). Runs in lockstep
     // with the engines' state-map renumber so pins keep naming the desktop
     // whose state they protect.
-    if (oldToNew.isEmpty()) {
+    // Every setter here rejects desktop < 1 because KWin desktops are 1-based
+    // and a 0/negative would poison a pin that outranks both other tiers; a
+    // renumber must not be the one path that writes what those guards refuse.
+    // The refusal is all-or-nothing (desktopRenumberMappingIsValid): leaving
+    // one value on its old desktop while its siblings shift onto that same
+    // number is the collision this tracker's callers assume cannot happen.
+    if (oldToNew.isEmpty() || !desktopRenumberMappingIsValid(oldToNew)) {
         return;
     }
-    // A mapped value below 1 is treated as absent. Every setter here rejects
-    // desktop < 1 because KWin desktops are 1-based and a 0/negative would
-    // poison a pin that outranks both other tiers; a renumber must not be the
-    // one path that writes what those guards refuse.
     const auto remap = [&oldToNew](int desktop) {
-        const int mapped = oldToNew.value(desktop, desktop);
-        return mapped >= 1 ? mapped : desktop;
+        return oldToNew.value(desktop, desktop);
     };
     m_currentDesktop = remap(m_currentDesktop);
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end(); ++it) {

@@ -49,6 +49,7 @@ private Q_SLOTS:
 
     void reapDesktopStateDropsOnlyTheDeadDesktop();
     void reapDesktopStateReleasesThePopulatedDesktopsWindows();
+    void reapDesktopStateKeepsTheSurvivingSiblingsScreenBookkeeping();
     void renumberDesktopStateShiftsKeysAndKeepsWindows();
     void renumberDesktopStateMovesTheStripStash();
     void renumberDesktopStateMovesPerScreenOverrides();
@@ -128,6 +129,59 @@ void TestScrollEngineDesktopReap::reapDesktopStateReleasesThePopulatedDesktopsWi
     // call returns, along with the tracking entry.
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|tiled")));
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|floated")));
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateKeepsTheSurvivingSiblingsScreenBookkeeping()
+{
+    // The reap releases the dying context with clearScreenBookkeeping=false:
+    // the SCREEN survives, so its per-screen maps belong to the sibling
+    // contexts that are still live. Falsifies flipping that argument to true —
+    // the tab-strip latch would be dropped (and a stale "[]" broadcast while
+    // the live desktop still shows a tabbed column) and the pending order seed
+    // would be discarded before the transition it was captured for ever
+    // arrived.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Desktop 2 is the survivor: give it a tabbed column, which latches the
+    // screen's tab-strip state.
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->windowOpened(QStringLiteral("app|tab1"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|tab2"), kS1, 0, 0);
+    engine->focusColumnFirst(kS1);
+    engine->consumeWindowIntoColumn(kS1);
+    engine->toggleColumnTabbed(kS1);
+
+    // A mode-transition seed for the same screen, naming windows that have
+    // not arrived yet (B before A).
+    engine->setInitialWindowOrder(kS1, {QStringLiteral("app|B"), QStringLiteral("app|A")});
+
+    // Desktop 1 is the one about to die, populated so the reap takes its full
+    // release path. Its window is not in the seed, so the open cannot consume
+    // one of the entries under test.
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(QStringLiteral("app|dying"), kS1, 0, 0);
+    engine->setCurrentDesktopForScreen(kS1, 2);
+
+    QSignalSpy strips(engine, &ScrollEngine::tabStripsChanged);
+    engine->reapDesktopState(1);
+    // The clear broadcast is queued, so give the event loop a turn before
+    // concluding it never came.
+    QTest::qWait(10);
+    for (const QList<QVariant>& emission : strips) {
+        QVERIFY2(!(emission.at(0).toString() == kS1 && emission.at(1).toString() == QStringLiteral("[]")),
+                 "the surviving sibling context still owns the screen's tab strip");
+    }
+
+    // The seed survived too: A arrives first but the seed puts B ahead of it.
+    engine->windowOpened(QStringLiteral("app|A"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|B"), kS1, 0, 0);
+    const QStringList order = engine->managedWindowOrder(kS1);
+    QVERIFY(order.contains(QStringLiteral("app|A")));
+    QVERIFY(order.contains(QStringLiteral("app|B")));
+    QVERIFY2(order.indexOf(QStringLiteral("app|B")) < order.indexOf(QStringLiteral("app|A")),
+             "a surviving order seed must still place the later arrival");
 }
 
 void TestScrollEngineDesktopReap::renumberDesktopStateShiftsKeysAndKeepsWindows()
