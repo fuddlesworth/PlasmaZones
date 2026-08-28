@@ -249,4 +249,25 @@ void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
     }
 }
 
+void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const QString& screenId)
+{
+    auto savedIt = m_savedPreTileForDesktopMove.find(windowId);
+    if (savedIt == m_savedPreTileForDesktopMove.end()) {
+        return;
+    }
+    // Only apply when the source screen matches the destination — saved rects
+    // are in absolute coordinates of the source monitor and would land
+    // off-target on a different screen after a cross-desktop + cross-screen
+    // move. Consumed either way: a rect that cannot be applied here has no
+    // later consumer, and leaving it behind would let a much later re-add on
+    // the original screen restore a rect from a session-old position.
+    if (savedIt.value().first == screenId) {
+        m_preTileGeometries[screenId][windowId] = savedIt.value().second;
+    } else {
+        qCDebug(lcEffect) << "Desktop move: dropping cross-screen pre-autotile rect for" << windowId
+                          << "source=" << savedIt.value().first << "dest=" << screenId;
+    }
+    m_savedPreTileForDesktopMove.erase(savedIt);
+}
+
 } // namespace PlasmaZones

@@ -20,6 +20,7 @@
 #include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
+#include "compositor/windowanimator.h"
 #include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 
@@ -61,40 +62,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
     m_wiredWindows.insert(w);
 
-    connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
-        updateWindowStickyState(window);
-        // No metadata push here: the daemon's float resolver reads the
-        // window's own desktop/activity from the registry, but that is kept
-        // fresh by the KWin::Window::desktopsChanged → pushLatest connection
-        // below (this signal is KWin's EffectWindow relay of the same event,
-        // so a push here would build and marshal the extended snapshot twice
-        // per desktop move).
-
-        // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
-        // treat it as removed from the current desktop's tiling. The normal desktop-
-        // switch flow will pick it up when the user switches to the target desktop.
-        if (window && !window->isOnCurrentDesktop() && !window->isOnAllDesktops()) {
-            const QString windowId = getWindowId(window);
-            const QString screenId = getWindowScreenId(window);
-            if (m_tilingHandler->isManagedScreen(screenId)) {
-                // Save pre-autotile geometry before onWindowClosed clears it.
-                // When the window is re-added on the target desktop, this preserved
-                // geometry is used instead of the current (tiled) frame position.
-                m_tilingHandler->savePreTileForDesktopMove(windowId);
-
-                // Title-bar state is rule-driven (no autotile decoration claim
-                // to release): KWin's off-desktop noBorder reset is corrected on
-                // desktop return by updateAllDecorations → resyncWindow for any
-                // rule-owned window. releaseWindowTracking, NOT onWindowClosed:
-                // the window is alive and merely moving desktops, so the close
-                // relay's capture and its ledger append must not fire (the
-                // preserved pre-tile geometry above is the state that matters).
-                m_tilingHandler->releaseWindowTracking(windowId, screenId);
-                removeWindowDecoration(windowId);
-                qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
-            }
-        }
-    });
+    // Virtual-desktop set changes (departure / arrival arms and the stamp they
+    // diff against) live in window_desktop_connections.cpp.
+    wireDesktopChangeHandler(w);
 
     // Detect when a window moves between monitors (e.g., "Move to Screen Right").
     // KWin::Window::outputChanged fires once when the window's output property changes.

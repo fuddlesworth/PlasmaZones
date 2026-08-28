@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Windows moved to another desktop are placed there**: dropping a window onto a different desktop from the pager or the Overview left it where it landed. On a tiling or scrolling screen it sat on top of the stack without joining it, and it stayed on the desktop it came from as far as PlasmaZones was concerned, until you left the desktop and came back. A window arriving on the desktop you are looking at now joins the stack the same way a newly opened one does. On a snapping screen it floats, which is what snapping does with any window you have not dropped into a zone yourself, unless the layout fills its zones automatically, in which case the window takes the first empty one ([#996](https://github.com/fuddlesworth/PlasmaZones/pull/996)).
 - **Scrolling windows can open at their own height**: Default width under Scrolling → New columns has always offered Window decides, which opens a column at the size the application asked for. Default height offered only the even split, a fixed pixel height and a preset. It now offers Window decides too, so a window joining a column keeps the height it asked for. As with the width, a per-window rule and a per-monitor setting still outrank it. Unless a rule pins a height, Retile then leaves a window-decided height alone rather than pulling it back to the even split ([#995](https://github.com/fuddlesworth/PlasmaZones/pull/995)).
 
 ### Fixed
