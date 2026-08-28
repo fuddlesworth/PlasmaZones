@@ -136,4 +136,111 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
     return false;
 }
 
+// ── Compositor-state claims ────────────────────────────────────────────────
+//
+// The effect imposes three kinds of compositor state that only it can hand
+// back, each tracked in its own per-window ledger. Which of them a given exit
+// path releases is decided HERE, as data, rather than by whether somebody
+// remembered to write the call at that site.
+//
+// That is the whole point: a missing release is an ABSENCE, so it compiles,
+// tests and reviews clean, and what it leaves behind is a window holding
+// compositor state with nothing recording the debt. PR #994 shipped a third
+// claim missing eight of its releases, and the two asymmetries introduced
+// while fixing those were the same shape. A table cannot forget a cell.
+
+/// A kind of compositor state the effect imposed on a window.
+enum class Claim {
+    MonocleMaximize, ///< KWin maximize held for a monocle tile
+    WindowedFullscreen, ///< KWin fullscreen + a keep-flag layer demotion
+    ColumnMaximize, ///< KWin maximize held for a maximized scroll column
+};
+
+/// Why the effect's authority over a window is ending. Each exit path names
+/// itself, and the table below says which claims answer to that name — so a
+/// deliberate blank is a cell a reader can see rather than a call nobody
+/// wrote.
+enum class ClaimScope {
+    /// The window is leaving the strip or the tiled set outright and no later
+    /// batch will carry it: close, cross-output transfer, the untile diff,
+    /// the active float channel, the leaving-scrolling loop.
+    StripExit,
+    /// The daemon's passive float channel, whose producers never reach the
+    /// active funnel.
+    PassiveFloat,
+    /// A screen changed mode, desktop or activity: the demote pass, the
+    /// removed-screens sweep, the pre-tile restores.
+    ModeFlip,
+    /// A window left fullscreen while floating — the repair arm for a claim
+    /// that was retained through the fullscreen hold.
+    FullscreenExitWhileFloating,
+    /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
+    /// claim answers, and the ORDER matters (see claimReleaseOrder).
+    Teardown,
+};
+
+/// Whether @p claim releases on @p scope.
+///
+/// Every blank below is deliberate and load-bearing; none is an oversight.
+/// Changing one is a behaviour change and belongs in its own commit with its
+/// own argument.
+inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
+{
+    switch (scope) {
+    case ClaimScope::StripExit:
+        // All three: the defining case. Nothing else will carry the window.
+        return true;
+    case ClaimScope::PassiveFloat:
+        // Monocle is EXCLUDED, and documented at its site: re-driving a
+        // maximize restore from a passive float signal has not been shown
+        // safe against the monocle batch that owns that membership. The
+        // other two have no such owner on this channel.
+        return claim != Claim::MonocleMaximize;
+    case ClaimScope::ModeFlip:
+        return true;
+    case ClaimScope::FullscreenExitWhileFloating:
+        // Windowed fullscreen is not held here by construction — this arm
+        // runs BECAUSE the window left fullscreen. The other two may have
+        // retained a claim through the hold, and this is their repair.
+        return claim != Claim::WindowedFullscreen;
+    case ClaimScope::Teardown:
+        return true;
+    }
+    return false;
+}
+
+/// Teardown release order, lowest first.
+///
+/// Windowed fullscreen goes BEFORE either maximize claim. Both maximize
+/// releases skip a window that still holds (or has requested) fullscreen, and
+/// on X11 setFullScreen(false) has already landed by the time the next claim
+/// runs — so releasing fullscreen first is what lets a window holding both
+/// get a real restore instead of a skip. Reversing this was a live regression
+/// during PR #994's remediation.
+inline constexpr int claimReleaseOrder(Claim claim)
+{
+    switch (claim) {
+    case Claim::WindowedFullscreen:
+        return 0;
+    case Claim::MonocleMaximize:
+        return 1;
+    case Claim::ColumnMaximize:
+        return 2;
+    }
+    return 3;
+}
+
+/// Whether a claim keeps its ledger entry when its release is SKIPPED because
+/// the window still holds fullscreen.
+///
+/// The two maximize claims retain: shedding an entry whose bit was never
+/// handed back strands that bit with nothing recording it is owed, and a
+/// later batch or the fullscreen-exit repair can still pay it. Windowed
+/// fullscreen does not retain, because its membership is shed by its caller
+/// (forgetWindowedFullscreen) before the compositor half runs at all.
+inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
+{
+    return claim != Claim::WindowedFullscreen;
+}
+
 } // namespace PlasmaZones::ScrollDecisions

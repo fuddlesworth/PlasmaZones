@@ -166,6 +166,52 @@ tree does today, including the deliberate blanks. Any cell that changes
 behaviour is a separate, argued commit — the refactor's value is that it makes
 such a change reviewable.
 
+That constraint is harder than it looks, and it is the reason the funnel is
+not in this branch. See below.
+
+## What a first implementation attempt found
+
+The scope table and its tests landed. The funnel and the site migration were
+written, run into two problems, and reverted rather than shipped.
+
+**The table and the tree disagree, and the table is the honest one.** Under a
+scope-driven funnel, `cleanupAutotileTracking` releases every claim that
+answers to `StripExit` — including monocle, which that path does NOT release
+today (it rides `cleanupClosedWindowState`'s bare scrub instead). So the very
+first migrated site silently changed shipped monocle behaviour on the close and
+cross-output paths. Every blank in the matrix has this property: the funnel
+either reproduces it, in which case the scope vocabulary has to grow a case per
+historical accident and stops being a simplification, or it fills the blank,
+in which case the "no behaviour change" promise is void.
+
+The blanks are not all principled. Some are documented decisions (the passive
+channel's monocle exclusion); others are simply where nobody wrote the call.
+The refactor cannot tell them apart, and neither can a reader — which is the
+original complaint, now aimed at the fix.
+
+**Ordering is per-site, not per-claim.** `applyFloatCleanup` releases windowed
+fullscreen early, then does the tiled/floating flips and the relocation-delta
+damage, then releases monocle and column, with a comment stating that order is
+deliberate ("the monocle unmaximize is a geometry change, and resolving the
+chain after it means the resolve sees the window's final shape"). Collapsing
+the three into one call forces a position, and either position moves a
+compositor write relative to work between them. Several sites have this shape.
+
+**So the sequencing changes.** The funnel is still the right destination, but
+it needs a decision per blank cell — keep it and encode the accident, or fill
+it and argue the behaviour change — and a per-site ordering audit. Both are
+reviewable work; neither is mechanical, and neither is verifiable by the test
+suite, because the sites live in the effect. That makes the linkable
+kwin-effect test target a genuine PREREQUISITE for the migration rather than a
+parallel nice-to-have, which is the opposite of what this document assumed.
+
+What is safe to land ahead of that, and has landed here, is the vocabulary and
+the policy: `Claim`, `ClaimScope`, `claimReleasesOn`, `claimReleaseOrder` and
+`claimRetainsOnFullscreenSkip` in `scrolldecisions.h`, with a row per cell in
+`test_scroll_decisions`. That is the specification made executable. It changes
+no behaviour, it pins the ordering rule whose reversal was a live regression,
+and it gives the migration something to be checked against.
+
 ## Sequencing
 
 After #994 merges, not with it. #994 already carries 91 audit findings, a
@@ -176,6 +222,9 @@ regression that cannot be told apart from the maximize feature.
 
 ## Acceptance
 
+- a linkable kwin-effect test target exists, so the migration is checkable
+- every blank cell in the matrix has been ruled a decision or an accident, in
+  writing, before the funnel fills it
 - one `releaseAllClaims` call per exit path, and the 26 scattered calls gone
 - the matrix above reproduced exactly, as a table in code
 - scope policy unit-tested in `scrolldecisions.h`'s suite

@@ -255,6 +255,87 @@ private Q_SLOTS:
         count = 0;
         QVERIFY(shouldCounterAssert(start, count, 10400, true));
     }
+
+    // ── Compositor-state claims ────────────────────────────────────────────
+    //
+    // The release table is the whole point of the claim vocabulary: a missing
+    // release is an ABSENCE in the old scattered form, so it compiled, tested
+    // and reviewed clean while stranding compositor state. Here every cell is
+    // asserted, so a blank has to be argued for rather than merely forgotten.
+
+    void claimReleaseTable_data()
+    {
+        QTest::addColumn<int>("claim");
+        QTest::addColumn<int>("scope");
+        QTest::addColumn<bool>("releases");
+
+        const auto c = [](Claim k) {
+            return static_cast<int>(k);
+        };
+        const auto s = [](ClaimScope k) {
+            return static_cast<int>(k);
+        };
+
+        // StripExit — the defining case: the window is leaving and no later
+        // batch will carry it, so every claim must pay up.
+        QTest::newRow("stripExit/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::StripExit) << true;
+        QTest::newRow("stripExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::StripExit) << true;
+        QTest::newRow("stripExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::StripExit) << true;
+
+        // PassiveFloat — monocle is the ONE deliberate blank in the table.
+        QTest::newRow("passiveFloat/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::PassiveFloat) << false;
+        QTest::newRow("passiveFloat/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::PassiveFloat) << true;
+        QTest::newRow("passiveFloat/column") << c(Claim::ColumnMaximize) << s(ClaimScope::PassiveFloat) << true;
+
+        QTest::newRow("modeFlip/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::ModeFlip) << true;
+        QTest::newRow("modeFlip/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::ModeFlip) << true;
+        QTest::newRow("modeFlip/column") << c(Claim::ColumnMaximize) << s(ClaimScope::ModeFlip) << true;
+
+        // FullscreenExitWhileFloating — windowed fullscreen cannot be held
+        // here by construction; the arm runs BECAUSE the window left it.
+        QTest::newRow("fsExit/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::FullscreenExitWhileFloating)
+                                        << true;
+        QTest::newRow("fsExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::FullscreenExitWhileFloating)
+                                    << false;
+        QTest::newRow("fsExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::FullscreenExitWhileFloating)
+                                       << true;
+
+        QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
+        QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
+        QTest::newRow("teardown/column") << c(Claim::ColumnMaximize) << s(ClaimScope::Teardown) << true;
+    }
+
+    void claimReleaseTable()
+    {
+        QFETCH(int, claim);
+        QFETCH(int, scope);
+        QFETCH(bool, releases);
+        QCOMPARE(claimReleasesOn(static_cast<Claim>(claim), static_cast<ClaimScope>(scope)), releases);
+    }
+
+    void teardownReleasesFullscreenBeforeEitherMaximize()
+    {
+        // Ordering, not preference. Both maximize releases SKIP a window that
+        // still holds fullscreen, and on X11 setFullScreen(false) has landed
+        // by the time the next claim runs — so fullscreen first is what lets
+        // a window holding both states get a real restore instead of a skip.
+        // The reverse order was a live regression during PR #994's
+        // remediation, which is why this is pinned rather than left to the
+        // enum's declaration order.
+        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::MonocleMaximize));
+        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::ColumnMaximize));
+    }
+
+    void onlyTheMaximizeClaimsRetainOnAFullscreenSkip()
+    {
+        // Shedding an entry whose bit was never handed back strands that bit
+        // with nothing recording it is owed. Windowed fullscreen is the
+        // exception because its caller sheds membership before the
+        // compositor half runs at all.
+        QVERIFY(claimRetainsOnFullscreenSkip(Claim::MonocleMaximize));
+        QVERIFY(claimRetainsOnFullscreenSkip(Claim::ColumnMaximize));
+        QVERIFY(!claimRetainsOnFullscreenSkip(Claim::WindowedFullscreen));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestScrollDecisions)
