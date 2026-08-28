@@ -142,6 +142,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // the floating pair is rejected by validationError() below like any
         // other garbling.
         entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
+        // Scrolling column maximize. Same shape as the flag above: only
+        // meaningful on a tiled entry, and validationError() below rejects
+        // the floating and monocle pairs.
+        entry.columnMaximized = obj.value(QLatin1String("columnMaximized")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling

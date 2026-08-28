@@ -298,6 +298,17 @@ void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
     m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
+void ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId)
+{
+    // Same gate chain as the width setters above: ownership, engine activity
+    // on the screen, and the per-context gate. There is no value to range
+    // check — the verb is a toggle.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+        return;
+    }
+    m_engine->toggleMaximizeColumn(screenId);
+}
+
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
     // Same wire-boundary policy as focusColumn: malformed input is a silent

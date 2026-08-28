@@ -429,6 +429,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // without it an unload strands every windowed-fullscreen client in
         // KWin fullscreen state with nothing left owning the flag.
         m_tilingHandler->restoreAllWindowedFullscreen();
+        // And for the maximize bits mirrored for maximized columns, on the
+        // same obligation: the mirror only tracks engine state while this
+        // effect is loaded to drive it.
+        m_tilingHandler->restoreAllColumnMaximized();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

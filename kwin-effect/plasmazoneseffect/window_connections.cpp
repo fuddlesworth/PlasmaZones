@@ -783,6 +783,33 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // interactive-gesture early return (the verdict must refresh
                 // even when the shader is skipped).
                 invalidateRuleCacheForStateChange(getWindowId(window));
+                // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
+                // belongs to the scrolling engine's maximize-column verb, not
+                // to KWin: the strip owns the column's width, so letting both
+                // answer would give one window two maximize authorities.
+                // Placed AFTER the edge filter and the tracking write so it
+                // sees genuine full-maximize edges only (KWin emits once per
+                // axis, and a half-snapped window going to full fires twice —
+                // a toggle verb driven off both would cancel itself), and
+                // after the rule-cache invalidation, which must run for the
+                // IsMaximized field whoever ends up owning the state.
+                //
+                // The suppression check keeps this off the handler's own
+                // bracketed writes; interceptMaximizeRequest additionally
+                // no-ops on the Wayland-lagged echo of its cancel, which
+                // arrives with the counter back at 0.
+                //
+                // A claimed request skips the maximize shader deliberately.
+                // The window does still resize when the column grows, but
+                // that geometry arrives through the strip's own batch with
+                // its own transition, and installing WindowMaximize here
+                // would supersede it — the same reasoning as the drag-restore
+                // guard immediately below.
+                if (m_tilingHandler && !m_tilingHandler->isSuppressingMaximizeChanged()
+                    && m_tilingHandler->interceptMaximizeRequest(window)) {
+                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                    return;
+                }
                 // Drag-restore guard: KWin unmaximizes a window mid interactive
                 // move when the user grabs the maximized title bar and pulls
                 // ("restore on drag"). The drag already owns the visuals — the

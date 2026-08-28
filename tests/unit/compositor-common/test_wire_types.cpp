@@ -204,6 +204,7 @@ private Q_SLOTS:
                                                  true,
                                                  false,
                                                  true,
+                                                 false,
                                                  QStringLiteral("lastOnTop"),
                                                  QStringLiteral("right"),
                                                  -240,
@@ -221,12 +222,12 @@ private Q_SLOTS:
         // coverage lives in the bus round-trip's two payloads instead. Do
         // not copy this fixture into a validator test.
         //
-        // Verify D-Bus signature: (siiiissbbbssiiibsb) = string + 4 ints + 2
-        // strings + 3 bools (monocle, floating, windowedFullscreen) +
-        // stacking + scrollEdge + viewDelta + the visual position pair and
-        // its validity flag + tabFrom + viewImmediate
+        // Verify D-Bus signature: (siiiissbbbbssiiibsb) = string + 4 ints + 2
+        // strings + 4 bools (monocle, floating, windowedFullscreen,
+        // columnMaximized) + stacking + scrollEdge + viewDelta + the visual
+        // position pair and its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibsb)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbbssiiibsb)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -334,8 +335,8 @@ private Q_SLOTS:
         // agreeing.)
         PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"), 50, 100, 640, 480,
                                                 QStringLiteral("{zone-uuid}"), QStringLiteral("screen-0"), false, false,
-                                                true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512, -900,
-                                                64, true, QStringLiteral("konsole|9"),
+                                                true, true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512,
+                                                -900, 64, true, QStringLiteral("konsole|9"),
                                                 // viewImmediate true on payload A and false on payload B,
                                                 // so BOTH values cross the bus: the trailing bool is the
                                                 // one field the signature probe cannot pin (a dropped
@@ -491,6 +492,7 @@ private Q_SLOTS:
                                                  480,
                                                  QStringLiteral("{z}"),
                                                  QStringLiteral("s0"),
+                                                 false,
                                                  false,
                                                  false,
                                                  false,

@@ -790,6 +790,18 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
         releaseWindowedFullscreenState(windowId);
     }
     m_windowedFsClearInFlight.remove(windowId);
+    // The column-maximize mirror dies with the tracking on the same two
+    // paths and for the same reason: on a cross-output transfer to a
+    // snapping screen no later tile batch exists to un-mirror it, and the
+    // window would stay KWin-maximized for the session. Resolved through the
+    // EffectWindow rather than dropped bare so the bit is actually handed
+    // back while the window is still alive; releaseColumnMaximized sheds
+    // membership first, so a synchronous re-entry from maximize() finds the
+    // entry already gone.
+    if (m_columnMaximizedWindows.contains(windowId)) {
+        KWin::EffectWindow* maxW = m_effect->findWindowByIdExact(windowId);
+        releaseColumnMaximized(windowId, maxW ? maxW->window() : nullptr);
+    }
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
@@ -1075,6 +1087,9 @@ void TilingHandler::drainDeadSessionState()
     // effect's flags are stale; the adopt-on-batch arm re-establishes them
     // from the new daemon's truth. Idempotent after the teardown's release.
     restoreAllWindowedFullscreen();
+    // The column-maximize mirror belongs to the dead session too, and the
+    // batch Apply arm re-establishes it from the new daemon's truth.
+    restoreAllColumnMaximized();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The resolved per-screen scroll behaviour belongs to the dead session
     // too, and bring-up clears it rather than trusting the teardown to have:

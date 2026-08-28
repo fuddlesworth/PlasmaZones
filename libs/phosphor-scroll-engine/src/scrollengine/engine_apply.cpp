@@ -476,6 +476,28 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 }
             }
         }
+        // Column maximize, for the effect to mirror onto KWin's maximize bit.
+        // Measured on the RENDERED column rather than read off the strip's
+        // pre-maximize slot: the slot says "we own a stored width to go back
+        // to", which is not the same question. toggleMaximizeActiveColumn has
+        // a deliberate arm for a column sitting at full width with NO stored
+        // slot (maximized in an earlier session, or another column's maximize
+        // discarded the single slot), and that column is maximized as far as
+        // the user and the titlebar button are concerned.
+        //
+        // ResolvedColumn::rect is the column's FULL extent, before any
+        // within-column tab-indicator reservation — which is exactly why the
+        // flag is measured here and not effect-side off a tile rect: the
+        // tiles carry the REDUCED rects, so a maximized tabbed column would
+        // measure under full width there.
+        //
+        // The degenerate work area is guarded, matching the bail
+        // toggleMaximizeActiveColumn takes for it: with a zero main extent
+        // the compare reads true for every column, and the batch would tell
+        // the effect to maximize the whole strip against a viewport that does
+        // not exist.
+        const int workAreaMain = params.axis.mainSize(params.workArea);
+        const bool columnMaximized = workAreaMain > 0 && params.axis.mainSize(column.rect) >= workAreaMain;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 columnHadSkippedTile.insert(column.columnIndex);
@@ -553,6 +575,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             const bool windowedFs = tile.windowedFullscreen;
             if (windowedFs) {
                 obj[QLatin1String("windowedFullscreen")] = true;
+            }
+            // Rides every tile of the column, and UNGATED by presentation for
+            // the same reason the flag above is: a parked column and a hidden
+            // tab keep the state, so scrolling past a maximized column does
+            // not cycle its clients' maximize bit off and on. Repeating it per
+            // tile rather than per column is what the flat per-window wire
+            // shape requires — the effect has no column identity to hang it
+            // on, and every tile of a maximized column is genuinely in a
+            // maximized column.
+            if (columnMaximized) {
+                obj[QLatin1String("columnMaximized")] = true;
             }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;

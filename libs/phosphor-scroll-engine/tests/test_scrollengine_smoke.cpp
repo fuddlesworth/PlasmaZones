@@ -80,6 +80,7 @@ private Q_SLOTS:
     void pruneRemovedScreenAndActivitiesSweep();
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
+    void columnMaximizeFlagRidesEveryTileOfTheColumn();
     void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
@@ -576,6 +577,65 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
     QVERIFY(bCol >= 0);
     QVERIFY(bCol != cCol);
     QCOMPARE(state->strip().columns().at(bCol).tiles.size(), 1);
+}
+
+void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
+{
+    // The columnMaximized wire flag: it must ride EVERY tile of a maximized
+    // column (the wire is per window and the effect has no column identity to
+    // hang a per-column flag on), must not leak onto a sibling column, and
+    // must clear on the toggle back.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // Two tiles in ONE column, so the "every tile" half of the claim has
+    // something to bite on: a single-tile column would pass a per-column
+    // emit just as well.
+    // Focus the LEADING column first: consume pulls the NEXT column's window
+    // into the active one, so consuming while the trailing column is already
+    // active has nothing to take and leaves two single-tile columns.
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    {
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(st);
+        QCOMPARE(st->strip().columnCount(), 1);
+        QCOMPARE(st->strip().columns().at(0).tiles.size(), 2);
+    }
+
+    const auto flagsByWindow = [](const QSignalSpy& spy) {
+        QHash<QString, bool> out;
+        const QJsonArray batch = QJsonDocument::fromJson(spy.last().at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QJsonObject o = v.toObject();
+            out.insert(o.value(QLatin1String("windowId")).toString(),
+                       o.value(QLatin1String("columnMaximized")).toBool(false));
+        }
+        return out;
+    };
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY(tiled.count() > 0);
+    QHash<QString, bool> flags = flagsByWindow(tiled);
+    QVERIFY2(flags.contains(QStringLiteral("app|a")), "the batch must carry the maximized column's first tile");
+    QVERIFY2(flags.contains(QStringLiteral("app|b")), "the batch must carry the maximized column's second tile");
+    QVERIFY2(flags.value(QStringLiteral("app|a")), "columnMaximized must ride the first tile");
+    QVERIFY2(flags.value(QStringLiteral("app|b")), "columnMaximized must ride the SECOND tile too");
+
+    // Toggle back: the flag is absent again, so the effect's Release arm has
+    // something to fire on. Absence rather than an explicit false — the emit
+    // is gated on the flag being set, the way windowedFullscreen is.
+    tiled.clear();
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY(tiled.count() > 0);
+    flags = flagsByWindow(tiled);
+    QVERIFY2(!flags.value(QStringLiteral("app|a"), false), "un-maximizing must drop the flag");
+    QVERIFY2(!flags.value(QStringLiteral("app|b"), false), "un-maximizing must drop it on every tile");
 }
 
 void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()

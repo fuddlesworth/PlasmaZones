@@ -24,6 +24,11 @@
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 
+// KWin::MaximizeMode is an unscoped enum with no fixed underlying type, so
+// applyMaximizeSuppressed's signature cannot be satisfied by the forward
+// declarations below — this is the one KWin header the class interface needs.
+#include <effect/globals.h>
+
 #include <QHash>
 #include <QJsonArray>
 #include <QObject>
@@ -340,6 +345,49 @@ public:
     /// snapshot-and-clear then release each, the restoreAllMonocleMaximized
     /// shape.
     void restoreAllWindowedFullscreen();
+    /// Bracketed maximize-mode write, the maximize twin of
+    /// applyFullScreenSuppressed: a counter rather than a bool because the
+    /// batch consumer and the interception arm both nest their own brackets.
+    void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
+
+    /// The maximize INTERCEPTION. A scroll-managed window asked to maximize
+    /// (titlebar button, Meta+PgUp, a client-side request) gets that request
+    /// routed to the scrolling engine's maximize-column verb instead, so one
+    /// window has ONE maximize authority. Answers whether the request was
+    /// claimed; an unclaimed one is left entirely alone.
+    bool interceptMaximizeRequest(KWin::EffectWindow* w);
+
+    /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p screenId.
+    /// Unlike dispatchWindowedFullscreenClear this needs no reply gate and no
+    /// in-flight marker — see resolveColumnMaximizeAction's contract note for
+    /// why the round trip cannot be raced.
+    void dispatchMaximizeColumnToggle(const QString& screenId);
+
+    /// Hand back the KWin maximize bit this handler imposed for a maximized
+    /// column, and shed membership. @p kw may be null for a gone window (the
+    /// entry is dropped either way).
+    void releaseColumnMaximized(const QString& windowId, KWin::Window* kw);
+
+    /// Bulk restore for daemon loss, effect unload, engine disable and daemon
+    /// bring-up — the restoreAllWindowedFullscreen shape.
+    void restoreAllColumnMaximized();
+
+    /// Whether this handler is holding the KWin maximize bit for @p windowId
+    /// because its column is maximized. Read by the effect's maximize-state
+    /// lambda, which must not treat our own writes as user intent.
+    bool holdsColumnMaximized(const QString& windowId) const
+    {
+        return m_columnMaximizedWindows.contains(windowId);
+    }
+
+    /// True while this handler is inside its own bracketed maximize write.
+    /// The effect's windowMaximizedStateChanged lambda consults it so the
+    /// interception cannot fire on the echo of its own cancel.
+    bool isSuppressingMaximizeChanged() const
+    {
+        return m_suppressMaximizeChanged > 0;
+    }
+
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker
     /// so a lost clear (whose flag-off echo will never arrive) cannot latch
@@ -1483,6 +1531,17 @@ private:
     QString m_pendingAutotileFocusWindowId;
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
+    /// Windows whose KWin maximize bit this handler holds because the
+    /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
+    /// on the same terms as m_monocleMaximizedWindows: membership is shed
+    /// only by an arm that actually hands the bit back, never merely because
+    /// the window's situation changed.
+    ///
+    /// Per window rather than per column because the wire is flat and the
+    /// effect has no column identity — every tile of a maximized column is a
+    /// member, and they enter and leave together on the batch that carries
+    /// the flag.
+    QSet<QString> m_columnMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
     /// Suppresses slotWindowFullScreenChanged for the effect's OWN
     /// setFullScreen calls (windowed fullscreen), mirroring

@@ -247,8 +247,8 @@ private Q_SLOTS:
         // change widen no signature at all: such a peer demarshals perfectly
         // and then misbehaves. The handshake is the only thing refusing it,
         // which is why this must not be "optimized away" later.
-        QCOMPARE(Service::ApiVersion, 5);
-        QCOMPARE(Service::MinPeerApiVersion, 5);
+        QCOMPARE(Service::ApiVersion, 6);
+        QCOMPARE(Service::MinPeerApiVersion, 6);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

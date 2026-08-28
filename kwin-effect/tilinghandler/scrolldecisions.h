@@ -63,6 +63,46 @@ inline WfsDecision resolveWindowedFullscreenAction(bool flagOnWire, bool inSet, 
     return d;
 }
 
+/// What the column-maximize half of a batch entry does for one window.
+enum class MaximizeAction {
+    None, ///< the KWin bit already agrees with the engine
+    Apply, ///< engine says maximized and KWin's bit is not set (or we are not yet a member)
+    Release, ///< engine dropped the maximize while we hold the bit
+};
+
+/// The column-maximize batch decision over its three inputs.
+///
+/// Deliberately has NO in-flight marker, unlike its windowed-fullscreen
+/// sibling above. That one needs one because its dispatch (clearWindowedFull-
+/// screen) drops effect-side membership at once, which opens a window where a
+/// pre-clear batch still carrying flag=true would take the Adopt arm and
+/// re-fullscreen the window the user just exited.
+///
+/// The maximize interception never speculatively changes membership: it
+/// cancels KWin's unilateral flip back to whatever the engine last said and
+/// dispatches a TOGGLE, leaving the engine to name the result. So during the
+/// round trip effect-side state still agrees with the pre-toggle flag, a
+/// stale batch resolves to None on its own terms, and there is nothing for a
+/// marker to guard. A toggle is also not idempotent, so a marker that
+/// suppressed one arm could not be applied symmetrically anyway.
+///
+/// @p flagOnWire     the batch entry's columnMaximized
+/// @p inSet          effect-side membership (m_columnMaximizedWindows)
+/// @p kwinMaximized  KWin's live maximizeMode() == MaximizeFull
+inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized)
+{
+    if (!flagOnWire) {
+        return inSet ? MaximizeAction::Release : MaximizeAction::None;
+    }
+    // Apply covers two situations that want the identical side effect: a
+    // column that just became maximized, and a member whose bit went missing
+    // (an effect restart with the daemon still holding the state, or KWin
+    // dropping it during a screen change). kwinMaximized is what keeps the
+    // steady state from re-calling maximize() on every batch of every tile of
+    // a maximized column.
+    return (!inSet || !kwinMaximized) ? MaximizeAction::Apply : MaximizeAction::None;
+}
+
 /// The counter-assert burst budget for scroll-managed X11 windows an
 /// EXTERNAL mover relocated: RATE-LIMITED to @p maxPerWindow counters per
 /// rolling window of @p windowMs, re-armed by every fresh batch command

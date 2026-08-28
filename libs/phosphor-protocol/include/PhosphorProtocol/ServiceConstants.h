@@ -325,8 +325,30 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       vertical view delta as a horizontal slide. The version handshake is the
 //       ONLY thing that refuses such a pairing, which is why both sides must be
 //       built and shipped from the same source.
-inline constexpr int ApiVersion = 5;
-inline constexpr int MinPeerApiVersion = 5;
+//   v6: columnMaximized on TileRequestEntry, widening it from
+//       a(siiiissbbbssiiibsb) to a(siiiissbbbbssiiibsb). The flag is inserted
+//       after windowedFullscreen, its nearest sibling in both meaning and
+//       handling: both are scrolling-only compositor states the effect imposes
+//       on the client while the strip keeps owning the rect.
+//
+//       It exists because the effect intercepts a window's maximize request
+//       and routes it to the scrolling engine's maximize-column verb, which
+//       makes KWin's maximize bit a VIEW of engine state rather than state in
+//       its own right. Something has to drive that bit when the verb is
+//       reached any other way (the Meta+Alt+F shortcut, a width verb that
+//       lands full width), or the titlebar button renders un-toggled and the
+//       two entry points disagree about one window.
+//
+//       Carried as data rather than inferred from the committed rect, which
+//       the effect already has. A tile's main extent is the column's main
+//       extent LESS any within-column tab-indicator reservation, so a
+//       maximized tabbed column measures under full width and would read as
+//       not-maximized — and the engine's own definition (its pre-maximize
+//       slot) is the only authority that survives that. Same doctrine as
+//       tabFrom: the engine names what it did instead of leaving the
+//       compositor to infer it from rect coincidence.
+inline constexpr int ApiVersion = 6;
+inline constexpr int MinPeerApiVersion = 6;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

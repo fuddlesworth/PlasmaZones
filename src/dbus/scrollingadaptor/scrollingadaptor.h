@@ -267,6 +267,23 @@ public Q_SLOTS:
     void setWindowHeightPixels(const QString& screenId, int px);
 
     /**
+     * @brief Toggle the focused column's maximize (compositor-driven)
+     *
+     * The KWin effect calls this when a scroll-managed window is asked to
+     * maximize (titlebar button, Meta+PgUp, a client-side request), so that
+     * request reaches the engine's own maximize-column verb instead of KWin's
+     * maximize. Identical in effect to the Scrolling maximize column
+     * shortcut, and deliberately routed to the SAME ScrollEngine entry point
+     * rather than a parallel one.
+     *
+     * Unlike the four setters above this one HAS an in-tree caller. Same
+     * ownership and per-context gates as focusColumn.
+     *
+     * @param screenId Screen whose focused column to toggle; empty is ignored
+     */
+    void toggleMaximizeColumn(const QString& screenId);
+
+    /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
      *
      * The KWin effect calls this when a windowed-fullscreen client leaves

@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Maximizing a window on a scrolling monitor maximizes its column**: the maximize button, Meta+PgUp and an application's own maximize request used to hand the window to the compositor's maximize, which fought the strip for control of its width. On a scrolling monitor they now do what the maximize column shortcut does, so the column fills the monitor along the strip and stays tiled. Pressing it again puts the column back at its old width. The button also lights up when you maximize a column with the shortcut, so the two agree about what a window is doing. Floating windows keep the ordinary maximize.
+
 ## [3.4.2] - 2026-08-27
 
 ### Fixed

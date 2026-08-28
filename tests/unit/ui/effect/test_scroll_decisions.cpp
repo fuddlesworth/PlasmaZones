@@ -98,6 +98,76 @@ private Q_SLOTS:
     }
 
     // Counter-assert budget: matching frame never counters.
+    // The full 8-row truth table over (flagOnWire, inSet, kwinMaximized).
+    void columnMaximizeTruthTable_data()
+    {
+        QTest::addColumn<bool>("flagOnWire");
+        QTest::addColumn<bool>("inSet");
+        QTest::addColumn<bool>("kwinMaximized");
+        QTest::addColumn<int>("expectedAction");
+
+        const auto a = [](MaximizeAction act) {
+            return static_cast<int>(act);
+        };
+        // Flag off, not a member: nothing to do, whatever KWin's own bit
+        // says. A window the USER maximized on a non-maximized column lands
+        // here, and must be left alone — the batch's anti-ballooning clear
+        // owns that case, not this decision.
+        QTest::newRow("off/free/kwin0") << false << false << false << a(MaximizeAction::None);
+        QTest::newRow("off/free/kwin1") << false << false << true << a(MaximizeAction::None);
+        // Flag off while held: the engine dropped the maximize, so hand the
+        // bit back. Release fires even when KWin's bit is already clear —
+        // something else cleared it and the membership must still be shed,
+        // which is exactly what releaseColumnMaximized's own no-op guard
+        // makes cheap.
+        QTest::newRow("off/held/kwin0") << false << true << false << a(MaximizeAction::Release);
+        QTest::newRow("off/held/kwin1") << false << true << true << a(MaximizeAction::Release);
+        // Flag on, not yet a member: adopt. The kwin1 row is the effect-
+        // restart case — the daemon still holds the state for a window this
+        // effect instance has never seen, and the bit happens to survive.
+        QTest::newRow("on/free/kwin0") << true << false << false << a(MaximizeAction::Apply);
+        QTest::newRow("on/free/kwin1") << true << false << true << a(MaximizeAction::Apply);
+        // Flag on and held but the bit went missing (KWin dropped it across a
+        // screen change): re-assert rather than sit on a mirror that no
+        // longer mirrors anything.
+        QTest::newRow("on/held/kwin0") << true << true << false << a(MaximizeAction::Apply);
+        // Steady state. THE row that keeps a maximized column from re-calling
+        // maximize() for every tile on every batch.
+        QTest::newRow("on/held/kwin1") << true << true << true << a(MaximizeAction::None);
+    }
+
+    void columnMaximizeTruthTable()
+    {
+        QFETCH(bool, flagOnWire);
+        QFETCH(bool, inSet);
+        QFETCH(bool, kwinMaximized);
+        QFETCH(int, expectedAction);
+
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(flagOnWire, inSet, kwinMaximized)), expectedAction);
+    }
+
+    // The interception's round trip cannot be raced, which is why this
+    // decision carries no in-flight marker (see the contract note on
+    // resolveColumnMaximizeAction). Both directions of a toggle are walked
+    // here with a STALE batch landing mid-flight, asserting it is inert.
+    void staleBatchDuringToggleIsInert()
+    {
+        // Maximizing: not a member, bit cancelled back to restore. A batch
+        // the daemon emitted before it processed the toggle still says
+        // flag=false — and resolves to None, so nothing fights the click.
+        QCOMPARE(resolveColumnMaximizeAction(/*flagOnWire=*/false, /*inSet=*/false, /*kwinMaximized=*/false),
+                 MaximizeAction::None);
+        // The real echo then applies.
+        QCOMPARE(resolveColumnMaximizeAction(true, false, false), MaximizeAction::Apply);
+
+        // Un-maximizing: a member whose bit was re-asserted by the cancel. A
+        // stale flag=true batch is the steady state and does nothing.
+        QCOMPARE(resolveColumnMaximizeAction(/*flagOnWire=*/true, /*inSet=*/true, /*kwinMaximized=*/true),
+                 MaximizeAction::None);
+        // The real echo then releases.
+        QCOMPARE(resolveColumnMaximizeAction(false, true, true), MaximizeAction::Release);
+    }
+
     void counterAssertNoOpOnMatchingFrame()
     {
         qint64 start = 0;

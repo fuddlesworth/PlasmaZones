@@ -63,6 +63,10 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // batch or per-context pass exists to release a skipped window — it
         // would stay KWin-fullscreen with keep-below held for the session.
         restoreAllWindowedFullscreen();
+        // Same reasoning for the column-maximize mirror: with the engine
+        // disabled no later batch exists to release a window the mirror
+        // still holds maximized.
+        restoreAllColumnMaximized();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not
