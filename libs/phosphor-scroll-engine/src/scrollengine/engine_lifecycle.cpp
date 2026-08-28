@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
@@ -1016,7 +1017,48 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // Emitted for a background context too: the strip that changed is
         // serialized whether or not it is the one on screen right now.
         Q_EMIT placementChanged(key.screenId);
+        return;
     }
+    // The report named the window the strip ALREADY calls active, so
+    // focusWindow refused it (scrollstrip_navigation.cpp's same-column,
+    // same-tile bail) and nothing above moved. That refusal is right about the
+    // focus SLOT and wrong about the VIEW. A pan detaches the view from the
+    // centering policy, and reanchorAfterFocusChange — the only thing that
+    // re-attaches it — sits behind the very branch this report just failed. No
+    // later pass revisits the question either: updateViewForFocus returns
+    // early while detached, so even the applyLayout a desktop return runs
+    // cannot re-centre. The result is that clicking the focused window, or
+    // switching away from its desktop and back, does nothing at all — the
+    // whole report is dropped, latch and all.
+    //
+    // Re-attach and let the POLICY answer, rather than re-anchoring outright.
+    // Under Never/OnOverflow updateViewForFocus leaves a fully-visible column
+    // alone, so a pan that kept the focused column on screen survives an
+    // incidental activation — KWin re-fires windowActivated on restacking,
+    // fullscreen exit and desktop switches, not only on real focus moves.
+    // Under Always it re-centres, which is what that setting asks for.
+    if (!state->strip().viewDetached() || state->strip().activeWindowId() != windowId) {
+        return;
+    }
+    // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
+    // screen owns the view for the rest of the hold, and picking the dragged
+    // window up activates it. Re-attaching here would slide the layout under a
+    // stationary cursor, the hazard applyLayout's own dragPreviewSteersView
+    // guard exists for. screensMatch, not ==, for that guard's reason.
+    if (m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId)) {
+        return;
+    }
+    state->strip().setViewDetached(false);
+    // Background-context guard, as above: the latch is cleared either way (it
+    // is persisted state, and the strip that changed is serialized whether or
+    // not it is on screen), but only the on-screen context re-derives the
+    // anchor now. A background one re-derives on the applyLayout its own
+    // desktop return runs, which is the pass that used to return early.
+    if (key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
+    Q_EMIT placementChanged(key.screenId);
 }
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the
