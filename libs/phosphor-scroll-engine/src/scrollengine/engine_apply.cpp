@@ -506,9 +506,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // alone it would report maximized permanently: the titlebar button
         // would latch with no way to un-latch it, and every toggle press
         // would rewrite persisted intent invisibly while reporting success.
-        // The toggle takes the same exclusion at scrollstrip_sizing.cpp:240,
+        // The toggle takes the same exclusion at its pinned-by-minimum bail
+        // (scrollstrip_sizing.cpp, the `columnMinExtentPx >= mainSize` arm),
         // so the verb and the published verdict agree about which columns are
-        // out of scope.
+        // out of scope. That agreement covers the pinned half ONLY; see below.
         //
         // A column is also excluded when the context's DEFAULT width itself
         // renders full. Under such a setting every column on the strip spans
@@ -517,9 +518,22 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // asserts KWin MaximizeFull on every scroll-managed window on the
         // screen with an is-maximized window rule firing strip-wide. That is
         // not what the flag means. It names a column the user made full when
-        // full is not the norm, which is also the only case the toggle can
-        // undo — the un-maximize arm falls back to half the work area for
-        // exactly this configuration (scrollstrip_sizing.cpp:287).
+        // full is not the norm.
+        //
+        // THE TOGGLE AND THIS PREDICATE DIVERGE HERE, deliberately on both
+        // sides, and it is worth being plain about it rather than implying
+        // they agree. Under a full-width default the toggle still acts: its
+        // fallback arm (the `defaultIsFullWidth` line in
+        // scrollstrip_sizing.cpp) halves the column and reports true, because
+        // a user whose default is itself full width would otherwise dead-end
+        // with no way to shrink a column. This predicate still publishes
+        // false, for the strip-wide latch reason above. So on such a strip a
+        // maximize press changes the column's width without the flag ever
+        // going true, and the effect's own anti-ballooning clear is what keeps
+        // KWin's maximize bit in step. The two answer different questions:
+        // this one is "should the titlebar button read toggled, safely, for
+        // every column on the strip", the toggle's is "did this press change
+        // the column".
         const int workAreaMain = params.axis.mainSize(params.workArea);
         const bool defaultRendersFull =
             workAreaMain > 0 && ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params) >= workAreaMain;

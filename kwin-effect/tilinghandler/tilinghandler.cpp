@@ -739,6 +739,11 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_untiledMinimizeFloats.remove(windowId);
     m_unfloatInFlight.remove(windowId);
+    // Same reasoning as the retry budget below: ids are appId-derived and
+    // reusable, so a reused id must not inherit an armed toggle. Without this
+    // a window closing inside its own round trip leaves an entry that
+    // suppresses the next occupant's repair arm until it expires.
+    m_maximizeToggleInFlight.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a
     // reused windowId must not inherit an exhausted budget, and every direct
     // caller of this cleanup (not just onWindowClosed) must drop the
@@ -847,9 +852,11 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // is no later arm, and restoreAllColumnMaximized re-inserts on a resolve
     // miss, so a window closing around a daemon-loss drain leaves an entry
     // with no window and no reaper. Window ids are appId-derived and reusable,
-    // and two live readers consume that entry: interceptMaximizeRequest reads
-    // it to decide what to cancel to, so a reused id makes the next window's
-    // first maximize click maximize instead of restore.
+    // and three live readers consume that entry: interceptMaximizeRequest's
+    // already-agrees test, dispatchMaximizeColumnToggle's refusal write-back,
+    // and the batch's resolveColumnMaximizeAction inSet term. So a reused id
+    // makes the next window's first maximize click restore instead of
+    // maximize.
     //
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is

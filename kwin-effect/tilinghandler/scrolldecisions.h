@@ -87,23 +87,32 @@ enum class MaximizeAction {
 
 /// The column-maximize batch decision over its three inputs.
 ///
-/// Deliberately has NO in-flight marker, unlike its windowed-fullscreen
-/// sibling above. That one needs one because its dispatch (clearWindowedFull-
-/// screen) drops effect-side membership at once, which opens a window where a
-/// pre-clear batch still carrying flag=true would take the Adopt arm and
-/// re-fullscreen the window the user just exited.
+/// TAKES AN IN-FLIGHT MARKER, like its windowed-fullscreen sibling above,
+/// though for a different reason. That one needs one because its dispatch
+/// (clearWindowedFullscreen) drops effect-side membership at once, opening a
+/// window where a pre-clear batch still carrying flag=true would take the
+/// Adopt arm and re-fullscreen the window the user just exited.
 ///
-/// The maximize interception never speculatively changes membership: it
-/// cancels KWin's unilateral flip back to whatever the engine last said and
-/// dispatches a TOGGLE, leaving the engine to name the result. So during the
-/// round trip effect-side state still agrees with the pre-toggle flag, a
-/// stale batch resolves to None on its own terms, and there is nothing for a
-/// marker to guard. A toggle is also not idempotent, so a marker that
-/// suppressed one arm could not be applied symmetrically anyway.
+/// This one needs one because the interception no longer writes KWin's bit
+/// before dispatching. It used to cancel the user's flip back to whatever the
+/// engine last said, which meant effect-side state agreed with the pre-toggle
+/// flag for the whole round trip and a stale batch genuinely did resolve to
+/// None on its own terms. That is where the older "no marker is needed"
+/// reasoning came from, and deleting the cancel took the guarantee with it.
 ///
-/// Exercised on a live compositor: sixteen consecutive compositor-driven
-/// maximize and restore edges each converged to the requested state, in both
-/// directions, with no echo re-dispatching a second toggle.
+/// What is exposed without a marker is the RESTORE direction only. The user's
+/// click has already cleared KWin's bit, membership has not moved, and a batch
+/// the daemon emitted before it dequeued the toggle still carries flag=true —
+/// (1, 1, 0), which is Apply. The window is re-maximized mid-flight and the
+/// same batch's geometry apply commits the stale maximized rect, so it flashes
+/// back to full width until the answering batch lands. Maximize is (0, 0, 1)
+/// and resolves to None, so the exposure is asymmetric.
+///
+/// Only the `inSet && !kwinMaximized` leg is suppressed. The adopt leg
+/// (`!inSet`) and Release must both still run while armed, or the engine's own
+/// answer would be dropped. The suppressed leg exists to repair an effect
+/// restart or a KWin-dropped bit, neither of which is time-critical, so
+/// deferring it by a batch costs nothing.
 ///
 /// @p flagOnWire     the batch entry's columnMaximized
 /// @p inSet          effect-side membership (m_columnMaximizedWindows)
@@ -114,10 +123,20 @@ enum class MaximizeAction {
 ///                   lands inside that window. The interception passes the
 ///                   COMMITTED mode instead, because there it is comparing
 ///                   against what actually landed.
-inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized)
+/// @p toggleInFlight a dispatched toggleMaximizeColumn for this window whose
+///                   reply has not arrived. Deliberately has NO default
+///                   argument: a defaulted parameter would let the call site
+///                   keep compiling while silently never passing the marker,
+///                   which is a fix present in the header and absent in
+///                   production that no test would catch.
+inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized, bool toggleInFlight)
 {
     if (!flagOnWire) {
         return inSet ? MaximizeAction::Release : MaximizeAction::None;
+    }
+    // A stale pre-toggle batch on the restore direction lands exactly here.
+    if (inSet && !kwinMaximized && toggleInFlight) {
+        return MaximizeAction::None;
     }
     // Apply covers two situations that want the identical side effect: a
     // column that just became maximized, and a member whose bit went missing

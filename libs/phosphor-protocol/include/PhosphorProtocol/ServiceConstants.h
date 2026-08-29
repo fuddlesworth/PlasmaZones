@@ -284,6 +284,12 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       scrollTabPaintOverrides / scrollTabPaintOverridesChanged,
 //       scrollTabColors / scrollTabColorsChanged).
 //
+//       org.plasmazones.Overlay GAINED setWindowThumbnailDmabuf, the zero-copy
+//       thumbnail path. A false reply routes the caller back to the existing
+//       setSnapAssistThumbnail, which is what makes it safe for a peer to try
+//       the dma-buf form first, so the two are one transport with a fallback
+//       rather than two independent methods.
+//
 //       windowsTileRequested. TileRequestEntry widened from a(siiiissbbs) to
 //       a(siiiissbbbssiiibsb). The added fields, in wire order: scrollEdge
 //       (which side of the strip a column departed towards, a closed set of
@@ -385,6 +391,13 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       no column holds, a column the toggle refuses). The effect's response is
 //       the same to both — put the bit back where the engine last had it — so
 //       the two are deliberately not distinguished on the wire.
+//
+//       The MEANING of that boolean tightened after it was first introduced,
+//       from "the daemon accepted the request" to "the strip changed", and it
+//       was rewritten in place rather than taking a bump of its own for the
+//       reason v5 states above: no released peer ever spoke an intermediate
+//       version, so the steps within this cycle are unobservable outside the
+//       branch. A change to it AFTER v7 ships needs v8.
 inline constexpr int ApiVersion = 7;
 inline constexpr int MinPeerApiVersion = 7;
 

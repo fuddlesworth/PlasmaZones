@@ -778,7 +778,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // correction coming.
                     //
                     // CANCEL ONLY, never a dispatch. Routing this through
-                    // interceptMaximizeRequest would cancel and then toggle,
+                    // interceptMaximizeRequest would dispatch a toggle,
                     // turning the user's quick tile into a column maximize (or,
                     // on a member, into an un-maximize).
                     m_tilingHandler->cancelAxisOnlyMaximize(window);
@@ -805,8 +805,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 //
                 // The suppression check keeps this off the handler's own
                 // bracketed writes; interceptMaximizeRequest additionally
-                // no-ops on the Wayland-lagged echo of its cancel, which
-                // arrives with the counter back at 0.
+                // no-ops on the Wayland-lagged echo of the refusal handler's
+                // write-back, which arrives with the counter back at 0.
                 //
                 // A claimed request skips the maximize shader deliberately.
                 // The window does still resize when the column grows, but

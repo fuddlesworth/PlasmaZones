@@ -188,20 +188,37 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // reapplyWindowGeometry below, windowMinSizeUpdated, the navigation and
     // reopen paths). The strip keys on the id frozen at first contact, so a
     // re-reported id compares unequal, columnOfWindow answers -1 and the verb
-    // refuses — silently, after the compositor has already cancelled KWin's
-    // own maximize, so the click does nothing at all. Empty in, empty out, so
-    // the active-column spelling above is untouched.
+    // refuses. The compositor's own maximize bit stays where the user's click
+    // put it and no batch follows, so the click leaves the window in a state
+    // the strip never agreed to until the effect's reply handler puts the bit
+    // back. Empty in, empty out, so the active-column spelling above is
+    // untouched.
     const QString canonicalId = canonicalizeForLookup(windowId);
-    // RESOLVE FROM THE WINDOW when one is named, not from the caller's screen.
+    // RESOLVE THE SCREEN FROM THE WINDOW when one is named, rather than
+    // trusting the caller's screen. The compositor names the window it got the
+    // request for, and its idea of which output that window is on can lag the
+    // engine's after a migration.
     //
-    // P_SCROLL_RESOLVE keys on the screen's CURRENT desktop and activity, so a
-    // named window sitting on a background context of that screen resolves
-    // against a strip that does not hold it, columnOfWindow answers -1 and the
-    // verb refuses — silently, after the compositor has already cancelled
-    // KWin's maximize. The two sibling window-keyed verbs below both resolve
-    // through the window for exactly this reason. The empty spelling keeps the
-    // caller's screen, because "the active column" is a question about a
-    // screen and not about any window.
+    // This corrects the SCREEN only. It deliberately does not reach a window on
+    // a background desktop or activity of that screen: only screenId is copied
+    // out of the resolved key, and P_SCROLL_RESOLVE below re-keys that screen
+    // on its CURRENT context. A named window sitting on a background context
+    // therefore still resolves against a strip that does not hold it,
+    // columnOfWindow answers -1 and the verb refuses. That is the intended
+    // answer, not a gap: acting on a strip the user is not looking at would
+    // resize a column out from under a context they cannot see, and the
+    // refusal is reported now, so the effect's reply handler puts KWin's bit
+    // back rather than leaving the click half-applied.
+    //
+    // Note this is NOT the shape the two sibling window-keyed verbs below use.
+    // clearWindowedFullscreen and reapplyWindowGeometry act on the state
+    // stateForWindow returned and then guard their applyLayout on the key
+    // still being current, because both are reconciliation calls that must
+    // follow reality even into a background context. This verb is a user
+    // action and stays with the visible strip.
+    //
+    // The empty spelling keeps the caller's screen, because "the active
+    // column" is a question about a screen and not about any window.
     QString resolvedScreen = screenId;
     if (!canonicalId.isEmpty()) {
         PhosphorEngine::PlacementStateKey windowKey;

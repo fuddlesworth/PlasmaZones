@@ -349,8 +349,17 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
-    // Same wire-boundary policy as focusColumn: malformed input is a silent
-    // no-op, and the engine's own lookup rejects an untracked window.
+    // Malformed input is a silent no-op and the engine's own lookup rejects an
+    // untracked window.
+    //
+    // NOT the same gate chain as focusColumn, and the difference is deliberate.
+    // The screen-scoped verbs also carry ownership and the per-context gate;
+    // this one is window-keyed, so ownership does not apply, and it skips the
+    // CONTEXT gate on purpose. It is a reconciliation call reporting something
+    // that has already happened to the client, so it must follow reality even
+    // into a context whose scrolling the user has switched off. Refusing there
+    // would leave the strip holding a windowed-fullscreen flag for a window
+    // that is no longer fullscreen, with nothing to clear it later.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }
@@ -359,9 +368,10 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 
 void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 {
-    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
-    // is a silent no-op, and the engine's own lookup rejects an untracked
-    // window.
+    // Same wire-boundary policy as clearWindowedFullscreen above, including
+    // its deliberate skip of the per-context gate and the reason for it:
+    // malformed input is a silent no-op, and the engine's own lookup rejects
+    // an untracked window.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }

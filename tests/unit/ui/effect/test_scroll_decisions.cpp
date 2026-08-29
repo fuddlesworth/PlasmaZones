@@ -107,12 +107,14 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(d.action), static_cast<int>(WfsAction::Adopt));
     }
 
-    // The full 8-row truth table over (flagOnWire, inSet, kwinMaximized).
+    // The full 16-row truth table over
+    // (flagOnWire, inSet, kwinMaximized, toggleInFlight).
     void columnMaximizeTruthTable_data()
     {
         QTest::addColumn<bool>("flagOnWire");
         QTest::addColumn<bool>("inSet");
         QTest::addColumn<bool>("kwinMaximized");
+        QTest::addColumn<bool>("toggleInFlight");
         QTest::addColumn<int>("expectedAction");
 
         const auto a = [](MaximizeAction act) {
@@ -122,27 +124,49 @@ private Q_SLOTS:
         // says. A window the USER maximized on a non-maximized column lands
         // here, and must be left alone — the batch's anti-ballooning clear
         // owns that case, not this decision.
-        QTest::newRow("off/free/kwin0") << false << false << false << a(MaximizeAction::None);
-        QTest::newRow("off/free/kwin1") << false << false << true << a(MaximizeAction::None);
+        QTest::newRow("off/free/kwin0/unarmed") << false << false << false << false << a(MaximizeAction::None);
+        QTest::newRow("off/free/kwin1/unarmed") << false << false << true << false << a(MaximizeAction::None);
         // Flag off while held: the engine dropped the maximize, so hand the
         // bit back. Release fires even when KWin's bit is already clear —
         // something else cleared it and the membership must still be shed,
         // which is exactly what releaseColumnMaximized's own no-op guard
         // makes cheap.
-        QTest::newRow("off/held/kwin0") << false << true << false << a(MaximizeAction::Release);
-        QTest::newRow("off/held/kwin1") << false << true << true << a(MaximizeAction::Release);
+        QTest::newRow("off/held/kwin0/unarmed") << false << true << false << false << a(MaximizeAction::Release);
+        QTest::newRow("off/held/kwin1/unarmed") << false << true << true << false << a(MaximizeAction::Release);
         // Flag on, not yet a member: adopt. The kwin1 row is the effect-
         // restart case — the daemon still holds the state for a window this
         // effect instance has never seen, and the bit happens to survive.
-        QTest::newRow("on/free/kwin0") << true << false << false << a(MaximizeAction::Apply);
-        QTest::newRow("on/free/kwin1") << true << false << true << a(MaximizeAction::Apply);
+        QTest::newRow("on/free/kwin0/unarmed") << true << false << false << false << a(MaximizeAction::Apply);
+        QTest::newRow("on/free/kwin1/unarmed") << true << false << true << false << a(MaximizeAction::Apply);
         // Flag on and held but the bit went missing (KWin dropped it across a
         // screen change): re-assert rather than sit on a mirror that no
         // longer mirrors anything.
-        QTest::newRow("on/held/kwin0") << true << true << false << a(MaximizeAction::Apply);
+        QTest::newRow("on/held/kwin0/unarmed") << true << true << false << false << a(MaximizeAction::Apply);
         // Steady state. THE row that keeps a maximized column from re-calling
         // maximize() for every tile on every batch.
-        QTest::newRow("on/held/kwin1") << true << true << true << a(MaximizeAction::None);
+        QTest::newRow("on/held/kwin1/unarmed") << true << true << true << false << a(MaximizeAction::None);
+
+        // ARMED: a toggleMaximizeColumn is dispatched and unanswered. Exactly
+        // ONE cell moves, and it is the one a stale pre-toggle batch on the
+        // restore direction lands in. Every other cell is marker-invariant,
+        // which is the property that makes the marker safe to add: it cannot
+        // suppress the engine's own answer.
+        QTest::newRow("off/free/kwin0/armed") << false << false << false << true << a(MaximizeAction::None);
+        QTest::newRow("off/free/kwin1/armed") << false << false << true << true << a(MaximizeAction::None);
+        // A flag-off answer is the ENGINE speaking, so Release is never
+        // suppressed. Suppressing it would strand membership for a restore
+        // the engine has already granted.
+        QTest::newRow("off/held/kwin0/armed") << false << true << false << true << a(MaximizeAction::Release);
+        QTest::newRow("off/held/kwin1/armed") << false << true << true << true << a(MaximizeAction::Release);
+        // Adopt is not suppressed either: an effect restart clears the marker
+        // anyway, and refusing to adopt would drop the daemon's state.
+        QTest::newRow("on/free/kwin0/armed") << true << false << false << true << a(MaximizeAction::Apply);
+        QTest::newRow("on/free/kwin1/armed") << true << false << true << true << a(MaximizeAction::Apply);
+        // THE CELL THE MARKER EXISTS FOR. Unarmed this is Apply, which
+        // re-maximizes the window the user just restored, mid-flight, and
+        // commits the stale maximized rect with it.
+        QTest::newRow("on/held/kwin0/armed") << true << true << false << true << a(MaximizeAction::None);
+        QTest::newRow("on/held/kwin1/armed") << true << true << true << true << a(MaximizeAction::None);
     }
 
     void columnMaximizeTruthTable()
@@ -150,15 +174,23 @@ private Q_SLOTS:
         QFETCH(bool, flagOnWire);
         QFETCH(bool, inSet);
         QFETCH(bool, kwinMaximized);
+        QFETCH(bool, toggleInFlight);
         QFETCH(int, expectedAction);
 
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(flagOnWire, inSet, kwinMaximized)), expectedAction);
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(flagOnWire, inSet, kwinMaximized, toggleInFlight)),
+                 expectedAction);
     }
 
-    // The interception's round trip cannot be raced, which is why this
-    // decision carries no in-flight marker (see the contract note on
-    // resolveColumnMaximizeAction). Both directions of a toggle are walked
-    // here with a STALE batch landing mid-flight, asserting it is inert.
+    // The UNARMED steady state: no toggle in flight, so a batch is never
+    // suppressed. Both directions are walked with a stale batch landing
+    // mid-flight, asserting it is inert on its own terms.
+    //
+    // This slot deliberately models the state where the effect has ALREADY
+    // observed the click's own bit flip, which is why kwinMax only ever
+    // changes from inside the Apply/Release arms below. That is the harmless
+    // half. The half where the user's click has cleared KWin's bit BEFORE the
+    // stale batch arrives is what staleBatchOnRestoreDoesNotReMaximize covers,
+    // and it is the half that needs the marker. Keep both.
     void staleBatchDuringToggleIsInert()
     {
         // The state is THREADED through the walk rather than hand-written per
@@ -172,7 +204,8 @@ private Q_SLOTS:
         bool inSet = false;
         bool kwinMax = false;
         const auto step = [&inSet, &kwinMax](bool flagOnWire) {
-            const MaximizeAction action = resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax);
+            const MaximizeAction action =
+                resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax, /*toggleInFlight=*/false);
             // MODELS what the batch arm does with the answer — it does not
             // call it. kwin-effect has no linkable test target, so the arm's
             // own bookkeeping cannot be driven from here; only a wrong
@@ -193,9 +226,8 @@ private Q_SLOTS:
             return action;
         };
 
-        // MAXIMIZING. The click is cancelled back to restore and dispatched;
-        // a batch the daemon emitted before it processed the toggle still
-        // says flag=false. It must not fight the click.
+        // MAXIMIZING. A batch the daemon emitted before it processed the
+        // toggle still says flag=false. It must not fight the click.
         QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
         QVERIFY(!inSet);
         // The answering batch applies, and the effect takes the bit.
@@ -215,6 +247,79 @@ private Q_SLOTS:
         // than re-applying and re-maximizing what the user just restored.
         QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
         QVERIFY(!inSet);
+    }
+
+    // THE RESTORE RACE. This is the walk the slot above structurally cannot
+    // reach, and the reason the marker exists.
+    //
+    // The difference is WHEN KWin's bit moves. Above, kwinMax only changes
+    // from inside the Apply/Release arms, so the un-maximizing leg steps
+    // flag=true while kwinMax is still true and lands on the harmless
+    // (1,1,1) cell. In reality the user's restore click clears KWin's bit
+    // BEFORE any batch arrives — the interception no longer cancels it back —
+    // so the stale batch lands on (1,1,0), which is Apply unless suppressed.
+    void staleBatchOnRestoreDoesNotReMaximize()
+    {
+        bool inSet = true;
+        bool kwinMax = true;
+        bool armed = false;
+        const auto step = [&inSet, &kwinMax, &armed](bool flagOnWire) {
+            const MaximizeAction action = resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax, armed);
+            if (action == MaximizeAction::Apply) {
+                inSet = true;
+                kwinMax = true;
+            } else if (action == MaximizeAction::Release) {
+                inSet = false;
+                kwinMax = false;
+            }
+            return action;
+        };
+
+        // The user clicks restore. KWin clears its own bit and the effect
+        // writes nothing; the toggle is dispatched and now in flight.
+        kwinMax = false;
+        armed = true;
+
+        // A batch the daemon emitted before it dequeued the toggle still
+        // carries flag=true. Unsuppressed this is Apply, which re-maximizes
+        // the window mid-flight and commits the stale maximized rect with it.
+        // THIS is the assertion that fails without the marker.
+        QCOMPARE(static_cast<int>(step(true)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(inSet);
+        QVERIFY(!kwinMax);
+
+        // More than one pre-toggle batch can be in flight (batches arrive at
+        // wheel-tick rate on a scrolling strip), so the marker must survive
+        // the first one rather than being consumed by it.
+        QCOMPARE(static_cast<int>(step(true)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(inSet);
+
+        // The answering batch carries the engine's own verdict. Release is
+        // never suppressed, so it lands even while armed.
+        QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::Release));
+        QVERIFY(!inSet);
+
+        // The reply disarms, and a trailing stale batch is inert on its own
+        // terms again.
+        armed = false;
+        QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
+        QVERIFY(!inSet);
+    }
+
+    // The marker must never swallow the engine's own answer. An adopt for a
+    // window this effect instance has never seen (daemon still holding the
+    // state across an effect restart) has to land even while armed, or the
+    // restart repair the Apply arm exists for would be lost.
+    void markerNeverSuppressesTheEnginesAnswer()
+    {
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(true, false, false, /*toggleInFlight=*/true)),
+                 static_cast<int>(MaximizeAction::Apply));
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(true, false, true, /*toggleInFlight=*/true)),
+                 static_cast<int>(MaximizeAction::Apply));
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(false, true, false, /*toggleInFlight=*/true)),
+                 static_cast<int>(MaximizeAction::Release));
+        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(false, true, true, /*toggleInFlight=*/true)),
+                 static_cast<int>(MaximizeAction::Release));
     }
 
     // Counter-assert budget: matching frame never counters.

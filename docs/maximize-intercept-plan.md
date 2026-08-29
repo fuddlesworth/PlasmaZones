@@ -53,9 +53,10 @@ signal.
 
 The neighbouring `windowMaximizedStateAboutToChange` (connected at
 `window_connections.cpp:713`) is the morph's departure-rect capture and is NOT
-the hook: it fires pre-commit, so the cancel would race the very state change
-it is trying to replace. The post-commit signal lets the interception read
-what actually landed and write the engine's answer over it.
+the hook: it fires pre-commit, so a handler there would race the very state
+change it is reacting to. The post-commit signal lets the interception read
+what actually landed. That capture is still load-bearing for the animation,
+which departs from the rect it recorded.
 
 **Dispatch, not gate.** Resolve the window's engine-authoritative screen and
 its mode, then hand off to that mode's arm (see Per-mode dispatch). The effect
@@ -100,7 +101,7 @@ driven by a shortcut, which means "act on what I am looking at", so the active
 column is the right target and the screen is enough. This one is driven by a
 maximize request naming ONE window, and that window is frequently not the
 active one — a client maximizing itself from the background, a titlebar click
-that does not raise first. Screen-scoped, the verb cancelled the clicked
+that does not raise first. Screen-scoped, the verb claimed the clicked
 window's maximize and then resized a different column. The window id is
 therefore on the wire, and an empty id keeps the shortcut's "active column"
 meaning.
@@ -259,10 +260,26 @@ slot is re-validated against the CURRENT work area for the same reason: a
 **Inbound.** `ScrollingAdaptor::toggleMaximizeColumn`, forwarding to the same
 `ScrollEngine::toggleMaximizeColumn` the shortcut uses.
 `TilingHandler::interceptMaximizeRequest` gates on tiled membership (float
-passes through) and `isScrollingScreen`, CANCELS KWin's flip back to engine
-state, and dispatches the toggle. Hooked into the existing
+passes through) and `isScrollingScreen`, leaves KWin's bit exactly where the
+user's click put it, and dispatches the toggle. Hooked into the existing
 `windowMaximizedStateChanged` lambda after its edge filter, so per-axis double
-firing cannot cancel the toggle against itself.
+firing cannot toggle against itself.
+
+An earlier revision of this plan had the interception CANCEL the flip back to
+engine state before dispatching. That shipped and was then removed, because
+KWin has already moved the window by the time the interception runs, so
+cancelling moved it a second time and the batch's animated leg then departed
+from wherever the cancel had left it. Two consequences of removing it are
+carried elsewhere in the design and are easy to miss. The refused case is no
+longer covered for free, which is why the verb reports whether the strip
+CHANGED rather than whether the call arrived and why the reply handler writes
+the bit back. And the round trip became raceable, which is why
+`m_maximizeToggleInFlight` exists: without it a batch the daemon emitted before
+it dequeued the toggle re-maximizes the window mid-restore.
+
+**Wire (v6 → v7).** `Scrolling.toggleMaximizeColumn` gained a boolean return,
+`(ss)` → `(ss)b`. False means the strip did not change, from either kind of
+refusal, deliberately not distinguished.
 
 **Outbound.** `m_columnMaximizedWindows`, an ownership ledger on the
 `m_monocleMaximizedWindows` pattern, driven from the batch by a pure 3-way

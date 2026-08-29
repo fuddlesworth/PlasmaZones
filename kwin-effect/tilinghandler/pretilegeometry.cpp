@@ -196,7 +196,13 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // the exact split m_columnMaximizedWindows' contract forbids.
                 if (m_columnMaximizedWindows.contains(windowId)) {
                     releaseColumnMaximized(windowId, safeW);
-                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
+                           && !kw->isRequestedFullScreen() && !kw->isFullScreen()) {
+                    // Fullscreen guard, the one every sibling maximize write
+                    // carries: maximize() has no fullscreen conditional and
+                    // would moveResize a presenting surface down to its
+                    // restore rect. releaseColumnMaximized on the arm above
+                    // takes the same guard internally.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
