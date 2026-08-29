@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 2000 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 2300 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Eight siblings carry the rest of the suite (enumerated below),
+// been done. Ten siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -24,7 +24,7 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Eight siblings carry the rest of the suite, split off at this file's size
+// Ten siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
@@ -35,8 +35,12 @@
 // vocabulary (column focus polarity, tile-end focus, absolute width/height
 // intents, the float moves and the layer switch),
 // test_scrollengine_behaviour.cpp owns the per-screen BEHAVIOUR overrides,
-// and test_scrollengine_snapshot.cpp owns stripSnapshot and its index
-// contract.
+// test_scrollengine_snapshot.cpp owns stripSnapshot and its index contract,
+// test_scrollengine_template.cpp owns the strip-template seed and its
+// blueprint progress, and test_scrollengine_maximize.cpp owns the
+// maximize-column claim (the flag riding tiles the user cannot see, two
+// columns maximized at once, the named verb's second press, and survival
+// across a mode round trip).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>

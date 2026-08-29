@@ -44,11 +44,15 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     if (m_lifecycleEngines.isEmpty()) {
         // Real teardown goes through clearEngine(); this empty-list form
         // exists for symmetry and has no production caller (see the header).
-        // It still clears the parked opens, because
-        // parked opens can never be retried without a pipeline, and the
-        // announce path's empty-union bail deliberately skips the retry, so
-        // they would otherwise sit for the rest of the process.
+        // It still clears BOTH open queues, because neither can be retried
+        // without a pipeline: parked opens are skipped by the announce path's
+        // empty-union bail, and panel-deferred opens reach a flush that finds
+        // no pipeline and discards them anyway. Clearing the deferral queue
+        // here is also what makes the flush path's empty-pipeline branch
+        // genuinely unreachable with entries in hand, which its test comment
+        // claims.
         m_unclaimedOpens.clear();
+        m_pendingOpens.clear();
     }
 }
 

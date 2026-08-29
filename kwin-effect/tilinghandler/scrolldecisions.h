@@ -160,8 +160,8 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
 //
 // That is the whole point: a missing release is an ABSENCE, so it compiles,
 // tests and reviews clean, and what it leaves behind is a window holding
-// compositor state with nothing recording the debt. PR #994 shipped a third
-// claim missing eight of its releases, and the two asymmetries introduced
+// compositor state with nothing recording the debt. The third claim below
+// arrived missing eight of its releases, and the two asymmetries introduced
 // while fixing those were the same shape. A table cannot forget a cell.
 
 /// A kind of compositor state the effect imposed on a window.

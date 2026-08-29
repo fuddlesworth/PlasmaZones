@@ -30,7 +30,10 @@ namespace PlasmaZones {
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
  * (with the preset vocabulary beside it), the wheel-driven focusColumn and
  * scrollView verbs, the four absolute width/height setters for external
- * scripting, the
+ * scripting, the toggleMaximizeColumn verb that answers a window's own
+ * maximize request with the strip's full-work-area column (and reports back
+ * whether it accepted, so the effect can fall through to a stock maximize
+ * when it did not), the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never

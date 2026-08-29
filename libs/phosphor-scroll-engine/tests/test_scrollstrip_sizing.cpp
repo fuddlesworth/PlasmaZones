@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The repeatable SIZE verbs' refusal and entry contract: where
-// adjustActiveColumnWidth and adjustActiveWindowHeight stop, which states
-// they and the two preset cycles decline outright, and which vocabulary entry
-// a cycle press lands on when the list is not what the shipped defaults look
-// like. Placed in its own file rather than grown into test_scrollstrip_ops,
+// adjustActiveWindowHeight stops, which states it and the two preset cycles
+// decline outright, and which vocabulary entry a cycle press lands on when
+// the list is not what the shipped defaults look like. adjustActiveColumnWidth
+// is named here only for its clamp (the widen that lands exactly on the work
+// area); its own refusal contract lives with the width verbs in
+// test_scrollstrip_ops.cpp. Placed in its own file rather than grown into test_scrollstrip_ops,
 // which owns the per-operation surface over one shared strip fixture and already
 // carries a file-size exception; every slot here builds its own strip against
 // the shared screen constants.
@@ -61,7 +63,7 @@ private Q_SLOTS:
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
-    void maximizeToggleRefusesAStaleFullWidthRestoreSlot();
+    void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -608,7 +610,7 @@ void TestScrollStripSizing::maximizeToggleEntersOnRenderedWidthNotIntentKind()
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), workMain);
 }
 
-void TestScrollStripSizing::maximizeToggleRefusesAStaleFullWidthRestoreSlot()
+void TestScrollStripSizing::maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot()
 {
     // The stored pre-maximize intent is re-validated against the CURRENT work
     // area rather than trusted. Nothing invalidates the slot when the output

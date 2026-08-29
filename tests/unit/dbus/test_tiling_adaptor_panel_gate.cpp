@@ -333,12 +333,16 @@ private Q_SLOTS:
     // ensurePipeline()'s empty check, even though the comment here used to claim
     // it did — that claim was false in both directions. The count is already 0
     // before emitPanelGeometryReady runs (clearEngine cleared it), so the
-    // closing QCOMPARE would pass with the empty check deleted outright; and the
-    // check cannot be reached with a non-empty queue at all, because
-    // windowOpened calls ensurePipeline BEFORE deferUntilPanelReady, so nothing
-    // can enqueue once the engine list is empty. ensurePipeline's empty branch
-    // on the flush path is therefore unreachable-by-construction defence, and
-    // the reachable contract is the drain plus crash-freedom.
+    // closing QCOMPARE would pass with the empty check deleted outright.
+    //
+    // The branch cannot be reached with a non-empty queue, but the ordering
+    // argument alone did not establish that. windowOpened calling
+    // ensurePipeline before deferUntilPanelReady stops anything enqueueing
+    // once the list is already empty; it says nothing about entries queued
+    // BEFORE the list was emptied. That hole was real until
+    // setLifecycleEngines({}) started clearing the deferral queue as well as
+    // the parked one — both are equally un-retryable without a pipeline. The
+    // reachable contract this slot pins is still the drain plus crash-freedom.
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {
