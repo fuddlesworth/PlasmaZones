@@ -272,7 +272,9 @@ private Q_SLOTS:
         // step collapses into the current number. See the v6 entry in
         // ServiceConstants.h for what it covers: it widened TileRequestEntry
         // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
-        // windowId argument, in one step, because neither form ever shipped.
+        // windowId argument, in one step, because neither form ever shipped;
+        // v7 then gave that verb a boolean return so the effect can see a
+        // refusal it has already cancelled KWin's maximize for.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened
         // struct or method signature does leave a stale peer's slot simply
@@ -281,8 +283,8 @@ private Q_SLOTS:
         // demarshals perfectly and then misbehaves. The handshake is the only
         // thing refusing it, which is why this must not be "optimized away"
         // later.
-        QCOMPARE(Service::ApiVersion, 6);
-        QCOMPARE(Service::MinPeerApiVersion, 6);
+        QCOMPARE(Service::ApiVersion, 7);
+        QCOMPARE(Service::MinPeerApiVersion, 7);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

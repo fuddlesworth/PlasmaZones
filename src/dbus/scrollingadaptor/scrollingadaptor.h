@@ -286,7 +286,7 @@ public Q_SLOTS:
      *        it, so a maximize request from a window that never took focus
      *        cannot resize another column.
      */
-    void toggleMaximizeColumn(const QString& screenId, const QString& windowId);
+    bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 
     /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)

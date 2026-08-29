@@ -1612,6 +1612,15 @@ private:
     /// member, and they enter and leave together on the batch that carries
     /// the flag.
     QSet<QString> m_columnMaximizedWindows;
+    /// Windows whose last maximize request the daemon REFUSED at its
+    /// boundary, and whose maximize we therefore replayed on the user's
+    /// behalf. One-shot: interceptMaximizeRequest consumes the entry and
+    /// declines that one event, which is what stops the replay being
+    /// cancelled and dispatched again. Without it the pair loops at one
+    /// D-Bus round trip per iteration, because on Wayland the replay's
+    /// committed echo arrives with the suppression counter back at zero and
+    /// reads as a fresh user maximize.
+    QSet<QString> m_maximizePassThrough;
     int m_suppressMaximizeChanged = 0;
     /// Suppresses slotWindowFullScreenChanged for the effect's OWN
     /// setFullScreen calls (windowed fullscreen), mirroring

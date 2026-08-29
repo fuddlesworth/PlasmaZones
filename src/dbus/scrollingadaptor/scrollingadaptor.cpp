@@ -298,7 +298,7 @@ void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
     m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
-void ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
+bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
 {
     // Same gate chain as the width setters above: ownership, engine activity
     // on the screen, and the per-context gate. There is no value to range
@@ -306,10 +306,26 @@ void ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // empty: that spelling means "the focused column" and is what the keyboard
     // shortcut sends. An unknown windowId is refused by the strip itself,
     // which is the only place that knows which columns it holds.
+    //
+    // ACCEPTANCE IS REPORTED, unlike every other verb on this interface,
+    // because this one is the only one whose caller has already destroyed
+    // state on the strength of it. The KWin effect cancels KWin's own maximize
+    // BEFORE dispatching, so a silently refused call left the user with a
+    // maximize button that did nothing and un-maximized the window, on every
+    // click, with nothing recording the loss. A void method still replies
+    // success on a silent no-op, so only a real return value can carry the
+    // refusal back.
+    //
+    // False means REFUSED HERE, at the boundary. It does not report what the
+    // engine did with an accepted call — a strip that does not hold the named
+    // window refuses inside the engine and still returns true, because the
+    // effect's answer to that case is the same as to success (leave the bit
+    // where the cancel put it).
     if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
-        return;
+        return false;
     }
     m_engine->toggleMaximizeColumn(screenId, windowId);
+    return true;
 }
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)

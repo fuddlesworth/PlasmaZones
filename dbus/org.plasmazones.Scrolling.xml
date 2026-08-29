@@ -88,6 +88,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window naming the column to toggle. An empty string targets the focused column, which is what the keyboard shortcut wants. A named window targets the column holding it and is ignored when the strip does not hold that window, so a maximize request arriving for a window that never took focus cannot resize somebody else's column."/>
             </arg>
+            <arg name="accepted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the daemon accepted the request, false when the boundary refused it (no engine, empty screen id, the engine is not active on that screen, or the per-context gate is closed). The KWin effect cancels KWin's own maximize before dispatching, so a refusal it could not see left the maximize button doing nothing on that screen. False does NOT report what the engine did with an accepted call: a strip that does not hold the named window refuses internally and still answers true, because the caller treats that case the same as success."/>
+            </arg>
         </method>
 
         <method name="clearWindowedFullscreen">

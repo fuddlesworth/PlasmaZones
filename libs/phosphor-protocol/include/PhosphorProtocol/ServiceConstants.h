@@ -366,8 +366,25 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       The window is now named on the wire so the engine can act on the
 //       column holding it. An empty windowId keeps the old meaning (the active
 //       column), which is the in-process spelling the keyboard shortcut uses.
-inline constexpr int ApiVersion = 6;
-inline constexpr int MinPeerApiVersion = 6;
+//   v7: Scrolling.toggleMaximizeColumn gains a BOOLEAN RETURN, (ss) -> (ss)b.
+//       A signature change, so it takes a bump like any other.
+//
+//       It is the only verb on that interface that reports acceptance, and it
+//       needs to because it is the only one whose caller has already destroyed
+//       state on the strength of the call: the effect cancels KWin's own
+//       maximize BEFORE dispatching, so a silently refused request left the
+//       user with a maximize button that did nothing and un-maximized the
+//       window, on every click, with nothing recording the loss. A void method
+//       still replies success on a silent no-op, so nothing short of a return
+//       value can carry the refusal back.
+//
+//       False means refused AT THE BOUNDARY (no engine, empty screen id, the
+//       engine not active on that screen, the per-context gate closed). It does
+//       not report what the engine did with an accepted call — an unknown
+//       window refuses inside the strip and still answers true, because the
+//       effect's response to that is the same as to success.
+inline constexpr int ApiVersion = 7;
+inline constexpr int MinPeerApiVersion = 7;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -181,6 +181,13 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     if (windowId.isEmpty()) {
         return false;
     }
+    // A one-shot pass-through, armed when the daemon refused this window's
+    // last request and we replayed the user's maximize. Consuming it here is
+    // what stops the replay being cancelled and dispatched again, which would
+    // loop at one D-Bus round trip per iteration.
+    if (m_maximizePassThrough.remove(windowId)) {
+        return false;
+    }
     // A FLOATED window on a scrolling screen is not a tile, and float is the
     // one genuine pass-through: the user took it out of the strip, so its
     // maximize is KWin's business and the engine has no column to act on.
@@ -263,17 +270,45 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
 
 void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId)
 {
-    // Fire and forget. There is no marker to arm and so nothing an error
-    // reply could un-arm: the effect changed no state of its own above beyond
-    // undoing KWin's, and a lost call leaves the window exactly where the
-    // cancel put it — the pre-click state, which is the correct answer for a
-    // request that never arrived.
+    // The reply IS consumed, unlike every other dispatch in this file.
+    //
+    // A lost or errored call leaves the window where the cancel put it, which
+    // is the right answer for a request that never arrived. A REFUSED one is
+    // different: the daemon received it, declined at the boundary (the engine
+    // is not active on that screen, or the per-context gate is closed), and no
+    // batch will ever follow — so the pre-click state is now permanent and the
+    // maximize button does nothing on that screen, on every click, forever.
+    // That is why the verb reports acceptance at all.
     if (!m_effect->m_daemonGate.serviceRegistered) {
         return;
     }
-    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
-                                                   QStringLiteral("toggleMaximizeColumn"), {screenId, windowId},
-                                                   QStringLiteral("toggleMaximizeColumn"));
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
+                                                   QStringLiteral("toggleMaximizeColumn"), {screenId, windowId}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* pw) {
+        pw->deleteLater();
+        const QDBusPendingReply<bool> reply = *pw;
+        if (reply.isError() || reply.value()) {
+            return;
+        }
+        // Refused. Hand the request back to KWin by replaying it, and arm a
+        // one-shot pass-through so the interception does NOT cancel the replay.
+        //
+        // Without that marker this loops: the replayed maximize emits its own
+        // state change, on Wayland the committed echo arrives with the
+        // suppression counter back at 0, the interception runs again, the
+        // window is still not a member so the already-agrees arm does not
+        // fire, and it cancels and dispatches once more — one round trip per
+        // iteration, indefinitely.
+        KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
+        KWin::Window* kw = w ? w->window() : nullptr;
+        if (!kw) {
+            return;
+        }
+        m_maximizePassThrough.insert(windowId);
+        applyMaximizeSuppressed(kw, KWin::MaximizeFull);
+    });
 }
 
 void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::EffectWindow* w)
