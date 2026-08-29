@@ -32,8 +32,8 @@ namespace PlasmaZones {
  * scrollView verbs, the four absolute width/height setters for external
  * scripting, the toggleMaximizeColumn verb that answers a window's own
  * maximize request with the strip's full-work-area column (and reports back
- * whether it accepted, so the effect can fall through to a stock maximize
- * when it did not), the
+ * whether the strip changed, so the effect can put KWin's maximize bit back
+ * to the engine's state when it did not), the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
@@ -293,6 +293,14 @@ public Q_SLOTS:
      *        IN-PROCESS and never crosses this boundary, and the only in-tree
      *        wire caller is the KWin effect's maximize interception, which
      *        always names the requesting window.
+     *
+     * @return true only when the strip actually CHANGED. False covers both
+     *         kinds of refusal and does not distinguish them: refused at this
+     *         boundary, or accepted and acted on by nothing. The effect steers
+     *         on it, because a call that changes nothing emits no tile batch,
+     *         so false is its only cue to put KWin's maximize bit back. No
+     *         [[nodiscard]]: the in-process keyboard-shortcut path legitimately
+     *         discards it.
      */
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 

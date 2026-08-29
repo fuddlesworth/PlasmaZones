@@ -273,8 +273,9 @@ private Q_SLOTS:
         // ServiceConstants.h for what it covers: it widened TileRequestEntry
         // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
         // windowId argument, in one step, because neither form ever shipped;
-        // v7 then gave that verb a boolean return so the effect can see a
-        // refusal it has already cancelled KWin's maximize for.
+        // v7 then gave that verb a boolean return so the effect can tell
+        // whether the strip changed, since it no longer writes KWin's
+        // maximize bit before dispatching.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened
         // struct or method signature does leave a stale peer's slot simply

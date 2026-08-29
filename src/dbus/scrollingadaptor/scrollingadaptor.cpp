@@ -324,31 +324,42 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // shortcut sends. An unknown windowId is refused by the strip itself,
     // which is the only place that knows which columns it holds.
     //
-    // ACCEPTANCE IS REPORTED, unlike every other verb on this interface,
-    // because this one is the only one whose caller has already destroyed
-    // state on the strength of it. The KWin effect cancels KWin's own maximize
-    // BEFORE dispatching, so a silently refused call left the user with a
-    // maximize button that did nothing and un-maximized the window, on every
-    // click, with nothing recording the loss. A void method still replies
-    // success on a silent no-op, so only a real return value can carry the
-    // refusal back.
+    // WHETHER THE STRIP CHANGED IS REPORTED, unlike every other verb on this
+    // interface, because this one is the only one whose caller is holding
+    // compositor state that only the answer can settle. The KWin effect leaves
+    // KWin's maximize bit exactly where the user's click put it and dispatches,
+    // so a request nothing acts on leaves the window in the state the USER
+    // asked for with no batch coming to impose the strip's own. A void method
+    // still replies success on a silent no-op, so only a real return value can
+    // carry that back.
     //
-    // False means REFUSED HERE, at the boundary. It does not report what the
-    // engine did with an accepted call — a strip that does not hold the named
-    // window refuses inside the engine and still returns true, because the
-    // effect's answer to that case is the same as to success (leave the bit
-    // where the cancel put it).
+    // False therefore covers BOTH refusals, and deliberately does not
+    // distinguish them: refused here at the boundary (no engine, empty screen
+    // id, the engine not active on that screen, the per-context gate closed),
+    // and accepted but acted on by nothing (no state for the context, an empty
+    // strip, a window no column holds, a column the toggle itself refuses).
+    // The effect's response is identical either way — put the bit back where
+    // the engine last had it — so splitting them would be a distinction with
+    // no consumer.
     if (refusesScreenVerb(screenId)) {
         return false;
     }
-    m_engine->toggleMaximizeColumn(screenId, windowId);
-    return true;
+    return m_engine->toggleMaximizeColumn(screenId, windowId);
 }
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
-    // Same wire-boundary policy as focusColumn: malformed input is a silent
-    // no-op, and the engine's own lookup rejects an untracked window.
+    // Malformed input is a silent no-op and the engine's own lookup rejects an
+    // untracked window.
+    //
+    // NOT the same gate chain as focusColumn, and the difference is deliberate.
+    // The screen-scoped verbs also carry ownership and the per-context gate;
+    // this one is window-keyed, so ownership does not apply, and it skips the
+    // CONTEXT gate on purpose. It is a reconciliation call reporting something
+    // that has already happened to the client, so it must follow reality even
+    // into a context whose scrolling the user has switched off. Refusing there
+    // would leave the strip holding a windowed-fullscreen flag for a window
+    // that is no longer fullscreen, with nothing to clear it later.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }
@@ -357,9 +368,10 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 
 void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 {
-    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
-    // is a silent no-op, and the engine's own lookup rejects an untracked
-    // window.
+    // Same wire-boundary policy as clearWindowedFullscreen above, including
+    // its deliberate skip of the per-context gate and the reason for it:
+    // malformed input is a silent no-op, and the engine's own lookup rejects
+    // an untracked window.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }

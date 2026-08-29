@@ -238,7 +238,16 @@ public:
     /// the strip does not hold it, which is what the compositor's maximize
     /// interception needs — that request names one window and the active
     /// column is frequently a different one.
-    void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
+    ///
+    /// Answers whether the strip actually CHANGED. The compositor's maximize
+    /// interception needs that distinction and not merely "the call arrived":
+    /// it no longer writes KWin's maximize bit before dispatching, so a request
+    /// this engine quietly does nothing with (no state for the context, an
+    /// empty strip, a window no column holds, a column the verb refuses) leaves
+    /// the window holding the state the USER asked for with no batch coming to
+    /// impose the strip's answer. False is the effect's cue to put the bit back
+    /// where the engine last had it.
+    bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -877,9 +886,10 @@ Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
     /// as AutotileEngine::windowsTiled. The field list and semantics live
     /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
-    /// which is the single source: an inline copy here named six of the
-    /// fourteen fields actually emitted and drifted every time one was
-    /// added. Float transitions are signalled separately via
+    /// which is the single source: an inline copy here named a handful of
+    /// the fields actually emitted and drifted every time one was added,
+    /// which is why no count is repeated here. Float transitions are
+    /// signalled separately via
     /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same

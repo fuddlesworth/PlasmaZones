@@ -367,6 +367,15 @@ public:
     {
         m_frameOpacityCache.clear();
     }
+    /// The frame @p window held before its last maximize state change, or an
+    /// invalid rect if none was captured. Read by the scroll batch to anchor a
+    /// column-maximize toggle's departure: by the time the batch applies, the
+    /// window has already been resized to KWin's maximize area, so its live
+    /// frame is no longer where the motion should appear to start.
+    QRectF preMaximizeFrame(KWin::EffectWindow* window) const
+    {
+        return m_preMaximizeFrame.value(window);
+    }
 
 private:
     friend class PlasmaZonesEffect;

@@ -1681,6 +1681,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // pending apply from a batch built while the screen was scrolling
             // can land after the flip has already released the claim, taking
             // membership back with nothing to hand it to.
+            // Set ONLY where this iteration actually wrote KWin's maximize
+            // bit, because the geometry apply further down needs to know
+            // whether THIS batch is the one that changed the maximize state.
+            //
+            // A membership-vs-wire delta looks like the obvious signal and is
+            // not a transition detector: releaseColumnMaximized RETAINS
+            // membership on its fullscreen and mid-gesture arms, so membership
+            // stays true while the wire flag stays false and the delta then
+            // reads true on EVERY following batch, with no
+            // windowMaximizedStateAboutToChange having fired to refresh the
+            // captured departure rect. The Apply arm's own fullscreen/gesture
+            // skip has the same shape in the other direction: it takes
+            // membership without calling maximize().
+            bool maximizeBitWrittenThisBatch = false;
             if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
@@ -1692,9 +1706,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // the geometry apply below immediately overwrites — and on a
                 // scrolling strip batches arrive at wheel-tick rate, so that
                 // window is crossed routinely rather than rarely.
+                // PEEKED, not consumed. The marker's lifetime is the round
+                // trip, not one batch: batches arrive at wheel-tick rate on a
+                // scrolling strip, so more than one pre-toggle batch can be in
+                // flight and consuming here would leave the second unguarded.
+                // It is also read per entry rather than once per batch,
+                // because the per-window applies are staggered and a later
+                // entry runs after the earlier ones have returned.
+                const bool kwinAlreadyFull = kwMax->requestedMaximizeMode() == KWin::MaximizeFull;
                 const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveColumnMaximizeAction(
-                    snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId),
-                    kwMax->requestedMaximizeMode() == KWin::MaximizeFull);
+                    snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId), kwinAlreadyFull,
+                    maximizeToggleInFlight(snap.windowId));
                 if (maxAction == ScrollDecisions::MaximizeAction::Apply) {
                     // Membership BEFORE the compositor call, so a synchronous
                     // re-entry through maximize() (X11 emits
@@ -1734,9 +1756,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (!kwMax->isFullScreen() && !kwMax->isRequestedFullScreen() && !snap.window->isUserMove()
                         && !snap.window->isUserResize()) {
                         applyMaximizeSuppressed(kwMax, KWin::MaximizeFull);
+                        // NOT unconditionally true. Apply also covers the
+                        // ADOPT case (!inSet with the bit already held, an
+                        // effect restart against a daemon that kept the
+                        // state), where maximize() is called on a window
+                        // already at MaximizeFull and emits nothing — so no
+                        // windowMaximizedStateAboutToChange fires and the
+                        // captured departure rect belongs to an arbitrarily
+                        // older episode. Claiming a write there would hand the
+                        // origin arm the same stale rect this gate exists to
+                        // keep out. The monocle arm below takes the identical
+                        // precaution.
+                        maximizeBitWrittenThisBatch = !kwinAlreadyFull;
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
-                    releaseColumnMaximized(snap.windowId, snap.window);
+                    maximizeBitWrittenThisBatch = releaseColumnMaximized(snap.windowId, snap.window);
                 }
             }
 
@@ -1749,7 +1783,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // for a bit the effect never set, and later hands back a
                     // maximize it never owned.
                     const bool wasAlreadyMaximized = (kw->requestedMaximizeMode() == KWin::MaximizeFull);
+                    // RAII rather than a bare ++/--, the last hand-rolled copy
+                    // of this bracket in the file. The counter's own contract
+                    // note spells out why it matters: leak one increment and
+                    // isSuppressingMaximizeChanged() stays true for the
+                    // session, so the interception never fires again. Nothing
+                    // returns between the two today, which is exactly what
+                    // makes an added early return a silent, permanent break.
                     ++m_suppressMaximizeChanged;
+                    const auto maxSuppressGuard = qScopeGuard([this] {
+                        --m_suppressMaximizeChanged;
+                    });
                     // Same two guards the column arm above carries, and for the
                     // same reasons. maximize() has no fullscreen conditional, so
                     // on a presenting surface it moveResizes down to the restore
@@ -1762,14 +1806,36 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // bit is not yet held, so a later batch can pay it, and
                     // unmaximizeMonocleWindow is itself guarded and cannot hand
                     // back a bit it never took.
+                    bool monocleBitWritten = false;
                     if (!kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                         kw->maximize(KWin::MaximizeFull);
+                        monocleBitWritten = !wasAlreadyMaximized;
                     }
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
-                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
-                    --m_suppressMaximizeChanged;
+                    // Same departure-rect fix the column arm takes, for the
+                    // same reason and by the same mechanism. maximize() above
+                    // has already moved the window to KWin's maximize area, so
+                    // a leg departing from the live frame animates almost
+                    // nothing growing and nothing at all shrinking. The
+                    // capture at windowMaximizedStateAboutToChange is the only
+                    // place the pre-monocle rect still exists, and this arm's
+                    // own maximize() is what just refreshed it.
+                    //
+                    // Gated on that call having actually happened AND on the
+                    // state having changed: on the already-maximized path
+                    // maximize() emits nothing, so the entry would be stale.
+                    QRectF monocleOrigin;
+                    if (monocleBitWritten) {
+                        const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                        if (preMaximize.isValid() && !preMaximize.isEmpty()) {
+                            monocleOrigin = preMaximize;
+                        }
+                    }
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, monocleOrigin);
                 } else {
                     m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
@@ -2253,6 +2319,51 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             originOverride = QRectF(committedGeo);
                         }
                     }
+                    // COLUMN-MAXIMIZE TOGGLE: depart from the rect the window
+                    // held before the maximize, not from its live frame.
+                    //
+                    // By the time this runs the window has ALREADY been resized
+                    // to KWin's maximize area, on both input paths: the titlebar
+                    // button flips the bit itself before the effect sees the
+                    // event, and the shortcut's own batch sets the bit in the
+                    // maximize arm above. So the live frame is 3840x2068 on the
+                    // way in and the target column rect on the way out, and a
+                    // leg departing from it animates a 16px correction growing
+                    // and NOTHING AT ALL shrinking — the whole visible motion is
+                    // KWin's unanimated jump, with the leg twitching afterwards.
+                    // Traced live: one leg per press, installing at
+                    // (8,54 3840x2068) maximizing and at the target rect
+                    // (8,54 1908x2052) restoring.
+                    //
+                    // m_preMaximizeFrame is the rect KWin captured at
+                    // windowMaximizedStateAboutToChange, before any geometry
+                    // change, which is the only place the departure rect still
+                    // exists. Gated on THIS iteration having actually written
+                    // KWin's maximize bit, which is what keeps a stale entry
+                    // (the map is latest-wins and only swept on windowDeleted)
+                    // from re-anchoring an unrelated later commit. A
+                    // membership-vs-wire delta will not do: both release retain
+                    // arms and the Apply arm's own fullscreen/gesture skip
+                    // leave that delta true with no capture having been
+                    // refreshed, so it latches on every following batch and
+                    // anchors the leg at an arbitrarily old rect.
+                    //
+                    // Screen-gated like every sibling arm in this lambda. The
+                    // override chain is reached by autotile batches too, and a
+                    // window carrying retained column membership onto a tiling
+                    // screen has no business anchoring off a scrolling
+                    // maximize.
+                    //
+                    // Placed after the chain above so the park and view-travel
+                    // arms keep priority — those describe where a window should
+                    // appear to come from across the strip, which outranks the
+                    // maximize's own departure rect.
+                    if (!originOverride.isValid() && maximizeBitWrittenThisBatch && isScrollingScreen(snap.screenId)) {
+                        const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                        if (preMaximize.isValid() && !preMaximize.isEmpty()) {
+                            originOverride = preMaximize;
+                        }
+                    }
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
                                                   visualTargetOverride);
@@ -2644,7 +2755,42 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // platforms — KWin's own maximize-area re-assert. That population arms a
     // commanded rect at the apply site for exactly this, and nothing else
     // reaches it, so the general exclusion and its reasoning stand.
-    const bool externallyMovable = !w->isWaylandClient() || m_columnMaximizedWindows.contains(windowId);
+    // A column-maximize member whose maximize bit is mid-transition is exempt
+    // on EVERY platform, XWayland included, and that exemption is what keeps
+    // the counter off the user's own restore.
+    //
+    // KWin emits frameGeometryChanged from INSIDE maximize(), before
+    // maximizedChanged, so on a restore click this slot runs first: the frame
+    // has already moved to the restore rect while m_scrollCommandedRects still
+    // holds the maximized column's rect, and the interception has not yet run,
+    // let alone dispatched the toggle the engine will answer with a narrower
+    // batch. Unqualified, the counter reads that as an external mover and
+    // shoves the window back to full width, which the arriving batch then
+    // undoes — a full-width bounce on every restore, seen live at 14ms.
+    //
+    // Nothing is given up. The mover this arm was added for is KWin's own
+    // maximize-area re-assert, which by definition happens while the window IS
+    // maximized, so it still passes. What no longer passes is a frame change
+    // that arrives with the bit already gone, which is never that mover: it is
+    // a maximize/restore transition, and the commanded rect describing the
+    // layout the engine is in the middle of replacing has no authority over
+    // it. Enforcement resumes as soon as the batch re-arms the entry.
+    // The transition test gates the WHOLE predicate, not just the Wayland
+    // member arm. XWayland windows are handled inside this Wayland session and
+    // report isWaylandClient() false, so a member arm qualified only on the
+    // right of the || is unreachable for them: the first disjunct
+    // short-circuits true and the restore bounce described above survives
+    // untouched on every XWayland scroll-managed window. Hoisting it keeps the
+    // X11 arm intact for the mover it exists for (a client moving ITSELF, the
+    // Wine case) while exempting the one frame change that is never an
+    // external mover on either platform.
+    KWin::Window* kwCounter = w->window();
+    const bool inMaximizeTransition = kwCounter && m_columnMaximizedWindows.contains(windowId)
+        && kwCounter->requestedMaximizeMode() != KWin::MaximizeFull;
+    const bool externallyMovable = !inMaximizeTransition
+        && (!w->isWaylandClient()
+            || (kwCounter && m_columnMaximizedWindows.contains(windowId)
+                && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull));
     if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))

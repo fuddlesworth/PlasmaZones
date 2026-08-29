@@ -348,12 +348,19 @@ private Q_SLOTS:
         // suite, not here.
         {
             const ColumnWidth beforeToggle = activeColumn().width;
-            m_adaptor->toggleMaximizeColumn(QStringLiteral("HDMI-2"), QString());
-            m_adaptor->toggleMaximizeColumn(QString(), QString());
+            // The boundary refusals answer false as well as doing nothing.
+            // These two arms returned false before ApiVersion 7 tightened the
+            // boolean too, so on their own they do not discriminate the new
+            // contract from the old — they complete the pair with the accepted
+            // no-op case asserted in the named-window block below.
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QStringLiteral("HDMI-2"), QString()),
+                     "a screen the engine does not own must answer false");
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QString(), QString()), "an empty screen id must answer false");
             QCOMPARE(activeColumn().width, beforeToggle);
             // And the accepted call does act, so the refusals above are
             // genuine gates rather than a verb that never does anything.
-            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QVERIFY2(m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString()),
+                     "an accepted call that changes the strip must answer true");
             QVERIFY(activeColumn().width != beforeToggle);
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
             // The round trip lands back where it started, which is the whole
@@ -389,10 +396,25 @@ private Q_SLOTS:
                      "the two windows must be in different columns, or this proves nothing");
             const ColumnWidth aBefore = widthOfWindow(QStringLiteral("app|a"));
             const ColumnWidth bBefore = widthOfWindow(QStringLiteral("app|b"));
-            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|b"));
+            QVERIFY2(m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|b")),
+                     "a toggle the strip acts on must answer true");
             QVERIFY2(widthOfWindow(QStringLiteral("app|b")) != bBefore,
                      "the NAMED window's column must be the one that changed");
             QCOMPARE(widthOfWindow(QStringLiteral("app|a")), aBefore);
+
+            // THE BOUNDARY CONTRACT, and the only assertion in the suite that
+            // discriminates it. ApiVersion 7 tightened this boolean from "the
+            // daemon accepted the request" to "the strip changed", and the
+            // KWin effect steers on it: a false answer is its only cue to put
+            // KWin's maximize bit back, because a call that changes nothing
+            // emits no tile batch to correct the window later.
+            //
+            // The engine-layer suite cannot see this. It calls the engine
+            // directly, so reverting the adaptor's `return m_engine->...` to
+            // the old unconditional `return true` passes every other test in
+            // the tree. This is the one that goes red.
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|nosuchwindow")),
+                     "an ACCEPTED call the strip does nothing with must answer false, not true");
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a
