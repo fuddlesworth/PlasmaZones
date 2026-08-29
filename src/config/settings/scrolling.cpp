@@ -134,9 +134,10 @@ P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCen
 P_STORE_GET(bool, scrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, bool)
 P_STORE_SET_BOOL(setScrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, scrollingSmartGapsChanged)
 
-// Derived, not stored — see the header. Rides the animation settings'
-// change signals into the engine because refreshConfigFromSettings re-reads
-// every IScrollSettings value on any settings change.
+// Derived, not stored — see the header, including why the GLOBAL duration is
+// a deliberate approximation of the per-window close leg. Rides the animation
+// settings' change signals into the engine because refreshConfigFromSettings
+// re-reads every IScrollSettings value on any settings change.
 int Settings::scrollingCloseReflowDelayMs() const
 {
     return animationsEnabled() ? animationDuration() : 0;

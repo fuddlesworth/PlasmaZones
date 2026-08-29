@@ -464,6 +464,17 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         // corpse's frame is frozen at death, so a one-shot constant is
         // exact; a mid-leg view offset freezes at its close-instant value,
         // which just means a dying window stops riding the strip.
+        //
+        // Two accepted approximations. (1) The freeze derives from the
+        // TRACKED screen alone, while the live draw's predicate additionally
+        // exempts user-move/resize and floats from displacement — a tracked
+        // window closed mid-drag mid-leg would inherit an offset it was not
+        // drawn with. The pre-death exemption state is not recoverable from
+        // a Deleted window, so it cannot be honoured here. (2) Damage for
+        // the displaced draw region: our close shader's grab pump repaints
+        // the output per frame; under a purely FOREIGN close animation the
+        // foreign effect's own damage is what keeps the corpse fresh, which
+        // in practice the reflow and neighbour legs also cover.
         QPointF frozen = scrollVisualTranslationFor(closingWindowId, closingFrame);
         const QString corpseScreen = m_tilingHandler->scrollTrackedScreenFor(closingWindowId);
         if (!corpseScreen.isEmpty()) {

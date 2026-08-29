@@ -586,7 +586,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     // then send one batch D-Bus call instead of per-window round-trips.
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
-    QStringList batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
+    QSet<QString> batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
     // Announce stamps, one PER ENTRY rather than one for the batch: a single
     // batch-wide stamp would let one superseded window (re-announced on its own
     // between dispatch and reply, or closed) disarm the rollback for every other
@@ -661,7 +661,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // the initial screen query was pending retains explicit spawn provenance.
         const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
         if (wasFresh) {
-            batchFreshWindowIds.append(windowId);
+            batchFreshWindowIds.insert(windowId);
         }
         const bool knownFreeFloating =
             wasFresh || (enteringAutotile && !TilingStateHelpers::isTiledWindow(m_border, windowId));

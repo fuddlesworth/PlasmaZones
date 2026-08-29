@@ -289,6 +289,11 @@ public:
     /// the bit is owed back. The new session heals it, because the first batch resolves an absent wire flag against
     /// surviving membership to a Release. Adding to the teardown list is a separate decision — see the
     /// serviceUnregistered handler for what belongs there and why.
+    ///
+    /// Two further deliberate exceptions, both self-healing rather than drained: m_maximizeToggleInFlight entries
+    /// expire on read via MaximizeToggleFlightMs, and m_windowedFsClearInFlight is reply-gated — a toggle or clear
+    /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
+    /// so a drain here would only race the same cleanup.
     void clearPerSessionDaemonState();
 
     /**

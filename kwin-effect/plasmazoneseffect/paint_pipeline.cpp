@@ -1796,16 +1796,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
-            } else if (const auto fit = m_scrollCorpseFreeze.constFind(w); fit != m_scrollCorpseFreeze.constEnd()) {
-                // Deleted-window arm, mirroring the draw's: a decorated corpse
-                // keeps sampling its backdrop for the close animation, and the
-                // predictor has to fold in the same frozen displacement the
-                // draw applies or the corpse re-blits a slice from a pan away.
-                if (!animatedFrame.isValid()) {
-                    animatedFrame = w->frameGeometry();
-                }
-                animatedFrame.translate(fit->x(), fit->y());
             }
+            // No m_scrollCorpseFreeze arm here on purpose: this whole block is
+            // gated on !w->isDeleted(), and freeze entries exist only for the
+            // slotWindowClosed→windowDeleted span, during which the window IS
+            // deleted — a corpse never re-captures its backdrop; it reuses the
+            // frozen composite (see the gate's comment above).
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
         }
     }

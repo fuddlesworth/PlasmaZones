@@ -967,6 +967,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // lands can never be answered; without this a later genuine focus of a
     // reused id would be eaten as that echo.
     m_pendingSelfActivations.removeAll(windowId);
+    m_pendingSelfActivationQueuedAt.remove(windowId);
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
@@ -1037,56 +1038,8 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     Q_EMIT placementChanged(key.screenId);
 }
 
-void ScrollEngine::startCloseReflowHold(const QString& screenId)
-{
-    if (!m_closeReflowClock.isValid()) {
-        m_closeReflowClock.start();
-    }
-    // Latest close wins: a second close inside the hold pushes the deadline
-    // so ITS animation also plays out before the one flush runs.
-    m_closeReflowHoldUntil[screenId] = m_closeReflowClock.elapsed() + m_closeReflowDelayMs;
-    scheduleCloseReflowFlush(screenId);
-}
-
-bool ScrollEngine::deferForCloseReflowHold(const QString& screenId)
-{
-    const auto it = m_closeReflowHoldUntil.constFind(screenId);
-    if (it == m_closeReflowHoldUntil.constEnd()) {
-        return false;
-    }
-    if (!m_closeReflowClock.isValid() || m_closeReflowClock.elapsed() >= *it) {
-        m_closeReflowHoldUntil.remove(screenId);
-        return false;
-    }
-    // Still inside the hold: make sure a flush is coming, and tell the
-    // caller to skip its immediate applyLayout — the flush is that apply.
-    scheduleCloseReflowFlush(screenId);
-    return true;
-}
-
-void ScrollEngine::scheduleCloseReflowFlush(const QString& screenId)
-{
-    if (m_closeReflowFlushScheduled.contains(screenId)) {
-        return;
-    }
-    m_closeReflowFlushScheduled.insert(screenId);
-    const qint64 remaining = qMax<qint64>(0, m_closeReflowHoldUntil.value(screenId) - m_closeReflowClock.elapsed());
-    QTimer::singleShot(static_cast<int>(remaining) + 1, this, [this, screenId] {
-        m_closeReflowFlushScheduled.remove(screenId);
-        const auto it = m_closeReflowHoldUntil.constFind(screenId);
-        if (it != m_closeReflowHoldUntil.constEnd() && m_closeReflowClock.elapsed() < *it) {
-            // A later close pushed the deadline while this timer was armed —
-            // re-arm for the remainder rather than flushing early.
-            scheduleCloseReflowFlush(screenId);
-            return;
-        }
-        m_closeReflowHoldUntil.remove(screenId);
-        // applyLayout resolves the screen's CURRENT context itself, so a
-        // desktop switch during the hold lands this on the right strip; on
-        // a screen that stopped scrolling meanwhile it no-ops.
-        applyLayout(screenId, false);
-    });
-}
+// startCloseReflowHold / deferForCloseReflowHold / scheduleCloseReflowFlush
+// live in engine_closehold.cpp (this TU is over the file-size ceiling).
 
 void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
 {
@@ -1109,9 +1062,25 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // never this engine's emit, so its echo still drives the strip
     // (signals.cpp documents that contract).
     if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
+        // Expiry check BEFORE swallowing: an entry whose echo the compositor
+        // dropped (show desktop, focus-stealing prevention) has no reclaim
+        // path any more (see below), and without this it ate the FIRST real
+        // click on its window. Echo round trips are milliseconds; a stamp
+        // this old means the echo is dead and this report is the user.
+        const qint64 queuedAt = m_pendingSelfActivationQueuedAt.value(windowId, -1);
+        const bool expired = queuedAt < 0 || !m_selfActivationClock.isValid()
+            || m_selfActivationClock.elapsed() - queuedAt > kSelfActivationEchoExpiryMs;
         m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
                                        m_pendingSelfActivations.begin() + selfIdx + 1);
-        return;
+        for (auto stampIt = m_pendingSelfActivationQueuedAt.begin();
+             stampIt != m_pendingSelfActivationQueuedAt.end();) {
+            stampIt = m_pendingSelfActivations.contains(stampIt.key()) ? std::next(stampIt)
+                                                                       : m_pendingSelfActivationQueuedAt.erase(stampIt);
+        }
+        if (!expired) {
+            return;
+        }
+        // Fall through: adopt as genuine focus.
     }
     // Declined-open consume, m_declinedOpenFocus' read side. An
     // `openFocused = false` arrival was focused by the compositor anyway, and
@@ -1139,7 +1108,9 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // the post-close anchor ping-pong (0↔1916 several times in two seconds,
     // re-parking live windows on every bounce). The queue stays bounded
     // without the reclaim: the prefix-drop at match above, the close-time
-    // removeAll, and the kMaxPendingSelfActivations cap all still run.
+    // removeAll, and the kMaxPendingSelfActivations cap all still run — and
+    // the dropped-echo case the reclaim used to (over-)serve is now handled
+    // precisely by the per-entry expiry at the match above.
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {

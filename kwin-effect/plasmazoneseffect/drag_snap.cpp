@@ -824,7 +824,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     // path the window never occupied either. Conservative
                     // choice: any origin override in play marks the from-rect
                     // synthetic and routes the snapshot to the raw capture.
-                    mt->fromIsSynthetic = originOverride.isValid();
+                    // STICKY within the leg: a no-override retarget on a
+                    // synthetic-origin leg re-anchors at a point on the same
+                    // never-occupied path, so the marker must survive it —
+                    // clearing it would hand a pre-first-paint capture the
+                    // composite-seed path with a rect the window never held.
+                    // (Once fromGeometry is rewritten to a REAL rect, the
+                    // writer clears the flag — see beginMaximizeShaderMorph.)
+                    mt->fromIsSynthetic = originOverride.isValid() || mt->fromIsSynthetic;
                     // Gate on the compiled shader actually LINKING uOldWindow,
                     // matching the two sibling request sites (the move-start
                     // hookup and beginMaximizeShaderMorph) and the bind/unbind
