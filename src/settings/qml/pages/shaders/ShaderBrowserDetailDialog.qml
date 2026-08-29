@@ -89,6 +89,24 @@ Kirigami.Dialog {
     property var _lockedParams: ({})
     property var _shaderInfo: ({})
     property var _translatedParams: ({})
+    /// Width the zone pane renders at, in logical px, published by the pane
+    /// itself because the translation below needs it.
+    ///
+    /// A zone shader's px parameters (a border width, a corner radius) are
+    /// absolute against the SCREEN. This pane is a few hundred px standing in
+    /// for a few thousand, so the raw values draw an effect several times too
+    /// coarse for the zone rectangles beside them, which zonesForShaderPreview
+    /// has already scaled into pane space. Handing the width to
+    /// translateShaderParams is what puts the two on the same footing.
+    ///
+    /// A binding, not a handler write: `livePreviewPane` is declared in this
+    /// file, so the root can read its width directly. Floored at 1 to match the
+    /// zone geometry call, which uses the same floor — a 0 here would leave the
+    /// px parameters raw while zonesForShaderPreview scaled the geometry as if
+    /// the pane were 1px, the exact geometry/parameter mismatch this scaling
+    /// exists to avoid.
+    readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
+    on_ZonePreviewWidthChanged: _recompute()
     property string _presetError: ""
     // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
     // so the ZoneShaderItem is destroyed and recreated on every shader switch —
@@ -230,7 +248,7 @@ Kirigami.Dialog {
         // and no translateShaderParams on that controller to call.
         if (!_zonePreview)
             return;
-        _translatedParams = previewController.translateShaderParams(effect.id, _liveParams) || ({});
+        _translatedParams = previewController.translateShaderParams(effect.id, _liveParams, _zonePreviewWidth) || ({});
     }
     function _setLiveParam(id, value) {
         var next = Object.assign({}, _liveParams);
@@ -754,8 +772,8 @@ Kirigami.Dialog {
 
                     // Zones the preview renders over — shared by the renderer,
                     // the label texture, and the hover hit-test. Recomputed on
-                    // resize; the settings backend supplies a 2-zone sample so
-                    // multi-zone + per-zone-highlight effects are visible.
+                    // resize; the settings backend supplies a four-zone sample
+                    // (one master, three stack) so multi-zone + per-zone-highlight effects are visible.
                     readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
                     // Mouse position within the pane (preview pixels); -1,-1 when
                     // not hovering. Drives iMouse + the hovered-zone highlight.

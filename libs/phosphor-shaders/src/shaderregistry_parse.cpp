@@ -15,6 +15,7 @@
 
 #include "shaderregistry_parse.h"
 #include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/PixelUnits.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
@@ -96,7 +97,13 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // the UUID source if present, the `name` field overrides display
     // only.
     const QString shaderName = dir.dirName();
-    const QString metadataId = root.value(QLatin1String("id")).toString(shaderName);
+    // Fall back on an EMPTY id as well as an absent one. The schema's minLength
+    // covers the live scan, but the validateSchema=false tool path would hash
+    // every `"id": ""` pack to the same UUIDv5 and collide them all.
+    QString metadataId = root.value(QLatin1String("id")).toString();
+    if (metadataId.isEmpty()) {
+        metadataId = shaderName;
+    }
     info.id = QUuid::createUuidV5(shaderNamespaceUuid(), metadataId).toString();
     info.name = root.value(QLatin1String("name")).toString(shaderName);
     info.description = root.value(QLatin1String("description")).toString();
@@ -144,7 +151,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
     if (bufferShadersArray.size() > kMaxBufferPasses) {
         qCWarning(lcShaderRegistry) << "Shader pack" << info.name << "declares" << bufferShadersArray.size()
-                                    << "buffer shaders; only the first 4 are used";
+                                    << "buffer shaders; only the first" << kMaxBufferPasses << "are used";
     }
     bool bufferShadersDeclared = false;
     if (!bufferShadersArray.isEmpty()) {
@@ -300,6 +307,17 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         param.maxValue = paramObj.value(QLatin1String("max")).toVariant();
         param.useZoneColor = paramObj.value(QLatin1String("use_zone_color")).toBool(false);
         param.wrap = paramObj.value(QLatin1String("wrap")).toString();
+        param.unit = paramObj.value(QLatin1String("unit")).toString();
+        if (!param.unit.isEmpty() && param.unit != pixelUnit()) {
+            // Same defensive re-check `wrap` gets in translateParamsToUniforms:
+            // the schema enum-gates `unit` to ["px"] for the live scan, but the
+            // validateSchema=false tool path reaches here ungated, and an
+            // unknown token silently opting a parameter out of px scaling is
+            // worse than a warning.
+            qCWarning(lcShaderRegistry) << "Shader pack" << dir.dirName() << "param" << param.id
+                                        << "declares unknown unit" << param.unit << "- ignoring it";
+            param.unit.clear();
+        }
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);
@@ -428,6 +446,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
         const QJsonObject values = it.value().toObject();
         QVariantMap presetValues;
+        QStringList refusedImageEntries;
         for (auto vit = values.begin(); vit != values.end(); ++vit) {
             if (imageParamIds.contains(vit.key())) {
                 const QString declared = vit.value().toVariant().toString();
@@ -444,10 +463,20 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
                 const QString resolved = resolveWithinPack(dir, declared, PhosphorFsLoader::AbsolutePathPolicy::Reject);
                 if (!resolved.isEmpty()) {
                     presetValues[vit.key()] = resolved;
+                } else {
+                    refusedImageEntries.append(vit.key());
                 }
                 continue;
             }
             presetValues[vit.key()] = vit.value().toVariant();
+        }
+        if (!refusedImageEntries.isEmpty()) {
+            // Name the preset. Without this a preset whose image entries were
+            // all refused vanishes from the pack with nothing in the log
+            // pointing at which one, or why.
+            qCWarning(lcShaderRegistry).noquote() << "Shader pack" << dir.dirName() << "preset" << it.key()
+                                                  << "declares texture path(s) outside the pack; refused:"
+                                                  << refusedImageEntries.join(QLatin1String(", "));
         }
         if (!presetValues.isEmpty()) {
             info.presets[it.key()] = presetValues;

@@ -142,6 +142,31 @@ Item {
     /// zone/overlay preview has always had.
     property bool animationsPaused: false
 
+    /// Route EVERY stage through a layer texture, not just the multipass ones.
+    ///
+    /// Mandatory for a host that applies a transform to this component or
+    /// relies on an ancestor's `clip`. A SurfaceShaderItem stage is a
+    /// QSGRenderNode that discards the RenderState it is handed
+    /// (ShaderNodeRhi::render, shadernoderhicore.cpp) and computes its own
+    /// viewport from `item->width() * devicePixelRatio` and the item's mapped
+    /// ORIGIN — so a scaled ancestor moves the stage but does not resize it,
+    /// and the node overwrites the scissor Qt set for the clip. A scaled host
+    /// therefore gets full-size stages drawn at scaled positions, spilling
+    /// over whatever is beside them.
+    ///
+    /// Layering removes the problem rather than working around it: the node
+    /// renders into an FBO sized to its own item (which is what it thinks it
+    /// is drawing at anyway), and the scene graph composites THAT texture with
+    /// the full transform and clip, like any other textured node. Multipass
+    /// stages already take this path for their own reasons, which is why the
+    /// blur family survived a scaled host while every single-pass pack escaped
+    /// its bounds.
+    ///
+    /// False by default: the daemon's overlay surfaces are drawn untransformed
+    /// at 1:1, and a layer per stage there would be a canvas-sized FBO for
+    /// nothing.
+    property bool layeredStages: false
+
     /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
     /// active from an inactive appearance keys on it — the border family mixes
     /// its two colours on it, and focus-fade washes the whole surface out when
@@ -237,6 +262,13 @@ Item {
     /// dismiss path forces via the mode="" / loaded=false unload).
     property Item shaderAnchorItem: null
 
+    /// Whether _applyAnchorRouting actually demoted the current anchor, so the
+    /// un-demote below RESTORES rather than promotes. Writing `true`
+    /// unconditionally would turn an anchor that declared `shaderAnchor: false`
+    /// into a tagged one on a content swap. No in-tree host declares it false
+    /// today, which is the only reason that was invisible.
+    property bool _anchorDemoted: false
+
     function _resolveAnchor() {
         // Un-demote the anchor we are leaving before dropping our reference: if
         // it was demoted (shaderAnchor=false while decorationActive), it would
@@ -246,8 +278,9 @@ Item {
         // Guard the property write: _findShaderAnchor may match by objectName
         // alone (mirroring SurfaceAnimator), and assigning a nonexistent
         // property on such an anchor would throw in QML JS.
-        if (shaderAnchorItem && shaderAnchorItem.shaderAnchor !== undefined)
+        if (_anchorDemoted && shaderAnchorItem && shaderAnchorItem.shaderAnchor !== undefined)
             shaderAnchorItem.shaderAnchor = true;
+        _anchorDemoted = false;
         shaderAnchorItem = contentItem ? _findShaderAnchor(contentItem) : null;
         _applyAnchorRouting();
     }
@@ -267,8 +300,17 @@ Item {
     function _applyAnchorRouting() {
         // Same objectName-matched-anchor guard as _resolveAnchor: only demote /
         // restore via the property when the anchor actually declares it.
-        if (root.shaderAnchorItem && root.shaderAnchorItem.shaderAnchor !== undefined)
-            root.shaderAnchorItem.shaderAnchor = !root.decorationActive;
+        if (!root.shaderAnchorItem || root.shaderAnchorItem.shaderAnchor === undefined)
+            return;
+        if (root.decorationActive) {
+            root.shaderAnchorItem.shaderAnchor = false;
+            root._anchorDemoted = true;
+        } else if (root._anchorDemoted) {
+            // Restore, never promote: only a demotion we made ourselves is ours
+            // to undo.
+            root.shaderAnchorItem.shaderAnchor = true;
+            root._anchorDemoted = false;
+        }
     }
 
     onDecorationActiveChanged: root._applyAnchorRouting()
@@ -412,28 +454,72 @@ Item {
             /// something is actually wrong.
             readonly property bool stageSettled: stageItem.status === SurfaceShaderItem.Ready || stageItem.status === SurfaceShaderItem.Error
             readonly property bool stageErrored: stageItem.status === SurfaceShaderItem.Error
-            onStageSettledChanged: root._settledStageCount += stage.stageSettled ? 1 : -1
-            onStageErroredChanged: root._erroredStageCount += stage.stageErrored ? 1 : -1
-            Component.onCompleted: {
-                if (stage.stageSettled)
-                    root._settledStageCount += 1;
-                if (stage.stageErrored)
-                    root._erroredStageCount += 1;
+
+            /// What this delegate has ALREADY contributed to each root counter.
+            ///
+            /// The counters are maintained by three arms (the status change,
+            /// creation, destruction) and a stage that settles DURING delegate
+            /// creation runs two of them for the same event: the change handler
+            /// fires while the component is being built and Component.onCompleted
+            /// then adds the same stage a second time. Destruction only ever
+            /// subtracted one, so the count never returned to 0 and chainReady
+            /// could be true with a stage still compiling. Mirroring the
+            /// contribution here makes every arm idempotent: each stage is worth
+            /// exactly one, whenever its status happens to settle.
+            property bool _settledCounted: false
+            property bool _erroredCounted: false
+            /// Released by the Repeater. The delegate lingers (deleteLater) with
+            /// its status bindings still live, so it must never re-enter the
+            /// counts after handing its contribution back.
+            property bool _released: false
+
+            function _syncCounts() {
+                if (stage._released)
+                    return;
+                if (stage.stageSettled !== stage._settledCounted) {
+                    root._settledStageCount += stage.stageSettled ? 1 : -1;
+                    stage._settledCounted = stage.stageSettled;
+                }
+                if (stage.stageErrored !== stage._erroredCounted) {
+                    root._erroredStageCount += stage.stageErrored ? 1 : -1;
+                    stage._erroredCounted = stage.stageErrored;
+                }
             }
-            Component.onDestruction: {
-                if (stage.stageSettled)
+
+            // Hand back whatever this delegate contributed. Guarded by the same
+            // flags the sync arm keeps, so calling it at removal AND again at
+            // destruction subtracts once.
+            function _releaseCounts() {
+                if (stage._settledCounted) {
                     root._settledStageCount -= 1;
-                if (stage.stageErrored)
+                    stage._settledCounted = false;
+                }
+                if (stage._erroredCounted) {
                     root._erroredStageCount -= 1;
+                    stage._erroredCounted = false;
+                }
+                stage._released = true;
             }
+
+            onStageSettledChanged: stage._syncCounts()
+            onStageErroredChanged: stage._syncCounts()
+            Component.onCompleted: stage._syncCounts()
+            Component.onDestruction: stage._releaseCounts()
 
             // Called by the Repeater's onItemRemoved when this delegate is
             // released: imperative assignment clears the animator tags AND
             // severs their bindings, so the deleteLater-pending item cannot
             // re-tag itself against the successor chain.
+            //
+            // The counter contribution goes back HERE rather than at destruction
+            // for the same reason: the Repeater destroys released delegates
+            // later, so across a same-packId recompose the old stages were still
+            // counted as settled and chainReady read true (and chainHasError
+            // reported the OLD chain) before a single new stage had compiled.
             function detagAnchors() {
                 stageItem.shaderAnchor = false;
                 stageItem.shaderAnchorOverride = false;
+                stage._releaseCounts();
             }
 
             anchors.fill: parent
@@ -452,20 +538,21 @@ Item {
                 // instead of its dummy, and the node raises uHasBackdrop off
                 // exactly that. Every stage in the chain gets the same
                 // backdrop, mirroring how each sees the same canvas.
-                // wallpaperTexture is a QImage property, so it only binds
-                // while a texture actually exists — the old
-                // `? ... : undefined` fallback tried to assign undefined to a
-                // QImage and logged an engine warning on every re-evaluation
-                // with no backdrop. useWallpaper is what gates sampling, so
-                // whatever stale image the property holds while unbound is
-                // never read.
+                //
+                // A PLAIN binding, and it has to stay one. This was a
+                // `Binding on wallpaperTexture { when: ...; value: ... }`,
+                // which wrote NOTHING — silently, no engine warning, while the
+                // useWallpaper binding right above it applied normally. Every
+                // decoration preview in the settings app therefore ran with
+                // uHasBackdrop = 0 and drew its no-backdrop fallback: the blur
+                // family showed its flat gradient slab where a blurred desktop
+                // belonged, and mosaic showed a tint slab with no cells at
+                // all. The property is a QVariant now (see
+                // ShaderEffect::setWallpaperTextureVariant), so a host with
+                // nothing to show can pass null or undefined straight through
+                // without the guard that broke it.
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
-
-                Binding on wallpaperTexture {
-                    when: root.backdropTexture !== null && root.backdropTexture !== undefined
-                    value: root.backdropTexture
-                    restoreMode: Binding.RestoreNone
-                }
+                wallpaperTexture: root.backdropTexture
 
                 // Which slice of that shared backdrop lies behind THIS stage.
                 // Both rects are in the host's coordinate space, so the item
@@ -638,7 +725,7 @@ Item {
                 // taps below still capture a layered stage: layer.enabled
                 // changes where the item renders, not whether it renders, so
                 // the hide-source fold is unaffected.
-                layer.enabled: stage.stageData.multipass === true && root.decorationActive
+                layer.enabled: (stage.stageData.multipass === true || root.layeredStages) && root.decorationActive
                 // Qt's DEFAULT mirroring (MirrorVertically), which differs from
                 // the NoMirroring ZoneShaderRenderer.qml sets. That difference
                 // is NOT a designed distinction between the two hosts: the zone
@@ -659,6 +746,25 @@ Item {
                 // pack (the whole glass/blur family) while single-pass packs
                 // stayed upright.
                 layer.textureMirroring: ShaderEffectSource.MirrorVertically
+                // Filtered minification for a host that shrinks the composed
+                // decoration (layeredStages implies exactly that). Drawing a
+                // busy shader's layer at 60% with plain bilinear filtering
+                // point-samples every other texel: fine mosaic cells, frost
+                // grain and blur noise BREAK UP rather than shrink, so the
+                // thumbnail stops reading as the same effect as the full-size
+                // one even when it was composed from identical geometry and
+                // parameters. A mip chain is what makes it an honest miniature.
+                //
+                // Only for the scaling host: at 1:1 the mip levels are never
+                // sampled and building them is pure cost, which is what the
+                // daemon's overlay surfaces would be paying.
+                //
+                // And only on the LAST stage. An intermediate stage's layer
+                // texture is never composited by the scene graph — the next
+                // stage's `tap` captures it instead — so its mip chain would be
+                // rebuilt every frame for a texture nothing samples through it.
+                layer.mipmap: root.layeredStages && stage.isLast
+                layer.smooth: root.layeredStages && stage.isLast
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on

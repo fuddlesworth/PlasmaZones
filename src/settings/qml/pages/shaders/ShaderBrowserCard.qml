@@ -263,6 +263,10 @@ ItemDelegate {
                         // torn-down chain reads as every decoration preview
                         // blinking out while the overlay previews carry on.
                         animationsPaused: !root.previewAnimating
+                        // No audioSpectrum, deliberately: an audio-reactive pack
+                        // reads inert here and alive in the detail dialog. A live
+                        // CAVA feed per visible card is real cost for a catalogue
+                        // entry, and the dialog is where a pack is actually judged.
                         cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
                     }
                 }
