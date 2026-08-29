@@ -484,9 +484,16 @@ public:
     /// Shed half of applyFloatCleanup for the WindowTracking float channel
     /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never
     /// reach this handler's slot and so never run applyFloatCleanup. Drops
-    /// the windowed-fullscreen hold, the clear-in-flight marker, the
-    /// counter-assert rect, the centering targets and the parked paint hint
-    /// (with damage), and re-drives decorations.
+    /// the windowed-fullscreen hold AND the column-maximize mirror (both
+    /// through releaseAllClaims, on the PassiveFloat scope), the
+    /// clear-in-flight marker, the counter-assert rect, the centering targets
+    /// and the parked paint hint (with damage), and re-drives decorations.
+    ///
+    /// Monocle is the one claim this path does NOT release, and that blank is
+    /// the PassiveFloat row's recorded DECISION rather than an omission:
+    /// re-driving a maximize restore off a passive float signal has not been
+    /// shown safe against the monocle batch that owns that membership. The
+    /// definition carries the full argument.
     void applyPassiveFloatShed(const QString& windowId);
 
     /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
@@ -1070,6 +1077,13 @@ private:
      * overlay, and unmaximizes monocle (title-bar restores flow through the
      * rule path). Used by the per-window D-Bus signal, batch float, and
      * drag-to-float paths.
+     *
+     * ALL THREE COMPOSITOR CLAIMS are released here, not just monocle: the
+     * windowed-fullscreen hold goes first (before the geometry work, which is
+     * why it is not folded into the funnel call), and the column-maximize
+     * mirror goes through releaseAllClaims with it. A floating window is
+     * leaving the strip, so no later batch arrives carrying a cleared flag —
+     * see the StripExit row of the claim-scope table.
      */
     void applyFloatCleanup(const QString& windowId);
 

@@ -284,10 +284,15 @@ public Q_SLOTS:
      *
      * @param screenId Screen whose column to toggle; empty is ignored
      * @param windowId Window naming the column; empty targets the FOCUSED
-     *        column (the shortcut's meaning). A named window targets the
-     *        column holding it and is ignored when the strip does not hold
-     *        it, so a maximize request from a window that never took focus
-     *        cannot resize another column.
+     *        column. A named window targets the column holding it and is
+     *        ignored when the strip does not hold it, so a maximize request
+     *        from a window that never took focus cannot resize another column.
+     *
+     *        The empty spelling is accepted for completeness, not because
+     *        anything sends it here: the keyboard shortcut reaches the engine
+     *        IN-PROCESS and never crosses this boundary, and the only in-tree
+     *        wire caller is the KWin effect's maximize interception, which
+     *        always names the requesting window.
      */
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 

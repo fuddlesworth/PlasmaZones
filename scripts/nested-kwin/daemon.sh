@@ -137,7 +137,20 @@ for _ in $(seq 1 30); do
 done
 if [ -n "$up" ]; then
     echo "daemon up (pid $(cat "$NEST/daemon.pid"), owns org.plasmazones); screens:"
-    qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+    # The screen dump is a convenience, so a missing qdbus6 must not fail a
+    # run that is otherwise healthy: the bus-name check above has ALREADY
+    # established the daemon is up, and exiting non-zero here would report a
+    # working session as a failure. Distros ship this binary under three
+    # different names.
+    if command -v qdbus6 >/dev/null 2>&1; then
+        qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+    elif command -v qdbus-qt6 >/dev/null 2>&1; then
+        qdbus-qt6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+    elif command -v qdbus >/dev/null 2>&1; then
+        qdbus org.plasmazones /PlasmaZones org.plasmazones.Screen.getPhysicalScreens
+    else
+        echo "  (no qdbus6/qdbus-qt6/qdbus on PATH; skipping the screen dump)"
+    fi
 else
     echo "daemon FAILED to claim org.plasmazones; see $NEST/daemon.log" >&2
     exit 1

@@ -28,7 +28,12 @@ confirmation pass. That is the cost of the current shape, measured on one PR.
 
 ## Evidence
 
-Three ledgers, released from **26** call sites:
+Three ledgers, released from **26** call sites. That count and the table below
+are the **pre-funnel** measurement, taken before `releaseAllClaims` existed.
+They are the evidence for the funnel rather than a description of the tree
+after it, so do not read them as current: the funnel replaced most of these
+sites with one call carrying a `ClaimScope`, and the scope table in
+`scrolldecisions.h` is the authority on what releases where today.
 
 | ledger | release calls |
 |---|---|
