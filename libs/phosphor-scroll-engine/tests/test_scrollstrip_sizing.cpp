@@ -239,7 +239,10 @@ void TestScrollStripSizing::maximizeToggleRefusesAColumnPinnedByItsMinimum()
     // BY ROLE: a symmetric minimum would set the cross floor past the cross
     // extent, which is a different refusal entirely.
     const QSize pinned = Ax::t(QSize(mainExtent, 0));
-    strip.setWindowMinimumSize(QStringLiteral("a"), pinned.width(), pinned.height());
+    // Verdict wrapped like the ~25 siblings in this file: this was the only
+    // bare call, and a setter that started refusing would leave the column
+    // unpinned, turning the refusal assertion below into a test of nothing.
+    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("a"), pinned.width(), pinned.height()));
 
     const int beforeMain = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
     QCOMPARE(beforeMain, mainExtent);
@@ -378,6 +381,12 @@ void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
     QVERIFY2(aHeight < bHeight, "the second press must keep shrinking from where the first left the column");
 
     // One owner, and it is the tab that was pressed.
+    //
+    // The pointer is read across several relayout() calls below, which is safe
+    // because relayout() is const and cannot reallocate m_columns. Any
+    // MUTATING call in between would invalidate it, so re-fetch rather than
+    // extending this pointer's life past one — the sibling slot below does
+    // exactly that after its ownership press.
     const Column* col = strip.activeColumn();
     QVERIFY(col);
     QCOMPARE(col->heightOwnerId, QStringLiteral("a"));

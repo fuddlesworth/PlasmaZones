@@ -755,10 +755,15 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // the whole point of the split; asserting the silence above without this
     // would pass just as well against a verb that had gone mute entirely.
     const PhosphorScrollEngine::ColumnWidth aBeforeKey = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeKey = widthOf(QStringLiteral("app|b"));
     QSignalSpy keyFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
     engine->toggleMaximizeColumn(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeKey, "an empty windowId must still target the active column");
+    // The sibling is checked here too, matching the two named arms above: on
+    // its own, "the active column changed" passes for a verb that widened
+    // BOTH columns.
+    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeKey, "the empty spelling must leave the other column alone");
     QCOMPARE(keyFeedback.count(), 1);
     QCOMPARE(keyFeedback.at(0).at(0).toBool(), true);
     QCOMPARE(keyFeedback.at(0).at(1).toString(), QStringLiteral("resize"));
@@ -1747,11 +1752,34 @@ void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
     // lexicographic minimum of the active set — QSet iteration order is
     // unspecified, so reverting the deterministic pick is invisible to a
     // casual repro but not to this assertion.
+    //
+    // EIGHT screens, not two. The reverted implementation this pins against
+    // reads QSet iteration order, and against a two-element set that lands on
+    // the right answer about half the time — so the old fixture passed for a
+    // broken engine on a coin flip. The set is also seeded in an order whose
+    // first-inserted element is NOT the answer, so an implementation reading
+    // insertion order fails too.
+    //
+    // The residual is 1 in 8: if the hash order happened to start at "S1"
+    // AND the pick were reverted, this would still pass. Driving it a second
+    // time with a set whose minimum is a different string closes most of what
+    // is left, since one hash order cannot favour both.
     QObject owner;
     auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
-    engine->setActiveScreens({QStringLiteral("S2"), QStringLiteral("S1")});
+    engine->setActiveScreens({QStringLiteral("S7"), QStringLiteral("S3"), QStringLiteral("S5"), QStringLiteral("S8"),
+                              QStringLiteral("S1"), QStringLiteral("S4"), QStringLiteral("S6"), QStringLiteral("S2")});
     engine->setWindowFloat(QStringLiteral("app|f"), false, QString());
     QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|f")), QStringLiteral("S1"));
+
+    // Same question, different answer, so no single iteration order satisfies
+    // both arms.
+    QObject owner2;
+    auto* engine2 = new ScrollEngine(nullptr, nullptr, &owner2);
+    engine2->setActiveScreens({QStringLiteral("eDP-1"), QStringLiteral("HDMI-2"), QStringLiteral("DP-9"),
+                               QStringLiteral("DP-3"), QStringLiteral("HDMI-1"), QStringLiteral("DP-1"),
+                               QStringLiteral("eDP-2"), QStringLiteral("DP-2")});
+    engine2->setWindowFloat(QStringLiteral("app|g"), false, QString());
+    QCOMPARE(engine2->screenForTrackedWindow(QStringLiteral("app|g")), QStringLiteral("DP-1"));
 }
 
 void TestScrollEngineSmoke::minSizeSeedsAndCarries()
