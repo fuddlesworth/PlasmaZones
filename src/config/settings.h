@@ -1374,6 +1374,19 @@ public:
     void setScrollingAlwaysCenterSingleColumn(bool center);
     bool scrollingSmartGaps() const override;
     void setScrollingSmartGaps(bool enabled);
+    /// Derived, not stored (no config key, no setter): the close-settle hold
+    /// exists to let the window-close animation play over an unchanged strip,
+    /// so its length tracks the GLOBAL animation duration, and a session with
+    /// animations off has nothing to wait for. Deliberately an approximation:
+    /// the effect resolves the actual window.close leg per window (per-event
+    /// motion-node duration overrides, Rule timing slots, and spring curves
+    /// whose lifetime comes from settleTime()), and that per-window outcome
+    /// is what the daemon cannot observe (the tree's static per-event
+    /// duration is readable here; the resolved leg is not) — so an
+    /// overridden or spring close can outlive the hold, and a
+    /// per-window animation exclusion still pays it. Tracking the real leg
+    /// would need effect→daemon plumbing; not worth it for a cosmetic hold.
+    int scrollingCloseReflowDelayMs() const override;
     bool scrollingCropStraddlers() const override;
     void setScrollingCropStraddlers(bool crop);
     bool scrollingDragScrollEnabled() const override;

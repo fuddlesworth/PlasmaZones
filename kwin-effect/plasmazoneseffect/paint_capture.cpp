@@ -208,7 +208,16 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // rect wearing the same resolved decoration, so the arriving side's live
     // fold already draws the pane the outgoing side is missing, in the same
     // place, at the same size.
-    if (src == window) {
+    // NOT for a synthetic departure rect (see fromIsSynthetic): the map below
+    // is anchored on the assumption that the composite was folded at
+    // fromGeometry, and a scroll-batch originOverride (an unpark's screen-edge
+    // origin) is a rect the window never occupied — while its composite is
+    // frozen at the last PRE-park fold besides. The intersection can still be
+    // non-empty for any column that scrolled off the same edge before parking,
+    // and the blit then seeds a stale, mis-registered slice as the "old"
+    // content for the whole leg. The raw capture below is
+    // position-independent and correct for exactly this case.
+    if (src == window && !transition.fromIsSynthetic) {
         if (const auto mpIt = m_surfaceMultipass.find(getWindowId(src)); mpIt != m_surfaceMultipass.end()) {
             const SurfaceMultipassState& mp = mpIt->second;
             KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();

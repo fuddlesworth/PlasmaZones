@@ -289,6 +289,11 @@ public:
     /// the bit is owed back. The new session heals it, because the first batch resolves an absent wire flag against
     /// surviving membership to a Release. Adding to the teardown list is a separate decision — see the
     /// serviceUnregistered handler for what belongs there and why.
+    ///
+    /// Two further deliberate exceptions, both self-healing rather than drained: m_maximizeToggleInFlight entries
+    /// expire on read via MaximizeToggleFlightMs, and m_windowedFsClearInFlight is reply-gated — a toggle or clear
+    /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
+    /// so a drain here would only race the same cleanup.
     void clearPerSessionDaemonState();
 
     /**
@@ -593,6 +598,17 @@ public:
     /// statement about where it is heading. Fails closed (false) on a null
     /// window, degenerate geometry, or no resolvable outputs.
     bool atScrollPark(KWin::EffectWindow* w) const;
+
+    /// The rect form of the same question, asked of a TARGET rect instead of
+    /// a live frame: true when @p rect lies entirely off the union of every
+    /// connected output. This is the "is this commit heading to a park?"
+    /// test the batch apply's animation guards need — a commit whose target
+    /// intersects no output must never receive an animated leg (the leg
+    /// would sweep the window visibly across the screen to a rect chosen
+    /// purely for being invisible). Fails closed (false) on an empty rect or
+    /// no resolvable outputs, mirroring atScrollPark: the fallback is the
+    /// ordinary animated leg, which is what an on-screen target should get.
+    bool rectAtScrollPark(const QRect& rect) const;
 
     /// Cheap gate for callers that want to skip scroll-specific work in a
     /// session with no scrolling screens at all. RAW set, deliberately NOT

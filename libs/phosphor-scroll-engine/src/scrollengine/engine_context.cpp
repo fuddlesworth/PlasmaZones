@@ -107,6 +107,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // left behind it would eat the first genuine focus of a reused id
         // (windowClosed and releaseScreenState sweep for the same reason).
         m_pendingSelfActivations.removeAll(windowId);
+        m_pendingSelfActivationQueuedAt.remove(windowId);
         // The declined-open marker with it. This sweep matters more for that
         // map than for the one above: the marker's other three sweeps all hang
         // off a windowClosed signal, and a window that dies WITHOUT one — the
@@ -514,6 +515,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
         // a stale entry would swallow the first genuine focus of a reused
         // id (windowClosed and releaseScreenState sweep the same way).
         m_pendingSelfActivations.removeAll(windowId);
+        m_pendingSelfActivationQueuedAt.remove(windowId);
         // Identical reasoning, and the same reused-id hazard: a declined-open
         // marker left behind swallows the first genuine focus the next window
         // to take this id receives. Unlike its sibling above it carries no

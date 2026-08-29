@@ -166,10 +166,18 @@ bool PlasmaZonesEffect::isActive() const
     // transition) this clause is what keeps KWin calling us. Without it the
     // next damage in the pill band recomposited without the blit and erased
     // the pills.
+    // `!m_scrollCorpseFreeze.isEmpty()` keeps the corpse-displacement paint
+    // arms running for a closing window riding a FOREIGN close animation
+    // (ours declined: animations off, or the window excluded) — the freeze's
+    // contract is "with or without our close shader", and without this clause
+    // that promise held only while some other clause coincidentally kept the
+    // effect in the chain (the spring settling mid-fade dropped it, jumping
+    // the corpse by the frozen offset). O(1); entries are bounded by corpse
+    // lifetime (sole erase at windowDeleted).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
-        || m_scrollTabPainter->hasAnyIndicators();
+        || m_scrollTabPainter->hasAnyIndicators() || !m_scrollCorpseFreeze.isEmpty();
 }
 
 void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)
