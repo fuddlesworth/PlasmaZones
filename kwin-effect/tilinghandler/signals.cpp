@@ -378,6 +378,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                              << "- reconcile deferred to the next batch";
             m_effect->updateAllDecorations();
         }
+        // Pay any maximize claim on the way out. This branch RETURNS, so the
+        // fullscreen-exit repair further down is unreachable from here, and
+        // both releases skipped while the window was still fullscreen — this
+        // is the first point at which they can succeed. Leaving them unpaid
+        // relies on the next batch, and the engine emits on change, so a
+        // strip at rest schedules none. Both are no-ops for a non-member.
+        unmaximizeMonocleWindow(windowId);
+        releaseColumnMaximized(windowId, w);
         return;
     }
     if (!w->isFullScreen()) {

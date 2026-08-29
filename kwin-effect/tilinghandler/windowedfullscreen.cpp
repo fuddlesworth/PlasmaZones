@@ -346,7 +346,13 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
     // in slotWindowFullScreenChanged, or until a teardown restore. Retaining
     // is still the better half of that trade — the old shed left the same bit
     // stranded with nothing even recording that we owed it.
-    if (kw->isRequestedFullScreen()) {
+    // Mid-gesture is a retain too, on the same terms as the fullscreen skip
+    // and for the reason the batch Apply arm spells out: maximize() moveResizes
+    // to the restore rect, and the geometry apply that would override it defers
+    // during a drag, so releasing here snaps the window out from under the
+    // user's pointer. Membership stands, so the next batch after the gesture
+    // pays it.
+    if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
         return;
     }
     m_columnMaximizedWindows.remove(windowId);
@@ -508,28 +514,46 @@ void TilingHandler::restoreAllMonocleMaximized()
         m_effect->m_daemonGate.inGeometryApply = prevInApply;
     });
     ++m_suppressMaximizeChanged;
+    const auto suppressGuard = qScopeGuard([this] {
+        --m_suppressMaximizeChanged;
+    });
     for (const QString& wid : ids) {
         // EXACT resolve — same sibling hazard as unmaximizeMonocleWindow.
+        //
+        // RETENTION ON EVERY UNPAID ARM, matching restoreAllColumnMaximized.
+        // The two functions are twins and used to argue opposite positions
+        // about the same situation: this one dropped a skipped member on the
+        // grounds that the skip "IS the effect giving up ownership", while its
+        // column sibling put the entry back on the grounds that dropping a bit
+        // that was never handed back strands it. The column reading is the
+        // right one, and it applies here identically — on the daemon-loss and
+        // engine-disable callers the effect keeps running and a later arm can
+        // still pay. Worse here than there, in fact: the sole insert site is
+        // gated on the window NOT already being maximized, so a dropped entry
+        // is never re-established by any batch.
         KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
-        if (w) {
-            KWin::Window* kw = w->window();
-            // Fullscreen members are skipped for the reason spelled out in
-            // unmaximizeMonocleWindow: maximize() has no fullscreen
-            // conditional and would moveResize a presenting surface down to
-            // its restore rect. Membership was cleared before the loop, so a
-            // skipped member loses it here — which is right, because this IS
-            // the effect giving up ownership.
-            if (kw && !kw->isRequestedFullScreen()) {
-                kw->maximize(KWin::MaximizeRestore);
-                // Same tracker re-seed as unmaximizeMonocleWindow, and more
-                // load-bearing here: the daemon-loss caller has no apply
-                // path left to heal a stale entry, and neither the teardown nor
-                // drainDeadSessionState clears this map across the restart.
-                m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
-            }
+        if (!w) {
+            m_monocleMaximizedWindows.insert(wid);
+            continue;
         }
+        KWin::Window* kw = w->window();
+        if (!kw) {
+            m_monocleMaximizedWindows.insert(wid);
+            continue;
+        }
+        // Fullscreen members are skipped for the reason spelled out in
+        // unmaximizeMonocleWindow: maximize() has no fullscreen conditional
+        // and would moveResize a presenting surface down to its restore rect.
+        if (kw->isRequestedFullScreen()) {
+            m_monocleMaximizedWindows.insert(wid);
+            continue;
+        }
+        kw->maximize(KWin::MaximizeRestore);
+        // Same tracker re-seed as unmaximizeMonocleWindow, and more
+        // load-bearing here: the daemon-loss caller has no apply path left to
+        // heal a stale entry.
+        m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
     }
-    --m_suppressMaximizeChanged;
 }
 
 void TilingHandler::forgetWindowedFullscreen(const QString& windowId)

@@ -520,7 +520,15 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     }
     for (KWin::EffectWindow* w : std::as_const(columnMaximizedLeavingScrolling)) {
         if (w && !w->isDeleted()) {
-            releaseColumnMaximized(m_effect->getWindowId(w), w);
+            const QString wid = m_effect->getWindowId(w);
+            // Monocle goes with it. The claim table says a mode flip releases
+            // all three, and this loop paid two — a monocle member on a screen
+            // leaving the scrolling set has no strip left to hand its bit
+            // back, and the destination engine's first batch only covers a
+            // window it TILES. No-op for a non-member, and it must precede the
+            // column release for the funnel's stated order.
+            unmaximizeMonocleWindow(wid);
+            releaseColumnMaximized(wid, w);
         }
     }
 
@@ -749,7 +757,15 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // BEFORE the accumulator: NaN passes qFuzzyIsNull, poisons the running
     // total, and then fails every subsequent magnitude comparison, so the
     // chord would swallow every event on that axis while firing nothing.
-    if (qFuzzyIsNull(delta) || !std::isfinite(delta)) {
+    //
+    // Gated on deltaV120 being ABSENT, because the notch conversion below
+    // prefers that field and reads `delta` only as a fallback. Testing delta
+    // unconditionally dropped an event carrying a nonzero v120 with a zero or
+    // non-finite smooth delta, and took its banked remainder with it. When
+    // v120 carries the event `delta` is never read, so a NaN there cannot
+    // reach the accumulator either way.
+    const bool useV120 = deltaV120 != 0;
+    if (!useV120 && (qFuzzyIsNull(delta) || !std::isfinite(delta))) {
         resetWheelAccumulators();
         return false;
     }

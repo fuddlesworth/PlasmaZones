@@ -161,7 +161,24 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // own maximize, so the click does nothing at all. Empty in, empty out, so
     // the active-column spelling above is untouched.
     const QString canonicalId = canonicalizeForLookup(windowId);
-    P_SCROLL_VERB(screenId,
+    // RESOLVE FROM THE WINDOW when one is named, not from the caller's screen.
+    //
+    // P_SCROLL_RESOLVE keys on the screen's CURRENT desktop and activity, so a
+    // named window sitting on a background context of that screen resolves
+    // against a strip that does not hold it, columnOfWindow answers -1 and the
+    // verb refuses — silently, after the compositor has already cancelled
+    // KWin's maximize. The two sibling window-keyed verbs below both resolve
+    // through the window for exactly this reason. The empty spelling keeps the
+    // caller's screen, because "the active column" is a question about a
+    // screen and not about any window.
+    QString resolvedScreen = screenId;
+    if (!canonicalId.isEmpty()) {
+        PhosphorEngine::PlacementStateKey windowKey;
+        if (stateForWindow(canonicalId, &windowKey)) {
+            resolvedScreen = windowKey.screenId;
+        }
+    }
+    P_SCROLL_VERB(resolvedScreen,
                   canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
                                         : state->strip().toggleMaximizeColumnForWindow(canonicalId, params),
                   "resize", false, QString());

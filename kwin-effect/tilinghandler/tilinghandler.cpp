@@ -1109,6 +1109,15 @@ void TilingHandler::drainDeadSessionState()
     // effect's flags are stale; the adopt-on-batch arm re-establishes them
     // from the new daemon's truth. Idempotent after the teardown's release.
     restoreAllWindowedFullscreen();
+    // Monocle belongs to the dead session on the same terms, and this was the
+    // one bulk-restore caller that omitted it — the teardown sites all call
+    // the three together. Its own re-establishment is weaker than the column
+    // mirror's, which is why leaving it is worse here than there: the sole
+    // insert site is gated on the window NOT already being maximized, so a
+    // surviving entry is never refreshed and never re-derived from the new
+    // daemon's truth. It runs after the fullscreen release, per the claim
+    // order, and before the column mirror.
+    restoreAllMonocleMaximized();
     // The column-maximize mirror belongs to the dead session too, and the
     // batch Apply arm re-establishes it from the new daemon's truth.
     restoreAllColumnMaximized();

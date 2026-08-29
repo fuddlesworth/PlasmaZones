@@ -2466,6 +2466,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()
                         && !fullscreenBailSkippedCommit && !scrollDeliveredRect.isNull()) {
                         m_effect->m_scrollCommandedRects.insert(snap.windowId, {scrollDeliveredRect, 0, 0});
+                    } else {
+                        // DISARM, the way the X11 and monocle arms both do.
+                        // This was the only one of the three that armed
+                        // without ever removing, and the entry it left is not
+                        // inert: externallyMovable reads ledger membership for
+                        // a Wayland window, and membership legitimately
+                        // outlives the maximize on the retain-on-fullscreen
+                        // arm — so a window that left fullscreen without
+                        // floating kept a stale full-column rect armed and got
+                        // yanked back to it on any frame change outside an
+                        // apply. Dropping the entry disarms the counter until
+                        // the next batch commands something.
+                        m_effect->m_scrollCommandedRects.remove(snap.windowId);
                     }
                     // A STRIP entry never takes the reactive centring pass.
                     //
