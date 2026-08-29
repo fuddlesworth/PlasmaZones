@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorCompositor/DaemonClient.h>
+#include <PhosphorProtocol/BridgeMarshalling.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
@@ -68,7 +69,11 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::CompositorBridge, QStringLiteral("registerBridge"));
-    msg << compositorId << apiVersion << capabilities;
+    // The version rides as a STRING: the adaptor's parameter is `s`, so an int
+    // here does not merely mis-type — the call fails to dispatch at all and
+    // registration never completes, which is what made the under-versioned
+    // daemon guard below unreachable.
+    msg << compositorId << QString::number(apiVersion) << capabilities;
 
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
@@ -80,14 +85,19 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
             return;
         }
 
-        QDBusPendingReply<QString, int> reply = *w;
+        // ONE struct out-arg, not two scalars. The adaptor returns
+        // BridgeRegistrationResult (apiVersion, bridgeName, sessionId), so
+        // reading a (QString, int) pair took the VERSION string as the session
+        // id and never saw the version at all.
+        QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
         if (!reply.isValid()) {
             Q_EMIT bridgeRejected(QStringLiteral("Invalid reply"));
             return;
         }
 
-        m_sessionId = reply.argumentAt<0>();
-        int peerVersion = reply.argumentAt<1>();
+        const PhosphorProtocol::BridgeRegistrationResult result = reply.value();
+        m_sessionId = result.sessionId;
+        const int peerVersion = result.apiVersion.toInt();
 
         if (m_sessionId == QLatin1String("REJECTED")) {
             // No session was established: a later reader must not see the

@@ -106,6 +106,17 @@ HOME_N="$NEST/home"
 # script sources, so sharing one across two sessions points them both at
 # whichever started last.
 PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested}"
+# Validated like the numeric arguments above, and for a sharper reason: this
+# one is interpolated into the `sh -c` command text and into env.sh below, so a
+# name carrying a space, a quote or a shell metacharacter either breaks every
+# follow-up script or runs as shell. It is a wayland socket NAME, so the
+# character class is not a restriction anyone will notice.
+case "$PZ_NESTED_SOCKET" in
+    ''|*[!A-Za-z0-9._-]*)
+        echo "PZ_NESTED_SOCKET must be a plain socket name matching [A-Za-z0-9._-]+, got '$PZ_NESTED_SOCKET'" >&2
+        exit 1
+        ;;
+esac
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$PZ_NESTED_SOCKET"
 if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     echo "refusing: $SOCK exists and is not a socket; remove it by hand" >&2

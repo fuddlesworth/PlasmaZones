@@ -26,6 +26,14 @@
  *     silently (inclusive at both bounds), and write the intent kind each
  *     form documents — width proportion exact, width/height px Fixed, height
  *     proportion a Preset anchor that relayout snaps to the height vocabulary.
+ *  4. toggleMaximizeColumn takes the same ownership, empty-screen and
+ *     per-context gates as the setters, its toggle round trip returns the
+ *     column to the width it started at, and — the one thing no other call
+ *     here can see — its windowId argument is FORWARDED rather than dropped.
+ *     The engine's parameter is defaulted, so an adaptor that swallowed the
+ *     id would compile and silently revert to acting on whichever column
+ *     happens to be active, which is the behaviour the wire argument exists
+ *     to replace.
  */
 
 #include <QTest>

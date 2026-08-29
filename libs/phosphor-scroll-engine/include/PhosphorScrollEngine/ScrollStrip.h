@@ -738,8 +738,22 @@ private:
     /// Whether an explicit pan owns the view instead of the centering policy
     /// (see the class doc's View detachment section).
     bool m_viewDetached = false;
-    /// Pre-maximize width intent for the maximize toggle (single slot:
-    /// maximize is a focused-column toggle).
+    /// Pre-maximize width intent for the maximize toggle, and the index of the
+    /// column it belongs to.
+    ///
+    /// ONE SLOT for the whole strip, deliberately, and no longer only a
+    /// focused-column toggle: toggleMaximizeColumnForWindow writes it for an
+    /// arbitrary column, so a second maximize anywhere discards the first
+    /// column's stored width. That column then un-maximizes to the context
+    /// default rather than to what it had. The toggle handles it — its
+    /// no-usable-slot arm exists for exactly this, and for the two other ways
+    /// the slot goes missing (a stash round trip and a restart, neither of
+    /// which carries it) — so the degradation is defined rather than a leak.
+    ///
+    /// Making it per-column would be an improvement and is a design change,
+    /// not a bug fix: the index is maintained across every insert, remove and
+    /// move in scrollstrip_structure.cpp, and a per-column slot would delete
+    /// all of that bookkeeping along with this pair.
     ColumnWidth m_preMaximizeWidth;
     int m_preMaximizeColumnIdx = -1;
 };

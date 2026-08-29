@@ -397,11 +397,16 @@ private Q_SLOTS:
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
         // columnMaximized rides the same JSON hop, and needs pinning for the
-        // same reason the two above do: the key crosses two independent string
-        // literals (engine_apply.cpp writes it, tilingadaptor.cpp reads it) and
-        // a typo or a dropped parse line on either side yields false with no
-        // error. Nothing else in the suite would catch it — the engine smoke
-        // test reads its JSON directly and the wire tests never touch JSON.
+        // same reason the two above do: a typo or a dropped parse line yields
+        // false with no error.
+        //
+        // What this pins is the CONSUMER half only. The fixture below hand-
+        // writes its own JSON, so it is a third literal rather than the
+        // engine's — a rename in engine_apply.cpp's producer would leave this
+        // green. That side is covered by the engine suite, which reads the key
+        // out of the engine's real emitted JSON. Neither compares the two
+        // literals, so a coordinated rename passes both; sharing one constant
+        // between producer and consumer is what would close that.
         // Paired with windowedFullscreen on b|2 deliberately: that combination
         // is explicitly legal (they drive different compositor state, and a
         // maximized column can hold a windowed-fullscreen tile), so this also
