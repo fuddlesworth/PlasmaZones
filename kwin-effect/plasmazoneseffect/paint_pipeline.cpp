@@ -1368,6 +1368,17 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         data.setTransformed();
     }
 
+    // A close-grabbed corpse with a frozen strip displacement (see
+    // m_scrollCorpseFreeze) is moved by paintWindow's deleted-window arm, so
+    // it needs the same TRANSFORMED treatment. Membership is the whole
+    // predicate: entries are only ever written for corpses whose drawn rect
+    // was on screen, so no parked test applies, and the two conditions are
+    // mutually exclusive (a live window never has an entry; a deleted one
+    // fails scrollManagedOutputFor above).
+    if (w && !m_scrollCorpseFreeze.isEmpty() && m_scrollCorpseFreeze.contains(w)) {
+        data.setTransformed();
+    }
+
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
@@ -1785,6 +1796,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
+            } else if (const auto fit = m_scrollCorpseFreeze.constFind(w); fit != m_scrollCorpseFreeze.constEnd()) {
+                // Deleted-window arm, mirroring the draw's: a decorated corpse
+                // keeps sampling its backdrop for the close animation, and the
+                // predictor has to fold in the same frozen displacement the
+                // draw applies or the corpse re-blits a slice from a pan away.
+                if (!animatedFrame.isValid()) {
+                    animatedFrame = w->frameGeometry();
+                }
+                animatedFrame.translate(fit->x(), fit->y());
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
         }
@@ -1900,6 +1920,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!viewOffset.isNull()) {
                 data += viewOffset;
             }
+        } else if (const auto fit = m_scrollCorpseFreeze.constFind(w); w && fit != m_scrollCorpseFreeze.constEnd()) {
+            // The deleted-window arm: scrollManagedOutputFor answers null the
+            // moment a window dies, so a close-grabbed corpse takes its
+            // displacement from the value frozen at death instead — both
+            // terms in one constant (see m_scrollCorpseFreeze). This is what
+            // keeps a panned strip's corpse playing its close animation where
+            // the window visually was rather than at its raw committed rect.
+            data += fit.value();
         }
     }
 
