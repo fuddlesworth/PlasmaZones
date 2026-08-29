@@ -84,7 +84,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // untitled-tab placeholder) and this process is kwin_wayland, which
     // installs no PlasmaZones catalog of its own. Load the daemon's catalog
     // for the current locale from the shared data location; the translator
-    // is parented to the effect so an unload removes it again. Same contexts
+    // is parented to the effect, so an unload destroys it and ~QTranslator
+    // calls removeTranslator itself (the parenting is what triggers that, not
+    // what performs it). Same contexts
     // and lookup as the daemon's translation loader, minus the build-tree
     // search dirs that only make sense next to our own binaries.
     {

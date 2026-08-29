@@ -135,7 +135,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // check), and routing the drop through it logs at qCWarning — a
         // producer emitting a zero rect is producer garbling and a bug
         // report by this boundary's own policy, not debug noise.
-        entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
+        // zoneId is NOT parsed. The protocol declares it reserved and always
+        // empty on this wire — no producer writes it and no consumer reads
+        // it — so parsing it only gave a foreign producer a field to put
+        // arbitrary string data in, riding all the way to the compositor.
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         // Scrolling windowed fullscreen. Only meaningful on a tiled entry;

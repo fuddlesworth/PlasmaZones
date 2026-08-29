@@ -175,7 +175,9 @@ effect-side membership, and KWin's maximize state. Pure; the call site in
 
 No in-flight marker, unlike the windowed-fullscreen decision — the Status
 section below records why the round trip cannot be raced. The KWin input is
-`requestedMaximizeMode()` rather than the committed `maximizeMode()`, for the
+`requestedMaximizeMode()` rather than the committed `maximizeMode()` **on the
+batch arm** (the interception passes the committed mode instead, because there
+it compares against what actually landed), for the
 lag reason the windowed-fullscreen arm documents at its own call site.
 
 ## Open decisions
