@@ -88,7 +88,38 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // arm, not just per outcome).
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume", true, QString());
+    // Hand-expanded from P_SCROLL_VERB for the SOURCE slot, the way
+    // consumeOrExpelWindow below is hand-expanded for its action token.
+    //
+    // The macro captures the source before the op, as the active column's
+    // focused window. For every other verb that IS the window acted upon; for
+    // this one it is the wrong window on every invocation, because the tile
+    // that moves comes from the NEIGHBOUR column. The OSD named the window
+    // that stayed put.
+    //
+    // Resolved AFTER the op instead: the consume focuses what it pulls in, so
+    // the post-op active window is exactly the tile that moved. Reading it
+    // back beats predicting it, because the strip walks past minimized tiles
+    // to choose which one to take and duplicating that walk here would be a
+    // second copy of a rule that has already changed once.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("consume"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString beforeWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().consumeWindowIntoColumn(params);
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    // On a refusal nothing moved, so the active window is the honest subject —
+    // that is the macro's own behaviour and the right answer for "there was
+    // nothing to consume".
+    const QString moved = changed ? state->strip().activeWindowId() : beforeWindow;
+    Q_EMIT navigationFeedback(changed, QStringLiteral("consume"), changed ? QString() : QStringLiteral("no_target"),
+                              moved, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 void ScrollEngine::expelWindowFromColumn(const QString& screenId)

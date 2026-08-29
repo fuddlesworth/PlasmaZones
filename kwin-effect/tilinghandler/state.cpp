@@ -852,8 +852,24 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // never terminates. The cap also bounds the D-Bus fan-out below, since
     // each step is its own message and no real gesture needs more than a
     // handful per event.
+    const bool capped = qAbs(accum) > static_cast<qreal>(kMaxWheelStepsPerEvent);
     const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
-    accum -= steps * whole;
+    if (capped) {
+        // TRUNCATE at the cap, do not bank the excess. Subtracting only what
+        // was spent leaves the remainder in the accumulator, and since the cap
+        // binds again on the next event, one garbled delta fires the full 16
+        // steps — sixteen D-Bus messages — on EVERY later event of the gesture
+        // until the chord is released. Discarding makes the behaviour match
+        // what the cap's own doc says it does, and there is nothing worth
+        // keeping: reaching this branch means the delta already exceeded any
+        // real gesture by an order of magnitude.
+        accum = 0.0;
+    } else {
+        // Under the cap the remainder is a genuine sub-notch fraction from a
+        // high-resolution wheel or touchpad, and carrying it is the whole
+        // point of the accumulator.
+        accum -= steps * whole;
+    }
     // This gesture belongs to one axis. Zeroing the other stops a diagonal
     // drift from banking a second, opposite step on the axis the user is not
     // actually scrolling along.
