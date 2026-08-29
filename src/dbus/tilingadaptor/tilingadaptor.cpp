@@ -288,6 +288,11 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
     QMetaObject::invokeMethod(
         this,
         [this, generation = m_announceGeneration]() {
+            // Deliberately redundant with the empty-pipeline bail below:
+            // either alone produces the same silence, so no test can tell them
+            // apart — and that is the point, since they guard different things
+            // (a superseded announce versus a torn-down pipeline) and the pair
+            // is one deletion away from unguarded.
             if (generation != m_announceGeneration) {
                 return; // clearEngine voided this session's announce
             }

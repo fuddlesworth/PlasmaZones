@@ -2458,10 +2458,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // committed frame the X11 leg uses, because a Wayland
                     // commit lands a round trip later and recording the frame
                     // now would capture the pre-commit rect. That substitution
-                    // is only safe for this population: a maximized column is
-                    // the full work-area extent, so unlike an ordinary column
-                    // no client can settle narrower than it for a minimum-size
-                    // reason and be fought forever.
+                    // is safe because the rect recorded is the one this
+                    // entry actually DELIVERED, captured after the
+                    // size-continuity pass. Recording the raw column instead
+                    // was not safe: that pass exists precisely because Wayland
+                    // clients do settle at a size other than the column
+                    // offered, and it does not exclude maximized ones, so the
+                    // counter-assert would have compared the centred commit
+                    // against a rect that was never offered.
                     // Not armed mid-gesture, matching the X11 leg's own
                     // deferred-commit predicate: countering a live drag or
                     // resize would fight the user's hand.
@@ -2609,7 +2613,11 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // RATE-LIMITED to 3 per rolling second (the window resets once a second
     // elapses since the burst started, and every fresh batch command
     // re-arms it) — a client that re-asserts on every configure gets
-    // countered at most 3x/s indefinitely, it does not win outright.
+    // countered at most 3 times per rolling second PER COMMAND, so it does
+    // not win outright. Note the budget is re-armed by every fresh batch
+    // command (the insert resets the pair, deliberately), so on a scrolling
+    // strip the effective ceiling is three per batch rather than three per
+    // second.
     //
     // User-move/resize terms: DragTracker never tracks an interactive
     // RESIZE at all (its start handler bails on isUserResize), and a mouse

@@ -464,7 +464,13 @@ void TestScrollStripSizing::tabbingAStackPicksTheShownTabAndUntabbingRestoresEve
     QVERIFY(col);
     QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
     QVERIFY(strip.focusAdjacentTile(-1));
-    strip.setActiveWindowHeight(WindowHeight::makeAuto());
+    // The verdict is asserted rather than discarded, and it is FALSE: the tile
+    // already holds Auto, so the write moves nothing and the verb correctly
+    // refuses. Spelling that out is the point — a bare discarded call reads as
+    // an oversight in a suite whose whole subject is which presses report a
+    // change, and a future reader would not know whether the refusal was
+    // expected or unnoticed.
+    QVERIFY(!strip.setActiveWindowHeight(WindowHeight::makeAuto()));
     QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 250);
 }

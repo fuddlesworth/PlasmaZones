@@ -545,7 +545,12 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // silently undo an explicit centerActiveColumn at the strip's edges
     // (whose centered anchor implies out-of-range viewOffset by design) and
     // reclaim removeWindowInternal's deliberate right-edge dead space.
-    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0) {
+    // BOTH ends, like every sibling bounds test in this file: this one indexes
+    // m_columns directly rather than delegating to a qBound, so an
+    // out-of-range active index would be an out-of-bounds read in release
+    // rather than an assertion. Not reachable today — every writer of the
+    // index clamps — so this is consistency, not a latent crash.
+    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0 && m_activeColumnIdx < m_columns.size()) {
         const int viewMain = mainExtent(params);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);

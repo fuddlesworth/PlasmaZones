@@ -281,10 +281,12 @@ public:
     /// still describe live windows while the daemon is merely absent.
     ///
     /// Paired invariant, and the reason this is one function rather than an
-    /// inline list: anything added to a per-session map must be dropped here, or
-    /// it survives a daemon restart and answers for a session that no longer
-    /// exists. Adding to the teardown list is a separate decision — see the
-    /// serviceUnregistered handler for what belongs there and why.
+    /// inline list: anything added to a per-session map must be dropped here. m_columnMaximizedWindows is the
+    /// deliberate exception: drainDeadSessionState restores it through the ledger instead, and that restore RETAINS
+    /// entries it could not pay, so a retained one survives the restart on purpose. The new session heals it — the
+    /// first batch resolves an absent wire flag against surviving membership to a Release, or it survives a daemon
+    /// restart and answers for a session that no longer exists. Adding to the teardown list is a separate decision —
+    /// see the serviceUnregistered handler for what belongs there and why.
     void clearPerSessionDaemonState();
 
     /**
