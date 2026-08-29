@@ -24,6 +24,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -1174,6 +1175,19 @@ private:
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
+    /// Queue-time stamps for m_pendingSelfActivations (latest-wins per id),
+    /// against m_selfActivationClock. An echo the compositor genuinely
+    /// DROPPED (show desktop, focus-stealing prevention) leaves its entry
+    /// stranded — there is no reclaim-on-genuine-focus any more (see the
+    /// windowFocused drain for why that reclaim was wrong) — and without an
+    /// expiry the stranded entry ate the FIRST real click on that window.
+    /// An entry older than kSelfActivationEchoExpiryMs cannot be a live echo
+    /// (echo round trips are milliseconds), so the drain treats a match on
+    /// one as genuine focus. Entries are unstamped/removed at every sweep
+    /// that removes them from the list.
+    QHash<QString, qint64> m_pendingSelfActivationQueuedAt;
+    QElapsedTimer m_selfActivationClock;
+    static constexpr qint64 kSelfActivationEchoExpiryMs = 10000;
     /// The one arrival whose focus an `openFocused = false` rule declined, held
     /// until its compositor focus report arrives and is consumed exactly once.
     ///
@@ -1254,6 +1268,35 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
+    /// the animation duration): a close-triggered reflow — and the
+    /// focus-adoption reflow the compositor's successor pick fires
+    /// milliseconds later — waits this long so the closing window's
+    /// disappear animation plays over an unchanged strip before the
+    /// neighbours move in. 0 (the no-IScrollSettings seed and the
+    /// animations-off answer) keeps the historical immediate reflow.
+    /// User-driven verbs deliberately bypass the hold: a deliberate action
+    /// mid-animation outranks the settle, and the scheduled flush behind it
+    /// is an idempotent re-apply. windowOpened bypasses it too, accepted
+    /// knowingly: an arrival must place itself (and usually takes focus, so
+    /// its apply cannot wait), which means a close-then-immediate-open chain
+    /// (a file dialog handing back to its parent) reflows over the corpse as
+    /// it always did — best-effort degradation to the pre-hold behaviour,
+    /// not a correctness bug. Only windowClosed and windowFocused defer.
+    /// scheduleRetileForScreen's queued apply is outside the hold for the
+    /// same reason and on the same terms: a config/per-screen change or a
+    /// min-size report landing mid-hold reflows on its own turn.
+    int m_closeReflowDelayMs = 0;
+    /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
+    /// guard that keeps one timer per screen however many closes land inside
+    /// one hold window (each close pushes the deadline; the flush lambda
+    /// reschedules itself for the remainder instead of applying early).
+    QHash<QString, qint64> m_closeReflowHoldUntil;
+    QSet<QString> m_closeReflowFlushScheduled;
+    QElapsedTimer m_closeReflowClock;
+    void startCloseReflowHold(const QString& screenId);
+    bool deferForCloseReflowHold(const QString& screenId);
+    void scheduleCloseReflowFlush(const QString& screenId);
     /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
     /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
     /// is false: tiling defaults this on because a sole window fills the screen

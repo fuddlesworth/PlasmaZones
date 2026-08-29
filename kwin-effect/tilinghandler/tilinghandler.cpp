@@ -414,6 +414,18 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
         // animated leg, which is what a non-parked window should get.
         return false;
     }
+    return rectAtScrollPark(frame);
+}
+
+bool TilingHandler::rectAtScrollPark(const QRect& rect) const
+{
+    // Shared tail of atScrollPark, split out so the batch apply can ask the
+    // same question of a commit TARGET (see the header doc). The frame-side
+    // preconditions (null window, degenerate geometry) stay in atScrollPark;
+    // this half owns the union test and its fail-closed arms.
+    if (rect.isEmpty()) {
+        return false;
+    }
     if (!KWin::effects) {
         // The doc promises fail-closed on "no resolvable outputs", and every
         // sibling m_scrollVisualDelta damage pair guards this pointer — an
@@ -427,7 +439,7 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
     }
     // No resolvable outputs (disconnect race): the union is empty and every
     // rect is trivially "off" it. Fail closed for the same reason as above.
-    return !unionRect.isEmpty() && !unionRect.intersects(frame);
+    return !unionRect.isEmpty() && !unionRect.intersects(rect);
 }
 
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
@@ -574,7 +586,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     // then send one batch D-Bus call instead of per-window round-trips.
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
-    QStringList batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
+    QSet<QString> batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
     // Announce stamps, one PER ENTRY rather than one for the batch: a single
     // batch-wide stamp would let one superseded window (re-announced on its own
     // between dispatch and reply, or closed) disarm the rollback for every other
@@ -649,7 +661,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // the initial screen query was pending retains explicit spawn provenance.
         const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
         if (wasFresh) {
-            batchFreshWindowIds.append(windowId);
+            batchFreshWindowIds.insert(windowId);
         }
         const bool knownFreeFloating =
             wasFresh || (enteringAutotile && !TilingStateHelpers::isTiledWindow(m_border, windowId));

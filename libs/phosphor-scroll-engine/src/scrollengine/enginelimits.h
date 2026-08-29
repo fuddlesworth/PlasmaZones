@@ -70,6 +70,16 @@ inline constexpr qint64 kFuzzyClaimGraceMs = 60'000;
 inline constexpr int kMaxRestoredColumnsPerKey = 64;
 inline constexpr int kMaxRestoredTilesPerColumn = 32;
 
+/// Ceiling for the close-settle reflow hold (refreshConfigFromSettings'
+/// qBound on scrollingCloseReflowDelayMs). Numerically equal to
+/// PhosphorAnimation::Limits::MaxAnimationDurationMs, hand-mirrored like
+/// MinColumnWidthFraction rather than included (this LGPL engine does not
+/// depend on phosphor-animation): the config setter clamps the duration to
+/// that same max, so this cap can never truncate a legal config value — it
+/// bounds a misbehaving embedder-injected ISettings, whose multi-second
+/// value would read as the strip hanging after every close.
+inline constexpr int kMaxCloseReflowDelayMs = 2000;
+
 /// Sanity ceiling for a PIXEL extent minted from an untrusted qreal (the
 /// per-screen override map, which applyPerScreenConfig stores verbatim, and
 /// the injected ISettings an embedder implements). Both channels reach

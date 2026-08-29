@@ -10,6 +10,7 @@
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <QTimer>
 #include <QVariant>
 
 #include <algorithm>
@@ -966,6 +967,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // lands can never be answered; without this a later genuine focus of a
     // reused id would be eaten as that echo.
     m_pendingSelfActivations.removeAll(windowId);
+    m_pendingSelfActivationQueuedAt.remove(windowId);
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
@@ -1017,10 +1019,27 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         // CURRENT context, so a close on another desktop's state would
         // relayout the wrong strip (the mutated one must stay silent
         // until its desktop returns).
-        applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        //
+        // Close-settle hold: with a configured delay, the reflow waits out
+        // the closing window's disappear animation instead of moving the
+        // neighbours over the still-painting corpse (the two animations
+        // fighting for the vacated slot is exactly the visual mess the hold
+        // exists to prevent). The deferred flush passes focusAfter=false on
+        // purpose: the compositor activates its own successor immediately
+        // and windowFocused adopts it long before the flush fires, so the
+        // engine re-asserting its pick a delay later would only re-open the
+        // dueling-activations bounce the pending-self-activation fix closed.
+        if (m_closeReflowDelayMs > 0) {
+            startCloseReflowHold(key.screenId);
+        } else {
+            applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        }
     }
     Q_EMIT placementChanged(key.screenId);
 }
+
+// startCloseReflowHold / deferForCloseReflowHold / scheduleCloseReflowFlush
+// live in engine_closehold.cpp (this TU is over the file-size ceiling).
 
 void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
 {
@@ -1043,9 +1062,25 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // never this engine's emit, so its echo still drives the strip
     // (signals.cpp documents that contract).
     if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
+        // Expiry check BEFORE swallowing: an entry whose echo the compositor
+        // dropped (show desktop, focus-stealing prevention) has no reclaim
+        // path any more (see below), and without this it ate the FIRST real
+        // click on its window. Echo round trips are milliseconds; a stamp
+        // this old means the echo is dead and this report is the user.
+        const qint64 queuedAt = m_pendingSelfActivationQueuedAt.value(windowId, -1);
+        const bool expired = queuedAt < 0 || !m_selfActivationClock.isValid()
+            || m_selfActivationClock.elapsed() - queuedAt > kSelfActivationEchoExpiryMs;
         m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
                                        m_pendingSelfActivations.begin() + selfIdx + 1);
-        return;
+        for (auto stampIt = m_pendingSelfActivationQueuedAt.begin();
+             stampIt != m_pendingSelfActivationQueuedAt.end();) {
+            stampIt = m_pendingSelfActivations.contains(stampIt.key()) ? std::next(stampIt)
+                                                                       : m_pendingSelfActivationQueuedAt.erase(stampIt);
+        }
+        if (!expired) {
+            return;
+        }
+        // Fall through: adopt as genuine focus.
     }
     // Declined-open consume, m_declinedOpenFocus' read side. An
     // `openFocused = false` arrival was focused by the compositor anyway, and
@@ -1060,9 +1095,22 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (m_declinedOpenFocus.remove(windowId)) {
         return;
     }
-    // A genuine focus report implies every previously-sent echo already
-    // landed, so whatever is left in the queue was dropped — reclaim it.
-    m_pendingSelfActivations.clear();
+    // Deliberately NO reclaim of m_pendingSelfActivations here. An earlier
+    // form cleared the queue on every genuine report, reasoning that a
+    // genuine focus implies every previously-sent echo already landed. That
+    // inference is false ACROSS DIRECTIONS: on a window close the compositor
+    // activates its own successor pick and that genuine report is in flight
+    // BEFORE this engine queues its competing self-activation (the close
+    // handler's focusWindowAfter), so the queued entry's echo is still
+    // legitimately in flight when the genuine report lands. The clear wiped
+    // it, the echo then arrived against an empty queue, was mis-read as user
+    // focus, and the two picks re-anchored the strip against each other —
+    // the post-close anchor ping-pong (0↔1916 several times in two seconds,
+    // re-parking live windows on every bounce). The queue stays bounded
+    // without the reclaim: the prefix-drop at match above, the close-time
+    // removeAll, and the kMaxPendingSelfActivations cap all still run — and
+    // the dropped-echo case the reclaim used to (over-)serve is now handled
+    // precisely by the per-entry expiry at the match above.
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -1131,7 +1179,14 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // now — a background one re-derives on the applyLayout its own desktop
     // return runs, which is the pass that used to return early.
     if (key == currentKeyForScreen(key.screenId)) {
-        applyLayout(key.screenId, false);
+        // Close-settle hold, second arm: the compositor's successor pick
+        // lands here milliseconds after a close, and its reanchor reflow
+        // moving the neighbours would defeat the hold windowClosed just
+        // started. The anchor/focus state above is already updated — only
+        // the geometry emission waits; the scheduled flush replays it.
+        if (!deferForCloseReflowHold(key.screenId)) {
+            applyLayout(key.screenId, false);
+        }
     }
     // Focus and view anchor are persisted (serializeStripState), and
     // placementChanged is the only thing that marks DirtyScrollStrips.

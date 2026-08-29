@@ -198,7 +198,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // drag-insert fires a batch, and each one copied the whole stacking order
     // into QPointers and carried it by value into the onComplete closure.
     QVector<QPointer<KWin::EffectWindow>> savedGlobalStack;
-    if (!allRequestsOnScrollingScreens) {
+    if (!allRequestsOnScrollingScreens && KWin::effects) {
         const auto allWindows = KWin::effects->stackingOrder();
         savedGlobalStack.reserve(allWindows.size());
         for (KWin::EffectWindow* w : allWindows) {
@@ -1172,7 +1172,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // activation — so the window the user is typing into stays
             // visible. Non-members are untouched: their position was already
             // restored by the saved-stack loop.
-            if (KWin::EffectWindow* active = KWin::effects->activeWindow();
+            if (KWin::EffectWindow* active = KWin::effects ? KWin::effects->activeWindow() : nullptr;
                 active && overlapMemberScreen.contains(active)) {
                 if (KWin::Window* kw = active->window()) {
                     ws->raiseWindow(kw);
@@ -1211,7 +1211,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // Skip (and drop) the reactivation during show-desktop/peek:
             // activateWindow() would synchronously cancel the peek. The
             // stacking restore is cosmetic, so losing it beats breaking peek.
-            if (!PlasmaZonesEffect::isShowingDesktop()) {
+            if (KWin::effects && !PlasmaZonesEffect::isShowingDesktop()) {
                 KWin::effects->activateWindow(m_pendingReactivateWindow);
             }
             m_pendingReactivateWindow = nullptr;
@@ -2100,6 +2100,31 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // it downstream, leaving the two disagreeing about the
                     // predicted commit.
                     const QRect committedGeo = m_effect->constrainTileGeometry(snap.window, geo.normalized());
+                    // Shared four-edge anchor for both LEAVING treatments
+                    // below: move the rect just past the named departure edge
+                    // of the screen. Four departure edges since v5:
+                    // "left"/"right" on a horizontal strip, "top"/"bottom" on
+                    // a vertical one. Folding the two vertical tokens into an
+                    // else would anchor them past the RIGHT screen edge and
+                    // slide every vertical park sideways across the
+                    // neighbouring output.
+                    //
+                    // QRect::right()/bottom() are x+width-1 and y+height-1,
+                    // so +1 sits one past the edge. screenRect must stay a
+                    // QRect (KWin::Rect's right()/bottom() are x+width and
+                    // y+height and would shift the slide by a pixel).
+                    const auto anchorPastEdge = [](QRect rect, const QRect& screenRect, const QString& edge) {
+                        if (edge == QLatin1String("left")) {
+                            rect.moveLeft(screenRect.left() - rect.width());
+                        } else if (edge == QLatin1String("top")) {
+                            rect.moveTop(screenRect.top() - rect.height());
+                        } else if (edge == QLatin1String("bottom")) {
+                            rect.moveTop(screenRect.bottom() + 1);
+                        } else {
+                            rect.moveLeft(screenRect.right() + 1);
+                        }
+                        return rect;
+                    };
                     if (snap.hasVisualPos) {
                         // Parked, but drawn at its real strip position and
                         // carried by the view like every other column. There is
@@ -2152,7 +2177,52 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // strip position beats a point synthesized just outside
                         // the screen edge, because that is where it actually
                         // was.
-                        if (!snap.scrollEdge.isEmpty()) {
+                        // Direction of THIS entry, asked of the committed
+                        // target: a target off the union of every output is a
+                        // park, and a park-bound (LEAVING) entry needs the
+                        // opposite treatment from an arriving one in both arms
+                        // below. The historical code assumed edge+viewDelta
+                        // means ARRIVING and edge-less+viewDelta means
+                        // on-strip travel — but a mid-strip close's re-anchor
+                        // batch carries viewDelta on EVERY entry, including
+                        // the parks the re-anchor just created, and routing
+                        // those through the arrival arms produced the two
+                        // artifacts fixed here: an unmasked pop to the park
+                        // (edged), and a real animated leg sweeping the
+                        // window visibly down to the park row (edge-less) —
+                        // the "closing a mid-strip window slides down off the
+                        // screen" bug.
+                        const bool viewLeavingToPark = rectAtScrollPark(committedGeo);
+                        if (!snap.scrollEdge.isEmpty() && viewLeavingToPark) {
+                            // LEAVING to a park with a named edge, carried by
+                            // the same batch's view travel. Give it the
+                            // scrollEdge branch's leaving treatment: the
+                            // commit still goes to the park, but the VISIBLE
+                            // motion is redirected to just past the named
+                            // edge so the window slides out as itself instead
+                            // of popping straight to the (off-screen) park.
+                            // Same edge math as the scrollEdge branch below;
+                            // same teleport fallback when no output resolves.
+                            const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
+                            const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                            if (!screenRect.isValid()) {
+                                qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                                  << snap.windowId << "to its target";
+                                skipScrollAnimation = true;
+                            } else if (atScrollPark(snap.window)) {
+                                // Already sitting at a park: both ends of the
+                                // slide-out would be off the union, so the
+                                // animated leg (and its shader arm) buys
+                                // nothing visible. Commit plain, matching the
+                                // at-park-now treatment of the sibling arms.
+                                skipScrollAnimation = true;
+                            } else {
+                                const KWin::RectF cur = snap.window->frameGeometry();
+                                const QRect liveRect =
+                                    QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
+                                visualTargetOverride = QRectF(anchorPastEdge(liveRect, screenRect, snap.scrollEdge));
+                            }
+                        } else if (!snap.scrollEdge.isEmpty()) {
                             // ARRIVING from a park. Its live frameGeometry is
                             // the park itself — below the union of all outputs
                             // — which is not a visual position at all, so
@@ -2199,6 +2269,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // arm above.
                             if (atScrollPark(snap.window)) {
                                 originOverride = QRectF(committedGeo);
+                            } else if (viewLeavingToPark) {
+                                // Edge-less LEAVING park (a hidden tab of an
+                                // on-screen column, or a cross-axis stack
+                                // overflow) riding a batch that also carries
+                                // view travel. The difference-origin arm
+                                // below would build a REAL leg from the live
+                                // on-screen frame down to the park — the
+                                // visible downward sweep. There is no edge to
+                                // slide out by, so the answer is the same as
+                                // the edge-less branch further down: commit
+                                // without an animation.
+                                skipScrollAnimation = true;
                             } else {
                                 // viewDelta is a signed scalar ALONG this
                                 // screen's strip axis, so the origin has to
@@ -2236,27 +2318,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 atEdge =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                             }
-                            // Four departure edges since v5: "left"/"right"
-                            // on a horizontal strip, "top"/"bottom" on a
-                            // vertical one. Folding the two vertical tokens
-                            // into an else would anchor them past the RIGHT
-                            // screen edge and slide every vertical park
-                            // sideways across the neighbouring output.
-                            //
-                            // QRect::right()/bottom() are x+width-1 and
-                            // y+height-1, so +1 sits one past the edge.
-                            // screenRect must stay a QRect (KWin::Rect's
-                            // right()/bottom() are x+width and y+height and
-                            // would shift the slide by a pixel).
-                            if (snap.scrollEdge == QLatin1String("left")) {
-                                atEdge.moveLeft(screenRect.left() - atEdge.width());
-                            } else if (snap.scrollEdge == QLatin1String("top")) {
-                                atEdge.moveTop(screenRect.top() - atEdge.height());
-                            } else if (snap.scrollEdge == QLatin1String("bottom")) {
-                                atEdge.moveTop(screenRect.bottom() + 1);
-                            } else {
-                                atEdge.moveLeft(screenRect.right() + 1);
-                            }
+                            // Edge semantics documented at anchorPastEdge.
+                            atEdge = anchorPastEdge(atEdge, screenRect, snap.scrollEdge);
                             if (arriving) {
                                 originOverride = QRectF(atEdge);
                             } else {
@@ -2363,6 +2426,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         if (preMaximize.isValid() && !preMaximize.isEmpty()) {
                             originOverride = preMaximize;
                         }
+                    }
+                    // Terminal backstop for every arm above, and for arms that
+                    // do not exist yet: a commit whose target lies off the
+                    // union of every output (a park) must NEVER take an
+                    // animated leg unless a visualTargetOverride has
+                    // redirected the visible motion on-screen. The chain
+                    // above handles every KNOWN park shape, but its arms are
+                    // gated on wire fields and tracking state
+                    // (scrollTrackedScreenFor answers empty across a
+                    // mode-flip or output-disconnect race, and
+                    // setScrollingScreens does not bump the stagger
+                    // generation), and an entry that falls through every gate
+                    // used to reach applyWindowGeometry bare — a full
+                    // animated leg from the live on-screen frame down to the
+                    // park row. An ORIGIN override does not redeem the leg
+                    // (its destination is still the park), so it is cleared
+                    // rather than honoured.
+                    if (!skipScrollAnimation && !visualTargetOverride.isValid() && rectAtScrollPark(committedGeo)) {
+                        skipScrollAnimation = true;
+                        originOverride = QRectF();
                     }
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
@@ -2940,7 +3023,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // (already-enforced) frame size from `centered`. Same contract, different
     // input source and rect type (QRectF here, QRect there). Keep the four
     // shift formulas in sync at the contract level.
-    if (auto* output = KWin::effects->screenAt(targetZone.center())) {
+    if (auto* output = KWin::effects ? KWin::effects->screenAt(targetZone.center()) : nullptr) {
         const QRect screenGeo = output->geometry();
         // Use exclusive edges (x + width / y + height) since QRectF::right()
         // and QRect::right() disagree (QRect is x+width-1, QRectF is x+width).
@@ -3078,7 +3161,9 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
     // which would then miss and silently skip the raise. Every other resolve
     // site in this file re-keys for the same reason.
     m_pendingAutotileFocusWindowId = m_effect->getWindowId(w);
-    KWin::effects->activateWindow(w);
+    if (KWin::effects) {
+        KWin::effects->activateWindow(w);
+    }
 }
 
 void TilingHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)

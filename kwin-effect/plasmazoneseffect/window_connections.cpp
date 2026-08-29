@@ -1255,6 +1255,14 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     st->toGeometry = newFrame;
     if (!st->oldSnapshot) {
         st->fromGeometry = preFrame;
+        // preFrame is a REAL rect the window occupied, so any synthetic-origin
+        // marker a kept scroll leg carried no longer describes fromGeometry.
+        // Clear it, or the pending capture wrongly takes the raw path and the
+        // maximize morph's old side loses its decorated composite seed. The
+        // invariant: fromIsSynthetic tracks the provenance of the CURRENT
+        // fromGeometry, maintained at every writer (see drag_snap.cpp's
+        // sticky retarget arm for the synthetic-path counterpart).
+        st->fromIsSynthetic = false;
         // Old-content cross-fade: same guard as the move-start hookup. The
         // raw capture happens on the first paint (post-jump, so it degrades
         // to the live content for undecorated windows), but decorated
