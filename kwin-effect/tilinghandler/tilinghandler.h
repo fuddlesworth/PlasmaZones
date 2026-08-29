@@ -382,6 +382,30 @@ public:
     /// this through the interception would toggle the column instead.
     void cancelAxisOnlyMaximize(KWin::EffectWindow* w);
 
+    /// The two halves of slotScreensChanged's removed-screens pass, split out
+    /// because they reach opposite conclusions about the same event. A screen
+    /// leaves the managed set either because the DESKTOP changed (the windows
+    /// stay owned by that desktop's live session, so demote and remember) or
+    /// because autotile was genuinely turned off for it (nothing owns them
+    /// now, so untrack and restore). Both take the caller's `windows` snapshot
+    /// and append to its deferred windowed-fullscreen release list rather than
+    /// releasing inline, because that release must land AFTER the managed-set
+    /// write.
+    void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
+                                       QStringList& windowedFsToRelease,
+                                       QHash<QString, QRectF>& windowedFsPreTileRestore);
+    void untrackWindowsForDisabledScreens(const QSet<QString>& removed, const QSet<QString>& newScreens,
+                                          const QList<KWin::EffectWindow*>& windows, QStringList& windowedFsToRelease);
+
+    /// Async fetch of the daemon's persisted pre-autotile geometries for the
+    /// screens just added, applied as overrides where they are unambiguous.
+    ///
+    /// Its own function so the superseded-reply arm can re-dispatch itself: the
+    /// fetch is a one-shot per genuine autotile toggle, so a reply that simply
+    /// returned would lose the daemon's true pre-tile geometries for the rest
+    /// of the session and leave float-back on the current-frame captures.
+    void fetchDaemonPreTileGeometries(const QSet<QString>& added, const QSet<QString>& expectedScreens);
+
     /// Re-drive a maximize claim the batch took but skipped applying because
     /// the window was under a user gesture.
     ///
@@ -948,20 +972,12 @@ public Q_SLOTS:
     /// restore). Both take the caller's `windows` snapshot and append to its
     /// deferred windowed-fullscreen release list rather than releasing inline,
     /// because that release must land AFTER the managed-set write.
-    /// Async fetch of the daemon's persisted pre-autotile geometries for the
-    /// screens just added, applied as overrides where they are unambiguous.
     ///
-    /// Its own function so the superseded-reply arm can re-dispatch itself: the
-    /// fetch is a one-shot per genuine autotile toggle, so a reply that simply
-    /// returned would lose the daemon's true pre-tile geometries for the rest
-    /// of the session and leave float-back on the current-frame captures.
-    void fetchDaemonPreTileGeometries(const QSet<QString>& added, const QSet<QString>& expectedScreens);
-
-    void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
-                                       QStringList& windowedFsToRelease,
-                                       QHash<QString, QRectF>& windowedFsPreTileRestore);
-    void untrackWindowsForDisabledScreens(const QSet<QString>& removed, const QSet<QString>& newScreens,
-                                          const QList<KWin::EffectWindow*>& windows, QStringList& windowedFsToRelease);
+    /// NOT slots, despite living beside them: both take non-const reference
+    /// out-parameters, which no queued or direct connection can supply, and
+    /// their only callers are plain calls from slotScreensChanged. They sit in
+    /// the private section below with the other screenschanged.cpp helpers, so
+    /// the slots block does not advertise as connectable something that is not.
     void slotScrollingScreensChanged(const QStringList& screenIds);
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 

@@ -70,9 +70,19 @@ PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningScreen(const QStrin
     }
     // Primary fallback is deliberate here, UNLIKE dispatchWindowOpened's
     // strict claim loop: the callers route stateless notifications (focus,
-    // desktop switches) where every engine self-guards on ownership, so a
-    // mid-flip miss is a harmless no-op — whereas an open adopted by the
-    // wrong engine would tile a window on a screen it does not own.
+    // desktop switches), and the fallback is the NORMAL route during a desktop
+    // switch — isAutotileScreen is evaluated against the current desktop, so
+    // switching to a non-autotile desktop makes the strict loop miss, and this
+    // is what still delivers the report to the engine whose same-screen arm
+    // schedules the revalidate repair. An open adopted by the wrong engine, by
+    // contrast, would tile a window on a screen it does not own.
+    //
+    // NOT because "every engine self-guards on ownership", which this comment
+    // used to claim and which is false: AutotileEngine::windowFocused guards on
+    // WINDOW tracking, not screen ownership, and read an unknown screen as a
+    // genuine cross-screen move — so an unvalidated screen id arriving here
+    // untracked the window outright. That branch now checks isKnownScreen; the
+    // fallback stays because the repair path depends on it.
     return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
 }
 

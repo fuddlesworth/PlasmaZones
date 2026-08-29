@@ -46,7 +46,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="notifyWindowFocused">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates the owning engine's focus tracking and window-to-screen mapping."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates the owning engine's focus tracking and window-to-screen mapping. The screenId must name a screen the compositor currently reports for that window: a screen no engine knows is ignored rather than treated as a move, because reading an unknown screen as a genuine cross-screen move would untrack the window with no repair path on this channel."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
             </arg>

@@ -294,7 +294,13 @@ public Q_SLOTS:
      * The KWin effect calls this when a windowed-fullscreen client leaves
      * fullscreen on its own (the app's in-app toggle), so the strip's flag
      * follows reality. Silent no-op for an unknown window or one whose
-     * flag is not set, same wire-boundary policy as focusColumn.
+     * flag is not set.
+     *
+     * Deliberately NOT ownership- or context-gated, unlike focusColumn and the
+     * width setters: this is a RECONCILIATION call, and a refusal would leave
+     * the strip's flag permanently disagreeing with a client that has already
+     * left fullscreen. The engine's own lookup rejects an untracked window,
+     * which is the only check this needs.
      *
      * @param windowId Window whose flag to clear; an empty string is ignored
      */
