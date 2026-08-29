@@ -935,6 +935,15 @@ public Q_SLOTS:
     /// restore). Both take the caller's `windows` snapshot and append to its
     /// deferred windowed-fullscreen release list rather than releasing inline,
     /// because that release must land AFTER the managed-set write.
+    /// Async fetch of the daemon's persisted pre-autotile geometries for the
+    /// screens just added, applied as overrides where they are unambiguous.
+    ///
+    /// Its own function so the superseded-reply arm can re-dispatch itself: the
+    /// fetch is a one-shot per genuine autotile toggle, so a reply that simply
+    /// returned would lose the daemon's true pre-tile geometries for the rest
+    /// of the session and leave float-back on the current-frame captures.
+    void fetchDaemonPreTileGeometries(const QSet<QString>& added, const QSet<QString>& expectedScreens);
+
     void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
                                        QStringList& windowedFsToRelease,
                                        QHash<QString, QRectF>& windowedFsPreTileRestore);

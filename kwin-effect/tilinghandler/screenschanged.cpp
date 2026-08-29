@@ -507,6 +507,140 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     }
 }
 
+void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, const QSet<QString>& expectedScreens)
+{
+    // Extracted from slotScreensChanged so the superseded arm below can
+    // re-dispatch itself. It is a one-shot per genuine autotile toggle, so a
+    // superseded reply that simply returned would lose the daemon's true
+    // pre-tile geometries for the rest of the session.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getPreTileGeometries")),
+        this);
+    // The GENERATION at dispatch, alongside the expected screen set.
+    // slotScreensChanged bumps it for exactly this purpose, and set-equality
+    // alone does not answer the question: a toggle off and back, or a later
+    // signal landing on a managed set that happens to match, leaves the sets
+    // equal while the captured `added` set describes a transition that has been
+    // superseded. The entries below are written as restore rects the
+    // desktop-switch path later applies verbatim, so a stale apply teleports a
+    // window.
+    const quint64 generationAtDispatch = m_screensSignalGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, added, expectedScreens, generationAtDispatch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<PhosphorProtocol::PreTileGeometryList> reply = *w;
+                if (!reply.isValid()) {
+                    return;
+                }
+                // Bail if the autotile screen set changed while we were waiting
+                if (m_managedScreens != expectedScreens) {
+                    qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
+                    return;
+                }
+                // A newer signal superseded this dispatch. RE-DISPATCH rather
+                // than simply returning: the generation bumps on every
+                // slotScreensChanged including a no-op re-emit with an
+                // identical set, so this test is strictly stricter than the set
+                // test above — and the fetch is a one-shot per genuine autotile
+                // toggle, so a silent drop loses the daemon's true pre-tile
+                // geometries for the session and leaves float-back on the
+                // current-frame captures. Returning here would trade a rare
+                // teleport for a more frequent silent loss.
+                if (m_screensSignalGeneration != generationAtDispatch) {
+                    qCDebug(lcEffect) << "Superseded async pre-autotile geometry reply, re-requesting for" << added;
+                    fetchDaemonPreTileGeometries(added, m_managedScreens);
+                    return;
+                }
+                const PhosphorProtocol::PreTileGeometryList entries = reply.value();
+                QHash<QString, QHash<QString, int>> entryCounts;
+                for (const auto& entry : entries) {
+                    if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
+                        ++entryCounts[entry.appId][entry.screenId];
+                    }
+                }
+                const auto allWindows = KWin::effects->stackingOrder();
+                for (const auto& entry : entries) {
+                    const QString stableId = entry.appId;
+                    QRectF geom = QRectF(entry.toRect());
+                    if (geom.width() <= 0 || geom.height() <= 0 || !added.contains(entry.screenId)
+                        || entryCounts.value(stableId).value(entry.screenId) != 1) {
+                        continue;
+                    }
+                    // Origin validation, not just extents. These rects
+                    // are applied verbatim by the desktop-switch
+                    // restore path, so a daemon-supplied origin on no
+                    // connected output parks the window where nothing
+                    // can show it. The capture side has a chokepoint
+                    // for this; the ingest side did not.
+                    if (!KWin::effects || !KWin::effects->screenAt(geom.center().toPoint())) {
+                        qCDebug(lcEffect)
+                            << "Ignoring daemon pre-tile geometry off every output for" << stableId << ":" << geom;
+                        continue;
+                    }
+                    // Find all windows on added screens matching this stableId.
+                    // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
+                    // the daemon's single geometry is ambiguous — skip the override entirely.
+                    KWin::EffectWindow* matchedWindow = nullptr;
+                    bool ambiguous = false;
+                    for (KWin::EffectWindow* ew : allWindows) {
+                        // isDeleted: a dying same-app window must not
+                        // consume the geometry override or trip the
+                        // ambiguous-skip, robbing the live window.
+                        if (!ew || ew->isDeleted() || !m_effect->shouldHandleWindow(ew))
+                            continue;
+                        if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
+                            continue;
+                        if (m_effect->getWindowScreenId(ew) != entry.screenId)
+                            continue;
+                        if (matchedWindow) {
+                            ambiguous = true;
+                            break;
+                        }
+                        matchedWindow = ew;
+                    }
+                    if (ambiguous || !matchedWindow) {
+                        if (ambiguous) {
+                            qCDebug(lcEffect) << "Skipping daemon geometry override for ambiguous stableId" << stableId
+                                              << "(multiple live windows match)";
+                        }
+                        continue;
+                    }
+                    {
+                        const QString wId = m_effect->getWindowId(matchedWindow);
+                        // ALL-bucket lookup, matching the rule
+                        // saveAndRecordPreTileGeometry documents: a
+                        // per-screen check here let a transferred
+                        // window (the cross-output path re-files its
+                        // rect under the CAPTURE screen's bucket)
+                        // gain a SECOND entry under its current
+                        // screen, and findPreTileGeometry then
+                        // returned whichever bucket hash order
+                        // reached first — possibly a rect measured
+                        // in the other monitor's coordinate space.
+                        // Update the existing entry in place under
+                        // its own bucket; insert under the current
+                        // screen only on a genuine all-bucket miss.
+                        QString bucketScreenId;
+                        const QRectF existing = findPreTileGeometry(wId, &bucketScreenId);
+                        if (!existing.isValid()) {
+                            const QString scr = m_effect->getWindowScreenId(matchedWindow);
+                            m_preTileGeometries[scr][wId] = geom;
+                            qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for" << stableId
+                                              << "on" << scr << ":" << geom;
+                        } else if (existing.toRect() != geom.toRect()) {
+                            // Daemon stored a different geometry (likely from before the window
+                            // was resnapped to a zone). Prefer the daemon's version as it's the
+                            // true pre-autotile position.
+                            qCDebug(lcEffect) << "Updated pre-autotile geometry from daemon for" << stableId
+                                              << "in bucket" << bucketScreenId << ":" << existing << "->" << geom;
+                            m_preTileGeometries[bucketScreenId][wId] = geom;
+                        }
+                    }
+                }
+            });
+}
+
 void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate any in-flight loadSettings property reply — this signal
@@ -843,113 +977,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // Non-blocking: the old synchronous QDBus::Block call (500ms timeout) froze the
             // compositor thread, causing jerky first-retile animations since QElapsedTimer
             // kept advancing while no frames were rendered.
-            auto* watcher = new QDBusPendingCallWatcher(
-                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
-                                                           QStringLiteral("getPreTileGeometries")),
-                this);
-            // Capture expected screen set for staleness detection — if the user
-            // rapidly toggles autotile, a stale reply must not overwrite fresh data.
-            const QSet<QString> expectedScreens = newScreens;
-            connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                    [this, added, expectedScreens](QDBusPendingCallWatcher* w) {
-                        w->deleteLater();
-                        QDBusPendingReply<PhosphorProtocol::PreTileGeometryList> reply = *w;
-                        if (!reply.isValid()) {
-                            return;
-                        }
-                        // Bail if the autotile screen set changed while we were waiting
-                        if (m_managedScreens != expectedScreens) {
-                            qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
-                            return;
-                        }
-                        const PhosphorProtocol::PreTileGeometryList entries = reply.value();
-                        QHash<QString, QHash<QString, int>> entryCounts;
-                        for (const auto& entry : entries) {
-                            if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
-                                ++entryCounts[entry.appId][entry.screenId];
-                            }
-                        }
-                        const auto allWindows = KWin::effects->stackingOrder();
-                        for (const auto& entry : entries) {
-                            const QString stableId = entry.appId;
-                            QRectF geom = QRectF(entry.toRect());
-                            if (geom.width() <= 0 || geom.height() <= 0 || !added.contains(entry.screenId)
-                                || entryCounts.value(stableId).value(entry.screenId) != 1) {
-                                continue;
-                            }
-                            // Origin validation, not just extents. These rects
-                            // are applied verbatim by the desktop-switch
-                            // restore path, so a daemon-supplied origin on no
-                            // connected output parks the window where nothing
-                            // can show it. The capture side has a chokepoint
-                            // for this; the ingest side did not.
-                            if (!KWin::effects || !KWin::effects->screenAt(geom.center().toPoint())) {
-                                qCDebug(lcEffect) << "Ignoring daemon pre-tile geometry off every output for"
-                                                  << stableId << ":" << geom;
-                                continue;
-                            }
-                            // Find all windows on added screens matching this stableId.
-                            // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
-                            // the daemon's single geometry is ambiguous — skip the override entirely.
-                            KWin::EffectWindow* matchedWindow = nullptr;
-                            bool ambiguous = false;
-                            for (KWin::EffectWindow* ew : allWindows) {
-                                // isDeleted: a dying same-app window must not
-                                // consume the geometry override or trip the
-                                // ambiguous-skip, robbing the live window.
-                                if (!ew || ew->isDeleted() || !m_effect->shouldHandleWindow(ew))
-                                    continue;
-                                if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
-                                    continue;
-                                if (m_effect->getWindowScreenId(ew) != entry.screenId)
-                                    continue;
-                                if (matchedWindow) {
-                                    ambiguous = true;
-                                    break;
-                                }
-                                matchedWindow = ew;
-                            }
-                            if (ambiguous || !matchedWindow) {
-                                if (ambiguous) {
-                                    qCDebug(lcEffect) << "Skipping daemon geometry override for ambiguous stableId"
-                                                      << stableId << "(multiple live windows match)";
-                                }
-                                continue;
-                            }
-                            {
-                                const QString wId = m_effect->getWindowId(matchedWindow);
-                                // ALL-bucket lookup, matching the rule
-                                // saveAndRecordPreTileGeometry documents: a
-                                // per-screen check here let a transferred
-                                // window (the cross-output path re-files its
-                                // rect under the CAPTURE screen's bucket)
-                                // gain a SECOND entry under its current
-                                // screen, and findPreTileGeometry then
-                                // returned whichever bucket hash order
-                                // reached first — possibly a rect measured
-                                // in the other monitor's coordinate space.
-                                // Update the existing entry in place under
-                                // its own bucket; insert under the current
-                                // screen only on a genuine all-bucket miss.
-                                QString bucketScreenId;
-                                const QRectF existing = findPreTileGeometry(wId, &bucketScreenId);
-                                if (!existing.isValid()) {
-                                    const QString scr = m_effect->getWindowScreenId(matchedWindow);
-                                    m_preTileGeometries[scr][wId] = geom;
-                                    qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for"
-                                                      << stableId << "on" << scr << ":" << geom;
-                                } else if (existing.toRect() != geom.toRect()) {
-                                    // Daemon stored a different geometry (likely from before the window
-                                    // was resnapped to a zone). Prefer the daemon's version as it's the
-                                    // true pre-autotile position.
-                                    qCDebug(lcEffect)
-                                        << "Updated pre-autotile geometry from daemon for" << stableId << "in bucket"
-                                        << bucketScreenId << ":" << existing << "->" << geom;
-                                    m_preTileGeometries[bucketScreenId][wId] = geom;
-                                }
-                            }
-                        }
-                    });
+            fetchDaemonPreTileGeometries(added, newScreens);
         } // else (genuine user toggle)
     }
 

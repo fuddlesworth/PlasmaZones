@@ -457,6 +457,36 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 m_ready = true;
                 qCInfo(lcPhosphorScreens) << "Panel geometry: ready";
             }
+            // A FAILING first query would otherwise never be retried.
+            //
+            // The only other requery kicks are screen-geometry events and the
+            // plasmashell service watcher, and the watcher is
+            // WatchForRegistration only — it never re-fires for a plasmashell
+            // that was already registered when the call failed. So on a static
+            // screen setup a single transient error left m_ready false for the
+            // life of the process, and panelGeometryReady is a one-shot that
+            // several consumers gate on: the tiling adaptor queues every window
+            // open behind it (bounded only by its overflow valve) and snap
+            // restore waits on it outright.
+            //
+            // Bounded backoff rather than a timer that runs forever: if
+            // plasmashell is genuinely not answering, the consumers' own
+            // fallbacks are the right answer and a retry loop would just hide
+            // it. Only while still un-ready, so a later failure on an
+            // already-ready source changes nothing.
+            if (!m_ready && !replyValid) {
+                if (m_readyRetriesRemaining > 0) {
+                    const int delayMs = kReadyRetryBaseMs << (kReadyRetryCount - m_readyRetriesRemaining);
+                    --m_readyRetriesRemaining;
+                    qCInfo(lcPhosphorScreens)
+                        << "Panel geometry: query failed before ready, retrying in" << delayMs << "ms";
+                    requestRequery(delayMs);
+                } else {
+                    qCWarning(lcPhosphorScreens)
+                        << "Panel geometry: giving up on the ready handshake after" << kReadyRetryCount
+                        << "attempts; consumers fall back to their own defaults";
+                }
+            }
 
             const auto qtScreens = QGuiApplication::screens();
             for (const QString& name : std::as_const(changedNames)) {
