@@ -232,6 +232,28 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
     }
     if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMaximize)) {
+        // KNOWN DIVERGENCE on scrolling screens, recorded rather than fixed.
+        //
+        // This unload is whole-session, but the maximize INTERCEPTION is
+        // per-window: a maximize on a scroll-managed tile is claimed by the
+        // strip's maximize-column verb, which skips the WindowMaximize morph
+        // on purpose (window_connections.cpp, the interceptMaximizeRequest
+        // arm) because the column's own batch transition already carries the
+        // resize and installing a second one would supersede it.
+        //
+        // So on a scrolling screen a maximize plays the strip transition,
+        // not the assigned pack, while stock maximize is gone session-wide.
+        // The pack still plays everywhere else — tiling, snapping, floating
+        // windows, and every non-scrolling screen — which is why the unload
+        // is still the right trade.
+        //
+        // Narrowing it would need this predicate to know, per window, whether
+        // the scrolling engine will claim that window's maximize. It cannot:
+        // the answer depends on the window's screen, desktop and activity at
+        // the moment of the request, and the suppression is decided once at
+        // sync time for the whole session. Restoring stock here would be
+        // worse than the divergence, since stock maximize would then fight
+        // the strip batch on exactly the windows this arm exists to protect.
         wanted << QStringLiteral("maximize");
     }
 
