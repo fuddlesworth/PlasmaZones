@@ -5,16 +5,24 @@
 #
 # Build-Depends carry alternatives because the same control file feeds three
 # targets and they disagree on binary package names:
-#   - KDE Neon (Ubuntu-based): `kf6-kcolorscheme-dev`, `kf6-kirigami-dev`
-#   - Ubuntu proper:           `libqt6shadertools6-dev`, `libqt6svg6-dev`
 #   - Debian testing/unstable: `qt6-shadertools-dev`, `qt6-svg-dev`,
 #     `libkf6colorscheme-dev`, and notably `libkirigami-dev` and
 #     `libplasmaactivities-dev`, which carry neither a `kf6-` nor a `libkf6-`
-#     prefix. Verified against sid on 2026-08-28; the last two exist under no
+#     prefix. Verified against sid on 2026-08-28. The last two exist under no
 #     other name there, so dropping them makes the OBS Debian build
 #     unresolvable rather than failing loudly.
+#   - KDE Neon (Ubuntu-based): `kf6-kcolorscheme-dev`, `kf6-kirigami-dev`
+#   - Ubuntu proper:           `libqt6shadertools6-dev`, `libqt6svg6-dev`
 # An alternative that does not exist on a given target is simply skipped, so
-# listing all three spellings is safe everywhere.
+# listing every spelling is safe everywhere. The order within a field carries
+# no meaning and does not rank the targets: apt takes the first alternative it
+# can satisfy, and each target satisfies exactly one of the spellings, so
+# whichever comes first is the only one available there anyway.
+#
+# Do not put a `#` comment inside the Build-Depends field. dpkg would strip it,
+# but packaging/obs/generate-dsc.sh has to re-parse the field to build the OBS
+# .dsc, and a comment inside a field is the shape that parse handles least
+# naturally. Keep them above the field, as here.
 Source: plasmazones
 Section: kde
 Priority: optional

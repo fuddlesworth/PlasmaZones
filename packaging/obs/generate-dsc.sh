@@ -41,10 +41,25 @@ fi
 # Flatten the multi-line Build-Depends field into the single logical line a
 # .dsc uses. Continuation lines in debian/control are the ones starting with
 # whitespace; the field ends at the next field name or a blank line.
+#
+# Comment lines are skipped rather than treated as a terminator. dpkg strips
+# `#`-at-column-0 lines from debian/control before parsing, so one may legally
+# sit between two dependencies, and packaging/debian/control already uses that
+# form inside its Depends field. Ending the field there instead would drop
+# every dependency after the comment and still emit a syntactically valid .dsc,
+# which OBS would resolve into a build missing headers it never reports as
+# missing. With comments skipped, the only thing that closes the field is a
+# real terminator, so a silent truncation is no longer reachable.
 BUILD_DEPENDS="$(awk '
     /^Build-Depends:/ { collecting = 1; sub(/^Build-Depends:[[:space:]]*/, ""); if ($0 != "") print; next }
-    collecting && /^[[:space:]]/ { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); if ($0 != "") print; next }
-    collecting { collecting = 0 }
+    !collecting { next }
+    /^#/ { next }
+    /^[[:space:]]/ {
+        sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, "")
+        if ($0 ~ /^#/ || $0 == "") next
+        print; next
+    }
+    { collecting = 0 }
 ' "$CONTROL" | paste -sd' ' - | sed 's/,$//')"
 
 if [[ -z "$BUILD_DEPENDS" ]]; then
@@ -52,12 +67,20 @@ if [[ -z "$BUILD_DEPENDS" ]]; then
     exit 1
 fi
 
-# Sanity-check that the parse actually captured the whole field rather than a
-# truncated prefix. kwin-dev is the last dependency that matters most (an
-# unresolvable KWin is the failure mode that strands the effect plugin), so its
-# absence means the awk above silently stopped early.
+# Canary that the field was found and read, rather than the parse landing on a
+# renamed or moved field and producing a plausible-looking prefix. kwin-dev is
+# the dependency whose absence hurts most, since an unresolvable KWin is what
+# strands the effect plugin.
 if [[ "$BUILD_DEPENDS" != *"kwin-dev"* ]]; then
     echo "Error: parsed Build-Depends is missing kwin-dev, parse likely truncated" >&2
+    echo "Got: $BUILD_DEPENDS" >&2
+    exit 1
+fi
+
+# A `#` surviving the flatten means a comment was folded into the dependency
+# list as a bogus token, which dpkg would reject far downstream on OBS.
+if [[ "$BUILD_DEPENDS" == *"#"* ]]; then
+    echo "Error: parsed Build-Depends contains a comment marker" >&2
     echo "Got: $BUILD_DEPENDS" >&2
     exit 1
 fi
