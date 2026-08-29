@@ -144,28 +144,47 @@ jobs:
           fi
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
+  # Build Debian Package (Debian testing / unstable)
   # ═══════════════════════════════════════════════════════════════════════════
+  # This job used to build in a KDE Neon container, which made it the wrong
+  # test for the thing it gates. Neon is Ubuntu 24.04-based, so it exercises
+  # neither the distro the .deb targets nor the one publish-obs builds for, and
+  # the two Build-Depends that were wrong for Debian (libkirigami-dev and
+  # libplasmaactivities-dev, which carry neither a `kf6-` nor a `libkf6-`
+  # prefix) went unnoticed here because Neon spells them differently.
+  #
+  # Building on the suites OBS publishes to closes that gap. Dependencies are
+  # resolved from packaging/debian/control itself rather than a hand-kept list,
+  # so the field OBS resolves is the field CI proves, alternatives and version
+  # floors included. Both suites gate the release; only unstable's artifact is
+  # uploaded, because the two produce identically named .deb files and a GitHub
+  # release asset is keyed by basename, so the second would clobber the first.
   build-deb:
-    name: Build .deb (KDE Neon)
+    name: Build .deb (Debian ${{ matrix.suite }})
     needs: version
     runs-on: ubuntu-latest
+    strategy:
+      # Report both suites. A freeze can drop testing below the version floors
+      # while unstable is fine, and that is worth seeing rather than having the
+      # first failure cancel its sibling.
+      fail-fast: false
+      matrix:
+        suite: [unstable, testing]
     container:
-      image: invent-registry.kde.org/neon/docker-images/plasma:user
-      options: --user root
+      image: debian:${{ matrix.suite }}
 
     steps:
       - name: Install prerequisites
         # Force bash for `set -o pipefail`, the same reason the build steps
         # below do. The container's default shell resolves to sh.
         #
-        # Retry the install once after refreshing the package index. Neon's
-        # archive occasionally advertises a package version whose .deb has not
+        # Retry the install once after refreshing the package index. A rolling
+        # suite regularly advertises a package version whose .deb has not
         # reached the mirror yet, and apt exits non-zero on the 404. This job
         # gates the `release` job, which in turn gates publish-aur and
-        # publish-obs, so a transient Neon mirror flake otherwise blocks the
-        # Fedora, Arch, openSUSE and Debian channels along with this one. Same
-        # shape as install_with_retry in build-rpm-opensuse.
+        # publish-obs, so a transient mirror flake otherwise blocks the Fedora,
+        # Arch, openSUSE and Debian channels along with this one. Same shape as
+        # install_with_retry in build-rpm-opensuse.
         shell: bash
         run: |
           set -euo pipefail
@@ -178,53 +197,46 @@ jobs:
                   apt-get install -y --no-install-recommends "$@"
               fi
           }
-          apt_install_with_retry git ca-certificates
+          # git so actions/checkout does a real clone rather than falling back
+          # to the REST tarball; dpkg-dev so `apt-get build-dep` can read the
+          # source package below.
+          apt_install_with_retry git ca-certificates dpkg-dev fakeroot
 
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.version.outputs.ref }}
 
-      - name: Install build dependencies
-        # Same retry as the prerequisites step, inlined because each step gets
-        # its own shell — no sourcing across steps. The dependency list is much
-        # larger here so it is also more exposed to a mirror lagging behind the
-        # index. Mirrors the note in build-rpm-opensuse.
+      - name: Install build dependencies from packaging/debian/control
+        # Resolved from the control file rather than a hand-maintained copy of
+        # the same list. The old copy drifted from the field it mirrored and
+        # hid two names that were wrong for Debian, which is the failure this
+        # job now exists to catch. `apt-get build-dep` reads Build-Depends
+        # directly, so alternatives and version floors are exercised exactly as
+        # OBS will exercise them.
+        #
+        # The debian/ symlink is created here rather than in the build step
+        # because build-dep needs it too. The build step still removes and
+        # recreates it, which is harmless and keeps that step self-contained.
+        #
+        # Retry shape inlined again: each step gets its own shell, so there is
+        # nothing to source across them.
         shell: bash
         run: |
           set -euo pipefail
-          apt_install_with_retry() {
+          rm -rf debian
+          ln -sfn packaging/debian debian
+          apt-get update
+          if ! apt-get build-dep -y --no-install-recommends ./; then
+              echo "::warning::apt-get build-dep failed; sleeping 60s and retrying after an index refresh"
+              sleep 60
               apt-get update
-              if ! apt-get install -y --no-install-recommends "$@"; then
-                  echo "::warning::apt-get install failed; sleeping 60s and retrying after an index refresh"
-                  sleep 60
-                  apt-get update
-                  apt-get install -y --no-install-recommends "$@"
-              fi
-          }
-          apt_install_with_retry \
-            cmake ninja-build extra-cmake-modules g++ pkg-config \
-            build-essential pkg-kde-tools \
-            devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev qt6-svg-dev \
-            kwin-dev libwayland-dev libvulkan-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
-            libkf6config-dev libkf6configwidgets-dev \
-            qt6-wayland-private-dev \
-            libkf6kcmutils-dev \
-            libkf6windowsystem-dev libkf6globalaccel-dev \
-            libkf6notifications-dev \
-            qt6-wayland-dev plasma-activities-dev
-          # Kirigami dev package name varies across distros. Deliberately NOT
-          # routed through apt_install_with_retry: a miss on the first name is
-          # the expected path on a target that spells it the other way, and the
-          # retry would spend 60s sleeping and emit a warning before falling
-          # through to the answer that was always going to work.
-          apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
-            || apt-get install -y --no-install-recommends kf6-kirigami-dev
+              apt-get build-dep -y --no-install-recommends ./
+          fi
 
       - name: Generate Debian changelog from CHANGELOG.md
-        # Force bash for the same reason the build step below does: the KDE
-        # Neon container's default shell resolves to dash, which has neither
+        # Force bash for the same reason the build step below does: the
+        # Debian container's default shell is dash, which has neither
         # `set -o pipefail` nor `[[ ]]`.
         shell: bash
         env:
@@ -253,9 +265,9 @@ jobs:
 
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
-        # bash builtins. The KDE Neon container's /bin/sh is dash, and
-        # GitHub's container default shell resolved to sh here, so the
-        # step aborted on 'Illegal option -o pipefail'.
+        # bash builtins. The container's /bin/sh is dash, and GitHub's
+        # container default shell resolved to sh here, so the step aborted
+        # on 'Illegal option -o pipefail'.
         shell: bash
         run: |
           set -euo pipefail
@@ -273,10 +285,18 @@ jobs:
               mv ../*.ddeb dist/
           fi
 
+      # Only unstable's build is published. Both suites produce a .deb with the
+      # identical name plasmazones_<version>-<rev>_amd64.deb, and a GitHub
+      # release asset is keyed by its basename, so uploading both would leave
+      # one silently overwriting the other with no way to tell them apart.
+      # testing still builds and still gates the release; it just does not ship
+      # an artifact. Unstable is the one published because it matches the
+      # Debian_Unstable OBS target and is the sharper signal of the two.
       - name: Upload artifact
+        if: matrix.suite == 'unstable'
         uses: actions/upload-artifact@v7
         with:
-          name: deb-kde-neon
+          name: deb-debian-unstable
           path: dist/*.*deb
           retention-days: 30
 
@@ -816,7 +836,8 @@ jobs:
             echo '```'
             echo "On Debian testing, swap Debian_Unstable for Debian_Testing in both lines. Packages are built for x86_64 only."
             echo ""
-            echo "**KDE Neon / manual .deb:**"
+            echo "**Debian (manual .deb):**"
+            echo "Built on Debian unstable. Prefer the apt repository above, which rebuilds when KWin moves."
             echo '```bash'
             echo "sudo dpkg -i plasmazones_${VERSION}-*_amd64.deb"
             echo "sudo apt-get install -f  # Install dependencies if needed"

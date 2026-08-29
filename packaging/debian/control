@@ -4,7 +4,9 @@
 # Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7).
 #
 # Build-Depends carry alternatives because the same control file feeds three
-# targets and they disagree on binary package names:
+# targets and they disagree on binary package names. Only the Debian spellings
+# are covered by CI, which builds this package on testing and unstable. The
+# other two are kept for anyone building by hand there, and cost nothing:
 #   - Debian testing/unstable: `qt6-shadertools-dev`, `qt6-svg-dev`,
 #     `libkf6colorscheme-dev`, and notably `libkirigami-dev` and
 #     `libplasmaactivities-dev`, which carry neither a `kf6-` nor a `libkf6-`
