@@ -58,6 +58,7 @@ private Q_SLOTS:
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
+    void aZeroMovementHeightPressStillReportsTheOwnershipClaim();
     void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
     void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
@@ -390,6 +391,74 @@ void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
     // So switching back to "b" still shows the column "a" set.
     QVERIFY(strip.focusAdjacentTile(1));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
+}
+
+// The one arm of these verbs that returns TRUE without writing a height, and
+// the inverse of the failure shape this file's header says it exists to pin.
+//
+// adjustActiveWindowHeight claims tabbed ownership BEFORE its no-move bail and
+// then returns whether the claim happened, so a press whose own target lands
+// exactly on the current pixel is still a real state change. It is emphatically
+// NOT a no-op: a tabbed column resolves its extent from the OWNER's intent, so
+// moving the owner re-resolves the column even though this press wrote no
+// height of its own. Here the claiming tab still carries Auto, which resolves
+// to the whole work area, and the column jumps from the outgoing owner's 600
+// to 800.
+//
+// That is exactly why the bail returns `claimed` rather than false. The verdict
+// is what drives the caller's relayout; a false here would leave the column
+// painted at the old owner's extent while the model had already moved on.
+//
+// Untested until now, which matters because the bail reads like a redundant
+// `target != currentPx` waiting to be tidied up. That edit looks obviously
+// right and breaks the handover silently.
+void TestScrollStripSizing::aZeroMovementHeightPressStillReportsTheOwnershipClaim()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // "b" (the shown tab) takes ownership with a press that DOES move.
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    const int settled = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+
+    // Now "a" presses by an amount that rounds to zero pixels. deltaPercent is
+    // a percentage of the work-area cross extent, so this is well under half a
+    // pixel and target lands exactly on currentPx.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    // Strictly UNDER half a pixel: the verb qRounds the pixel delta, and
+    // qRound rounds a half away from zero, so exactly 0.5 would move one pixel
+    // and stop testing the zero-movement arm.
+    const qreal subPixel = 0.2 / Ax::crossLen(ScrollTestUtils::defaultScreenRect()) * 100.0;
+    QVERIFY2(strip.adjustActiveWindowHeight(-subPixel, params),
+             "a press that moves nothing but takes the extent owner is still a change");
+
+    // The claim landed...
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
+    // ...and "a" wrote NO height of its own: it still carries the Auto it was
+    // inserted with. This is the arm's signature — the true verdict came from
+    // the claim, not from a resize.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height.kind, WindowHeight::Auto);
+    // Which is why the verdict has to be true. The column now resolves from
+    // "a"'s Auto (the whole work area) instead of the 600 "b" had set, so a
+    // caller told "nothing happened" would skip the relayout and leave the
+    // column painted at a value the model no longer holds.
+    const int afterClaim = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    QVERIFY2(afterClaim != settled, "moving the extent owner must re-resolve the column");
+    QCOMPARE(afterClaim, Ax::crossLen(ScrollTestUtils::defaultScreenRect()));
+
+    // Pressing again as the SITTING owner, still by a sub-pixel amount, has
+    // nothing left to claim and nothing to move: now it must report false.
+    QVERIFY2(!strip.adjustActiveWindowHeight(-subPixel, params),
+             "with the claim already held and no movement there is nothing to report");
 }
 
 // The tab toggle is REVERSIBLE, which is the whole reason ownership is a

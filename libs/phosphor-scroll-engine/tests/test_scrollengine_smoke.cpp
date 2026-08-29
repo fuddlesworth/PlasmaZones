@@ -56,6 +56,7 @@ using namespace PhosphorScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
 using ScrollTestUtils::defaultScreenRect;
+using ScrollTestUtils::GeometryFn;
 using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEngineSmoke : public QObject
@@ -1809,7 +1810,16 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // no-op re-apply; the tab-strip payload is change-gated with the empty
     // latch broadcasting exactly one "[]".
     QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // A MUTABLE work area, so the positive arm below has a change that only
+    // retile can publish. Every other assertion here is "the count did not
+    // go up", and a suite made only of those passes just as well against a
+    // retile() that became a no-op — which is the regression the emit-on-change
+    // gate is most likely to be tidied into.
+    auto sharedRect = std::make_shared<QRect>(defaultScreenRect());
+    const GeometryFn geometry = [sharedRect](const QString&) {
+        return *sharedRect;
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
 
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
     QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
@@ -1821,6 +1831,19 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), afterOpen);
+
+    // The POSITIVE half: the work area genuinely changes, so the same retile
+    // call that was silent above must now deliver. Without this the whole slot
+    // is satisfied by an apply path that never emits at all.
+    sharedRect->setWidth(sharedRect->width() - 200);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(tiledSpy.count() > afterOpen, "a retile after a real work-area change must emit");
+    const int afterResize = tiledSpy.count();
+    // And it re-latches: the new rect is now the no-change baseline.
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(tiledSpy.count(), afterResize);
 
     // Tabbed column: the strip payload appears once and does not re-emit
     // byte-identically on a plain retile.
