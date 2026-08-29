@@ -1060,9 +1060,20 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (m_declinedOpenFocus.remove(windowId)) {
         return;
     }
-    // A genuine focus report implies every previously-sent echo already
-    // landed, so whatever is left in the queue was dropped — reclaim it.
-    m_pendingSelfActivations.clear();
+    // Deliberately NO reclaim of m_pendingSelfActivations here. An earlier
+    // form cleared the queue on every genuine report, reasoning that a
+    // genuine focus implies every previously-sent echo already landed. That
+    // inference is false ACROSS DIRECTIONS: on a window close the compositor
+    // activates its own successor pick and that genuine report is in flight
+    // BEFORE this engine queues its competing self-activation (the close
+    // handler's focusWindowAfter), so the queued entry's echo is still
+    // legitimately in flight when the genuine report lands. The clear wiped
+    // it, the echo then arrived against an empty queue, was mis-read as user
+    // focus, and the two picks re-anchored the strip against each other —
+    // the post-close anchor ping-pong (0↔1916 several times in two seconds,
+    // re-parking live windows on every bounce). The queue stays bounded
+    // without the reclaim: the prefix-drop at match above, the close-time
+    // removeAll, and the kMaxPendingSelfActivations cap all still run.
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
