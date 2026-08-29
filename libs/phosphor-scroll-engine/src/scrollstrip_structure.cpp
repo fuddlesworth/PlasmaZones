@@ -769,7 +769,29 @@ bool ScrollStrip::expelWindowFromColumn(const ScrollLayoutParams& params)
         col->activeTileIdx = col->tiles.size() - 1;
     }
     Column newCol;
-    newCol.width = col->width;
+    // Inherit the source column's width, EXCEPT when that renders full.
+    //
+    // A maximized column is by definition THE full-work-area column, and the
+    // apply path publishes columnMaximized by MEASURING the rendered extent —
+    // so copying a full width here produced two columns both reporting
+    // maximized, both lighting the titlebar button, and the effect holding a
+    // KWin maximize bit for each. The single m_preMaximizeColumnIdx slot can
+    // only describe one of them, so the copy also silently handed the new
+    // column a state with no remembered width behind it.
+    //
+    // The expelled tile takes the context default instead, which is what
+    // "give this window its own column" means. Half the work area when the
+    // default is itself full width, the same sub-fallback the maximize toggle
+    // uses to avoid handing back a column that is still full.
+    const int workMain = params.axis.mainSize(params.workArea);
+    const bool sourceRendersFull = workMain > 0 && resolveColumnWidthPx(col->width, params) >= workMain;
+    if (sourceRendersFull) {
+        newCol.width = resolveColumnWidthPx(params.defaultColumnWidth, params) >= workMain
+            ? ColumnWidth::makeProportion(0.5)
+            : params.defaultColumnWidth;
+    } else {
+        newCol.width = col->width;
+    }
     newCol.display = ColumnDisplay::Normal;
     newCol.tiles.append(expelled);
     const int insertAt = m_activeColumnIdx + 1;

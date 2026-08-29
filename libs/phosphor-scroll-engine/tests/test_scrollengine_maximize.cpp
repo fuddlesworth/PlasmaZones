@@ -93,7 +93,49 @@ private Q_SLOTS:
     void twoColumnsCanBeMaximizedAtOnce();
     void namedVerbTogglesBackOnASecondPress();
     void maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot();
+    void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
 };
+
+// Expel copies the source column's width to the new one, which is right for
+// every width except a full one. A maximized column IS the full-work-area
+// column, and the apply path decides columnMaximized by MEASURING the rendered
+// extent, so the copy produced two columns both reporting maximized, both
+// lighting the titlebar button, and the effect holding a KWin maximize bit for
+// each. The strip's single pre-maximize slot can only describe one of them, so
+// the second also had the state with no remembered width behind it.
+//
+// Asserted on the published FLAG rather than on the stored width, because the
+// flag is what the effect acts on and an intent assertion would pass for a
+// column that stored something narrow and still rendered full.
+void TestScrollEngineMaximize::expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // Focus the FIRST column: consume pulls the next column's window in, so
+    // running it on the last column would consume nothing and leave two
+    // separate columns, which is not the shape this slot is about.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    // One column holding both tiles, then maximized.
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(maximizedInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+
+    // Expel the focused tile into its own column.
+    engine->expelWindowFromColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // Both windows are still tiled and still reported...
+    QCOMPARE(windowsInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+    // ...but exactly one column is maximized now, not both. Which tile stayed
+    // behind is the expel verb's business and not this slot's; the defect was
+    // the COUNT, and a size assertion catches it without pinning that choice.
+    QCOMPARE(maximizedInBatch(tiled).size(), 1);
+}
 
 void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()
 {
