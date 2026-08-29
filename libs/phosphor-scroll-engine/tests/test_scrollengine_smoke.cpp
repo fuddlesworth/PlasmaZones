@@ -688,6 +688,14 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // verb aims at is a strip fact, and reading it back through the wire would
     // also make the test depend on the batch emit-gate, which legitimately
     // stays silent when a width rewrite happens to move no rect.
+    //
+    // That does mean these assertions read stored INTENT and not resolved
+    // geometry, so on their own they would pass for a column whose intent
+    // moved while its rendered extent did not. The rendered side is covered
+    // where it belongs: test_scrollengine_maximize.cpp asserts the PUBLISHED
+    // columnMaximized flag, which the apply path derives by measuring the
+    // rect, and test_scrollstrip_sizing.cpp asserts resolved pixels for the
+    // toggle's own arms.
     const auto widthOf = [engine](const QString& windowId) {
         // Both guards, matching columnDisplayOf above and the null-guard rule
         // this file states at stateFor: a dropped state or a window the strip

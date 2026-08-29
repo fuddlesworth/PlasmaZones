@@ -740,6 +740,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Seed from the LIVE maximize mode: a window already fully maximized when
     // the effect (re)loads has no entry, so its first RESTORE compared
     // false==false, read as a no-edge, and played no morph.
+    //
+    // No equivalent seed for m_columnMaximizedWindows, and that asymmetry is
+    // intended. This map is an EDGE FILTER whose whole job is answering
+    // "did the state change", so a missing entry is a wrong answer with no
+    // way back — nothing else ever writes it. The claim ledger is an
+    // OWNERSHIP record, and an unseeded one is self-healing: the daemon's
+    // first tile batch carries the flag, and the Apply arm re-inserts
+    // membership for any column the engine still says is maximized. Seeding
+    // it from live compositor state would also be a guess, since KWin's
+    // maximize bit does not distinguish a column maximize from a user's own.
+    //
+    // The cost of not seeding is bounded to one click: after an effect
+    // reload, the first maximize on an already-column-maximized window
+    // un-maximizes and re-maximizes before the batch re-establishes the
+    // record.
     if (KWin::Window* kwSeed = w->window()) {
         m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
     }
@@ -927,6 +942,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // is a pass-through for Wayland, where the negotiated size is
                 // not knowable up front. Retargeting when the commit arrives
                 // needs no prediction and covers both.
+                //
+                // DELIBERATELY UNGATED on inGeometryApply, unlike Body -0.5
+                // below, and the difference is what each body does with the
+                // commit rather than an oversight. This one retargets a
+                // running leg ONTO the rect that was just committed, which is
+                // the right destination whoever committed it — including the
+                // effect itself, since a mid-animation apply from one of the
+                // thirteen bracketed sites is exactly a new destination the
+                // leg should adopt. Body -0.5 instead CENTRES the window on a
+                // size mismatch, and during an effect apply that mismatch is
+                // transient, so acting on it would fight the write in flight.
+                //
+                // The re-entrant case is also cheap: an effect moveResize
+                // commits synchronously, so frameGeometry() already equals the
+                // target and either isAnimatingToTarget short-circuits or the
+                // retarget lands on the window's own rect and reaps the
+                // converged leg, which is the outcome this correction wants.
                 //
                 // Scoped to strip members: this is the only path that
                 // relocates a window away from its committed rect, so it is
