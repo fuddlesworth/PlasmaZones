@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.4.3] - 2026-08-29
 
 ### Added
 
@@ -32,6 +32,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Tabbing a column keeps every window's height**: a column of stacked windows can have a height set on each one. Turning it into tabs used to throw all but one of them away, so turning the tabs back into a stack gave you an even split instead of the layout you had built. Which window's height the tabbed column took was decided by stack order too, so it could size itself to a window you were not looking at. The tab you have in front of you now decides the column's height, and the others keep theirs for when you switch back ([#995](https://github.com/fuddlesworth/PlasmaZones/pull/995)).
 - **Clicking the focused window brings it back into view**: scrolling the strip by hand takes the view out of the centering policy's hands, which is what lets a scrolled view stay put. Focusing a window hands it back, but a click on the window that already had focus was ignored entirely, and so was the one the compositor sends when you return to a desktop. So was a switch between two windows stacked in the same column. A window you had scrolled away from stayed off to one side no matter how many times you clicked it. All three now hand the view back, and under the two policies that only move the view when they have to, a scroll that left the window fully on screen is still left alone ([#992](https://github.com/fuddlesworth/PlasmaZones/pull/992)).
 - **The shortcut cheatsheet lists the mode you are actually using**: the sheet picked its shortcuts using the mode assigned to the screen, without checking whether that mode was switched on. A screen still assigned to snapping with snapping turned off listed the snapping keys, which do nothing, and hid the tiling and scrolling ones. With tiling turned off as well, a screen assigned to tiling showed no mode's shortcuts at all. The sheet now picks a mode that is turned on. If you have all three turned off there is nothing to list, so it says so instead of opening. An open sheet also follows the switches now, including the ones changed from System Settings, and closes when you turn the last mode off ([#993](https://github.com/fuddlesworth/PlasmaZones/pull/993)).
+- **Closing a window in the middle of the strip no longer sends it sliding off the screen**: on a scrolling screen you had panned away from, closing a window in the middle of the strip made the closing window drop downward and off the bottom while its neighbours slid over it. Three things were behind it. The dying window was drawn at the raw position the strip had committed for it, which on a panned strip is the row off screen where parked columns wait, so it snapped there the moment it closed. A stale picture of a column that had scrolled off the same edge earlier was painted behind the arriving window for the whole animation. And the re-anchor that follows a close animated a parked column toward the parking row instead of the screen edge. The closing window now holds the place it was drawn in until its animation finishes, and nothing animates toward the parking row ([#1003](https://github.com/fuddlesworth/PlasmaZones/pull/1003)).
+- **The strip settles after a close instead of bouncing**: closing a window made the compositor focus one neighbour while PlasmaZones focused another, and the two picks re-anchored the strip against each other, so the view swung back and forth several times in a second and re-parked windows that were on screen. The strip now waits for the close animation to finish and then reflows once ([#1003](https://github.com/fuddlesworth/PlasmaZones/pull/1003)).
+- **Seven translations corrected**: 345 strings across German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish said the wrong thing. Among them, "User sets" was read as a verb rather than as the name for your saved sets in five of the seven languages, Georgian rendered Opacity with the word for transparency, which is its opposite, Russian described a window's height as how high up it sits, and Dutch rendered Overshoot as a surplus, contradicting its own help text ([#1004](https://github.com/fuddlesworth/PlasmaZones/pull/1004)).
 
 ## [3.4.2] - 2026-08-27
 
@@ -1996,7 +1999,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.3...HEAD
+[3.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.2...v3.4.3
 [3.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.1...v3.4.2
 [3.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.0...v3.4.1
 [3.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.9...v3.4.0
