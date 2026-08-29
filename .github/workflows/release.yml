@@ -156,9 +156,29 @@ jobs:
 
     steps:
       - name: Install prerequisites
+        # Force bash for `set -o pipefail`, the same reason the build steps
+        # below do. The container's default shell resolves to sh.
+        #
+        # Retry the install once after refreshing the package index. Neon's
+        # archive occasionally advertises a package version whose .deb has not
+        # reached the mirror yet, and apt exits non-zero on the 404. This job
+        # gates the `release` job, which in turn gates publish-aur and
+        # publish-obs, so a transient Neon mirror flake otherwise blocks the
+        # Fedora, Arch, openSUSE and Debian channels along with this one. Same
+        # shape as install_with_retry in build-rpm-opensuse.
+        shell: bash
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates
+          set -euo pipefail
+          apt_install_with_retry() {
+              apt-get update
+              if ! apt-get install -y --no-install-recommends "$@"; then
+                  echo "::warning::apt-get install failed; sleeping 60s and retrying after an index refresh"
+                  sleep 60
+                  apt-get update
+                  apt-get install -y --no-install-recommends "$@"
+              fi
+          }
+          apt_install_with_retry git ca-certificates
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -166,8 +186,23 @@ jobs:
           ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
+        # Same retry as the prerequisites step, inlined because each step gets
+        # its own shell — no sourcing across steps. The dependency list is much
+        # larger here so it is also more exposed to a mirror lagging behind the
+        # index. Mirrors the note in build-rpm-opensuse.
+        shell: bash
         run: |
-          apt-get install -y --no-install-recommends \
+          set -euo pipefail
+          apt_install_with_retry() {
+              apt-get update
+              if ! apt-get install -y --no-install-recommends "$@"; then
+                  echo "::warning::apt-get install failed; sleeping 60s and retrying after an index refresh"
+                  sleep 60
+                  apt-get update
+                  apt-get install -y --no-install-recommends "$@"
+              fi
+          }
+          apt_install_with_retry \
             cmake ninja-build extra-cmake-modules g++ pkg-config \
             build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
@@ -179,7 +214,11 @@ jobs:
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
             qt6-wayland-dev plasma-activities-dev
-          # Kirigami dev package name varies across distros
+          # Kirigami dev package name varies across distros. Deliberately NOT
+          # routed through apt_install_with_retry: a miss on the first name is
+          # the expected path on a target that spells it the other way, and the
+          # retry would spend 60s sleeping and emit a warning before falling
+          # through to the answer that was always going to work.
           apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
