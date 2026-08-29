@@ -804,38 +804,63 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // re-notified by later notifyWindowAdded calls (e.g., window moves).
             qCInfo(lcEffect) << "slotScreensChanged: desktop return, added screens:" << added
                              << "managed screens:" << m_managedScreens;
-            for (const QString& screenId : added) {
-                for (KWin::EffectWindow* w : windows) {
-                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
-                        const QString windowId = m_effect->getWindowId(w);
-                        if (m_savedNotifiedForDesktopReturn.contains(windowId)
-                            || m_notifiedWindows.contains(windowId)) {
-                            // Previously tracked — re-add without re-notifying the
-                            // daemon. Restore the SCREEN record too: the demotion
-                            // dropped both, and a window tracked with an empty
-                            // screen record never detects cross-monitor / cross-VS
-                            // transfers again (handleWindowOutputChanged
-                            // early-returns on an unknown old screen).
-                            m_notifiedWindows.insert(windowId);
-                            m_notifiedWindowScreens[windowId] = screenId;
-                        } else {
-                            // Genuinely new window opened while this desktop was
-                            // not active — notify daemon so it's added to PhosphorTiles::TilingState
-                            notifyWindowAdded(w, /*knownFreeFloating=*/true);
-                        }
-                    }
+            // One pass over the windows with a set lookup rather than a pass
+            // per added screen. The screen-major form re-resolved
+            // getWindowScreenId and getWindowId for every (screen, window)
+            // pair, and this whole block runs three such nested loops on the
+            // desktop-switch path — at fifty screens by five hundred windows
+            // that is 25k resolves apiece. The screen id is needed inside, so
+            // it is resolved once and reused.
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                    || !w->isOnCurrentActivity()) {
+                    continue;
+                }
+                const QString screenId = m_effect->getWindowScreenId(w);
+                if (!added.contains(screenId)) {
+                    continue;
+                }
+                const QString windowId = m_effect->getWindowId(w);
+                if (m_savedNotifiedForDesktopReturn.contains(windowId) || m_notifiedWindows.contains(windowId)) {
+                    // Previously tracked — re-add without re-notifying the
+                    // daemon. Restore the SCREEN record too: the demotion
+                    // dropped both, and a window tracked with an empty
+                    // screen record never detects cross-monitor / cross-VS
+                    // transfers again (handleWindowOutputChanged
+                    // early-returns on an unknown old screen).
+                    m_notifiedWindows.insert(windowId);
+                    m_notifiedWindowScreens[windowId] = screenId;
+                } else {
+                    // Genuinely new window opened while this desktop was
+                    // not active — notify daemon so it's added to PhosphorTiles::TilingState
+                    notifyWindowAdded(w, /*knownFreeFloating=*/true);
                 }
             }
             // Only remove entries for windows on screens we just processed.
             // In multi-screen setups, windows on OTHER screens (not in `added`)
             // must remain in the set for when their screen returns.
-            for (const QString& screenId : added) {
-                for (KWin::EffectWindow* w : windows) {
-                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
-                        m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
-                    }
+            //
+            // ITS NARROW PURPOSE IS MINIMIZED WINDOWS. The catch-scan below
+            // runs over every managed screen under these same filters and
+            // removes the same entries, so for a non-minimized window this
+            // loop is redundant with it. What the catch-scan additionally
+            // skips is `w->isMinimized()`, deliberately — it re-ADDS windows
+            // to tiling, and a minimized window must not be. This loop only
+            // clears bookkeeping, so it has no such reason to skip them, and
+            // dropping it would strand a minimized window's entry until its
+            // screen next left and returned.
+            //
+            // One pass over the windows with a set lookup, not a pass per
+            // added screen: `added` is already a QSet, and the screen-major
+            // form re-resolved getWindowScreenId and getWindowId for every
+            // (screen, window) pair.
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                    || !w->isOnCurrentActivity()) {
+                    continue;
+                }
+                if (added.contains(m_effect->getWindowScreenId(w))) {
+                    m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
                 }
             }
 

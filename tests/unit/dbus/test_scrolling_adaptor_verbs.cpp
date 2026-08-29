@@ -310,6 +310,30 @@ private Q_SLOTS:
             // user-reachable in a way the four setters' is not.
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
             QCOMPARE(activeColumn().width, widthBeforeGate);
+
+            // The NO-PROVIDER arm, which this block's own "per-method code"
+            // reasoning demands and which only focusColumn and scrollView had.
+            //
+            // An absent gate FAILS CLOSED: refusesForContext is
+            // `!m_contextGated || m_contextGated(screenId)`, so a null
+            // std::function refuses outright. That is the deliberate stance —
+            // the daemon installs the gate during bring-up, and a verb
+            // arriving before it must not act on a context whose disabled
+            // state is not yet knowable — and it is a DIFFERENT code path
+            // from the refusing gate above, which exercises the second
+            // operand. A mis-written `m_contextGated && ...` would pass every
+            // assertion above and fail here.
+            const ColumnWidth widthBeforeNoGate = activeColumn().width;
+            const WindowHeight heightBeforeNoGate = activeHeight();
+            m_adaptor->setContextGateProvider({});
+            m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.31);
+            m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 712);
+            m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.43);
+            m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 301);
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QCOMPARE(activeColumn().width, widthBeforeNoGate);
+            QCOMPARE(activeHeight(), heightBeforeNoGate);
+
             m_adaptor->setContextGateProvider([](const QString&) {
                 return false;
             });
