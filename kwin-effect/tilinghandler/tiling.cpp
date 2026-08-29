@@ -1681,6 +1681,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // pending apply from a batch built while the screen was scrolling
             // can land after the flip has already released the claim, taking
             // membership back with nothing to hand it to.
+            // Captured BEFORE the arm below writes membership, because the
+            // geometry apply further down needs to know whether THIS batch is
+            // the one that changed the maximize state — by then membership
+            // already agrees with the wire and the transition is invisible.
+            const bool wasColumnMaximized = m_columnMaximizedWindows.contains(snap.windowId);
             if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
@@ -2251,6 +2256,41 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             skipScrollAnimation = true;
                         } else if (atScrollPark(snap.window)) {
                             originOverride = QRectF(committedGeo);
+                        }
+                    }
+                    // COLUMN-MAXIMIZE TOGGLE: depart from the rect the window
+                    // held before the maximize, not from its live frame.
+                    //
+                    // By the time this runs the window has ALREADY been resized
+                    // to KWin's maximize area, on both input paths: the titlebar
+                    // button flips the bit itself before the effect sees the
+                    // event, and the shortcut's own batch sets the bit in the
+                    // maximize arm above. So the live frame is 3840x2068 on the
+                    // way in and the target column rect on the way out, and a
+                    // leg departing from it animates a 16px correction growing
+                    // and NOTHING AT ALL shrinking — the whole visible motion is
+                    // KWin's unanimated jump, with the leg twitching afterwards.
+                    // Traced live: one leg per press, installing at
+                    // (8,54 3840x2068) maximizing and at the target rect
+                    // (8,54 1908x2052) restoring.
+                    //
+                    // m_preMaximizeFrame is the rect KWin captured at
+                    // windowMaximizedStateAboutToChange, before any geometry
+                    // change, which is the only place the departure rect still
+                    // exists. Gated on the state actually TOGGLING in this
+                    // batch, which is what keeps a stale entry (the map is
+                    // latest-wins and only swept on windowDeleted) from
+                    // re-anchoring an unrelated later commit: a transition means
+                    // the flip just happened, so the entry was just written.
+                    //
+                    // Placed after the chain above so the park and view-travel
+                    // arms keep priority — those describe where a window should
+                    // appear to come from across the strip, which outranks the
+                    // maximize's own departure rect.
+                    if (!originOverride.isValid() && wasColumnMaximized != snap.isColumnMaximized) {
+                        const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                        if (preMaximize.isValid() && !preMaximize.isEmpty()) {
+                            originOverride = preMaximize;
                         }
                     }
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
