@@ -2475,7 +2475,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // bail commits NOTHING for this entry, so recording a rect
                     // as commanded would arm the counter-assert against a rect
                     // that was never offered, and it would yank a self-
-                    // fullscreened client back into its column ~3x/s.
+                    // fullscreened client back into its column repeatedly.
+                    // The burst budget caps that at 3 per rolling second
+                    // BETWEEN batches only — every fresh batch command re-arms
+                    // the pair, so a client that keeps provoking batches is not
+                    // bounded at 3/s overall.
                     if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()
                         && !fullscreenBailSkippedCommit && !scrollDeliveredRect.isNull()) {
                         m_effect->m_scrollCommandedRects.insert(snap.windowId, {scrollDeliveredRect, 0, 0});
@@ -2563,7 +2567,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // above records a commanded rect for it — so a surviving
                 // entry from an earlier scrolling batch would keep the
                 // counter armed against a rect the strip no longer owns,
-                // yanking the maximized window back up to 3x/s. Mirrors the
+                // yanking the maximized window back (3 per rolling second
+                // between batches, and re-armed by each fresh command, so not
+                // bounded at 3/s across a batch storm). Mirrors the
                 // commitDeferredOrBailed remove above: dropping the entry is
                 // how this pipeline disarms the counter.
                 //

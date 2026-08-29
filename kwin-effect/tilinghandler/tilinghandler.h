@@ -281,12 +281,14 @@ public:
     /// still describe live windows while the daemon is merely absent.
     ///
     /// Paired invariant, and the reason this is one function rather than an
-    /// inline list: anything added to a per-session map must be dropped here. m_columnMaximizedWindows is the
-    /// deliberate exception: drainDeadSessionState restores it through the ledger instead, and that restore RETAINS
-    /// entries it could not pay, so a retained one survives the restart on purpose. The new session heals it — the
-    /// first batch resolves an absent wire flag against surviving membership to a Release, or it survives a daemon
-    /// restart and answers for a session that no longer exists. Adding to the teardown list is a separate decision —
-    /// see the serviceUnregistered handler for what belongs there and why.
+    /// inline list: anything added to a per-session map must be dropped here.
+    ///
+    /// m_columnMaximizedWindows is the deliberate exception. drainDeadSessionState restores it through the ledger
+    /// instead, and that restore RETAINS entries it could not pay, so a retained one survives the restart on purpose:
+    /// the window is still holding a KWin maximize bit, and clearing the ledger here would lose the only record that
+    /// the bit is owed back. The new session heals it, because the first batch resolves an absent wire flag against
+    /// surviving membership to a Release. Adding to the teardown list is a separate decision — see the
+    /// serviceUnregistered handler for what belongs there and why.
     void clearPerSessionDaemonState();
 
     /**
@@ -1640,10 +1642,14 @@ private:
     /// the batch is not one of them for a window that LEAVES the strip: no
     /// entry arrives to carry a cleared flag. The float funnels (both
     /// channels), the untile diff, the demote and removed-screen sweeps, the
-    /// no-strip-left output-change arm, the leaving-scrolling loop and the
-    /// fullscreen-exit-while-floating repair all call it for that reason. The
-    /// scroll-to-scroll handoff deliberately does NOT: the destination strip
-    /// owns the bit and answers on its own first batch.
+    /// no-strip-left output-change arm, the leaving-scrolling loop, the
+    /// fullscreen-exit-while-floating repair and the untrack funnel
+    /// (untrackWindow, via releaseAllClaims) all call it for that reason. The
+    /// untrack funnel matters most for the cross-output transfer half: the
+    /// window survives on a screen these engines do not manage, and nothing
+    /// else would ever hand the bit back. The scroll-to-scroll handoff
+    /// deliberately does NOT: the destination strip owns the bit and answers
+    /// on its own first batch.
     ///
     /// Per window rather than per column because the wire is flat and the
     /// effect has no column identity — every tile of a maximized column is a

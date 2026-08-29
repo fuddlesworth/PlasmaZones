@@ -285,6 +285,25 @@ public:
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
+    ///
+    /// "Already maximized" is decided on RESOLVED PIXELS, not on the stored
+    /// intent value, so every route to a full-width column un-maximizes —
+    /// preset cycling, expand, equalize, a restore from disk. Three arms sit
+    /// behind the simple description:
+    ///
+    ///  - The stored pre-maximize width is re-validated against the current
+    ///    work area and axis. One captured on a wider output resolves clamped
+    ///    back to full width, and restoring it would spend the slot and move
+    ///    nothing, so that case falls through instead.
+    ///  - With no usable stored width (maximized in an earlier session, or
+    ///    another column's maximize took the single slot) it un-maximizes to
+    ///    the context default width rather than dead-ending.
+    ///  - If the default is ITSELF full width, it takes half the work area,
+    ///    because otherwise that user could never un-maximize.
+    ///
+    /// Refuses (false) only for a column pinned at or past the work area by
+    /// its client minimum, which is a dead end the verb cannot resolve; the
+    /// definition documents why.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
     /// The same verb aimed at the column OWNING @p windowId rather than at the
     /// active one. Refuses (false) when this strip does not hold the window.

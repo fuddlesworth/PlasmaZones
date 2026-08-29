@@ -234,9 +234,24 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
     // sibling width verbs take at their own floors: without it the press
     // rewrites persisted intent, renders identical pixels, and still returns
     // true — which costs a relayout and raises a "resize" success OSD for a
-    // press that did nothing, forever, on every press. This is the verb-side
-    // twin of the suppression engine_apply applies to the published flag for
-    // exactly the same class of column.
+    // press that did nothing, forever, on every press.
+    //
+    // Related to, but NOT the twin of, the suppression engine_apply applies to
+    // the published columnMaximized flag. That predicate is strictly wider: it
+    // also declines to publish when the context DEFAULT width already renders
+    // full, a column this verb happily maximizes and un-maximizes (the
+    // defaultIsFullWidth arm below exists for exactly that user). Only the
+    // pinned-by-minimum half is shared.
+    //
+    // DEAD END, deliberate and unfixable here: a column that was maximized and
+    // whose client THEN raises its minimum past the work area lands in this
+    // refusal on the un-maximize press, so it can never be un-maximized and
+    // m_preMaximizeWidth stays armed for it indefinitely. Letting the press
+    // through would not help — the relayout floors the column at the client
+    // minimum, so it would render full width regardless, and the user would
+    // get the same pixels plus a spent slot. The window has outgrown the
+    // strip; the way out is the float path (minSizeOutgrowingWorkArea), not
+    // this verb.
     if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
         return false;
     }
@@ -288,6 +303,18 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
     col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
     // A stale slot pointing at this column is spent either way — leaving it
     // armed would make the NEXT maximize restore a width this press discarded.
+    //
+    // KEPT despite being unobservable today, and the reasoning is worth
+    // recording so it is not deleted as dead. Reaching here leaves the column
+    // NARROWER than full, so the next press takes the maximize arm above and
+    // overwrites the slot before anything reads it. Even the roundabout route
+    // — widening back to full through expand or equalize, then pressing —
+    // re-enters this same arm, because the stale slot still renders full and
+    // fails the restore arm's !rendersFullWidth test. So no sequence currently
+    // reads the value this line clears. It stays because "the slot describes
+    // THIS column's pre-maximize width" is the invariant the other three arms
+    // are written against, and a future arm that reads the slot without
+    // re-validating it would inherit a discarded width silently.
     if (m_preMaximizeColumnIdx == columnIndex) {
         m_preMaximizeColumnIdx = -1;
     }
