@@ -8,8 +8,20 @@
 # so the run has one daemon with a known pid and log, and reaps daemons left
 # behind by earlier sessions whose bus is gone. Never touches the host
 # session's own daemon.
+#
+# ONE run at a time per nested session. Two concurrent runs against the same
+# PZ_NESTED_DIR each evict the other's daemon through the bus-owner kill and
+# each overwrite the other's daemon.pid, so both end up reporting a pid that
+# is either dead or not theirs. That is not guarded here because the harness
+# is already documented as one-session-per-directory (run-nested.sh pairs a
+# distinct PZ_NESTED_SOCKET with a distinct PZ_NESTED_DIR); two sessions
+# sharing a directory are broken well before this script runs.
 set -euo pipefail
-NEST="${PZ_NESTED_DIR:-${XDG_RUNTIME_DIR:-/tmp/pz-nested-$USER}/pz-nested}"
+# Must resolve exactly as run-nested.sh does, including the fallback when
+# XDG_RUNTIME_DIR is unset — a divergence here points this script at a
+# different state dir than the session it is meant to join.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
 if [ ! -r "$NEST/env.sh" ]; then
     echo "no nested session state at $NEST/env.sh; start run-nested.sh first" >&2
     exit 1
@@ -18,7 +30,7 @@ fi
 
 # env.sh is written just before kwin_wayland execs, so on a fast follow-up
 # the compositor may not be listening yet. Wait for the socket, bounded.
-SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_DISPLAY"
+SOCK="$RUNTIME_DIR/$WAYLAND_DISPLAY"
 for _ in $(seq 1 50); do
     [ -S "$SOCK" ] && break
     sleep 0.2
@@ -49,7 +61,23 @@ BUSPID=$(dbus-send --session --print-reply --dest=org.freedesktop.DBus / \
     | awk '/uint32/{print $2}') || true
 if [ -n "${BUSPID:-}" ]; then
     kill "$BUSPID" 2>/dev/null || true
-    sleep 1
+    # Bounded poll rather than a fixed sleep: a fixed wait is simultaneously
+    # too long for the common case (the daemon is gone in well under a second)
+    # and too short for a loaded machine, where the name is still owned when
+    # the new daemon starts and the run silently answers from the old one.
+    for _ in $(seq 1 25); do
+        [ -d "/proc/$BUSPID" ] || break
+        sleep 0.2
+    done
+    if [ -d "/proc/$BUSPID" ]; then
+        kill -9 "$BUSPID" 2>/dev/null || true
+        # SIGKILL is not synchronous either; give the bus time to notice the
+        # peer drop and release the name before we claim it.
+        for _ in $(seq 1 10); do
+            [ -d "/proc/$BUSPID" ] || break
+            sleep 0.2
+        done
+    fi
 fi
 
 # Reap daemons stranded on a DEAD nested bus. run-nested.sh now shadows the

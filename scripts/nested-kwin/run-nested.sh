@@ -72,7 +72,15 @@ HEIGHT="${3:-}"
 SCALE="${4:-}"
 for n in "$WIDTH" "$HEIGHT"; do
     case "$n" in
-        ''|*[!0-9]*) [ -z "$n" ] || { echo "width/height must be integers" >&2; exit 1; } ;;
+        '') ;;
+        *[!0-9]*) echo "width/height must be positive integers, got '$n'" >&2; exit 1 ;;
+        *)
+            # Zero is a well-formed integer and a useless output dimension:
+            # kwin takes it and comes up with a degenerate screen, which reads
+            # as the harness being broken. Rejected for the same reason
+            # output-count rejects it above.
+            [ "$n" -gt 0 ] || { echo "width/height must be positive integers, got '$n'" >&2; exit 1; }
+            ;;
     esac
 done
 if { [ -n "$WIDTH" ] && [ -z "$HEIGHT" ]; } || { [ -z "$WIDTH" ] && [ -n "$HEIGHT" ]; }; then
@@ -85,9 +93,22 @@ case "$SCALE" in
         echo "scale must be numeric, got '$SCALE'" >&2
         exit 1
         ;;
+    # Well-formed but degenerate: 0, 0.0, .0 and friends all parse as numeric
+    # and scale every output to nothing.
+    0|0.|0.0|0.00|.0|.00)
+        echo "scale must be greater than zero, got '$SCALE'" >&2
+        exit 1
+        ;;
 esac
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-NEST="${PZ_NESTED_DIR:-${XDG_RUNTIME_DIR:-/tmp/pz-nested-$USER}/pz-nested}"
+# ONE fallback for a missing XDG_RUNTIME_DIR, resolved once. The state dir and
+# the wayland socket both live under it, and giving them different fallbacks
+# (/tmp for one, /run/user/UID for the other) splits the session in half on
+# exactly the systems where the variable is absent: the socket lands somewhere
+# unwritable while env.sh reports success from /tmp.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
+mkdir -p "$RUNTIME_DIR"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
 BUILD="${PZ_NESTED_BUILD:-build}"
 HOME_N="$NEST/home"
 
@@ -117,7 +138,7 @@ case "$PZ_NESTED_SOCKET" in
         exit 1
         ;;
 esac
-SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$PZ_NESTED_SOCKET"
+SOCK="$RUNTIME_DIR/$PZ_NESTED_SOCKET"
 if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     echo "refusing: $SOCK exists and is not a socket; remove it by hand" >&2
     exit 1
@@ -156,10 +177,23 @@ fi
 # directory up, so require something that looks like a scratch dir: absolute,
 # and at least two components deep. Unset is safe already — it falls through
 # to the default above.
+#
+# The character class matters as much as the depth. This path is also written
+# unquoted into the generated D-Bus service file's Exec= line, which is parsed
+# as a command line and cannot express a path containing whitespace, and it is
+# interpolated into two heredocs where a quote or a dollar sign would either
+# break the shim or run as shell. A scratch directory has no business carrying
+# any of that.
 case "$NEST" in
     /*/*) ;;
     *)
         echo "refusing: PZ_NESTED_DIR must be an absolute path at least two components deep, got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
         exit 1
         ;;
 esac
@@ -295,7 +329,7 @@ exec dbus-run-session -- sh -c "
   set -e
   {
     echo \"export DBUS_SESSION_BUS_ADDRESS='\$DBUS_SESSION_BUS_ADDRESS'\"
-    echo \"export WAYLAND_DISPLAY=$PZ_NESTED_SOCKET\"
+    echo \"export WAYLAND_DISPLAY='$PZ_NESTED_SOCKET'\"
     echo \"export XDG_CONFIG_HOME='$XDG_CONFIG_HOME'\"
     echo \"export XDG_DATA_HOME='$XDG_DATA_HOME'\"
     echo \"export XDG_CACHE_HOME='$XDG_CACHE_HOME'\"
@@ -311,5 +345,7 @@ exec dbus-run-session -- sh -c "
     echo \"export PZ_NESTED_BUILD='$BUILD'\"
   } > '$NEST/env.sh.tmp'
   mv '$NEST/env.sh.tmp' '$NEST/env.sh'
-  exec kwin_wayland --virtual --output-count $OUTPUTS$EXTRA_FLAGS --socket $PZ_NESTED_SOCKET --no-lockscreen --no-global-shortcuts --no-kactivities
+  # \$EXTRA_FLAGS stays unquoted on purpose: it is a flag LIST and needs word
+  # splitting. Everything else is quoted.
+  exec kwin_wayland --virtual --output-count '$OUTPUTS'$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
 "
