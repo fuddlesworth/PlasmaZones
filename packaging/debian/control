@@ -46,11 +46,11 @@ Build-Depends:
  qt6-base-dev (>= 6.10.0),
  qt6-base-private-dev,
  qt6-declarative-dev,
-# Debian splits Qt's private headers into separate -private-dev packages.
-# phosphor-animation links Qt6::QuickPrivate and the shader tooling links
-# Qt6::ShaderToolsPrivate, so both are needed to configure.
+# Debian ships QtQuick's private headers in their own package, which
+# phosphor-animation needs for Qt6::QuickPrivate. Note there is no matching
+# split for shadertools: qt6-shadertools-dev already carries the private
+# headers that Qt6::ShaderToolsPrivate wants.
  qt6-declarative-private-dev,
- qt6-shadertools-private-dev,
  qt6-tools-dev,
  qt6-shadertools-dev | libqt6shadertools6-dev,
  qt6-svg-dev | libqt6svg6-dev,
