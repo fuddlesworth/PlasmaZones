@@ -344,7 +344,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Leave a tabbed column unmarked while it holds only one window.")},
         {CD::placeWithinColumnKey(), CD::scrollingTabIndicatorPlaceWithinColumn(), QMetaType::Bool,
          QStringLiteral("Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a "
-                        "neighbor or run off screen.")},
+                        "neighbour or run off screen.")},
         // The gap floor is NEGATIVE on purpose: niri parity, where a negative
         // gap pulls the indicator on top of the window.
         {CD::gapKey(), CD::scrollingTabIndicatorGap(), QMetaType::Int,

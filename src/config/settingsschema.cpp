@@ -263,7 +263,7 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Sounds above this frequency are ignored."),
          clampInt(CD::audioHigherCutoffHzMin(), CD::audioHigherCutoffHzMax())},
         {CD::monstercatKey(), CD::audioMonstercat(), QMetaType::Bool,
-         QStringLiteral("Spreads each bar into its neighbors for a smoother outline.")},
+         QStringLiteral("Spreads each bar into its neighbours for a smoother outline.")},
         {CD::wavesKey(), CD::audioWaves(), QMetaType::Bool, QStringLiteral("Rounds the spectrum into soft waves.")},
         {CD::channelModeKey(), CD::audioChannelMode(), QMetaType::QString,
          QStringLiteral("Stereo shows left and right bars side by side. Mono collapses to one set of bars."),
@@ -506,9 +506,10 @@ namespace {
 // schema below when every entry is the same shape.
 //
 // `description` is what the action DOES, in the user's terms, for the
-// settings UI and the generated documentation to share. It stays optional
-// so an entry added before anyone has written its sentence still compiles;
-// the schema dump reports how many are still blank.
+// settings UI and the generated documentation to share. Every call below
+// passes one. The parameter stays optional so an entry added before anyone
+// has written its sentence still compiles; the schema dump emits the field
+// unconditionally, so a blank one is a query away rather than a source grep.
 inline void addShortcut(QVector<PhosphorConfig::KeyDef>& list, const QString& key, const QString& defaultValue,
                         const QString& description = {})
 {
@@ -924,7 +925,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
                     CD::sizeMode()),
          intChoices({{static_cast<int>(ZoneSelectorSizeMode::Auto), "auto"_L1},
                      {static_cast<int>(ZoneSelectorSizeMode::Manual), "manual"_L1}})},
-        {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, QStringLiteral("Scrolling enabled when more rows exist."),
+        {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int,
+         QStringLiteral("Most rows of previews the picker shows at once. It scrolls when there are more."),
          clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
@@ -1093,7 +1095,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
     };
     schema.groups[CD::windowsAppearanceGroup()] = {
         {CD::showBorderKey(), CD::showWindowBorder(), QMetaType::Bool,
-         QStringLiteral("Draw a colored border around windows placed by PlasmaZones.")},
+         QStringLiteral("Draw a coloured border around windows placed by PlasmaZones.")},
         {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString,
          QStringLiteral("Which windows get a border."), scopeValidator(CD::windowBorderScope()),
          tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
@@ -1130,7 +1132,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("How visible matched windows stay, where 1 is fully opaque."),
          clampDouble(CD::windowOpacityMin(), CD::windowOpacityMax())},
         {CD::tintStrengthKey(), CD::windowTintStrength(), QMetaType::Double,
-         QStringLiteral("How strongly the tint color blends over the window, where 0% keeps it untinted."),
+         QStringLiteral("How strongly the tint colour blends over the window, where 0 keeps it untinted."),
          clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
         {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString,
          QStringLiteral("Colour blended over matched windows. Empty follows the colour scheme."),

@@ -140,10 +140,10 @@ QJsonObject dumpKey(const PhosphorConfig::KeyDef& def)
     o[QStringLiteral("type")] = typeName(def.expectedType);
     o[QStringLiteral("default")] = toJson(def.defaultValue);
 
-    // Empty for every key today.  Emitted unconditionally anyway so the
-    // site's generator can render prose the moment upstream fills one in,
-    // and so a coverage count of documented-vs-total is a trivial query
-    // against this file rather than a source grep.
+    // Emitted unconditionally, including when it is empty, so the site's
+    // generator sees one shape for every key and a coverage count of
+    // documented-vs-total is a trivial query against this file rather than
+    // a source grep.
     o[QStringLiteral("description")] = def.description;
 
     if (!def.choices.isEmpty()) {
