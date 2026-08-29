@@ -56,6 +56,9 @@ Build-Depends:
  kwin-dev (>= 6.7.0),
  libxkbcommon-dev,
  libwayland-dev,
+# KWinConfig.cmake does find_dependency(Libdrm), so configuring the KWin
+# effect needs libdrm's headers even though we never include them ourselves.
+ libdrm-dev,
  libvulkan-dev,
  qt6-wayland-dev (>= 6.10.0),
  qt6-wayland-private-dev (>= 6.10.0),
