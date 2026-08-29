@@ -309,12 +309,32 @@ window, matching `unmaximizeMonocleWindow`. Shedding it there stranded the bit:
 the Apply arm cannot re-assert on any path that reaches the release, because
 Apply requires the wire flag and every such path has it false.
 
-**No in-flight marker**, unlike `clearWindowedFullscreen`. The interception
-changes no membership of its own, so effect state still agrees with the
-pre-toggle flag during the round trip and a stale batch resolves to None on its
-own terms. A toggle is not idempotent, so a marker could not be applied
-symmetrically anyway. Both directions are pinned in
-`staleBatchDuringToggleIsInert`.
+**An in-flight marker**, like `clearWindowedFullscreen` but for a different
+reason. This paragraph originally said none was needed, and that was true only
+while the interception cancelled KWin's flip before dispatching: effect state
+then agreed with the pre-toggle flag for the whole round trip, so a stale batch
+resolved to `None` on its own terms. Removing the cancel took that guarantee
+with it, and the reasoning survived here long enough that two comments in the
+effect cited it as authority for a marker they needed.
+
+`m_maximizeToggleInFlight` covers the gap. On a RESTORE the user's click has
+already cleared KWin's bit while membership has not moved, so a batch the
+daemon emitted before it dequeued the toggle arrives as `(1, 1, 0)` and
+resolves to `Apply`, re-maximizing the window mid-flight. Maximize is `(0, 0,
+1)` and inert, so the exposure is asymmetric. The marker suppresses only the
+`inSet && !kwinMaximized` leg; adopt and `Release` must still run while it is
+armed, or the engine's own answer would be dropped. A toggle is not idempotent,
+which is why the suppression is one-sided rather than symmetric. It is bounded
+in time, because the leg it suppresses is the effect-restart repair and
+latching that off would be worse than the race it closes.
+
+The marker also carries a press that arrives mid-round-trip, so a fast
+double-click toggles twice rather than once.
+
+The unarmed steady state stays pinned in `staleBatchDuringToggleIsInert`; the
+armed cell and the never-suppress-the-engine's-answer invariant are pinned in
+`staleBatchOnRestoreDoesNotReMaximize` and
+`markerNeverSuppressesTheEnginesAnswer`.
 
 **Idempotence against our own echo.** `m_suppressMaximizeChanged` covers the
 synchronous X11 emission from inside `maximize()`, but the Wayland committed

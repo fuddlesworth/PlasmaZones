@@ -209,9 +209,14 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     // conditions and RETAINS membership so a later arm pays
                     // the bit, this is the non-member arm and holds no ledger,
                     // so a skip here is permanent rather than deferred. That
-                    // is the accepted trade: the window keeps a maximize the
-                    // user can clear themselves, where the alternative shrinks
-                    // a presenting surface or yanks a window mid-drag.
+                    // is the accepted trade against shrinking a presenting
+                    // surface.
+                    //
+                    // The gesture terms are REDUNDANT in this file: the
+                    // enclosing lambda already returns early on the same pair
+                    // above. They are kept so this arm reads identically to
+                    // its twin in screenschanged.cpp, where they are live.
+                    // Do not treat this as the place that guard lives.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
