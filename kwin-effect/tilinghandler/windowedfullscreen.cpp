@@ -525,6 +525,17 @@ void TilingHandler::restoreAllColumnMaximized()
             continue;
         }
         KWin::Window* kw = w->window();
+        if (!kw) {
+            // THIRD unpaid arm, and it retains for the same reason as the
+            // other two. Without this the entry falls through every `kw &&`
+            // test below, hands nothing back, and is then discarded by the
+            // snapshot-clear above — the ledger forgets a bit the window is
+            // still holding. That is exactly the "record depends on WHY we
+            // could not pay" asymmetry the comment below rules out, and it
+            // was the one case that had it.
+            m_columnMaximizedWindows.insert(wid);
+            continue;
+        }
         // A window still holding fullscreen is SKIPPED, and its entry goes
         // BACK rather than being discarded by the snapshot-clear above. This
         // is the same retention releaseColumnMaximized takes, and for the same
@@ -532,11 +543,11 @@ void TilingHandler::restoreAllColumnMaximized()
         // that bit with nothing owning it. It matters on the daemon-loss
         // caller, where the effect keeps running and a later arm can still do
         // the real restore; at unload nothing survives to care either way.
-        if (kw && kw->isRequestedFullScreen()) {
+        if (kw->isRequestedFullScreen()) {
             m_columnMaximizedWindows.insert(wid);
             continue;
         }
-        if (kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore) {
+        if (kw->requestedMaximizeMode() != KWin::MaximizeRestore) {
             // Through the shared bracket rather than an inline ++/maximize/--:
             // three hand-rolled copies of this write had drifted apart, and
             // this one was the copy missing nothing but easy to break next.

@@ -327,7 +327,16 @@ public:
     void connectSignals();
     void loadSettings();
 
-    // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
+    /// Cleanup: unmaximize all monocle-maximized windows.
+    ///
+    /// Three callers, all of them shedding a dead session's claims: daemon
+    /// loss, effect teardown, and daemon BRING-UP via drainDeadSessionState.
+    /// The bring-up one is not redundant with the teardown pair — it makes
+    /// bring-up authoritative on its own rather than on what the loss edge
+    /// left behind, and this ledger needs that more than its siblings do,
+    /// because its only insert site is gated on the window not already being
+    /// maximized, so a surviving entry is never refreshed and never
+    /// re-derived from the new daemon's truth.
     void restoreAllMonocleMaximized();
     /// Membership half of the windowed-fullscreen release (hash removal
     /// only, no compositor call). Split from the state half because the
