@@ -425,6 +425,16 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // with neither engine owning it. The entering direction needs no such care
     // (those windows are on-canvas, so positional and override agree), but
     // resolving both under the old set keeps one rule for the whole batch.
+    // NOT converted to QPointer, deliberately, and the exposure is recorded
+    // here rather than left silent. This list and its announceScreens twin are
+    // consumed by notifyWindowsAddedBatch after the release loops below, whose
+    // compositor calls can re-enter — the same hazard the column list above
+    // converts for. Converting these two is a wider change than it looks: the
+    // list is a parameter of notifyWindowsAddedBatch, and the hash uses the
+    // pointer as its KEY, which QPointer cannot serve without a custom qHash.
+    // Both are built and consumed in the same turn, and the consumer bails on
+    // a null-or-deleted window, so the residual risk is the isDeleted() test
+    // itself on a pointer that has already been freed.
     QList<KWin::EffectWindow*> announceWindows;
     QHash<KWin::EffectWindow*, QString> announceScreens;
     if (announcing && KWin::effects) {
@@ -463,7 +473,13 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // caller that can reach here with live membership owes both restores, or
     // must resolve the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
-    QList<KWin::EffectWindow*> columnMaximizedLeavingScrolling;
+    // QPointer, not a raw pointer, for the reason slotWindowFullScreenChanged
+    // states about the same shape: the release loop below runs
+    // releaseWindowedFullscreenState first, whose setFullScreen(false) emits
+    // synchronously into effect handlers, and a raw pointer collected before
+    // that is not safe to test with isDeleted() afterwards — that check is
+    // undefined on a dangling pointer rather than a guard.
+    QList<QPointer<KWin::EffectWindow>> columnMaximizedLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -487,7 +503,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // not the whole answer for such a caller.
             m_effect->m_scrollOfferedColumn.remove(wid);
             // The other two per-window scroll companions go with it, the way
-            // every other teardown funnel sheds all three together. Leaving
+            // the teardown funnels shed all three together. Leaving
             // them behind lets a flip BACK to scrolling, before the new
             // engine's first batch, re-arm the dead session's park relocation
             // and counter-assert a rect the strip no longer owns. The
@@ -518,7 +534,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
     }
-    for (KWin::EffectWindow* w : std::as_const(columnMaximizedLeavingScrolling)) {
+    for (const QPointer<KWin::EffectWindow>& w : std::as_const(columnMaximizedLeavingScrolling)) {
         if (w && !w->isDeleted()) {
             const QString wid = m_effect->getWindowId(w);
             // Monocle goes with it. The claim table says a mode flip releases

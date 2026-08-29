@@ -982,8 +982,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
-                // The other two strip companions go with it. Every other
-                // teardown funnel sheds all three together; this one shed only
+                // The other two strip companions go with it. The teardown
+                // funnels shed all three together, and this one shed only
                 // the relocation, so a window untiled by a rule change kept the
                 // column it was last OFFERED. On re-tile the apply then reads
                 // columnUnchanged against that stale offer, skips offering the
@@ -1672,7 +1672,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             //
             // The 3-way decision is pure and unit-tested (scrolldecisions.h);
             // this block only performs the chosen arm's side effects.
-            if (KWin::Window* kwMax = snap.window->window()) {
+            // Screen-gated like every sibling arm in this lambda (the
+            // size-continuity block, the commanded-rect writes, the centring
+            // shed). The wire flag can only be true for a scroll entry today,
+            // so this is defensive rather than a live gap — but the per-window
+            // applies are STAGGERED and outlive this function, and
+            // setScrollingScreens does not bump the stagger generation, so a
+            // pending apply from a batch built while the screen was scrolling
+            // can land after the flip has already released the claim, taking
+            // membership back with nothing to hand it to.
+            if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
                 // same lag the windowed-fullscreen arm above reads
