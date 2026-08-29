@@ -999,6 +999,21 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
             ++it;
         }
     }
+    // The two OPEN QUEUES go with them. windowClosed drops all four together,
+    // and this prune is the backstop for a window that never produced a
+    // destroy notification — so covering only the two dedup maps left exactly
+    // the windows this function exists for holding a queue slot.
+    //
+    // Milder than a stale dedup entry (both queues are capped, and a flush or
+    // an announce retry drains them wholesale), but a dead entry that reaches
+    // dispatch is a phantom tile, and behind a panel gate that never lifts it
+    // sits for the session eating one of the 512 slots.
+    m_unclaimedOpens.removeIf([&alive](const ParkedOpen& parked) {
+        return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(parked.entry.windowId));
+    });
+    m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
+        return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
+    });
 }
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
@@ -1063,8 +1078,21 @@ void TilingAdaptor::clearEngine()
     // pending coalesced announce (its lambda re-checks the empty list) and
     // every per-session queue/dedup cache except m_activeLayouts — none of it
     // may leak into a restart (a stale dedup value could suppress the first
-    // genuine broadcast of the new session). m_activeLayouts is deliberately
-    // kept; setActiveLayouts documents why.
+    // genuine broadcast of the new session).
+    //
+    // m_activeLayouts is the exception, and the reason is the GETTER rather
+    // than the emission: activeLayouts() is ungated, so it keeps answering
+    // this map for as long as the object exists. Clearing it would replace a
+    // true answer with an empty one, which a reader cannot tell from "no
+    // screen has a layout" — the same call the scrolling adaptor's clearEngine
+    // makes about its two daemon-built values, and for the same reason. It is
+    // also not per-session state to begin with: the map is daemon-built, it
+    // covers every effective screen rather than the engine-managed ones, and
+    // the daemon re-pushes it from every updateEngineScreens pass, so a new
+    // session restates it in full rather than incrementally.
+    //
+    // (setActiveLayouts documents only its change gate, which is a different
+    // question from this one.)
     m_lifecycleEngines.clear();
     ++m_announceGeneration;
     m_screensAnnouncePending = false;

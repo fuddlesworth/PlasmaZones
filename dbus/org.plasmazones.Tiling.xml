@@ -16,10 +16,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <property name="enabled" type="b" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="Whether any tiling-family engine is active on any screen (read-only, derived from assignments)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Whether any tiling-family engine is active on any screen (read-only, derived from assignments). Changes are announced on the enabledChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
         <property name="managedScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset."/>
+            <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset. Changes are announced on the managedScreensChanged signal below, which carries an extra isDesktopSwitch flag the property itself cannot express, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
         <property name="activeLayouts" type="a{sv}" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
