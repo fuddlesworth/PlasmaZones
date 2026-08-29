@@ -128,6 +128,55 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     kw->maximize(mode);
 }
 
+void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
+{
+    // Pay the claims the batch arms took but could not apply mid-gesture.
+    //
+    // Both maximize arms insert membership BEFORE their compositor call and
+    // then skip that call while the window is under a user move or resize,
+    // because maximize() moveResizes and the geometry apply that would
+    // override it defers during a drag. The ledger therefore says the effect
+    // holds a bit KWin does not, and that disagreement is read: the maximize
+    // interception computes what to cancel to from membership, so a click in
+    // the interim cancels TO MaximizeFull.
+    //
+    // Nothing else closes it. The gesture end replays geometry only, and the
+    // engine emits on change, so a drag that moves no column produces no
+    // batch to re-resolve against.
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // Through the same predicate the Apply arms use, not a bare maximize: a
+    // window that entered fullscreen during the gesture must still be skipped,
+    // and the gesture flags must genuinely be clear by now.
+    if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
+        return;
+    }
+    const bool owesColumn = m_columnMaximizedWindows.contains(windowId);
+    const bool owesMonocle = m_monocleMaximizedWindows.contains(windowId);
+    if (!owesColumn && !owesMonocle) {
+        return;
+    }
+    if (kw->requestedMaximizeMode() == KWin::MaximizeFull) {
+        return;
+    }
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
+    applyMaximizeSuppressed(kw, KWin::MaximizeFull);
+    m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
+}
+
 void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
 {
     // The cancel half of interceptMaximizeRequest, with no dispatch.

@@ -380,6 +380,17 @@ public:
     /// this through the interception would toggle the column instead.
     void cancelAxisOnlyMaximize(KWin::EffectWindow* w);
 
+    /// Re-drive a maximize claim the batch took but skipped applying because
+    /// the window was under a user gesture.
+    ///
+    /// Both Apply arms insert ledger membership before their compositor call
+    /// and then skip that call mid-drag, so the ledger records a bit KWin does
+    /// not hold — and the interception reads membership to decide what to
+    /// cancel to, so a click in the interim cancels the wrong way. Nothing else
+    /// closes it: the gesture end replays geometry only, and the engine emits
+    /// on change, so a drag that moves no column schedules no batch.
+    void reconcileMaximizeAfterGesture(KWin::EffectWindow* w);
+
     /// What a releaseAllClaims call actually handed back. Callers gate
     /// follow-up work on it — the passive float shed re-resolves decorations
     /// only when the windowed-fullscreen claim released, because that is the

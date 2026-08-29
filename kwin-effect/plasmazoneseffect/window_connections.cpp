@@ -691,6 +691,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             notifyWindowResized(window, m_resizeStartGeometry);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
+        // A maximize claim taken during the gesture was never paid: the batch
+        // arms insert membership and then skip the compositor call while the
+        // user is dragging, and nothing re-drives them — this lambda replays
+        // geometry only, and its two other calls are gated on wasResize, so a
+        // MOVE end does nothing at all. The engine emits on change, so a drag
+        // that leaves the strip alone schedules no batch either. This is the
+        // one point that always runs at the end of a gesture.
+        m_tilingHandler->reconcileMaximizeAfterGesture(window);
     });
 
     // Track when user manually unmaximizes a monocle-maximized window

@@ -51,6 +51,8 @@ private Q_SLOTS:
     void heightAdjustResizesATabbedColumn();
     void heightPresetCycleResizesATabbedColumn();
     void heightAdjustMeasuresATabbedColumnInColumnSpace();
+    void heightPresetCycleMeasuresATabbedColumnInColumnSpace();
+    void maximizeToggleRefusesAColumnPinnedByItsMinimum();
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
@@ -167,6 +169,82 @@ void TestScrollStripSizing::heightPresetCycleResizesATabbedColumn()
 // tabs measure the same. With the indicator placed WITHIN the column and
 // eating the CROSS axis the two differ, and a verb that compared in the tab's
 // space would enter one reservation off and settle short of the press.
+void TestScrollStripSizing::heightPresetCycleMeasuresATabbedColumnInColumnSpace()
+{
+    // The CYCLE verb's half of the reservation correction, which its adjust
+    // twin above has always covered and it has not. The two share one entry
+    // rule — enter in COLUMN space, so the tab lands one reservation under the
+    // column rather than the column being shortened from the tab's own extent
+    // — and deleting the correction from the cycle alone left the suite green,
+    // because the only tabbed cycle test runs on defaultParams where the
+    // reservation is zero.
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.placeWithinColumn = true;
+    // Picked by axis for the reason the twin states: a Left/Right indicator is
+    // thick along the CROSS axis only while the strip runs vertically, so a
+    // hardcoded position leaves one of the two registered arms reserving
+    // nothing and testing nothing.
+    params.tabIndicator.position = params.axis.isHorizontal() ? TabIndicatorPosition::Top : TabIndicatorPosition::Left;
+    const int reservation = params.tabIndicator.reservedThickness(2);
+    QVERIFY2(reservation > 0, "the fixture must actually reserve, or the slot proves nothing");
+    const int crossExtent = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
+    params.presetWindowHeights = {0.5, 1.0};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // The RELATIONSHIP, read from the strip, not a predicted absolute: what
+    // the entry rule decides is whether the tab sits exactly one reservation
+    // under its own column, and asserting a computed pixel figure would also
+    // pin what the preset fraction is a fraction OF, which is a separate
+    // contract this slot has no business restating.
+    const auto tabUnderItsColumn = [&](const char* whenLabel) {
+        const auto resolved = strip.relayout(params);
+        const int tabCross = Ax::crossLen(rectOf(resolved, QStringLiteral("b")));
+        const int columnCross = Ax::crossLen(resolved.columns.at(0).rect);
+        QVERIFY2(columnCross > reservation, whenLabel);
+        QCOMPARE(tabCross, columnCross - reservation);
+    };
+    tabUnderItsColumn("the starting column must be taller than the reservation");
+
+    // And it still holds after the cycle moves the column, which is the press
+    // whose entry rule was uncovered.
+    QVERIFY(strip.cycleActiveWindowPresetHeight(1, params));
+    tabUnderItsColumn("the cycled column must be taller than the reservation");
+    QVERIFY2(Ax::crossLen(strip.relayout(params).columns.at(0).rect) != crossExtent,
+             "the cycle must have moved the column, or the entry rule is untested");
+}
+
+void TestScrollStripSizing::maximizeToggleRefusesAColumnPinnedByItsMinimum()
+{
+    // The verb-side twin of the published flag's min-pinned exclusion, and the
+    // arm this suite exists for: a bool that says "changed" while nothing moved
+    // costs a relayout and a success OSD per press, forever.
+    //
+    // A column whose tiles' declared minimum alone reaches the work area
+    // renders full width whatever the intent says, so both toggle arms are
+    // dead for it — maximizing changes nothing visible, and un-maximizing
+    // cannot shrink it past its own floor. The verb must refuse rather than
+    // report success.
+    ScrollLayoutParams params = defaultParams();
+    const int mainExtent = Ax::mainLen(ScrollTestUtils::defaultScreenRect());
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    // BY ROLE: a symmetric minimum would set the cross floor past the cross
+    // extent, which is a different refusal entirely.
+    const QSize pinned = Ax::t(QSize(mainExtent, 0));
+    strip.setWindowMinimumSize(QStringLiteral("a"), pinned.width(), pinned.height());
+
+    const int beforeMain = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    QCOMPARE(beforeMain, mainExtent);
+    QVERIFY2(!strip.toggleMaximizeActiveColumn(params),
+             "a column pinned full by its minimum must refuse, not report a change");
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), beforeMain);
+}
+
 void TestScrollStripSizing::heightAdjustMeasuresATabbedColumnInColumnSpace()
 {
     ScrollLayoutParams params = defaultParams();
