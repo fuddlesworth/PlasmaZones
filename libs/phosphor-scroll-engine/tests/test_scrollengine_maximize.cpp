@@ -94,6 +94,7 @@ private Q_SLOTS:
     void namedVerbTogglesBackOnASecondPress();
     void maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot();
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
+    void verbReportsWhetherTheStripActuallyChanged();
 };
 
 // Expel copies the source column's width to the new one, which is right for
@@ -367,6 +368,47 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
     QVERIFY2(widthOf(QStringLiteral("app|a")) != maximized, "the press must leave the column narrower than full");
+}
+
+void TestScrollEngineMaximize::verbReportsWhetherTheStripActuallyChanged()
+{
+    // The return value is what the compositor's maximize interception steers
+    // on, and it has to mean "the strip changed", not "the call arrived".
+    //
+    // The effect no longer writes KWin's maximize bit before dispatching: the
+    // user's own flip stands for the length of the round trip, so a request
+    // this engine does nothing with leaves the window holding a state no batch
+    // is coming to correct. False is the effect's only cue to put it back.
+    // A verb that answered true for a no-op would strand the window silently.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+
+    // No windows anywhere: the empty-strip arm.
+    QVERIFY2(!engine->toggleMaximizeColumn(QStringLiteral("S1")), "an empty strip changed nothing");
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // A window no column holds. columnOfWindow answers -1 and the strip
+    // refuses, which used to be reported as success because the effect's
+    // response was the same either way. It no longer is.
+    QVERIFY2(!engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|nosuchwindow")),
+             "a window the strip does not hold changed nothing");
+
+    // NOT probed here: an unowned screen id. resolveOperationScreen falls back
+    // to the active scrolling screen (then to the lexicographic minimum) for
+    // any id it does not recognise, so a bogus one acts on S1 and reports true
+    // — by design, and unreachable as a negative through this entry point. The
+    // screen-ownership refusal is the ADAPTOR's (refusesScreenVerb), which is
+    // where the D-Bus boundary tests cover it.
+
+    // And the positives, so the slot discriminates rather than just proving
+    // the verb can say no: both directions of a real toggle report true.
+    QVERIFY2(engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "maximizing a real column changed the strip");
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "un-maximizing it changed the strip too");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineMaximize)

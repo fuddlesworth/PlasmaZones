@@ -174,7 +174,7 @@ void ScrollEngine::adjustColumnWidth(qreal deltaPercent, const QString& screenId
     P_SCROLL_VERB(screenId, state->strip().adjustActiveColumnWidth(deltaPercent, params), "resize", false, QString());
 }
 
-void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
+bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
 {
     // An empty windowId means "the active column", which is what the keyboard
     // shortcut wants: it acts on whatever the user is looking at. A NAMED
@@ -236,7 +236,7 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
             Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
                                       QString(), screen);
         }
-        return;
+        return false;
     }
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
@@ -249,6 +249,7 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
         Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
                                   sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
     }
+    return changed;
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)

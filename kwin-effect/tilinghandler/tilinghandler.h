@@ -380,6 +380,12 @@ public:
     /// routed to the scrolling engine's maximize-column verb instead, so one
     /// window has ONE maximize authority. Answers whether the request was
     /// claimed; an unclaimed one is left entirely alone.
+    ///
+    /// Writes NOTHING to KWin's maximize bit. The user's own flip stands for
+    /// the length of the round trip and the engine's batch imposes the answer,
+    /// which is what keeps the button's motion to a single animated leg. Only
+    /// a REFUSED request writes the bit back, from the dispatch's reply
+    /// handler.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
 
     /// Put a scroll-managed tile's KWin maximize bit back after an AXIS-ONLY
@@ -1052,14 +1058,18 @@ private:
     /// apply's, which spans the geometry apply as well as the maximize.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
-    /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p windowId's column
-    /// on @p screenId. The window is named rather than left implicit because
-    /// the request can arrive for a window that is not the strip's active one
-    /// (a client's own maximize, a click under focus-follows-mouse), and the
-    /// engine must act on the column holding it.
-    /// Unlike dispatchWindowedFullscreenClear this needs no reply gate and no
-    /// in-flight marker — see resolveColumnMaximizeAction's contract note for
-    /// why the round trip cannot be raced.
+    /// Scrolling.toggleMaximizeColumn for @p windowId's column on @p screenId.
+    /// The window is named rather than left implicit because the request can
+    /// arrive for a window that is not the strip's active one (a client's own
+    /// maximize, a click under focus-follows-mouse), and the engine must act on
+    /// the column holding it.
+    ///
+    /// CONSUMES THE REPLY. A false answer means the strip did not change, so no
+    /// batch is coming and the state the user's click left on the window is
+    /// nobody's — the handler puts KWin's bit back to membership. Still needs
+    /// no in-flight marker: nothing here changes membership speculatively, so a
+    /// batch landing mid-trip resolves against the same state it would have
+    /// anyway (resolveColumnMaximizeAction's contract note).
     void dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId);
 
     /// Announce, once per window per episode, that a window on a tracked
@@ -1679,15 +1689,6 @@ private:
     /// member, and they enter and leave together on the batch that carries
     /// the flag.
     QSet<QString> m_columnMaximizedWindows;
-    /// Windows whose last maximize request the daemon REFUSED at its
-    /// boundary, and whose maximize we therefore replayed on the user's
-    /// behalf. One-shot: interceptMaximizeRequest consumes the entry and
-    /// declines that one event, which is what stops the replay being
-    /// cancelled and dispatched again. Without it the pair loops at one
-    /// D-Bus round trip per iteration, because on Wayland the replay's
-    /// committed echo arrives with the suppression counter back at zero and
-    /// reads as a fresh user maximize.
-    QSet<QString> m_maximizePassThrough;
     int m_suppressMaximizeChanged = 0;
     /// Suppresses slotWindowFullScreenChanged for the effect's OWN
     /// setFullScreen calls (windowed fullscreen), mirroring

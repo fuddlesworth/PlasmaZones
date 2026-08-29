@@ -238,7 +238,16 @@ public:
     /// the strip does not hold it, which is what the compositor's maximize
     /// interception needs — that request names one window and the active
     /// column is frequently a different one.
-    void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
+    ///
+    /// Answers whether the strip actually CHANGED. The compositor's maximize
+    /// interception needs that distinction and not merely "the call arrived":
+    /// it no longer writes KWin's maximize bit before dispatching, so a request
+    /// this engine quietly does nothing with (no state for the context, an
+    /// empty strip, a window no column holds, a column the verb refuses) leaves
+    /// the window holding the state the USER asked for with no batch coming to
+    /// impose the strip's answer. False is the effect's cue to put the bit back
+    /// where the engine last had it.
+    bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
