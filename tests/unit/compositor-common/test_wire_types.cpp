@@ -14,10 +14,12 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QScopeGuard>
 #include <QTest>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
+#include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -109,6 +111,46 @@ private Q_SLOTS:
     // =================================================================
     // D-Bus types: PhosphorProtocol::PreTileGeometryEntry roundtrip
     // =================================================================
+
+    /// The only two REGISTERED wire types with no signature probe anywhere in
+    /// the repo, which made them the only two whose registration could be
+    /// deleted with the whole suite still green. That is not a coverage nit:
+    /// the comment above P_REGISTER_DBUS_TYPE states the consequence of an
+    /// unregistered adaptor parameter type is a RUNTIME DISPATCH CRASH, so a
+    /// one-line deletion shipped a crash. DragPolicy also carries the only
+    /// marshaller in the family that TRANSFORMS a field (bypassReason through
+    /// toWireString / bypassReasonFromWireString) with its shape declared
+    /// nowhere but a comment.
+    ///
+    /// A signature probe needs no bus and no peer — it writes into an
+    /// in-process QDBusArgument — so the "needs full D-Bus transport"
+    /// reasoning that kept these two uncovered applies to a round trip, not
+    /// to this.
+    void testDragTypesAreRegisteredAndPinned()
+    {
+        PhosphorProtocol::registerWireTypes();
+
+        PhosphorProtocol::DragPolicy policy;
+        policy.streamDragMoved = true;
+        policy.showOverlay = false;
+        policy.grabKeyboard = true;
+        policy.captureGeometry = false;
+        policy.immediateFloatOnStart = true;
+        policy.screenId = QStringLiteral("DP-1");
+        policy.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
+        QCOMPARE(dbusSignature(policy), QStringLiteral("(bbbbbss)"));
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(qMetaTypeId<PhosphorProtocol::DragPolicy>())) != nullptr);
+
+        PhosphorProtocol::DragOutcome outcome;
+        outcome.action = PhosphorProtocol::DragOutcome::ApplySnap;
+        outcome.windowId = QStringLiteral("app|1");
+        outcome.zoneId = QStringLiteral("{zone}");
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(qMetaTypeId<PhosphorProtocol::DragOutcome>())) != nullptr);
+        // Shape pinned against the struct rather than the comment: the tail is
+        // an EmptyZoneList, whose own entry signature is pinned by
+        // testEmptyZoneEntryRoundtrip.
+        QCOMPARE(dbusSignature(outcome), QStringLiteral("(issiiiisbba(siiiiiibsssdd))"));
+    }
 
     void testPreTileGeometryEntryRoundtrip()
     {
@@ -204,6 +246,7 @@ private Q_SLOTS:
                                                  true,
                                                  false,
                                                  true,
+                                                 false,
                                                  QStringLiteral("lastOnTop"),
                                                  QStringLiteral("right"),
                                                  -240,
@@ -221,12 +264,12 @@ private Q_SLOTS:
         // coverage lives in the bus round-trip's two payloads instead. Do
         // not copy this fixture into a validator test.
         //
-        // Verify D-Bus signature: (siiiissbbbssiiibsb) = string + 4 ints + 2
-        // strings + 3 bools (monocle, floating, windowedFullscreen) +
-        // stacking + scrollEdge + viewDelta + the visual position pair and
-        // its validity flag + tabFrom + viewImmediate
+        // Verify D-Bus signature: (siiiissbbbbssiiibsb) = string + 4 ints + 2
+        // strings + 4 bools (monocle, floating, windowedFullscreen,
+        // columnMaximized) + stacking + scrollEdge + viewDelta + the visual
+        // position pair and its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibsb)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbbssiiibsb)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -243,6 +286,9 @@ private Q_SLOTS:
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
         QCOMPARE(entry.windowedFullscreen, true);
+        // Differs from windowedFullscreen beside it, so a transposition of the
+        // two adjacent bools fails here rather than passing by coincidence.
+        QCOMPARE(entry.columnMaximized, false);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDelta, -240);
@@ -258,6 +304,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
         QCOMPARE(defaultEntry.windowedFullscreen, false);
+        QCOMPARE(defaultEntry.columnMaximized, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDelta, 0);
@@ -285,6 +332,13 @@ private Q_SLOTS:
         TileRequestEcho echo;
         const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+        // Scope guard rather than a trailing call: a failing QCOMPARE below
+        // returns from the slot, and the two older bus slots avoid that by
+        // unregistering BEFORE they compare. A guard gets the same property on
+        // every exit path without reordering the assertions.
+        const auto unregisterGuard = qScopeGuard([&bus, &path] {
+            bus.unregisterObject(path);
+        });
 
         // NOTE: QCOMPARE inside this lambda returns from the LAMBDA, not the
         // test slot — a payload-A failure still runs payload B. Safe as
@@ -308,6 +362,7 @@ private Q_SLOTS:
             QCOMPARE(got.monocle, sent.monocle);
             QCOMPARE(got.floating, sent.floating);
             QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
+            QCOMPARE(got.columnMaximized, sent.columnMaximized);
             QCOMPARE(got.stacking, sent.stacking);
             QCOMPARE(got.scrollEdge, sent.scrollEdge);
             QCOMPARE(got.viewDelta, sent.viewDelta);
@@ -319,23 +374,24 @@ private Q_SLOTS:
         };
 
         // TWO legal payloads, because no single legal payload can cover the
-        // three bool slots: validationError rejects windowedFullscreen
-        // beside either monocle or floating, so wf=true forces the other
-        // two false. Payload A (wf=true) catches a floating-for-wf or
+        // four bool slots: validationError rejects windowedFullscreen and
+        // columnMaximized beside either monocle or floating, so wf=true
+        // forces monocle and floating false. Payload A (wf=true,
+        // columnMaximized=true — a pair that IS legal, since the two drive
+        // different compositor state) catches a floating-for-wf or
         // monocle-for-wf transposition in either operator; payload B
         // (monocle=true) catches the monocle-for-floating swap A cannot
-        // see. Between them, a transposition introduced in EITHER operator
-        // alone fails loudly. (A matching swap in both operators is an
-        // identity round-trip no bus test can see — the realistic
-        // regression is the single-operator edit, and that is what these
-        // two payloads pin.)
+        // see, and clears columnMaximized both because monocle+cm is
+        // rejected and so that `false` crosses the bus for that bool too. Between them, a transposition introduced in
+        // EITHER operator alone fails loudly. (A matching swap in both operators is an identity round-trip no bus test
+        // can see — the realistic regression is the single-operator edit, and that is what these two payloads pin.)
         // (The signature probe above pins struct DECLARATION order via its
         // aggregate init; only these bus trips pin the two marshallers
         // agreeing.)
         PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"), 50, 100, 640, 480,
                                                 QStringLiteral("{zone-uuid}"), QStringLiteral("screen-0"), false, false,
-                                                true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512, -900,
-                                                64, true, QStringLiteral("konsole|9"),
+                                                true, true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512,
+                                                -900, 64, true, QStringLiteral("konsole|9"),
                                                 // viewImmediate true on payload A and false on payload B,
                                                 // so BOTH values cross the bus: the trailing bool is the
                                                 // one field the signature probe cannot pin (a dropped
@@ -345,10 +401,9 @@ private Q_SLOTS:
         roundTrip(sent);
         sent.monocle = true;
         sent.windowedFullscreen = false;
+        sent.columnMaximized = false;
         sent.viewImmediate = false;
         roundTrip(sent);
-
-        bus.unregisterObject(path);
     }
 
     void testSwapTargetResultBusRoundtrip()
@@ -361,6 +416,13 @@ private Q_SLOTS:
         SwapTargetResultEcho echo;
         const QString path = QStringLiteral("/test/wiretypes/swaptargetecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+        // Scope guard rather than a trailing call: a failing QCOMPARE below
+        // returns from the slot, and the two older bus slots avoid that by
+        // unregistering BEFORE they compare. A guard gets the same property on
+        // every exit path without reordering the assertions.
+        const auto unregisterGuard = qScopeGuard([&bus, &path] {
+            bus.unregisterObject(path);
+        });
 
         // Every field distinct — the two int quadruples especially, so a
         // window1/window2 transposition or an x/y/w/h shuffle inside either
@@ -410,8 +472,6 @@ private Q_SLOTS:
         QCOMPARE(got.sourceZoneId, sent.sourceZoneId);
         QCOMPARE(got.targetZoneId, sent.targetZoneId);
         QCOMPARE(got.screenName2, sent.screenName2);
-
-        bus.unregisterObject(path);
     }
 
     // =================================================================
@@ -491,6 +551,7 @@ private Q_SLOTS:
                                                  480,
                                                  QStringLiteral("{z}"),
                                                  QStringLiteral("s0"),
+                                                 false,
                                                  false,
                                                  false,
                                                  false,
@@ -653,6 +714,13 @@ private Q_SLOTS:
         QCOMPARE(entry.borderRadius, 8);
         QCOMPARE(entry.useCustomColors, true);
         QCOMPARE(entry.highlightColor, QStringLiteral("#ff00ff00"));
+        // The other two colour strings are compared too. All three are
+        // adjacent same-type members, so a declaration-order transposition
+        // between any pair keeps the signature valid and passes every other
+        // assertion here — which is precisely the failure this file's own
+        // aggregate-init note warns about.
+        QCOMPARE(entry.inactiveColor, QStringLiteral("#80808080"));
+        QCOMPARE(entry.borderColor, QStringLiteral("#ffffffff"));
         QCOMPARE(entry.activeOpacity, 0.7);
         QCOMPARE(entry.inactiveOpacity, 0.2);
 
@@ -713,20 +781,13 @@ private Q_SLOTS:
     void testAlgorithmInfoEntryRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::AlgorithmInfoEntry entry{QStringLiteral("master-stack"),
-                                                   QStringLiteral("Master-Stack"),
-                                                   QStringLiteral("A tiling algorithm"),
-                                                   true,
-                                                   true,
-                                                   false,
-                                                   false,
-                                                   0.65,
-                                                   8,
-                                                   false,
-                                                   QStringLiteral("sequential"),
-                                                   false,
-                                                   true,
-                                                   true};
+        PhosphorProtocol::AlgorithmInfoEntry entry{
+            QStringLiteral("master-stack"), QStringLiteral("Master-Stack"), QStringLiteral("A tiling algorithm"),
+            // Adjacent bools take DIFFERENT values wherever the
+            // declaration lets them: an aggregate init pins field
+            // order, and a transposition between two neighbours
+            // holding the same value ships green.
+            true, false, true, false, 0.65, 8, true, QStringLiteral("sequential"), false, true, false};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbbb)"));
@@ -738,16 +799,16 @@ private Q_SLOTS:
         QCOMPARE(entry.name, QStringLiteral("Master-Stack"));
         QCOMPARE(entry.description, QStringLiteral("A tiling algorithm"));
         QCOMPARE(entry.supportsMasterCount, true);
-        QCOMPARE(entry.supportsSplitRatio, true);
-        QCOMPARE(entry.centerLayout, false);
+        QCOMPARE(entry.supportsSplitRatio, false);
+        QCOMPARE(entry.centerLayout, true);
         QCOMPARE(entry.producesOverlappingZones, false);
         QVERIFY(qAbs(entry.defaultSplitRatio - 0.65) < 0.001);
         QCOMPARE(entry.defaultMaxWindows, 8);
-        QCOMPARE(entry.isScripted, false);
+        QCOMPARE(entry.isScripted, true);
         QCOMPARE(entry.zoneNumberDisplay, QStringLiteral("sequential"));
         QCOMPARE(entry.isUserScript, false);
         QCOMPARE(entry.supportsMemory, true);
-        QCOMPARE(entry.supportsSingleWindow, true);
+        QCOMPARE(entry.supportsSingleWindow, false);
     }
 
     // A genuine marshal-then-demarshal round-trip over the bus, exercising BOTH
@@ -974,7 +1035,10 @@ private Q_SLOTS:
     void testRestoreTargetResultRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::RestoreTargetResult entry{true, true, 50, 75, 1024, 768};
+        // success and found DIFFER: they are adjacent bools, so equal values
+        // would hide a declaration-order transposition in both the fixture and
+        // the default check below.
+        PhosphorProtocol::RestoreTargetResult entry{true, false, 50, 75, 1024, 768};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bbiiii)"));
@@ -983,7 +1047,7 @@ private Q_SLOTS:
         QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
-        QCOMPARE(entry.found, true);
+        QCOMPARE(entry.found, false);
         QCOMPARE(entry.toRect(), QRect(50, 75, 1024, 768));
 
         PhosphorProtocol::RestoreTargetResult defaultEntry;
@@ -1089,6 +1153,14 @@ private Q_SLOTS:
         QCOMPARE(reply.arguments().size(), 1);
         const QVariant raw = reply.arguments().at(0);
 
+        // The next assertion and the last one in this slot pin QT's OWN
+        // behaviour, not PlasmaZones code, and they are here on purpose: this
+        // whole slot exists because the qdbus_cast requirement is a Qt detail
+        // that is easy to "simplify" back to toMap() in a reviewer's head. If
+        // a future Qt made toMap() work over the bus, these would fail and the
+        // right response would be to delete the qdbus_cast requirement, not to
+        // patch the test.
+        //
         // Negative case: the plain accessor loses the whole map.
         QVERIFY(raw.toMap().isEmpty());
 

@@ -11,6 +11,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
+#include "scrollstubtracking.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -21,6 +22,7 @@
 using namespace PhosphorScrollEngine;
 
 using ScrollTestUtils::makeProviderEngine;
+using ScrollTestUtils::StubWindowTracking;
 
 namespace {
 
@@ -56,6 +58,7 @@ private Q_SLOTS:
     void unclaimedStashTilesExpireAfterThreeSessions();
     void coTenantClaimDoesNotRenewSiblingLease();
     void serializeKeepsAnUnclaimedStashTileBesideALiveStrip();
+    void loginRestorePredicateGatesTheFloatPositionRestore();
     void windowedFullscreenSurvivesSerializeRestore();
     void windowedFullscreenTogglesEmitAndFloatClears();
     void windowedFullscreenHiddenTabStillEmitsFlag();
@@ -801,6 +804,59 @@ void TestScrollEnginePersistence::serializeKeepsAnUnclaimedStashTileBesideALiveS
     QVERIFY2(saved.contains("app|n1"), "the live strip's own windows must be written");
     QVERIFY2(saved.contains("other|u3"),
              "the tile still waiting in the stash must survive a save taken while a live strip shares its key");
+}
+
+// The restore-position gate on the login path. Both sibling engines have
+// dedicated suites for the identical predicate (six drivers on the snap side,
+// three on autotile); the scroll engine's was production-wired with none, so
+// deleting the gate outright — making it ignore both the
+// scrollingRestoreFloatedWindowsOnLogin setting and the per-window
+// RestorePosition rule — left the whole suite green.
+//
+// Asserted on the SIGNAL rather than the predicate's return value: a slot that
+// called the predicate itself would still pass if the engine stopped
+// consulting it. The float itself is deliberately NOT gated (the window floats
+// either way); only the geometry move onto the recorded free spot is.
+void TestScrollEnginePersistence::loginRestorePredicateGatesTheFloatPositionRestore()
+{
+    const QRect recorded(140, 90, 640, 480);
+
+    // Same fixture twice, differing only in the predicate's answer, so the
+    // discriminator is the gate and nothing else.
+    for (const bool allow : {true, false}) {
+        QObject owner;
+        StubWindowTracking tracker;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, {}, {}, &tracker);
+        engine->setRestorePositionPredicate([allow](const QString&) {
+            return allow;
+        });
+
+        // A window that closed FLOATING on this screen, with a free position
+        // on record. Only a floating record is consumed for reopen.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|old");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = kS1;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        rec.freeGeometryByScreen.insert(kS1, recorded);
+        tracker.placementStore().record(rec);
+
+        QSignalSpy geoSpy(engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        engine->windowOpened(QStringLiteral("app|new"), kS1, 0, 0);
+
+        // The float is restored either way: the gate is on the MOVE alone.
+        QVERIFY2(engine->isWindowFloatingInScroll(QStringLiteral("app|new")),
+                 "the reopen must float regardless of the position gate");
+
+        if (allow) {
+            QCOMPARE(geoSpy.count(), 1);
+            QCOMPARE(geoSpy.first().at(1).toRect(), recorded);
+        } else {
+            QVERIFY2(geoSpy.isEmpty(), "a refused predicate must not move the window onto its recorded spot");
+        }
+    }
 }
 
 void TestScrollEnginePersistence::windowedFullscreenSurvivesSerializeRestore()

@@ -64,6 +64,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -71,6 +72,23 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     FloatRestore restore;
     restore.column = columnIdx;
     const Column& sourceColumn = state->strip().columns().at(columnIdx);
+    // Captured VERBATIM, a full width included, and that is the intended
+    // trade rather than an oversight.
+    //
+    // A minimize/unminimize round trip of a maximized column's only window
+    // therefore rebuilds a full-width column, which publishes columnMaximized
+    // again — correct, since the user did maximize it — but WITHOUT the
+    // strip's pre-maximize slot, which is per-strip state this restore does
+    // not carry. The consequence is bounded: the un-maximize press falls
+    // through to the context default instead of a remembered width, which is
+    // the same arm a column maximized in an earlier session takes.
+    //
+    // Deliberately not "fixed" by capturing a narrower width. That would drop
+    // the maximized state across a minimize, which is a visible regression for
+    // the ordinary case, to avoid losing a remembered width in the rare one.
+    // This is the opposite call from expelWindowFromColumn, which DOES narrow
+    // the new column, because there the copy created a SECOND maximized column
+    // rather than restoring the one the user made.
     restore.width = sourceColumn.width;
     restore.display = sourceColumn.display;
     restore.ownedTabbedHeight = sourceColumn.display == ColumnDisplay::Tabbed && sourceColumn.heightOwnerId == windowId;
@@ -114,6 +132,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // not carry it — float and windowed fullscreen are exclusive), so the
     // emit-gate memory goes with it.
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {
@@ -325,6 +344,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

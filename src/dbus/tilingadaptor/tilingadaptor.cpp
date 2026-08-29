@@ -44,11 +44,15 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     if (m_lifecycleEngines.isEmpty()) {
         // Real teardown goes through clearEngine(); this empty-list form
         // exists for symmetry and has no production caller (see the header).
-        // It still clears the parked opens, because
-        // parked opens can never be retried without a pipeline, and the
-        // announce path's empty-union bail deliberately skips the retry, so
-        // they would otherwise sit for the rest of the process.
+        // It still clears BOTH open queues, because neither can be retried
+        // without a pipeline: parked opens are skipped by the announce path's
+        // empty-union bail, and panel-deferred opens reach a flush that finds
+        // no pipeline and discards them anyway. Clearing the deferral queue
+        // here is also what makes the flush path's empty-pipeline branch
+        // genuinely unreachable with entries in hand, which its test comment
+        // claims.
         m_unclaimedOpens.clear();
+        m_pendingOpens.clear();
     }
 }
 
@@ -70,9 +74,19 @@ PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningScreen(const QStrin
     }
     // Primary fallback is deliberate here, UNLIKE dispatchWindowOpened's
     // strict claim loop: the callers route stateless notifications (focus,
-    // desktop switches) where every engine self-guards on ownership, so a
-    // mid-flip miss is a harmless no-op — whereas an open adopted by the
-    // wrong engine would tile a window on a screen it does not own.
+    // desktop switches), and the fallback is the NORMAL route during a desktop
+    // switch — isAutotileScreen is evaluated against the current desktop, so
+    // switching to a non-autotile desktop makes the strict loop miss, and this
+    // is what still delivers the report to the engine whose same-screen arm
+    // schedules the revalidate repair. An open adopted by the wrong engine, by
+    // contrast, would tile a window on a screen it does not own.
+    //
+    // NOT because "every engine self-guards on ownership", which this comment
+    // used to claim and which is false: AutotileEngine::windowFocused guards on
+    // WINDOW tracking, not screen ownership, and read an unknown screen as a
+    // genuine cross-screen move — so an unvalidated screen id arriving here
+    // untracked the window outright. That branch now checks isKnownScreen; the
+    // fallback stays because the repair path depends on it.
     return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
 }
 
@@ -135,13 +149,20 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // check), and routing the drop through it logs at qCWarning — a
         // producer emitting a zero rect is producer garbling and a bug
         // report by this boundary's own policy, not debug noise.
-        entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
+        // zoneId is NOT parsed. The protocol declares it reserved and always
+        // empty on this wire — no producer writes it and no consumer reads
+        // it — so parsing it only gave a foreign producer a field to put
+        // arbitrary string data in, riding all the way to the compositor.
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         // Scrolling windowed fullscreen. Only meaningful on a tiled entry;
         // the floating pair is rejected by validationError() below like any
         // other garbling.
         entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
+        // Scrolling column maximize. Same shape as the flag above: only
+        // meaningful on a tiled entry, and validationError() below rejects
+        // the floating and monocle pairs.
+        entry.columnMaximized = obj.value(QLatin1String("columnMaximized")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
@@ -284,6 +305,11 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
     QMetaObject::invokeMethod(
         this,
         [this, generation = m_announceGeneration]() {
+            // Deliberately redundant with the empty-pipeline bail below:
+            // either alone produces the same silence, so no test can tell them
+            // apart — and that is the point, since they guard different things
+            // (a superseded announce versus a torn-down pipeline) and the pair
+            // is one deletion away from unguarded.
             if (generation != m_announceGeneration) {
                 return; // clearEngine voided this session's announce
             }
@@ -438,6 +464,17 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
     // it draws rather than every window that ever changed its title; a
     // window that becomes a tab later is covered by the effect's own
     // scrollTabColors query when the strip for it arrives.
+    //
+    // The substring test is UNSCOPED — it does not check that the match sits
+    // under a "tabs" array — and that is a robustness note rather than a bug.
+    // A false positive needs some other string value in the payload to equal
+    // a full window id including its quotes, and window ids are
+    // "<class>|<uuid>" while every other string the payload carries is a
+    // screen id, a colour or a title fragment. Nothing constructible collides.
+    // The cost of a hypothetical collision is also bounded: one extra colour
+    // relay for a window the effect does not paint a pill for, which the
+    // effect ignores. Parsing the JSON per title change to close it would be
+    // strictly worse on the hot path this bound exists to keep cheap.
     const QString quoted = QLatin1Char('"') + windowId + QLatin1Char('"');
     bool named = false;
     for (auto it = m_lastScrollTabStrips.constBegin(); it != m_lastScrollTabStrips.constEnd(); ++it) {
@@ -768,7 +805,31 @@ void TilingAdaptor::flushPendingWindowOpens()
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         engine->beginArrivalBurst();
     }
+    // DISPATCH is the choke point for validity and duplicates, not the two
+    // append sites. windowsOpenedBatch applies its seenWindowIds guard only on
+    // the immediate path, and windowOpened does not check the queue at all, so
+    // a window can reach here twice: once from a batch carrying it twice, and
+    // once from two separate deferred calls (the effect drops m_notifiedWindows
+    // on a desktop or activity demotion with no daemon-side close, so a return
+    // re-announces while the first entry is still queued). Dispatching twice
+    // runs applyOpenRoutingForTiling's side effects twice, which the
+    // parked-open path bakes in a routed screen specifically to avoid.
+    //
+    // Guarding here rather than at the appends means a future enqueue path
+    // cannot bypass it. Keep-first preserves the replay order that decides
+    // strip column order and master assignment, and matches the batch guard.
+    QSet<QString> seenWindowIds;
     for (const auto& entry : toFlush) {
+        if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
+            qCWarning(lcDbusTiling) << "flushPendingWindowOpens: dropping invalid queued entry" << entry.windowId
+                                    << entry.screenId;
+            continue;
+        }
+        if (seenWindowIds.contains(entry.windowId)) {
+            qCDebug(lcDbusTiling) << "flushPendingWindowOpens: dropping duplicate queued open" << entry.windowId;
+            continue;
+        }
+        seenWindowIds.insert(entry.windowId);
         dispatchWindowOpened(entry);
     }
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
@@ -949,6 +1010,21 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
             ++it;
         }
     }
+    // The two OPEN QUEUES go with them. windowClosed drops all four together,
+    // and this prune is the backstop for a window that never produced a
+    // destroy notification — so covering only the two dedup maps left exactly
+    // the windows this function exists for holding a queue slot.
+    //
+    // Milder than a stale dedup entry (both queues are capped, and a flush or
+    // an announce retry drains them wholesale), but a dead entry that reaches
+    // dispatch is a phantom tile, and behind a panel gate that never lifts it
+    // sits for the session eating one of the 512 slots.
+    m_unclaimedOpens.removeIf([&alive](const ParkedOpen& parked) {
+        return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(parked.entry.windowId));
+    });
+    m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
+        return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
+    });
 }
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
@@ -1013,8 +1089,21 @@ void TilingAdaptor::clearEngine()
     // pending coalesced announce (its lambda re-checks the empty list) and
     // every per-session queue/dedup cache except m_activeLayouts — none of it
     // may leak into a restart (a stale dedup value could suppress the first
-    // genuine broadcast of the new session). m_activeLayouts is deliberately
-    // kept; setActiveLayouts documents why.
+    // genuine broadcast of the new session).
+    //
+    // m_activeLayouts is the exception, and the reason is the GETTER rather
+    // than the emission: activeLayouts() is ungated, so it keeps answering
+    // this map for as long as the object exists. Clearing it would replace a
+    // true answer with an empty one, which a reader cannot tell from "no
+    // screen has a layout" — the same call the scrolling adaptor's clearEngine
+    // makes about its two daemon-built values, and for the same reason. It is
+    // also not per-session state to begin with: the map is daemon-built, it
+    // covers every effective screen rather than the engine-managed ones, and
+    // the daemon re-pushes it from every updateEngineScreens pass, so a new
+    // session restates it in full rather than incrementally.
+    //
+    // (setActiveLayouts documents only its change gate, which is a different
+    // question from this one.)
     m_lifecycleEngines.clear();
     ++m_announceGeneration;
     m_screensAnnouncePending = false;

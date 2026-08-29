@@ -323,6 +323,20 @@ QStringList ScrollEngine::windowsBeyondFocusScrollLimit(const QString& screenId,
 {
     // "No cap" short-circuits before any work: this runs on every relayout of
     // every scrolling screen, and the default setting is exactly this case.
+    //
+    // COMPLEXITY, because that short-circuit is doing more work than it looks
+    // like it is. Past it, the loop below calls predictedFocusScrollPx once
+    // per column, and that helper walks the strip to compute a position — so
+    // the pass is O(columns^2) with a per-tile term inside, on every relayout
+    // of the screen. Turning the niri max-scroll-amount cap on is therefore
+    // what switches the quadratic on, for that screen only.
+    //
+    // Left as-is deliberately. At the column counts a strip actually reaches
+    // (tens, bounded by what a person opens) the constant dominates and this
+    // is nowhere near a relayout's cost; caching the positions would add an
+    // invalidation surface across every structural mutation to buy nothing
+    // measurable. Recorded so that if a strip ever grows into the hundreds,
+    // the profile has somewhere to start rather than being re-derived.
     if (maxScrollPercent >= 100) {
         return {};
     }

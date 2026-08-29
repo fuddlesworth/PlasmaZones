@@ -84,7 +84,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // untitled-tab placeholder) and this process is kwin_wayland, which
     // installs no PlasmaZones catalog of its own. Load the daemon's catalog
     // for the current locale from the shared data location; the translator
-    // is parented to the effect so an unload removes it again. Same contexts
+    // is parented to the effect, so an unload destroys it and ~QTranslator
+    // calls removeTranslator itself (the parenting is what triggers that, not
+    // what performs it). Same contexts
     // and lookup as the daemon's translation loader, minus the build-tree
     // search dirs that only make sense next to our own binaries.
     {
@@ -230,6 +232,28 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
     }
     if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMaximize)) {
+        // KNOWN DIVERGENCE on scrolling screens, recorded rather than fixed.
+        //
+        // This unload is whole-session, but the maximize INTERCEPTION is
+        // per-window: a maximize on a scroll-managed tile is claimed by the
+        // strip's maximize-column verb, which skips the WindowMaximize morph
+        // on purpose (window_connections.cpp, the interceptMaximizeRequest
+        // arm) because the column's own batch transition already carries the
+        // resize and installing a second one would supersede it.
+        //
+        // So on a scrolling screen a maximize plays the strip transition,
+        // not the assigned pack, while stock maximize is gone session-wide.
+        // The pack still plays everywhere else — tiling, snapping, floating
+        // windows, and every non-scrolling screen — which is why the unload
+        // is still the right trade.
+        //
+        // Narrowing it would need this predicate to know, per window, whether
+        // the scrolling engine will claim that window's maximize. It cannot:
+        // the answer depends on the window's screen, desktop and activity at
+        // the moment of the request, and the suppression is decided once at
+        // sync time for the whole session. Restoring stock here would be
+        // worse than the divergence, since stock maximize would then fight
+        // the strip batch on exactly the windows this arm exists to protect.
         wanted << QStringLiteral("maximize");
     }
 
@@ -429,6 +453,17 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // without it an unload strands every windowed-fullscreen client in
         // KWin fullscreen state with nothing left owning the flag.
         m_tilingHandler->restoreAllWindowedFullscreen();
+        // And for the maximize bits mirrored for maximized columns, on the
+        // same obligation. AFTER the fullscreen release, deliberately: the
+        // column restore skips a window that still holds fullscreen, and on
+        // X11 setFullScreen(false) above has already taken effect by the time
+        // this runs, so a window holding both states THROUGH OUR OWN windowed
+        // fullscreen gets a real restore rather than a skip. A window that
+        // went fullscreen on its own request is not in that ledger and is
+        // skipped on either platform. On Wayland the committed bit trails a
+        // client round-trip, so the skip applies there too — which is why it
+        // retains its ledger entry instead of dropping it.
+        m_tilingHandler->restoreAllColumnMaximized();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

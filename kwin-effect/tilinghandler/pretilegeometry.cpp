@@ -187,10 +187,17 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 });
                 // Clear any lingering KWin maximize flag first or KWin re-asserts
                 // the maximize-area rect and defeats the restore (discussion #461).
-                if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-                    ++m_suppressMaximizeChanged;
-                    kw->maximize(KWin::MaximizeRestore);
-                    --m_suppressMaximizeChanged;
+                //
+                // Through the ledger when the ledger owns the bit, so membership
+                // and the bit move TOGETHER — the same shape the two sibling
+                // pre-tile restores in screenschanged.cpp use, and for the reason
+                // stated there: a bare clear strips a column-maximize member's bit
+                // while leaving the effect recorded as still holding it, which is
+                // the exact split m_columnMaximizedWindows' contract forbids.
+                if (m_columnMaximizedWindows.contains(windowId)) {
+                    releaseColumnMaximized(windowId, safeW);
+                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
                 m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),

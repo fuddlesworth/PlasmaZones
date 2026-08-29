@@ -232,7 +232,13 @@ public:
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
-    void toggleMaximizeColumn(const QString& screenId);
+    /// Toggle the maximized state of a column on @p screenId. An empty
+    /// @p windowId targets the ACTIVE column (the keyboard shortcut's
+    /// meaning); a named window targets the column owning it and refuses when
+    /// the strip does not hold it, which is what the compositor's maximize
+    /// interception needs — that request names one window and the active
+    /// column is frequently a different one.
+    void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -869,8 +875,11 @@ public:
 
 Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
-    /// as AutotileEngine::windowsTiled ({windowId, screenId, x, y, width,
-    /// height}). Float transitions are signalled separately via
+    /// as AutotileEngine::windowsTiled. The field list and semantics live
+    /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
+    /// which is the single source: an inline copy here named six of the
+    /// fourteen fields actually emitted and drifted every time one was
+    /// added. Float transitions are signalled separately via
     /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same
@@ -1270,6 +1279,17 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
+    /// Windows whose last EMITTED batch entry carried columnMaximized. The
+    /// column twin of m_lastAppliedWindowedFs and its own leg of the same
+    /// emit-on-change gate, for the same reason and one more: this flag can
+    /// flip with every committed rect byte-identical. It is derived partly
+    /// from extentPinnedByMinimum, which moves when a client reports a
+    /// minimum anywhere in [resolveColumnWidthPx(width), workAreaMain] on an
+    /// already-full-width column, or when respectMinimumSize is toggled over
+    /// one. Without this leg the batch is suppressed and the compositor keeps
+    /// asserting a maximize the engine has dropped. Maintained wherever
+    /// m_lastAppliedWindowedFs is.
+    QSet<QString> m_lastAppliedColumnMaximized;
     /// Which screen edge each currently-parked window went out by — one of
     /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
     /// the screen's strip axis: a horizontal strip goes out left/right, a

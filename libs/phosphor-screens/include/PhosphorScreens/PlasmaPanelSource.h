@@ -62,6 +62,15 @@ private:
 
     bool m_running = false;
     bool m_ready = false;
+    /// Bounded retries for the READY handshake only. The first query can fail
+    /// transiently while plasmashell is already registered, and nothing else
+    /// would ever retry it: the service watcher only fires on registration and
+    /// the other requery kicks are screen-geometry events, so a static setup
+    /// stayed un-ready for the life of the process with every consumer gated
+    /// behind a one-shot that never fired.
+    static constexpr int kReadyRetryCount = 3;
+    static constexpr int kReadyRetryBaseMs = 1000;
+    int m_readyRetriesRemaining = kReadyRetryCount;
 
     /// True while a D-Bus call is in flight. Rapid requestRequery calls
     /// coalesce: additional requests while pending set m_requeryQueued so

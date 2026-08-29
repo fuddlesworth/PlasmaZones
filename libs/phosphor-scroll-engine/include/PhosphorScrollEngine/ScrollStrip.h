@@ -104,7 +104,7 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, consumeWindowIntoColumn, consumeOrExpel) all act
     /// on activeTileIdx, so a caller pairing this accessor with one of them
     /// could report a window the operation did not touch. Not reachable in
     /// production today, where the daemon models minimize as float and a
@@ -285,7 +285,36 @@ public:
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
+    ///
+    /// "Already maximized" is decided on RESOLVED PIXELS, not on the stored
+    /// intent value, so every route to a full-width column un-maximizes —
+    /// preset cycling, expand, equalize, a restore from disk. Three arms sit
+    /// behind the simple description:
+    ///
+    ///  - The stored pre-maximize width is re-validated against the current
+    ///    work area and axis. One captured on a wider output resolves clamped
+    ///    back to full width, and restoring it would spend the slot and move
+    ///    nothing, so that case falls through instead.
+    ///  - With no usable stored width (maximized in an earlier session, or
+    ///    another column's maximize took the single slot) it un-maximizes to
+    ///    the context default width rather than dead-ending.
+    ///  - If the default is ITSELF full width, it takes half the work area,
+    ///    because otherwise that user could never un-maximize.
+    ///
+    /// Refuses (false) only for a column pinned at or past the work area by
+    /// its client minimum, which is a dead end the verb cannot resolve; the
+    /// definition documents why.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
+    /// The same verb aimed at the column OWNING @p windowId rather than at the
+    /// active one. Refuses (false) when this strip does not hold the window.
+    ///
+    /// The distinction is load-bearing for the compositor's maximize
+    /// interception: that arrives for ONE named window (a titlebar click, a
+    /// client's own request from a window that never took focus) and the
+    /// active column is frequently a different one, so aiming at the active
+    /// column would cancel the clicked window's maximize and resize somebody
+    /// else's column.
+    bool toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params);
     /// Grow the active column into the on-screen MAIN-axis space not taken by
     /// the FULLY visible columns at the current view (niri
     /// expand-column-to-available-width).
@@ -368,9 +397,10 @@ public:
     /// TALLER going forward, nearest shorter going back, wrapping at each
     /// end), measured off a fresh relayout so an AUTO tile enters the cycle
     /// at what it currently renders rather than always at the first entry.
-    /// A TABBED column cycles too: the shown tab's intent sizes the whole
-    /// column (tabbedColumnCrossPx), so the press moves the column's cross
-    /// extent. The measurement then reads the column rather than the tile,
+    /// A TABBED column cycles too, in two steps: the press first CLAIMS
+    /// extent ownership for the shown tab, and the OWNER's intent then sizes
+    /// the whole column (tabbedColumnCrossPx), so the press moves the
+    /// column's cross extent. The measurement then reads the column rather than the tile,
     /// since the indicator's reservation sits between the two.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
@@ -649,8 +679,9 @@ private:
     /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
     /// share the floor would overrule is never written as if it could render.
     int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
-    /// Pixel CROSS extent of TABBED column @p c: the shown tab's own height
-    /// intent, resolved exactly the way the stack branch resolves a single
+    /// Pixel CROSS extent of TABBED column @p c: the height intent of the
+    /// tab that OWNS the extent (Column::heightOwnerId), not the tab on show,
+    /// resolved exactly the way the stack branch resolves a single
     /// tile's Fixed/Preset height, so an entry of the preset vocabulary lands
     /// on the same pixels whichever display the column is in. Auto means the
     /// whole work area, which is what a tabbed column used to be pinned at.
@@ -713,6 +744,9 @@ private:
         m_viewDetached = false;
     }
     Column* activeColumnMutable();
+    /// Shared core of the two maximize-toggle entry points. Out-of-range
+    /// @p columnIndex (including columnOfWindow's -1 miss) refuses.
+    bool toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params);
     Tile* activeTileMutable();
     void clampActiveIndices();
 
@@ -723,8 +757,22 @@ private:
     /// Whether an explicit pan owns the view instead of the centering policy
     /// (see the class doc's View detachment section).
     bool m_viewDetached = false;
-    /// Pre-maximize width intent for the maximize toggle (single slot:
-    /// maximize is a focused-column toggle).
+    /// Pre-maximize width intent for the maximize toggle, and the index of the
+    /// column it belongs to.
+    ///
+    /// ONE SLOT for the whole strip, deliberately, and no longer only a
+    /// focused-column toggle: toggleMaximizeColumnForWindow writes it for an
+    /// arbitrary column, so a second maximize anywhere discards the first
+    /// column's stored width. That column then un-maximizes to the context
+    /// default rather than to what it had. The toggle handles it — its
+    /// no-usable-slot arm exists for exactly this, and for the two other ways
+    /// the slot goes missing (a stash round trip and a restart, neither of
+    /// which carries it) — so the degradation is defined rather than a leak.
+    ///
+    /// Making it per-column would be an improvement and is a design change,
+    /// not a bug fix: the index is maintained across every insert, remove and
+    /// move in scrollstrip_structure.cpp, and a per-column slot would delete
+    /// all of that bookkeeping along with this pair.
     ColumnWidth m_preMaximizeWidth;
     int m_preMaximizeColumnIdx = -1;
 };

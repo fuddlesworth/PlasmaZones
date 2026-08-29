@@ -545,7 +545,12 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // silently undo an explicit centerActiveColumn at the strip's edges
     // (whose centered anchor implies out-of-range viewOffset by design) and
     // reclaim removeWindowInternal's deliberate right-edge dead space.
-    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0) {
+    // BOTH ends, like every sibling bounds test in this file: this one indexes
+    // m_columns directly rather than delegating to a qBound, so an
+    // out-of-range active index would be an out-of-bounds read in release
+    // rather than an assertion. Not reachable today — every writer of the
+    // index clamps — so this is consistency, not a latent crash.
+    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0 && m_activeColumnIdx < m_columns.size()) {
         const int viewMain = mainExtent(params);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);
@@ -723,6 +728,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
+        // Published so a consumer can tell "the user asked for this extent"
+        // from "this column cannot be any narrower" — columnExtentPx takes the
+        // max of the two and the answer is indistinguishable afterwards.
+        rc.extentPinnedByMinimum = columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
         // rewrites this rect from the height intent of the tab that OWNS the

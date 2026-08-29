@@ -187,6 +187,38 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
     }
 
+    void testTileRequestValidationColumnMaximized()
+    {
+        // The same three-arm shape as the windowedFullscreen test above, for
+        // the flag that mirrors a maximized scroll column onto KWin's maximize
+        // bit. Without this, deleting either guard in types.cpp leaves the
+        // whole suite green.
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.columnMaximized = true;
+        QVERIFY(e.validationError().isEmpty());
+        // Discriminating substrings on both arms, as above: "columnMaximized"
+        // alone is shared by the two messages.
+        e.floating = true;
+        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("floating")));
+        e.floating = false;
+        e.monocle = true;
+        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
+        // The pairing with windowedFullscreen is deliberately LEGAL: the two
+        // drive different compositor state and a maximized column can hold a
+        // windowed-fullscreen tile. Pinned because it is an absence — nothing
+        // else fails if a later tidy-up folds columnMaximized into the
+        // windowedFullscreen arms and starts rejecting it.
+        e.monocle = false;
+        e.windowedFullscreen = true;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
@@ -236,19 +268,23 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // One step past the v4 that last shipped. Every wire change of the
-        // v3.4 cycle collapses into v5, because MinPeerApiVersion tracks
-        // ApiVersion exactly and no released peer ever spoke an intermediate
-        // version. See the v5 entry in ServiceConstants.h for what it covers.
+        // MinPeerApiVersion tracks ApiVersion exactly, so every unreleased
+        // step collapses into the current number. See the v6 entry in
+        // ServiceConstants.h for what it covers: it widened TileRequestEntry
+        // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
+        // windowId argument, in one step, because neither form ever shipped;
+        // v7 then gave that verb a boolean return so the effect can see a
+        // refusal it has already cancelled KWin's maximize for.
         //
-        // The bump is NOT redundant with Qt's signature matching. Most of v5
-        // widens windowsTileRequested, where a stale peer's slot simply never
-        // fires, but the interface moves and the scrollEdge / viewDelta axis
-        // change widen no signature at all: such a peer demarshals perfectly
-        // and then misbehaves. The handshake is the only thing refusing it,
-        // which is why this must not be "optimized away" later.
-        QCOMPARE(Service::ApiVersion, 5);
-        QCOMPARE(Service::MinPeerApiVersion, 5);
+        // The bump is NOT redundant with Qt's signature matching. A widened
+        // struct or method signature does leave a stale peer's slot simply
+        // never firing, but earlier steps widened no signature at all (the
+        // interface moves, the scrollEdge / viewDelta axis change): such a peer
+        // demarshals perfectly and then misbehaves. The handshake is the only
+        // thing refusing it, which is why this must not be "optimized away"
+        // later.
+        QCOMPARE(Service::ApiVersion, 7);
+        QCOMPARE(Service::MinPeerApiVersion, 7);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

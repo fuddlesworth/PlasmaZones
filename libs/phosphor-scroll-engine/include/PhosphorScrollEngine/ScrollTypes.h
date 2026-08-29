@@ -241,8 +241,12 @@ enum class ColumnDisplay : int {
     /// Only the active tile is laid out, at the column's content rect (its
     /// CROSS extent less whatever an in-column indicator reserved); the other
     /// tiles are hidden and represented by a tab-indicator strip. That cross
-    /// extent is the SHOWN tab's own height intent, so a tabbed column need
-    /// not span the work area (ScrollStrip::tabbedColumnCrossPx).
+    /// extent is the height intent of the tab that OWNS it
+    /// (Column::heightOwnerId), NOT the tab on show: reading the shown tab
+    /// would resize the column on every tab switch and break the
+    /// compositor's tab cross-fade, which is built on the arriving tab
+    /// occupying the rect the outgoing one just vacated. So a tabbed column
+    /// need not span the work area (ScrollStrip::tabbedColumnCrossPx).
     Tabbed = 1,
 };
 
@@ -983,6 +987,15 @@ struct ResolvedColumn
     /// indicator's long axis without re-deriving it from the rect's aspect (a
     /// one-tab indicator can be square).
     TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
+    /// True when the column's main extent came from its MINIMUM rather than
+    /// from its stored width intent — its tiles' declared minimum (plus any
+    /// main-axis indicator reservation) is at least as wide as the intent.
+    /// A consumer publishing "this column is maximized" must not do so off
+    /// @c rect alone: a column whose floor already reaches the work area
+    /// renders at full extent no matter what the user asks for, so it would
+    /// read as permanently maximized and every toggle would report success
+    /// while changing nothing the user can see.
+    bool extentPinnedByMinimum = false;
     QVector<ResolvedTile> tiles;
 };
 

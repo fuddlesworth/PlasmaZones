@@ -425,6 +425,16 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // with neither engine owning it. The entering direction needs no such care
     // (those windows are on-canvas, so positional and override agree), but
     // resolving both under the old set keeps one rule for the whole batch.
+    // NOT converted to QPointer, deliberately, and the exposure is recorded
+    // here rather than left silent. This list and its announceScreens twin are
+    // consumed by notifyWindowsAddedBatch after the release loops below, whose
+    // compositor calls can re-enter — the same hazard the column list above
+    // converts for. Converting these two is a wider change than it looks: the
+    // list is a parameter of notifyWindowsAddedBatch, and the hash uses the
+    // pointer as its KEY, which QPointer cannot serve without a custom qHash.
+    // Both are built and consumed in the same turn, and the consumer bails on
+    // a null-or-deleted window, so the residual risk is the isDeleted() test
+    // itself on a pointer that has already been freed.
     QList<KWin::EffectWindow*> announceWindows;
     QHash<KWin::EffectWindow*, QString> announceScreens;
     if (announcing && KWin::effects) {
@@ -457,12 +467,19 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // enumeration empty and releases nothing. Both such callers compensate
     // deliberately and say so at their own site — the bring-up fetch
     // (wiring.cpp) runs before any batch has populated the membership hash,
-    // and the bring-up drain (drainDeadSessionState) calls
-    // restoreAllWindowedFullscreen immediately BEFORE its
-    // setScrollingScreens({}, false). A future announceFlipped=false caller
-    // that can reach here with live membership must do the same, or resolve
-    // the leaving screens independently of the announce.
+    // and the bring-up drain (drainDeadSessionState) calls BOTH
+    // restoreAllWindowedFullscreen AND restoreAllColumnMaximized immediately
+    // BEFORE its setScrollingScreens({}, false). A future announceFlipped=false
+    // caller that can reach here with live membership owes both restores, or
+    // must resolve the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
+    // QPointer, not a raw pointer, for the reason slotWindowFullScreenChanged
+    // states about the same shape: the release loop below runs
+    // releaseWindowedFullscreenState first, whose setFullScreen(false) emits
+    // synchronously into effect handlers, and a raw pointer collected before
+    // that is not safe to test with isDeleted() afterwards — that check is
+    // undefined on a dangling pointer rather than a guard.
+    QList<QPointer<KWin::EffectWindow>> columnMaximizedLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -485,9 +502,30 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // redundant resize, not a lost relocation — but it is why this is
             // not the whole answer for such a caller.
             m_effect->m_scrollOfferedColumn.remove(wid);
+            // The other two per-window scroll companions go with it, the way
+            // the teardown funnels shed all three together. Leaving
+            // them behind lets a flip BACK to scrolling, before the new
+            // engine's first batch, re-arm the dead session's park relocation
+            // and counter-assert a rect the strip no longer owns. The
+            // relocation is a paint input, so its removal carries damage.
+            m_effect->m_scrollCommandedRects.remove(wid);
+            if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
             if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
                 forgetWindowedFullscreen(wid);
                 windowedFsLeavingScrolling.append(wid);
+            }
+            // The column mirror leaves with the strip for the same reason,
+            // and is deferred past the managed-set write below on the same
+            // split: releaseColumnMaximized moveResizes, and doing that while
+            // m_scrollingScreens still names this screen would re-enter the
+            // scrolling paths for a screen that is mid-flip. The destination
+            // engine's first batch releases any window it TILES, but one it
+            // floats (over maxWindows, excluded, minimize-floated) never gets
+            // an entry — which is exactly the case this loop exists for.
+            if (m_columnMaximizedWindows.contains(wid)) {
+                columnMaximizedLeavingScrolling.append(it.key());
             }
         }
     }
@@ -495,6 +533,19 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     m_scrollingScreens = newSet;
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
+    }
+    for (const QPointer<KWin::EffectWindow>& w : std::as_const(columnMaximizedLeavingScrolling)) {
+        if (w && !w->isDeleted()) {
+            const QString wid = m_effect->getWindowId(w);
+            // Monocle goes with it. The claim table says a mode flip releases
+            // all three, and this loop paid two — a monocle member on a screen
+            // leaving the scrolling set has no strip left to hand its bit
+            // back, and the destination engine's first batch only covers a
+            // window it TILES. No-op for a non-member, and it must precede the
+            // column release for the funnel's stated order.
+            unmaximizeMonocleWindow(wid);
+            releaseColumnMaximized(wid, w);
+        }
     }
 
     // A screen LEAVING the scrolling set mid-leg must take its view spring
@@ -722,7 +773,15 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // BEFORE the accumulator: NaN passes qFuzzyIsNull, poisons the running
     // total, and then fails every subsequent magnitude comparison, so the
     // chord would swallow every event on that axis while firing nothing.
-    if (qFuzzyIsNull(delta) || !std::isfinite(delta)) {
+    //
+    // Gated on deltaV120 being ABSENT, because the notch conversion below
+    // prefers that field and reads `delta` only as a fallback. Testing delta
+    // unconditionally dropped an event carrying a nonzero v120 with a zero or
+    // non-finite smooth delta, and took its banked remainder with it. When
+    // v120 carries the event `delta` is never read, so a NaN there cannot
+    // reach the accumulator either way.
+    const bool useV120 = deltaV120 != 0;
+    if (!useV120 && (qFuzzyIsNull(delta) || !std::isfinite(delta))) {
         resetWheelAccumulators();
         return false;
     }
@@ -793,8 +852,24 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // never terminates. The cap also bounds the D-Bus fan-out below, since
     // each step is its own message and no real gesture needs more than a
     // handful per event.
+    const bool capped = qAbs(accum) > static_cast<qreal>(kMaxWheelStepsPerEvent);
     const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
-    accum -= steps * whole;
+    if (capped) {
+        // TRUNCATE at the cap, do not bank the excess. Subtracting only what
+        // was spent leaves the remainder in the accumulator, and since the cap
+        // binds again on the next event, one garbled delta fires the full 16
+        // steps — sixteen D-Bus messages — on EVERY later event of the gesture
+        // until the chord is released. Discarding makes the behaviour match
+        // what the cap's own doc says it does, and there is nothing worth
+        // keeping: reaching this branch means the delta already exceeded any
+        // real gesture by an order of magnitude.
+        accum = 0.0;
+    } else {
+        // Under the cap the remainder is a genuine sub-notch fraction from a
+        // high-resolution wheel or touchpad, and carrying it is the whole
+        // point of the accumulator.
+        accum -= steps * whole;
+    }
     // This gesture belongs to one axis. Zeroing the other stops a diagonal
     // drift from banking a second, opposite step on the axis the user is not
     // actually scrolling along.

@@ -20,6 +20,8 @@
 #include <QObject>
 #include <QTest>
 
+#include <limits>
+
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -237,6 +239,83 @@ private Q_SLOTS:
         const QString err = e.validationError();
         QVERIFY(!err.isEmpty());
         QVERIFY(err.contains(QStringLiteral("negative size")));
+    }
+
+    /// The HEIGHT half of both size guards, which no other row reaches.
+    ///
+    /// Every existing fixture moves the two dimensions together — (-10, 600)
+    /// for the negative arm and (0, 0) for the zero arm — so dropping the
+    /// `height < 0` or `height == 0` term from either conjunction left the
+    /// whole suite green while an entry with a valid width and a degenerate
+    /// height sailed through the boundary and reached the compositor's
+    /// geometry apply as an inverted or empty rect.
+    void tileRequestEntry_negativeHeightAlone_rejected()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 800;
+        e.height = -10;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("negative size")));
+    }
+
+    void tileRequestEntry_tiledZeroHeightAlone_rejected()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.floating = false;
+        e.width = 800;
+        e.height = 0;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("tiled request requires non-zero size")));
+    }
+
+    /// The upper bounds, which exist so the consumer's QRect arithmetic cannot
+    /// overflow: it builds a rect from these and the x/y/w/h constructor
+    /// computes x + w - 1, which is undefined at INT_MAX before the effect's
+    /// own non-positive guard ever runs.
+    void tileRequestEntry_implausibleExtent_rejected()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = std::numeric_limits<int>::max();
+        e.height = 600;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("implausible size")));
+    }
+
+    void tileRequestEntry_implausibleOrigin_rejected()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.x = std::numeric_limits<int>::max();
+        e.width = 800;
+        e.height = 600;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("implausible origin")));
+    }
+
+    /// A PARKED column sits entirely outside its screen rect by design, so the
+    /// origin bound must be generous enough to let one through. An
+    /// over-strict validator here has dropped every vertical park before.
+    void tileRequestEntry_parkedOffscreenOrigin_tolerated()
+    {
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.x = -20000;
+        e.y = -20000;
+        e.width = 800;
+        e.height = 600;
+        QVERIFY(e.validationError().isEmpty());
     }
 
     void tileRequestEntry_tiledZeroSize_rejected()

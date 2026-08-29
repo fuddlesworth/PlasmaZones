@@ -405,6 +405,7 @@ void ScrollEngine::adoptAsFloatAfterRefusal(ScrollState* owner, const QString& w
     m_lastAppliedRect.remove(windowId);
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
     Q_EMIT windowFloatingStateSynced(windowId, true, announceScreen);
 }
 
@@ -612,6 +613,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId); // eviction symmetry with the float/handoff paths
+        m_lastAppliedColumnMaximized.remove(windowId);
     } else {
         // Refused, with the window already out of the source strip: adopt it
         // as a FLOAT of the source state rather than leaving it held by
@@ -659,6 +661,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                 m_lastAppliedRect.remove(partner); // same rationale as the mover's
                 m_parkedScrollEdge.remove(partner);
                 m_lastAppliedWindowedFs.remove(partner);
+                m_lastAppliedColumnMaximized.remove(partner);
             }
             // The put-back changed no output: the partner keeps its target
             // key, its last-applied rect and its edge memory untouched.

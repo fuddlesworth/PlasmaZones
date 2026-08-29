@@ -40,6 +40,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // Same treatment for the column-maximize leg, which is maintained
+    // alongside it everywhere.
+    for (auto it = m_lastAppliedColumnMaximized.begin(); it != m_lastAppliedColumnMaximized.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_lastAppliedColumnMaximized.erase(it);
+        } else {
+            ++it;
+        }
+    }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen. windowClosed drops the entry
     // (with the fs memory above) at close, and every path that drops
@@ -446,6 +455,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         for (const QString& windowId : std::as_const(displacedWindows)) {
             m_lastAppliedRect.remove(windowId);
             m_lastAppliedWindowedFs.remove(windowId);
+            m_lastAppliedColumnMaximized.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
@@ -496,6 +506,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -745,6 +756,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);

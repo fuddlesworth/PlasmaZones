@@ -88,7 +88,38 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // arm, not just per outcome).
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume", true, QString());
+    // Hand-expanded from P_SCROLL_VERB for the SOURCE slot, the way
+    // consumeOrExpelWindow below is hand-expanded for its action token.
+    //
+    // The macro captures the source before the op, as the active column's
+    // focused window. For every other verb that IS the window acted upon; for
+    // this one it is the wrong window on every invocation, because the tile
+    // that moves comes from the NEIGHBOUR column. The OSD named the window
+    // that stayed put.
+    //
+    // Resolved AFTER the op instead: the consume focuses what it pulls in, so
+    // the post-op active window is exactly the tile that moved. Reading it
+    // back beats predicting it, because the strip walks past minimized tiles
+    // to choose which one to take and duplicating that walk here would be a
+    // second copy of a rule that has already changed once.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("consume"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString beforeWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().consumeWindowIntoColumn(params);
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    // On a refusal nothing moved, so the active window is the honest subject —
+    // that is the macro's own behaviour and the right answer for "there was
+    // nothing to consume".
+    const QString moved = changed ? state->strip().activeWindowId() : beforeWindow;
+    Q_EMIT navigationFeedback(changed, QStringLiteral("consume"), changed ? QString() : QStringLiteral("no_target"),
+                              moved, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 void ScrollEngine::expelWindowFromColumn(const QString& screenId)
@@ -143,9 +174,81 @@ void ScrollEngine::adjustColumnWidth(qreal deltaPercent, const QString& screenId
     P_SCROLL_VERB(screenId, state->strip().adjustActiveColumnWidth(deltaPercent, params), "resize", false, QString());
 }
 
-void ScrollEngine::toggleMaximizeColumn(const QString& screenId)
+void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
 {
-    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveColumn(params), "resize", false, QString());
+    // An empty windowId means "the active column", which is what the keyboard
+    // shortcut wants: it acts on whatever the user is looking at. A NAMED
+    // window aims at the column owning it, which is what the compositor's
+    // maximize interception needs — that request arrives for one specific
+    // window (titlebar click, a client's own request from a window that never
+    // took focus) and the active column is often a different one.
+    //
+    // CANONICALIZE the named id first, the way every other window-keyed entry
+    // point on this engine does (clearWindowedFullscreen and
+    // reapplyWindowGeometry below, windowMinSizeUpdated, the navigation and
+    // reopen paths). The strip keys on the id frozen at first contact, so a
+    // re-reported id compares unequal, columnOfWindow answers -1 and the verb
+    // refuses — silently, after the compositor has already cancelled KWin's
+    // own maximize, so the click does nothing at all. Empty in, empty out, so
+    // the active-column spelling above is untouched.
+    const QString canonicalId = canonicalizeForLookup(windowId);
+    // RESOLVE FROM THE WINDOW when one is named, not from the caller's screen.
+    //
+    // P_SCROLL_RESOLVE keys on the screen's CURRENT desktop and activity, so a
+    // named window sitting on a background context of that screen resolves
+    // against a strip that does not hold it, columnOfWindow answers -1 and the
+    // verb refuses — silently, after the compositor has already cancelled
+    // KWin's maximize. The two sibling window-keyed verbs below both resolve
+    // through the window for exactly this reason. The empty spelling keeps the
+    // caller's screen, because "the active column" is a question about a
+    // screen and not about any window.
+    QString resolvedScreen = screenId;
+    if (!canonicalId.isEmpty()) {
+        PhosphorEngine::PlacementStateKey windowKey;
+        if (stateForWindow(canonicalId, &windowKey)) {
+            resolvedScreen = windowKey.screenId;
+        }
+    }
+    // Hand-expanded from P_SCROLL_VERB for the FEEDBACK alone, the way
+    // consumeOrExpelWindow above is hand-expanded for its action token.
+    //
+    // The macro raises the navigation OSD unconditionally, which was right
+    // while the keyboard shortcut was this verb's only producer: the user
+    // pressed a key, so they get told what it did. The compositor's maximize
+    // interception is a second producer with the opposite requirement. That
+    // request arrives for a NAMED window from a titlebar click or from a
+    // client maximizing itself, and a background application doing so would
+    // pop "Resized" over whatever the user is actually working on.
+    //
+    // So the named spelling is quiet and the active-column spelling is not.
+    // The split is the same one the canonicalize and resolve steps above are
+    // written around: an empty id is the user's own key press about the
+    // column in front of them, a named id is somebody else's request about a
+    // window that may not even be on screen.
+    //
+    // Suppressing the emit rather than passing a quiet flag into the OSD also
+    // sidesteps the macro's source/target slots, which report the ACTIVE
+    // window. On the named path that is frequently the wrong window entirely.
+    const bool quiet = !canonicalId.isEmpty();
+    P_SCROLL_RESOLVE(resolvedScreen);
+    if (!state || state->strip().isEmpty()) {
+        if (!quiet) {
+            Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
+                                      QString(), screen);
+        }
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
+                                               : state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
+    if (changed) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    if (!quiet) {
+        Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
+                                  sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+    }
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
@@ -485,13 +588,30 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
                                   QString(), screen);
         return;
     }
+    // The float layer holds focus, so the focused window is already floating
+    // and this per-window verb must not answer by acting on the strip's stale
+    // active tile. Same guard and same token as moveFocusedToFloating, whose
+    // mirror in moveFocusedToTiling inverts the identical test; the source
+    // slot names the floating window that actually holds focus, so the OSD
+    // refers to what the user is looking at.
+    if (state->floatingHasFocus()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_target"),
+                                  state->lastFloatingFocus(), QString(), screen);
+        return;
+    }
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().toggleActiveWindowedFullscreen();
     if (changed) {
         // The flag never moves a rect; applyLayout's emit-on-change gate has
         // its own windowed-fullscreen leg (m_lastAppliedWindowedFs) so the
         // flip reaches the compositor on an otherwise motionless strip.
-        applyLayout(screen, true);
+        //
+        // focusAfter FALSE, per the doctrine at the head of this file: a
+        // display verb has no business yanking focus, and applyLayout's focus
+        // arm also clears floatingHasFocus, so passing true would rewrite the
+        // float layer's focus memory. Nothing is lost by declining it — the
+        // op targets activeWindowId(), which is already the active tile.
+        applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
     }
     // The success reason carries the RESULTING state, read back from the
