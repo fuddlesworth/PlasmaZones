@@ -2644,7 +2644,30 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // platforms — KWin's own maximize-area re-assert. That population arms a
     // commanded rect at the apply site for exactly this, and nothing else
     // reaches it, so the general exclusion and its reasoning stand.
-    const bool externallyMovable = !w->isWaylandClient() || m_columnMaximizedWindows.contains(windowId);
+    // The member arm is qualified by KWin STILL REPORTING THE WINDOW
+    // MAXIMIZED, and that qualification is what keeps the counter off the
+    // user's own restore.
+    //
+    // KWin emits frameGeometryChanged from INSIDE maximize(), before
+    // maximizedChanged, so on a restore click this slot runs first: the frame
+    // has already moved to the restore rect while m_scrollCommandedRects still
+    // holds the maximized column's rect, and the interception has not yet run,
+    // let alone dispatched the toggle the engine will answer with a narrower
+    // batch. Unqualified, the counter reads that as an external mover and
+    // shoves the window back to full width, which the arriving batch then
+    // undoes — a full-width bounce on every restore, seen live at 14ms.
+    //
+    // Nothing is given up. The mover this arm was added for is KWin's own
+    // maximize-area re-assert, which by definition happens while the window IS
+    // maximized, so it still passes. What no longer passes is a frame change
+    // that arrives with the bit already gone, which is never that mover: it is
+    // a maximize/restore transition, and the commanded rect describing the
+    // layout the engine is in the middle of replacing has no authority over
+    // it. Enforcement resumes as soon as the batch re-arms the entry.
+    KWin::Window* kwCounter = w->window();
+    const bool externallyMovable = !w->isWaylandClient()
+        || (kwCounter && m_columnMaximizedWindows.contains(windowId)
+            && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull);
     if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
