@@ -10,6 +10,7 @@
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <QTimer>
 #include <QVariant>
 
 #include <algorithm>
@@ -1017,9 +1018,74 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         // CURRENT context, so a close on another desktop's state would
         // relayout the wrong strip (the mutated one must stay silent
         // until its desktop returns).
-        applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        //
+        // Close-settle hold: with a configured delay, the reflow waits out
+        // the closing window's disappear animation instead of moving the
+        // neighbours over the still-painting corpse (the two animations
+        // fighting for the vacated slot is exactly the visual mess the hold
+        // exists to prevent). The deferred flush passes focusAfter=false on
+        // purpose: the compositor activates its own successor immediately
+        // and windowFocused adopts it long before the flush fires, so the
+        // engine re-asserting its pick a delay later would only re-open the
+        // dueling-activations bounce the pending-self-activation fix closed.
+        if (m_closeReflowDelayMs > 0) {
+            startCloseReflowHold(key.screenId);
+        } else {
+            applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        }
     }
     Q_EMIT placementChanged(key.screenId);
+}
+
+void ScrollEngine::startCloseReflowHold(const QString& screenId)
+{
+    if (!m_closeReflowClock.isValid()) {
+        m_closeReflowClock.start();
+    }
+    // Latest close wins: a second close inside the hold pushes the deadline
+    // so ITS animation also plays out before the one flush runs.
+    m_closeReflowHoldUntil[screenId] = m_closeReflowClock.elapsed() + m_closeReflowDelayMs;
+    scheduleCloseReflowFlush(screenId);
+}
+
+bool ScrollEngine::deferForCloseReflowHold(const QString& screenId)
+{
+    const auto it = m_closeReflowHoldUntil.constFind(screenId);
+    if (it == m_closeReflowHoldUntil.constEnd()) {
+        return false;
+    }
+    if (!m_closeReflowClock.isValid() || m_closeReflowClock.elapsed() >= *it) {
+        m_closeReflowHoldUntil.remove(screenId);
+        return false;
+    }
+    // Still inside the hold: make sure a flush is coming, and tell the
+    // caller to skip its immediate applyLayout — the flush is that apply.
+    scheduleCloseReflowFlush(screenId);
+    return true;
+}
+
+void ScrollEngine::scheduleCloseReflowFlush(const QString& screenId)
+{
+    if (m_closeReflowFlushScheduled.contains(screenId)) {
+        return;
+    }
+    m_closeReflowFlushScheduled.insert(screenId);
+    const qint64 remaining = qMax<qint64>(0, m_closeReflowHoldUntil.value(screenId) - m_closeReflowClock.elapsed());
+    QTimer::singleShot(static_cast<int>(remaining) + 1, this, [this, screenId] {
+        m_closeReflowFlushScheduled.remove(screenId);
+        const auto it = m_closeReflowHoldUntil.constFind(screenId);
+        if (it != m_closeReflowHoldUntil.constEnd() && m_closeReflowClock.elapsed() < *it) {
+            // A later close pushed the deadline while this timer was armed —
+            // re-arm for the remainder rather than flushing early.
+            scheduleCloseReflowFlush(screenId);
+            return;
+        }
+        m_closeReflowHoldUntil.remove(screenId);
+        // applyLayout resolves the screen's CURRENT context itself, so a
+        // desktop switch during the hold lands this on the right strip; on
+        // a screen that stopped scrolling meanwhile it no-ops.
+        applyLayout(screenId, false);
+    });
 }
 
 void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
@@ -1142,7 +1208,14 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // now — a background one re-derives on the applyLayout its own desktop
     // return runs, which is the pass that used to return early.
     if (key == currentKeyForScreen(key.screenId)) {
-        applyLayout(key.screenId, false);
+        // Close-settle hold, second arm: the compositor's successor pick
+        // lands here milliseconds after a close, and its reanchor reflow
+        // moving the neighbours would defeat the hold windowClosed just
+        // started. The anchor/focus state above is already updated — only
+        // the geometry emission waits; the scheduled flush replays it.
+        if (!deferForCloseReflowHold(key.screenId)) {
+            applyLayout(key.screenId, false);
+        }
     }
     // Focus and view anchor are persisted (serializeStripState), and
     // placementChanged is the only thing that marks DirtyScrollStrips.

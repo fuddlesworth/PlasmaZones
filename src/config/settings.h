@@ -1374,6 +1374,11 @@ public:
     void setScrollingAlwaysCenterSingleColumn(bool center);
     bool scrollingSmartGaps() const override;
     void setScrollingSmartGaps(bool enabled);
+    /// Derived, not stored (no config key, no setter): the close-settle hold
+    /// exists to let the window-close animation play over an unchanged strip,
+    /// so its length IS the animation duration, and a session with animations
+    /// off has nothing to wait for.
+    int scrollingCloseReflowDelayMs() const override;
     bool scrollingCropStraddlers() const override;
     void setScrollingCropStraddlers(bool crop);
     bool scrollingDragScrollEnabled() const override;

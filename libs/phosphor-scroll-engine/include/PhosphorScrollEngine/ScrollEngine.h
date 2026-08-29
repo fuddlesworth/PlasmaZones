@@ -24,6 +24,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -1254,6 +1255,27 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
+    /// the animation duration): a close-triggered reflow — and the
+    /// focus-adoption reflow the compositor's successor pick fires
+    /// milliseconds later — waits this long so the closing window's
+    /// disappear animation plays over an unchanged strip before the
+    /// neighbours move in. 0 (the no-IScrollSettings seed and the
+    /// animations-off answer) keeps the historical immediate reflow.
+    /// User-driven verbs deliberately bypass the hold: a deliberate action
+    /// mid-animation outranks the settle, and the scheduled flush behind it
+    /// is an idempotent re-apply.
+    int m_closeReflowDelayMs = 0;
+    /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
+    /// guard that keeps one timer per screen however many closes land inside
+    /// one hold window (each close pushes the deadline; the flush lambda
+    /// reschedules itself for the remainder instead of applying early).
+    QHash<QString, qint64> m_closeReflowHoldUntil;
+    QSet<QString> m_closeReflowFlushScheduled;
+    QElapsedTimer m_closeReflowClock;
+    void startCloseReflowHold(const QString& screenId);
+    bool deferForCloseReflowHold(const QString& screenId);
+    void scheduleCloseReflowFlush(const QString& screenId);
     /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
     /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
     /// is false: tiling defaults this on because a sole window fills the screen

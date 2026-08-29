@@ -1094,6 +1094,11 @@ void ScrollEngine::refreshConfigFromSettings()
         : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
     m_smartGaps = settings->scrollingSmartGaps();
+    // Bounded like every other cast/derived read here: the value is derived
+    // daemon-side from the animation duration, but nothing stops a future
+    // implementor handing back garbage, and a multi-second hold would read
+    // as the strip hanging after every close.
+    m_closeReflowDelayMs = qBound(0, settings->scrollingCloseReflowDelayMs(), 2000);
 
     // Tab-indicator geometry. The numeric fields are taken as-is: the config
     // schema already clamps every one of them, and re-clamping here with a
