@@ -33,9 +33,13 @@ namespace {
 /// is only emitted from within PhosphorScreens::ScreenManager's D-Bus panel callback in
 /// production; for unit tests we need a way to simulate that moment without
 /// running a real Plasma shell.
-void emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
+bool emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
 {
-    QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
+    // The bool is RETURNED, and every call site QVERIFYs it. Invoking by
+    // string name means a rename is a runtime warning rather than a compile
+    // error, and one slot here asserts a count that is already zero before the
+    // emit — so it would pass against a helper that fired nothing at all.
+    return QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
 }
 } // namespace
 
@@ -44,6 +48,76 @@ class TestTilingAdaptorPanelGate : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    // -------------------------------------------------------------------------
+    // The deferral queue's DROP path. A window that opens behind the panel gate
+    // and closes before the gate lifts must never reach an engine.
+    //
+    // Untested until now, and the sibling close-sweep case covers the OTHER
+    // queue (the mid-flip park), so deleting removePendingOpen's call site left
+    // the whole suite green. What it guards is a phantom tile for the session:
+    // the flush would dispatch a dead window into the engine, and there is no
+    // later windowClosed to shed it, because the close already happened before
+    // the dispatch. A splash screen or a session-restore dialog that opens and
+    // closes inside the startup window is exactly this shape.
+    //
+    // The assertion is on ENGINE TRACKING, not on the queue count: every other
+    // deferral case here pins only that the queue drained, which cannot tell a
+    // dispatch from a drop.
+    // -------------------------------------------------------------------------
+    void testDeferredOpenClosedBeforeReady_neverReachesTheEngine()
+    {
+        PhosphorScreens::ScreenManager mgr;
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        QVERIFY2(!mgr.isPanelGeometryReady(), "the gate must start closed, or nothing defers");
+
+        adaptor.windowOpened(QStringLiteral("splash|1"), QStringLiteral("HDMI-1"), 0, 0);
+        adaptor.windowOpened(QStringLiteral("kept|2"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 2);
+
+        adaptor.windowClosed(QStringLiteral("splash|1"));
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
+
+        QVERIFY(emitPanelGeometryReady(mgr));
+        QCoreApplication::processEvents();
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QVERIFY2(!engine.isWindowTracked(QStringLiteral("splash|1")),
+                 "a window closed before the gate lifted must not be dispatched");
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("kept|2")),
+                 "the surviving open must still dispatch, or the drop proved nothing");
+    }
+
+    // -------------------------------------------------------------------------
+    // The NO-GATE fast path: an open reaches its engine immediately rather than
+    // queueing. Every other deferral case here relies on the gate being CLOSED,
+    // so nothing pinned that an ungated open dispatches at all — and the
+    // baseline case above, which does use a null manager, has no engine
+    // claiming the screen, so it can only assert that nothing queued.
+    //
+    // This drives the `!m_screenManager` half of the bail. The other half,
+    // isPanelGeometryReady() answering TRUE, is NOT reachable from this
+    // harness: the flag is set inside ScreenManager's own Plasma D-Bus
+    // callback, and the test helper can only emit the notification signal, not
+    // flip the state behind it. Stating that rather than leaving a
+    // half-covered predicate looking fully covered.
+    // -------------------------------------------------------------------------
+    void testNoPanelGate_dispatchesImmediatelyWithoutQueueing()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        adaptor.windowOpened(QStringLiteral("app|now"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("app|now")),
+                 "with no panel gate an open must dispatch immediately rather than queue");
+    }
 
     // -------------------------------------------------------------------------
     // Baseline: with no ScreenManager injected, windowOpened must not force a
@@ -189,7 +263,7 @@ private Q_SLOTS:
 
         // Fire panelGeometryReady. The adaptor's auto-connection fires the flush
         // slot on the same thread, synchronously.
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
 
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
@@ -217,7 +291,7 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("ok|uuid"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
 
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
 
@@ -244,7 +318,7 @@ private Q_SLOTS:
         adaptor.windowsOpenedBatch(batch);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 5);
 
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
         // The contract pinned here is only that the flush drained the queue.
     }
@@ -284,7 +358,7 @@ private Q_SLOTS:
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
 
         // And a late flush against the cleared adaptor must not crash.
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
 
