@@ -577,8 +577,18 @@ private Q_SLOTS:
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
 
         // Opening a window is a placement change on an owned screen.
+        //
+        // Bounded ABOVE as well as below. A lower bound alone is the only
+        // constraint on multiplicity anywhere in this suite, so a regression
+        // that fanned the signal out once per window, per column or per tile
+        // would pass every assertion here — and this signal exists to wake a
+        // preview, so an N-times-per-change storm is exactly the defect worth
+        // catching. Two is not a contract, it is headroom: the open legitimately
+        // produces a placement change and may settle the view, and pinning
+        // exactly one would fail on an ordering change that is not a defect.
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         QVERIFY(spy.count() >= 1);
+        QVERIFY2(spy.count() <= 2, "stripChanged must not fan out per window or per tile");
         QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-1"));
 
         // The other owned screen names itself, not the first one.
@@ -697,6 +707,19 @@ private Q_SLOTS:
         QCOMPARE(blocked.count(), 2);
         QVERIFY(m_adaptor->scrollFocusScrollBlockedWindows().isEmpty());
         QCOMPARE(behaviour.count(), 1);
+
+        // The MAP's own emit-on-change gate, which nothing else pinned. Every
+        // assertion above drives the map exactly once, so a
+        // setScrollEffectBehaviour that re-emitted for an identical push would
+        // have left the whole slot green — and this setter is on the daemon's
+        // settings path, where an unchanged republish is the common case.
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-1")}, {}, {});
+        QCOMPARE(behaviour.count(), 1);
+        // A genuine change still speaks, so the gate is not simply mute.
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-2")}, {}, {});
+        QCOMPARE(behaviour.count(), 2);
+        // And the block list stayed out of it throughout.
+        QCOMPARE(blocked.count(), 2);
     }
 
     // clearEngine drops the ENGINE-derived screen set, because leaving it
@@ -772,6 +795,13 @@ private Q_SLOTS:
 
         QSignalSpy placement(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
+        // NOT DISCRIMINATING, and kept deliberately: an empty id that got past
+        // the isEmpty conjunct would fall through to the same lookup, find
+        // nothing and refuse anyway, so deleting that conjunct leaves this leg
+        // green. It documents the wire boundary rather than defending it. The
+        // two legs below it DO discriminate — "tracked but unflagged"
+        // especially, which is the only one that separates "this adaptor
+        // checks the flag" from "this adaptor checks membership".
         m_adaptor->clearWindowedFullscreen(QString()); // empty id
         m_adaptor->clearWindowedFullscreen(QStringLiteral("nobody|9")); // unknown window
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|b")); // tracked but unflagged
@@ -797,6 +827,9 @@ private Q_SLOTS:
 
         QSignalSpy tiled(m_engine, &ScrollEngine::windowsTiled);
 
+        // Empty-id leg is documentation, not discrimination, for the reason
+        // spelled out in the sibling slot above: it reaches the same refusal
+        // through the lookup even with the isEmpty conjunct deleted.
         m_adaptor->reapplyWindowGeometry(QString()); // empty id
         m_adaptor->reapplyWindowGeometry(QStringLiteral("nobody|9")); // unknown window
         QCOMPARE(tiled.count(), 0);
