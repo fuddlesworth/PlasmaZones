@@ -684,8 +684,22 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // also make the test depend on the batch emit-gate, which legitimately
     // stays silent when a width rewrite happens to move no rect.
     const auto widthOf = [engine](const QString& windowId) {
+        // Both guards, matching columnDisplayOf above and the null-guard rule
+        // this file states at stateFor: a dropped state or a window the strip
+        // no longer holds must fail the comparison, not index .at(-1), which
+        // is undefined and takes the whole binary down with the remaining
+        // slots' results. The sentinel is deliberately unreachable — a
+        // default-constructed ColumnWidth is Proportion(0.5), a value a REAL
+        // column can hold, so a genuine lookup miss would compare equal and
+        // pass.
         const auto* st = stateFor(engine, QStringLiteral("S1"));
+        if (!st) {
+            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
+        }
         const int idx = st->strip().columnOfWindow(windowId);
+        if (idx < 0) {
+            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
+        }
         return st->strip().columns().at(idx).width;
     };
     const PhosphorScrollEngine::ColumnWidth aBefore = widthOf(QStringLiteral("app|a"));
@@ -850,6 +864,14 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // widens the column, 1300 outgrows the work area entirely.
     const QSize min900 = Ax::t(QSize(900, 0));
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
+    // Re-acquired, per this file's own rule: a float can rebuild the state, and
+    // windowMinSizeUpdated is precisely the call that can trigger one. Reading
+    // the pre-call pointer here is safe only BECAUSE of the outcome the next
+    // line asserts, which is the wrong direction of dependency — if the
+    // verdict ever floats at this size the assertion would be reading freed
+    // memory rather than failing.
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QVERIFY(!state->isFloating(QStringLiteral("app|a")));
     QCOMPARE(floatSpy.count(), 0);
 
@@ -877,6 +899,8 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // may have been rearranged, and the manual unfloat restores the slot.
     const QSize min400 = Ax::t(QSize(400, 0));
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), min400.width(), min400.height());
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
 }
 

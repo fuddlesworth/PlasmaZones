@@ -14,6 +14,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QScopeGuard>
 #include <QTest>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
@@ -331,6 +332,13 @@ private Q_SLOTS:
         TileRequestEcho echo;
         const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+        // Scope guard rather than a trailing call: a failing QCOMPARE below
+        // returns from the slot, and the two older bus slots avoid that by
+        // unregistering BEFORE they compare. A guard gets the same property on
+        // every exit path without reordering the assertions.
+        const auto unregisterGuard = qScopeGuard([&bus, &path] {
+            bus.unregisterObject(path);
+        });
 
         // NOTE: QCOMPARE inside this lambda returns from the LAMBDA, not the
         // test slot — a payload-A failure still runs payload B. Safe as
@@ -396,8 +404,6 @@ private Q_SLOTS:
         sent.columnMaximized = false;
         sent.viewImmediate = false;
         roundTrip(sent);
-
-        bus.unregisterObject(path);
     }
 
     void testSwapTargetResultBusRoundtrip()
@@ -410,6 +416,13 @@ private Q_SLOTS:
         SwapTargetResultEcho echo;
         const QString path = QStringLiteral("/test/wiretypes/swaptargetecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+        // Scope guard rather than a trailing call: a failing QCOMPARE below
+        // returns from the slot, and the two older bus slots avoid that by
+        // unregistering BEFORE they compare. A guard gets the same property on
+        // every exit path without reordering the assertions.
+        const auto unregisterGuard = qScopeGuard([&bus, &path] {
+            bus.unregisterObject(path);
+        });
 
         // Every field distinct — the two int quadruples especially, so a
         // window1/window2 transposition or an x/y/w/h shuffle inside either
@@ -459,8 +472,6 @@ private Q_SLOTS:
         QCOMPARE(got.sourceZoneId, sent.sourceZoneId);
         QCOMPARE(got.targetZoneId, sent.targetZoneId);
         QCOMPARE(got.screenName2, sent.screenName2);
-
-        bus.unregisterObject(path);
     }
 
     // =================================================================
@@ -703,6 +714,13 @@ private Q_SLOTS:
         QCOMPARE(entry.borderRadius, 8);
         QCOMPARE(entry.useCustomColors, true);
         QCOMPARE(entry.highlightColor, QStringLiteral("#ff00ff00"));
+        // The other two colour strings are compared too. All three are
+        // adjacent same-type members, so a declaration-order transposition
+        // between any pair keeps the signature valid and passes every other
+        // assertion here — which is precisely the failure this file's own
+        // aggregate-init note warns about.
+        QCOMPARE(entry.inactiveColor, QStringLiteral("#80808080"));
+        QCOMPARE(entry.borderColor, QStringLiteral("#ffffffff"));
         QCOMPARE(entry.activeOpacity, 0.7);
         QCOMPARE(entry.inactiveOpacity, 0.2);
 
@@ -763,20 +781,13 @@ private Q_SLOTS:
     void testAlgorithmInfoEntryRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::AlgorithmInfoEntry entry{QStringLiteral("master-stack"),
-                                                   QStringLiteral("Master-Stack"),
-                                                   QStringLiteral("A tiling algorithm"),
-                                                   true,
-                                                   true,
-                                                   false,
-                                                   false,
-                                                   0.65,
-                                                   8,
-                                                   false,
-                                                   QStringLiteral("sequential"),
-                                                   false,
-                                                   true,
-                                                   true};
+        PhosphorProtocol::AlgorithmInfoEntry entry{
+            QStringLiteral("master-stack"), QStringLiteral("Master-Stack"), QStringLiteral("A tiling algorithm"),
+            // Adjacent bools take DIFFERENT values wherever the
+            // declaration lets them: an aggregate init pins field
+            // order, and a transposition between two neighbours
+            // holding the same value ships green.
+            true, false, true, false, 0.65, 8, true, QStringLiteral("sequential"), false, true, false};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbbb)"));
@@ -788,16 +799,16 @@ private Q_SLOTS:
         QCOMPARE(entry.name, QStringLiteral("Master-Stack"));
         QCOMPARE(entry.description, QStringLiteral("A tiling algorithm"));
         QCOMPARE(entry.supportsMasterCount, true);
-        QCOMPARE(entry.supportsSplitRatio, true);
-        QCOMPARE(entry.centerLayout, false);
+        QCOMPARE(entry.supportsSplitRatio, false);
+        QCOMPARE(entry.centerLayout, true);
         QCOMPARE(entry.producesOverlappingZones, false);
         QVERIFY(qAbs(entry.defaultSplitRatio - 0.65) < 0.001);
         QCOMPARE(entry.defaultMaxWindows, 8);
-        QCOMPARE(entry.isScripted, false);
+        QCOMPARE(entry.isScripted, true);
         QCOMPARE(entry.zoneNumberDisplay, QStringLiteral("sequential"));
         QCOMPARE(entry.isUserScript, false);
         QCOMPARE(entry.supportsMemory, true);
-        QCOMPARE(entry.supportsSingleWindow, true);
+        QCOMPARE(entry.supportsSingleWindow, false);
     }
 
     // A genuine marshal-then-demarshal round-trip over the bus, exercising BOTH
@@ -1024,7 +1035,10 @@ private Q_SLOTS:
     void testRestoreTargetResultRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
-        PhosphorProtocol::RestoreTargetResult entry{true, true, 50, 75, 1024, 768};
+        // success and found DIFFER: they are adjacent bools, so equal values
+        // would hide a declaration-order transposition in both the fixture and
+        // the default check below.
+        PhosphorProtocol::RestoreTargetResult entry{true, false, 50, 75, 1024, 768};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bbiiii)"));
@@ -1033,7 +1047,7 @@ private Q_SLOTS:
         QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
-        QCOMPARE(entry.found, true);
+        QCOMPARE(entry.found, false);
         QCOMPARE(entry.toRect(), QRect(50, 75, 1024, 768));
 
         PhosphorProtocol::RestoreTargetResult defaultEntry;
