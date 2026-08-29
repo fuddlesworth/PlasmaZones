@@ -122,7 +122,8 @@
             "type": "float",
             "default": 3.0,
             "min": 1.0,
-            "max": 6.0
+            "max": 6.0,
+            "unit": "px"
         },
         {
             "id": "labelBrightness",

@@ -56,8 +56,20 @@ Item {
     /// the window was still fully visible.
     property bool animating: true
 
-    /// Pack metadata, re-read only when the pack changes rather than per frame.
-    readonly property var _info: (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({})
+    /// Read by the metadata expression below, which calls into the controller.
+    ///
+    /// packInfo() is a Q_INVOKABLE and QML records no dependency on a function
+    /// call, only on the properties an expression touches. Without naming this
+    /// one, a pack reload while the dialog is open would leave the notices and
+    /// the backdrop flag on the old metadata. Same `void root._rev;` idiom
+    /// DecorationChainPreview uses for exactly the same reason.
+    readonly property int _rev: previewController ? previewController.previewRevision : 0
+
+    /// Pack metadata, re-read when the pack changes or the registry revises.
+    readonly property var _info: {
+        void root._rev;
+        return (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({});
+    }
     readonly property bool _isAudioPack: _info.audio === true
     readonly property bool _needsBackdrop: _info.needsBackdrop === true
 
@@ -141,11 +153,11 @@ Item {
             CheckBox {
                 id: focusToggle
 
-                // Starts UNFOCUSED, matching the browser cards. That is the
-                // state that shows what a focus-reactive pack does: focus-fade
-                // is inert when focused, and the border family's inactive
-                // colour never appears. Ticking it is the comparison.
-                checked: false
+                // Starts FOCUSED, matching the browser cards. That is the pack
+                // at full strength, the way its author intended it to be seen.
+                // Unticking it is the comparison: focus-fade's wash and the
+                // border family's inactive colour only appear from there.
+                checked: true
                 text: i18nc("@option:check decoration preview", "Focused")
             }
 

@@ -47,12 +47,12 @@ Item {
     /// across it on purpose, so whatever moves when this is toggled is the
     /// pack's doing rather than the subject's.
     ///
-    /// Defaults to UNFOCUSED, which is the state that actually shows what a
-    /// pack does. focus-fade only washes the surface out while unfocused and is
-    /// inert when focused; the border family's inactive colour is likewise
-    /// invisible until then. It is also the state most windows on a desktop are
-    /// in at any moment.
-    property bool focused: false
+    /// Defaults to FOCUSED, which is the pack as its author intended it to be
+    /// seen. A pack's full-strength look is its focused one, and the unfocused
+    /// states are washes and inactive colours derived from it. A catalogue
+    /// entry should show the thing itself, so the browser card and the dialog
+    /// both open focused and the toggle is the comparison.
+    property bool focused: true
     /// Master gate. False composes no chain and instantiates no shader item.
     property bool active: false
     /// Freeze animated packs without tearing the chain down — forwarded to
@@ -209,6 +209,63 @@ Item {
     /// DecorationPreviewCard's implicit size.
     readonly property real _cardAspect: 22 / 14
 
+    /// The size EVERY decoration preview composes at, whatever size it is
+    /// shown at. Fixed — not derived from the host — and that is the point.
+    ///
+    /// Two previews of different sizes cannot show the same pack the same way,
+    /// and no amount of parameter scaling closes the gap, because the things
+    /// that differ are not parameters:
+    ///
+    ///   - a multipass pack's blur runs in a buffer of `itemPx * bufferScale`
+    ///     texels (ShaderNodeRhi), so the browser card blurred in a ~61-texel
+    ///     buffer and the detail pane in a ~96-texel one;
+    ///   - PopupFrame reserves a capture margin of
+    ///     `ceil(Kirigami.Units.gridUnit * 1.25)` (23px at the default gridUnit
+    ///     of 18) whatever size the preview is, so the decorated frame occupied
+    ///     81% of the small canvas and 88% of the large one;
+    ///   - the backdrop slice, the wallpaper's minification behind the card,
+    ///     and the ground image's crop all follow the item's size and aspect.
+    ///
+    /// Composing at one size and displaying the RESULT scaled makes the card
+    /// and the pane the same render at two magnifications, which is the only
+    /// thing that makes them look alike. Both axes are pinned, not just the
+    /// width: a shared aspect is what keeps the backdrop slice and the ground
+    /// crop identical too.
+    ///
+    /// Sized to the detail pane, the largest place a preview is shown, so that
+    /// pane composes at roughly 1:1 and only thumbnails are minified.
+    ///
+    /// The canvas is also WHY the pack's px parameters are previewed at their
+    /// declared values, with no scaling: this canvas IS the surface the pack
+    /// is being judged on. Scaling them to stand in for a larger real window
+    /// shrinks every feature the pack has — a 14px mosaic cell becomes 6px,
+    /// which then cannot survive a thumbnail drawing it at 60% and reads as
+    /// plain tinted glass instead of a mosaic. Declared values keep the effect
+    /// legible at both magnifications, and the thumbnail stays a faithful
+    /// smaller copy of the pane because both compose here.
+    readonly property size _canvasSize: Qt.size(420, 236)
+
+    /// Uniform fit of the canvas into whatever slot this item occupies, so the
+    /// composition is never distorted; the leftover is empty on one axis.
+    ///
+    /// Requires `layeredStages` on the decoration below — see that property.
+    /// A scaled SurfaceShaderItem draws at full size unless it is layered.
+    ///
+    /// REDUCE-ONLY. The canvas above is deliberately a fixed size while
+    /// everything composed inside it is gridUnit-derived, so a user on a larger
+    /// UI scale has a slot wider than the canvas. Magnifying the composed
+    /// texture to fill it only makes the preview soft (the stage layers are
+    /// smoothed), so the scale is clamped at 1.0 and the extra room is left
+    /// empty instead.
+    readonly property real _canvasScale: {
+        const w = root.width;
+        const h = root.height;
+        if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) {
+            return 1.0;
+        }
+        return Math.min(1.0, w / root._canvasSize.width, h / root._canvasSize.height);
+    }
+
     /// Card size: the largest _cardAspect rectangle that fits the space left
     /// once the outer margin is reserved on ALL FOUR sides (the padded canvas
     /// is centred on the card).
@@ -225,8 +282,11 @@ Item {
     readonly property size _cardSize: {
         const minW = Kirigami.Units.gridUnit * 5;
         const minH = minW / _cardAspect;
-        const availW = Math.max(minW, width - root._outerPad * 2);
-        const availH = Math.max(minH, height - root._outerPad * 2);
+        // The CANVAS, not this item: everything is laid out in canvas
+        // coordinates and the whole composition is scaled into the slot
+        // afterwards, so measuring the slot here would size the card twice.
+        const availW = Math.max(minW, root._canvasSize.width - root._outerPad * 2);
+        const availH = Math.max(minH, root._canvasSize.height - root._outerPad * 2);
         return (availW / availH > _cardAspect) ? Qt.size(availH * _cardAspect, availH) : Qt.size(availW, availW / _cardAspect);
     }
 
@@ -264,68 +324,87 @@ Item {
         return (active && _needsBackdrop && previewController) ? previewController.wallpaperImage() : null;
     }
 
-    // Ground the card sits on. The desktop wallpaper where we can resolve it:
-    // a decoration is judged by how it looks ON a desktop, and flat grey
-    // flatters everything equally — a border, a glow and a drop shadow all read
-    // differently over a photograph, and the glass family is entirely about
-    // what shows through.
-    Rectangle {
-        anchors.fill: parent
-        color: root.groundColor
+    // Everything visible composes HERE, at _canvasSize, and the composition
+    // is then scaled into the slot as one unit. Nothing inside may measure
+    // `root`: the whole point is that a 226px browser card and a 414px detail
+    // pane hand the shader chain identical geometry and get identical pixels.
+    Item {
+        id: canvas
 
-        Image {
-            id: groundImage
+        width: root._canvasSize.width
+        height: root._canvasSize.height
+        anchors.centerIn: parent
+        scale: root._canvasScale
+
+        // Ground the card sits on. The desktop wallpaper where we can resolve it:
+        // a decoration is judged by how it looks ON a desktop, and flat grey
+        // flatters everything equally — a border, a glow and a drop shadow all read
+        // differently over a photograph, and the glass family is entirely about
+        // what shows through.
+        Rectangle {
+            anchors.fill: parent
+            color: root.groundColor
+
+            Image {
+                id: groundImage
+
+                anchors.fill: parent
+                source: root._wallpaper.length > 0 ? "file://" + encodeURI(root._wallpaper).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
+                // Crop rather than letterbox: a letterboxed wallpaper would leave
+                // grey bands that read as part of the decoration.
+                fillMode: Image.PreserveAspectCrop
+                // Pinned at 2x the fixed canvas, the same for every instance, so
+                // a 4K wallpaper is not decoded at full size behind a preview.
+                // `cache: true` means one decode is shared across every card and
+                // pane rather than repeated per instance.
+                sourceSize.width: Math.max(1, Math.round(width * 2))
+                sourceSize.height: Math.max(1, Math.round(height * 2))
+                asynchronous: true
+                cache: true
+                visible: status === Image.Ready
+            }
+        }
+
+        // The decorated subject. Sized to leave room for an outer effect on every
+        // side: the host centres its padded canvas on the card, so the halo needs
+        // _outerPad clear above and below, left and right (see _cardSize).
+        PZCommon.DecorationPreviewCard {
+            id: card
+
+            anchors.centerIn: parent
+            width: root._cardSize.width
+            height: root._cardSize.height
+            title: root.cardTitle
+        }
+
+        PZCommon.SurfaceDecoration {
+            id: decoration
 
             anchors.fill: parent
-            source: root._wallpaper.length > 0 ? "file://" + encodeURI(root._wallpaper).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
-            // Crop rather than letterbox: a letterboxed wallpaper would leave
-            // grey bands that read as part of the decoration.
-            fillMode: Image.PreserveAspectCrop
-            // Thumbnails are small and there are many on screen at once, so the
-            // decode is capped near display size instead of loading a 4K frame
-            // per card.
-            sourceSize.width: Math.max(1, Math.round(width * 2))
-            sourceSize.height: Math.max(1, Math.round(height * 2))
-            asynchronous: true
-            cache: true
-            visible: status === Image.Ready
+            contentItem: card
+            decorationChain: root._chain
+            decorationOuterPadding: root._outerPad
+            audioSpectrum: root.audioSpectrum
+            // The only thing the focus toggle moves. The host used to pin this
+            // true, so a focus-reactive pack could never show its inactive state
+            // and the toggle appeared to do nothing but restyle the card.
+            surfaceFocused: root.focused
+            // Load-bearing, not an optimisation: this host SCALES the composed
+            // decoration, and an unlayered stage ignores the scene graph's
+            // transform and clip entirely — it would draw at full canvas size
+            // over the neighbouring cards. See SurfaceDecoration.layeredStages.
+            layeredStages: true
+            animationsPaused: root.animationsPaused
+            // Only decoded for a pack that actually samples it. Every other pack
+            // ignores the backdrop, and handing one over regardless would upload a
+            // wallpaper-sized texture per card for nothing.
+            backdropTexture: root._needsBackdrop ? root._backdrop : null
+            // The ground Image above fills this same item with the very wallpaper
+            // bound above, so the card refracts the part of it that is genuinely
+            // behind it and the pane reads as one continuous surface. Without this
+            // the card would sample the whole desktop shrunk into itself while the
+            // ground behind it showed the wallpaper at a different scale.
+            backdropSourceArea: Qt.rect(0, 0, width, height)
         }
-    }
-
-    // The decorated subject. Sized to leave room for an outer effect on every
-    // side: the host centres its padded canvas on the card, so the halo needs
-    // _outerPad clear above and below, left and right (see _cardSize).
-    PZCommon.DecorationPreviewCard {
-        id: card
-
-        anchors.centerIn: parent
-        width: root._cardSize.width
-        height: root._cardSize.height
-        title: root.cardTitle
-    }
-
-    PZCommon.SurfaceDecoration {
-        id: decoration
-
-        anchors.fill: parent
-        contentItem: card
-        decorationChain: root._chain
-        decorationOuterPadding: root._outerPad
-        audioSpectrum: root.audioSpectrum
-        // The only thing the focus toggle moves. The host used to pin this
-        // true, so a focus-reactive pack could never show its inactive state
-        // and the toggle appeared to do nothing but restyle the card.
-        surfaceFocused: root.focused
-        animationsPaused: root.animationsPaused
-        // Only decoded for a pack that actually samples it. Every other pack
-        // ignores the backdrop, and handing one over regardless would upload a
-        // wallpaper-sized texture per card for nothing.
-        backdropTexture: root._needsBackdrop ? root._backdrop : null
-        // The ground Image above fills this same item with the very wallpaper
-        // bound above, so the card refracts the part of it that is genuinely
-        // behind it and the pane reads as one continuous surface. Without this
-        // the card would sample the whole desktop shrunk into itself while the
-        // ground behind it showed the wallpaper at a different scale.
-        backdropSourceArea: Qt.rect(0, 0, width, height)
     }
 }

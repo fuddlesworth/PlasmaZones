@@ -7,6 +7,7 @@
 #include "phosphor_i18n.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorShaders/PixelUnits.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneDefaults.h>
@@ -19,7 +20,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -94,6 +98,24 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     // fallback below.
     const QVariantList zones = m_backend->previewZones();
 
+    // How much this preview shrinks the screen, for the px-denominated
+    // appearance values below. One definition of the policy, shared with the
+    // shader's own px parameters via translateShaderParams. Computed before the
+    // empty-zones branch so the fallback zone's border scales too — otherwise
+    // its border would be raw while the shader's px params for the same frame
+    // were scaled, which is the mismatch this scaling exists to remove.
+    // m_backend is non-null here (bailed above), so previewPixelScale's own
+    // backend guard is already satisfied.
+    const qreal pixelScale = previewPixelScale(width);
+    // The width has a floor and the radius does not: a border scaled below one
+    // device pixel stops being a thin border and becomes an absent one, while a
+    // corner radius rounding away to square is the honest miniature of a small
+    // radius on a big screen. The floor keeps a thin border visible; it must
+    // not invent one, so a zone that asked for no border still gets none.
+    const auto scaledBorderWidth = [pixelScale](qreal borderWidth) {
+        return borderWidth > 0.0 ? qMax(1.0, borderWidth * pixelScale) : 0.0;
+    };
+
     if (zones.isEmpty()) {
         // Fallback: single zone filling the preview area
         QVariantMap out;
@@ -107,8 +129,8 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] = false;
         writeZoneAppearance(out, ::PhosphorZones::ZoneDefaults::HighlightColor, ::PhosphorZones::ZoneDefaults::Opacity,
                             ::PhosphorZones::ZoneDefaults::BorderColor,
-                            static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius),
-                            static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth));
+                            static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius) * pixelScale,
+                            scaledBorderWidth(static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth)));
         result.append(out);
         return result;
     }
@@ -175,7 +197,14 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
                   .toReal()
             : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
 
-        writeZoneAppearance(out, fillColor, alpha, borderColor, borderRadius, borderWidth);
+        // Border width and radius are px on the SCREEN, and the zone rects
+        // above have just been scaled into a preview a fraction of its size.
+        // Passed through raw they would draw a border several times too thick
+        // and corners several times too round for the geometry they sit on —
+        // the same size-mismatch the shader's own px parameters get from
+        // translateShaderParams. `pixelScale` is that one factor.
+        writeZoneAppearance(out, fillColor, alpha, borderColor, borderRadius * pixelScale,
+                            scaledBorderWidth(borderWidth));
 
         result.append(out);
     }
@@ -183,9 +212,70 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     return result;
 }
 
-QVariantMap ShaderPreviewController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const
+double ShaderPreviewController::previewPixelScale(int previewWidth) const
 {
-    return m_backend ? m_backend->translateParams(shaderId, params) : QVariantMap();
+    if (!m_backend || previewWidth <= 0) {
+        return 1.0;
+    }
+    const int screenW = m_backend->targetScreenSize().width();
+    if (screenW <= 0) {
+        return 1.0;
+    }
+    // Capped at 1 for the same reason the zone geometry above is never
+    // magnified: a preview larger than the screen is still a preview OF that
+    // screen, and inflating px values past what the shader declares would show
+    // an effect the user cannot get.
+    return std::min(1.0, static_cast<double>(previewWidth) / static_cast<double>(screenW));
+}
+
+QVariantMap ShaderPreviewController::translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                           int previewWidth) const
+{
+    if (!m_backend) {
+        return QVariantMap();
+    }
+    const double scale = previewPixelScale(previewWidth);
+    if (qFuzzyCompare(scale, 1.0)) {
+        return m_backend->translateParams(shaderId, params);
+    }
+    // Scaled BEFORE translation, while the map is still keyed by parameter id:
+    // after translateParams the keys are UBO lane names and the metadata that
+    // says which of them are px no longer matches anything.
+    QVariantMap scaled = params;
+    const QVariantList paramInfos = parameterInfos(shaderId);
+    if (paramInfos.isEmpty() && !PhosphorShaders::ShaderRegistry::isNoneShader(shaderId)) {
+        // zonesForShaderPreview has already scaled the zone geometry for this
+        // frame; leaving the shader's px params unscaled reproduces exactly the
+        // geometry/params mismatch the scaling exists to remove. The backend
+        // logs its own failure, but only on its side, so say it here too.
+        qCWarning(lcShaderPreview) << "No parameter metadata for shader" << shaderId
+                                   << "- px parameters left unscaled at preview scale" << scale;
+    }
+    PhosphorShaders::scalePixelParams(paramInfos, scaled, scale);
+    return m_backend->translateParams(shaderId, scaled);
+}
+
+QVariantList ShaderPreviewController::parameterInfos(const QString& shaderId) const
+{
+    if (m_paramInfoShaderId == shaderId) {
+        return m_paramInfoCache;
+    }
+    if (!m_backend) {
+        return QVariantList();
+    }
+    const QVariantList infos = m_backend->shaderInfo(shaderId).value(QStringLiteral("parameters")).toList();
+    // An empty answer is deliberately NOT cached: in the editor the backend is
+    // a blocking D-Bus call to the daemon, and a timeout there returns an empty
+    // map. Caching that would strand the shader unscaled for the rest of the
+    // dialog's life, where retrying costs one round-trip on the next slider
+    // move. A shader that genuinely declares no parameters re-queries too, and
+    // for it the query is the cheap path anyway (nothing to scale).
+    if (infos.isEmpty()) {
+        return infos;
+    }
+    m_paramInfoShaderId = shaderId;
+    m_paramInfoCache = infos;
+    return m_paramInfoCache;
 }
 
 QVariantMap ShaderPreviewController::getShaderInfo(const QString& shaderId) const
@@ -350,7 +440,12 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
         return result;
     }
     // Validate the shader still exists via the backend's metadata.
-    if (!m_backend || m_backend->shaderInfo(shaderId).isEmpty()) {
+    if (!m_backend) {
+        Q_EMIT shaderPresetLoadFailed(PhosphorI18n::tr("Shader in preset is no longer available", "@info"));
+        return result;
+    }
+    const QVariantMap info = m_backend->shaderInfo(shaderId);
+    if (info.isEmpty()) {
         Q_EMIT shaderPresetLoadFailed(PhosphorI18n::tr("Shader in preset is no longer available", "@info"));
         return result;
     }
@@ -365,6 +460,33 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
             return result;
         }
         shaderParams = paramsValue.toObject().toVariantMap();
+        // A preset file is a system boundary: its keys are whatever was in the
+        // JSON, and nothing downstream checks a parameter id against what the
+        // shader declares. Keep only the declared ids, so a hand-edited or
+        // stale preset cannot push unknown keys into the live param map. Same
+        // id-filtering EditorController::stripStaleShaderParams does against
+        // its cached parameter list; that method is not reachable from here
+        // (it is an editor member reading m_cachedShaderParameters), so the
+        // logic is mirrored against this shader's own metadata instead.
+        const QVariantList declared = info.value(QStringLiteral("parameters")).toList();
+        QSet<QString> validIds;
+        for (const QVariant& paramVar : declared) {
+            const QString id = paramVar.toMap().value(QStringLiteral("id")).toString();
+            if (!id.isEmpty()) {
+                validIds.insert(id);
+            }
+        }
+        if (!validIds.isEmpty()) {
+            QVariantMap filtered;
+            for (auto it = shaderParams.constBegin(); it != shaderParams.constEnd(); ++it) {
+                if (validIds.contains(it.key())) {
+                    filtered.insert(it.key(), it.value());
+                } else {
+                    qCWarning(lcShaderPreview) << "Dropping unknown parameter" << it.key() << "from preset" << filePath;
+                }
+            }
+            shaderParams = filtered;
+        }
     }
 
     result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =

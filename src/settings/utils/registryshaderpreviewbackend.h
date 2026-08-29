@@ -11,6 +11,10 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
+#include <QGuiApplication>
+#include <QScreen>
+#include <QWindow>
+
 namespace PlasmaZones {
 
 /// Settings-app IShaderPreviewBackend.
@@ -66,11 +70,25 @@ public:
                 makeZone(0.6, 0.333333, 0.4, 0.333334, 3), makeZone(0.6, 0.666667, 0.4, 0.333333, 4)};
     }
 
-    // Only consulted for fixed-geometry zones, of which this backend's
-    // master-stack zones (all relative geometry) have none; a sane default keeps
-    // the contract total.
+    // Read on EVERY preview call, not just for fixed-geometry zones: it is the
+    // denominator of ShaderPreviewController::previewPixelScale, so it decides
+    // how far the preview shrinks the shader's px-denominated parameters and
+    // the zone border width/radius. A constant here would mis-scale every
+    // preview on any screen that is not the constant, so resolve a real one.
+    // The settings window's own screen when there is a live window, else the
+    // primary screen. The 1920x1080 last resort keeps the contract total (a
+    // zero size would make previewPixelScale's divisor zero).
     QSize targetScreenSize() const override
     {
+        if (const QWindow* window = QGuiApplication::focusWindow()) {
+            if (const QScreen* screen = window->screen(); screen && !screen->geometry().size().isEmpty()) {
+                return screen->geometry().size();
+            }
+        }
+        if (const QScreen* primary = QGuiApplication::primaryScreen();
+            primary && !primary->geometry().size().isEmpty()) {
+            return primary->geometry().size();
+        }
         return QSize(1920, 1080);
     }
 

@@ -49,6 +49,20 @@ inline constexpr int kMaxUserTextureSlots = 4;
 /// slot's shader param overrides it.
 inline constexpr int kDefaultUserTextureSvgSize = 1024;
 
+/// Peel the QML delivery wrappers off a property value and return the inner
+/// QVariant. Handles a QJSValue and a QVariant nested inside a QVariant, in
+/// any order and interleaved, up to a fixed depth (a chain deeper than that is
+/// already pathological, and an unbounded peel would hang on a self-
+/// referencing one).
+///
+/// Returns the PEELED variant only — it deliberately does not convert to a
+/// payload type, because the two call sites that need it want different
+/// terminal conversions (`ShaderEffect::setWallpaperTextureVariant` wants a
+/// QImage, `ZoneShaderItem::setLabelsTextureVariant` wants a
+/// `ZoneLabelTexture` through a registered converter). Each caller keeps its
+/// own conversion and its own handling of an invalid or unconvertible result.
+PHOSPHORRENDERING_EXPORT QVariant peelQmlVariant(const QVariant& value);
+
 /**
  * @brief QQuickItem that renders a fullscreen fragment shader via Qt RHI.
  *
@@ -145,8 +159,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     // ── Textures ─────────────────────────────────────────────────────
     Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY
                    audioSpectrumChanged FINAL)
-    Q_PROPERTY(
-        QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
+    Q_PROPERTY(QVariant wallpaperTexture READ wallpaperTextureVariant WRITE setWallpaperTextureVariant NOTIFY
+                   wallpaperTextureChanged FINAL)
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
     Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
 
@@ -170,9 +184,14 @@ public:
     /// `setShaderParams` to the `uTexture<N>_svgSize` parameter. Exposed so
     /// consumers (UI sliders, validators, tests) can mirror the clamp range
     /// without hardcoding the value. The setter performs
-    /// `qBound(64, requested, kMaxSvgDimension)`; values outside the range
-    /// are silently clamped, not rejected.
+    /// `qBound(kMinSvgDimension, requested, kMaxSvgDimension)`; values outside
+    /// the range are silently clamped, not rejected.
     static constexpr int kMaxSvgDimension = 2048;
+
+    /// Floor of the same clamp. Named for the same mirror-the-cap reason as
+    /// `kMaxSvgDimension`, and so the two `qBound` sites in
+    /// shadereffect_params.cpp stop repeating a bare literal.
+    static constexpr int kMinSvgDimension = 64;
 
     /// Hard cap on the byte budget for a single rasterised SVG (16 MiB —
     /// matches RGBA8 at `kMaxSvgDimension` × `kMaxSvgDimension`). When a
@@ -595,7 +614,49 @@ public:
     void setUserTextureWrap(int slot, const QString& wrap);
 
     QImage wallpaperTexture() const;
+
+    /// QML-facing form of `wallpaperTexture`, and the reason the Q_PROPERTY is
+    /// a QVariant rather than a QImage.
+    ///
+    /// QML cannot reliably drive a QImage-typed property: a
+    /// `Binding on wallpaperTexture { value: someVarHoldingAnImage }` writes
+    /// NOTHING AT ALL — silently, with no engine warning — while the sibling
+    /// bool binding beside it applies. That is how every decoration preview in
+    /// the settings app came to render its no-backdrop fallback: the image
+    /// reached the host QML and stopped there.
+    ///
+    /// Measured delivery shapes (Qt 6.11.2), because the retype alone does not
+    /// rescue a Binding and the difference decides how a host must write this:
+    ///
+    ///   - direct assignment (`item.wallpaperTexture = someImage`), a
+    ///     `createObject` initial-property map, and a C++ `setProperty` all
+    ///     deliver the image intact;
+    ///   - QML `null` arrives as a VALID std::nullptr_t;
+    ///   - QML `undefined`, an ABSENT key on a JS object, an undefined
+    ///     `property var`, and BOTH `Binding` forms (the
+    ///     `Binding { target: …; property: … }` element and
+    ///     `Binding on wallpaperTexture`) ALL arrive as an INVALID QVariant,
+    ///     carrying no payload at all. The QVariant property type does not
+    ///     change that; only writing the value directly does.
+    ///
+    /// So a host must assign this property directly. An invalid QVariant is
+    /// treated as "no texture" and clears, which is correct for the absent-key
+    /// and `undefined` cases and is the only option for the Binding case: the
+    /// two are INDISTINGUISHABLE at the setter. That is why the QML-source
+    /// sweep test — not this code — is the guard against a host driving one
+    /// property from both a direct assignment and a Binding.
+    ///
+    /// Mirrors the `audioSpectrum` property beside it, which is a QVariant for
+    /// the same class of reason.
+    QVariant wallpaperTextureVariant() const;
     void setWallpaperTexture(const QImage& image);
+    /// Accepts a QImage, a null, an undefined, an absent key, or an invalid
+    /// QVariant — a host with nothing behind its surface passes one of the
+    /// latter four, which is the ordinary no-backdrop state rather than an
+    /// error, and resolves to a null QImage without a warning. A VALID but
+    /// unconvertible value (a QString, a QUrl, a number) also clears, but logs
+    /// first: that one is a host bug, not an ordinary state.
+    void setWallpaperTextureVariant(const QVariant& texture);
 
     bool useWallpaper() const
     {

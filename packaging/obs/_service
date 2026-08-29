@@ -10,9 +10,17 @@
   real Version into the spec before each `osc commit`, so the service
   needs no version parameter — it always resolves to the tag just cut.
 
+  The same fetched tarball feeds both recipe types in this package. RPM
+  targets build from plasmazones.spec. Debian targets build from
+  plasmazones.dsc plus the debian.* files, which obs-build's debtransform
+  folds together into a real source package at build time. Only one
+  tarball may sit in the package directory, because debtransform picks the
+  source archive by auto-discovery and aborts if it finds two.
+
   Users add the resulting repository with:
     sudo zypper addrepo \
       https://download.opensuse.org/repositories/home:fuddlesworth/openSUSE_Tumbleweed/home:fuddlesworth.repo
+  or, on Debian testing/unstable, the apt repository documented in README.md.
 -->
 <services>
   <service name="download_files"/>

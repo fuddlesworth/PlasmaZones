@@ -128,7 +128,12 @@ Kirigami.Dialog {
         var w = Math.max(1, Math.floor(previewBackground.width));
         var h = Math.max(1, Math.floor(previewBackground.height));
         var zones = editorController.zonesForShaderPreview(w, h);
-        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {});
+        // Same width the zones were scaled into: a px-denominated shader
+        // parameter (border width, corner radius) is absolute against the
+        // screen, so on a preview a fraction of its size it has to shrink with
+        // the geometry it decorates or it draws an effect several times too
+        // coarse for the zones beside it.
+        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {}, w);
         if (root.cachedShaderInfoId !== root.pendingShaderId) {
             root.cachedShaderInfoForPreview = editorController.getShaderInfo(root.pendingShaderId);
             root.cachedShaderParamPreamble = editorController.shaderParamPreamble(root.pendingShaderId);
