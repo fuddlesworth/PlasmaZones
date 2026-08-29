@@ -246,6 +246,19 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // would strip a column-maximize member's bit while leaving
             // the effect recorded as still holding it, which is the
             // exact split m_columnMaximizedWindows' contract forbids.
+            //
+            // The GUARD is what earns its place here, not the call behind
+            // it. releaseColumnMaximized already ran unconditionally earlier
+            // in this same iteration, so membership survives to here in
+            // exactly one case: that call SKIPPED a still-fullscreen window
+            // and retained the entry on purpose. Re-calling it now skips
+            // again for the same reason, making the then-branch a no-op.
+            //
+            // Deleting the condition and keeping only the else-branch would
+            // therefore not be equivalent — it would hand that retained
+            // member the bare clear, which is precisely the ledger split the
+            // paragraph above forbids. Keep the test; do not "simplify" it
+            // away on the grounds that the call inside it does nothing.
             if (m_columnMaximizedWindows.contains(windowId)) {
                 releaseColumnMaximized(windowId, w);
             } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {

@@ -2676,10 +2676,20 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // drag would fight the user, and the drag machinery owns
                     // the re-insert; a superseding batch mooting the deferred
                     // replay is the correct outcome, not a drop.
+                    // Save/restore, not set/clear (nesting-safe), through
+                    // qScopeGuard like the four siblings in this file and
+                    // signals.cpp. Hand-restoring was correct as written —
+                    // applyWindowGeometry does not throw and the return is
+                    // immediate — but it is the one site where an early exit
+                    // added between the call and the restore would strand the
+                    // flag set for the rest of the frame, silently muting the
+                    // VS-crossing detector.
                     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
+                    const auto counterGuard = qScopeGuard([this, prevInApply] {
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+                    });
                     m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
-                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     return;
                 }
             }

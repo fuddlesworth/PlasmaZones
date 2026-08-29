@@ -6,6 +6,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <cmath>
 
 namespace PhosphorScrollEngine {
 
@@ -148,6 +149,14 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
 
 bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params)
 {
+    // deltaPercent is public API and reaches qRound below. qRound on a NaN or
+    // an infinity is undefined, and the D-Bus verb surface hands this straight
+    // to an external caller, so refuse a non-finite delta at the boundary
+    // rather than letting it decide a column width. qFuzzyIsNull answers false
+    // for both, so the zero test does not already cover it.
+    if (!std::isfinite(deltaPercent)) {
+        return false;
+    }
     Column* col = activeColumnMutable();
     if (!col || qFuzzyIsNull(deltaPercent)) {
         return false;
@@ -724,6 +733,10 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
+    // Non-finite refused at the boundary, for adjustActiveColumnWidth's reason.
+    if (!std::isfinite(deltaPercent)) {
+        return false;
+    }
     // Lone tiles included: see setActiveWindowHeight.
     Tile* tile = activeTileMutable();
     if (!tile || qFuzzyIsNull(deltaPercent)) {

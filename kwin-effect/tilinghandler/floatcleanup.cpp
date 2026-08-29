@@ -164,7 +164,14 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // the comment at that call spells out why. Collapsing them into a single
     // call would move one compositor write across that work, which is a
     // behaviour change dressed as a cleanup.
-    if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
+    // Membership through forgetWindowedFullscreen like every other site, so
+    // the ledger has one writer. The remove's RESULT is still the gate: the
+    // compositor call must fire only when this pass is the one that owned the
+    // claim, or a second cleanup for the same window would re-issue
+    // setFullScreen(false) against a window that has since re-entered
+    // fullscreen on its own.
+    if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        forgetWindowedFullscreen(windowId);
         releaseWindowedFullscreenState(windowId);
     }
     // The clear-in-flight marker dies with the hold, like the untrack
