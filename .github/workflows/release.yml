@@ -144,48 +144,99 @@ jobs:
           fi
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
+  # Build Debian Package (Debian testing / unstable)
   # ═══════════════════════════════════════════════════════════════════════════
+  # This job used to build in a KDE Neon container, which made it the wrong
+  # test for the thing it gates. Neon is Ubuntu 24.04-based, so it exercises
+  # neither the distro the .deb targets nor the one publish-obs builds for, and
+  # the two Build-Depends that were wrong for Debian (libkirigami-dev and
+  # libplasmaactivities-dev, which carry neither a `kf6-` nor a `libkf6-`
+  # prefix) went unnoticed here because Neon spells them differently.
+  #
+  # Building on the suites OBS publishes to closes that gap. Dependencies are
+  # resolved from packaging/debian/control itself rather than a hand-kept list,
+  # so the field OBS resolves is the field CI proves, alternatives and version
+  # floors included. Both suites gate the release; only unstable's artifact is
+  # uploaded, because the two produce identically named .deb files and a GitHub
+  # release asset is keyed by basename, so the second would clobber the first.
   build-deb:
-    name: Build .deb (KDE Neon)
+    name: Build .deb (Debian ${{ matrix.suite }})
     needs: version
     runs-on: ubuntu-latest
+    strategy:
+      # Report both suites. A freeze can drop testing below the version floors
+      # while unstable is fine, and that is worth seeing rather than having the
+      # first failure cancel its sibling.
+      fail-fast: false
+      matrix:
+        suite: [unstable, testing]
     container:
-      image: invent-registry.kde.org/neon/docker-images/plasma:user
-      options: --user root
+      image: debian:${{ matrix.suite }}
 
     steps:
       - name: Install prerequisites
+        # Force bash for `set -o pipefail`, the same reason the build steps
+        # below do. The container's default shell resolves to sh.
+        #
+        # Retry the install once after refreshing the package index. A rolling
+        # suite regularly advertises a package version whose .deb has not
+        # reached the mirror yet, and apt exits non-zero on the 404. This job
+        # gates the `release` job, which in turn gates publish-aur and
+        # publish-obs, so a transient mirror flake otherwise blocks the Fedora,
+        # Arch, openSUSE and Debian channels along with this one. Same shape as
+        # install_with_retry in build-rpm-opensuse.
+        shell: bash
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates
+          set -euo pipefail
+          apt_install_with_retry() {
+              apt-get update
+              if ! apt-get install -y --no-install-recommends "$@"; then
+                  echo "::warning::apt-get install failed; sleeping 60s and retrying after an index refresh"
+                  sleep 60
+                  apt-get update
+                  apt-get install -y --no-install-recommends "$@"
+              fi
+          }
+          # git so actions/checkout does a real clone rather than falling back
+          # to the REST tarball; dpkg-dev so `apt-get build-dep` can read the
+          # source package below.
+          apt_install_with_retry git ca-certificates dpkg-dev fakeroot
 
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.version.outputs.ref }}
 
-      - name: Install build dependencies
+      - name: Install build dependencies from packaging/debian/control
+        # Resolved from the control file rather than a hand-maintained copy of
+        # the same list. The old copy drifted from the field it mirrored and
+        # hid two names that were wrong for Debian, which is the failure this
+        # job now exists to catch. `apt-get build-dep` reads Build-Depends
+        # directly, so alternatives and version floors are exercised exactly as
+        # OBS will exercise them.
+        #
+        # The debian/ symlink is created here rather than in the build step
+        # because build-dep needs it too. The build step still removes and
+        # recreates it, which is harmless and keeps that step self-contained.
+        #
+        # Retry shape inlined again: each step gets its own shell, so there is
+        # nothing to source across them.
+        shell: bash
         run: |
-          apt-get install -y --no-install-recommends \
-            cmake ninja-build extra-cmake-modules g++ pkg-config \
-            build-essential pkg-kde-tools \
-            devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev qt6-svg-dev \
-            kwin-dev libwayland-dev libvulkan-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
-            libkf6config-dev libkf6configwidgets-dev \
-            qt6-wayland-private-dev \
-            libkf6kcmutils-dev \
-            libkf6windowsystem-dev libkf6globalaccel-dev \
-            libkf6notifications-dev \
-            qt6-wayland-dev plasma-activities-dev
-          # Kirigami dev package name varies across distros
-          apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
-            || apt-get install -y --no-install-recommends kf6-kirigami-dev
+          set -euo pipefail
+          rm -rf debian
+          ln -sfn packaging/debian debian
+          apt-get update
+          if ! apt-get build-dep -y --no-install-recommends ./; then
+              echo "::warning::apt-get build-dep failed; sleeping 60s and retrying after an index refresh"
+              sleep 60
+              apt-get update
+              apt-get build-dep -y --no-install-recommends ./
+          fi
 
       - name: Generate Debian changelog from CHANGELOG.md
-        # Force bash for the same reason the build step below does: the KDE
-        # Neon container's default shell resolves to dash, which has neither
+        # Force bash for the same reason the build step below does: the
+        # Debian container's default shell is dash, which has neither
         # `set -o pipefail` nor `[[ ]]`.
         shell: bash
         env:
@@ -214,9 +265,9 @@ jobs:
 
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
-        # bash builtins. The KDE Neon container's /bin/sh is dash, and
-        # GitHub's container default shell resolved to sh here, so the
-        # step aborted on 'Illegal option -o pipefail'.
+        # bash builtins. The container's /bin/sh is dash, and GitHub's
+        # container default shell resolved to sh here, so the step aborted
+        # on 'Illegal option -o pipefail'.
         shell: bash
         run: |
           set -euo pipefail
@@ -234,10 +285,18 @@ jobs:
               mv ../*.ddeb dist/
           fi
 
+      # Only unstable's build is published. Both suites produce a .deb with the
+      # identical name plasmazones_<version>-<rev>_amd64.deb, and a GitHub
+      # release asset is keyed by its basename, so uploading both would leave
+      # one silently overwriting the other with no way to tell them apart.
+      # testing still builds and still gates the release; it just does not ship
+      # an artifact. Unstable is the one published because it matches the
+      # Debian_Unstable OBS target and is the sharper signal of the two.
       - name: Upload artifact
+        if: matrix.suite == 'unstable'
         uses: actions/upload-artifact@v7
         with:
-          name: deb-kde-neon
+          name: deb-debian-unstable
           path: dist/*.*deb
           retention-days: 30
 
@@ -767,7 +826,18 @@ jobs:
             echo "sudo pacman -U plasmazones-${VERSION}-*-x86_64.pkg.tar.zst"
             echo '```'
             echo ""
-            echo "**KDE Neon / Debian-based:**"
+            echo "**Debian testing/unstable (apt repository):**"
+            echo "Tracks KDE as it lands in Debian and rebuilds when KWin moves."
+            echo '```bash'
+            echo "sudo curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key -o /etc/apt/keyrings/plasmazones.asc"
+            echo "echo 'deb [signed-by=/etc/apt/keyrings/plasmazones.asc] https://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list"
+            echo "sudo apt update"
+            echo "sudo apt install plasmazones"
+            echo '```'
+            echo "On Debian testing, swap Debian_Unstable for Debian_Testing in both lines. Packages are built for x86_64 only."
+            echo ""
+            echo "**Debian (manual .deb):**"
+            echo "Built on Debian unstable. Prefer the apt repository above, which rebuilds when KWin moves."
             echo '```bash'
             echo "sudo dpkg -i plasmazones_${VERSION}-*_amd64.deb"
             echo "sudo apt-get install -f  # Install dependencies if needed"
@@ -1113,6 +1183,17 @@ jobs:
   #   3. In the project's "Repositories" tab add openSUSE_Tumbleweed for
   #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.7+, so Leap
   #      is not a viable target — Tumbleweed (and optionally Slowroll) only.
+  #      Add Debian_Unstable and Debian_Testing (x86_64) for the .deb repo.
+  #      Both satisfied every Build-Depends floor when checked on 2026-08-28
+  #      (kwin-dev 4:6.7.4-2, qt6-base-dev 6.10.2, KF6 6.28.0). If a future
+  #      Debian freeze drops testing below the floors, OBS marks the package
+  #      "unresolvable" rather than failing the build — that state is easy to
+  #      mistake for a slow build, so check it explicitly after a freeze.
+  #      This is also why the Debian .deb arm publishes through OBS at all:
+  #      OBS rebuilds automatically when KWin moves in the target repo, and
+  #      the kwin-effect plugin's IID goes inert on every KWin bump (see the
+  #      note in packaging/debian/control), so a static .deb would go stale
+  #      within days on testing/unstable.
   #   4. Add two GitHub Actions secrets (Settings -> Secrets and variables
   #      -> Actions):
   #        OBS_USERNAME — your build.opensuse.org login
@@ -1171,10 +1252,11 @@ jobs:
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.version.outputs.version }}"
-          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # OBS builds from the committed spec, so it must carry the real
           # version (download_files resolves Source0's %{version}) and the
           # release changelog — not the 0.0.0 placeholder. Same templating
@@ -1195,13 +1277,55 @@ jobs:
               exit 1
           fi
 
+      - name: Stamp version and changelog into Debian recipe
+        # Pass the version job's outputs through env rather than interpolating
+        # them into the script body — the script-injection hardening pattern
+        # the version job documents and the build-deb job follows.
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
+        run: |
+          set -euo pipefail
+          # OBS's Debian targets build from a .dsc, not from debian/control.
+          # Its Build-Depends are generated from packaging/debian/control so
+          # the two cannot drift; the version is stamped the same way the
+          # spec's is.
+          bash packaging/obs/generate-dsc.sh "$VERSION" "$PKGREL"
+          bash packaging/generate-changelog.sh debian "" "$PKGREL"
+          # The generator ships with the release tag and may predate the
+          # revision argument, so restamp the revision the same way the
+          # build-deb job does and then assert. Same reasoning as the spec.
+          sed -i "1s/-[0-9]\{1,\})/-$PKGREL)/" packaging/debian/changelog
+          GOT="$(sed -n '1s/^plasmazones (\(.*\)).*/\1/p' packaging/debian/changelog)"
+          if [[ "$GOT" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: debian/changelog version is '$GOT', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          # The .dsc is what actually numbers the package: debtransform rewrites
+          # debian/changelog's version to match it, so a wrong .dsc version is
+          # not caught by the changelog assertion above, it overrides it, and
+          # ships a package numbered differently from the RPM.
+          #
+          # This is not a restatement of the arguments passed to the generator
+          # above. publish-obs checks out the release tag, so it runs THAT TAG'S
+          # generate-dsc.sh while the workflow comes from the dispatched branch,
+          # the same split the changelog comment describes. A tag whose
+          # generator formats the version differently, or ignores the revision
+          # argument, is exactly what this catches.
+          DSC_VER="$(sed -n 's/^Version:[[:space:]]*//p' packaging/obs/plasmazones.dsc)"
+          if [[ "$DSC_VER" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: dsc Version is '$DSC_VER', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          echo "Debian recipe version: $DSC_VER"
+
       - name: Commit package to OBS
         env:
           OBS_PROJECT: home:fuddlesworth
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.version.outputs.version }}"
-          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # Check out the existing OBS package working copy — the project
           # and package must already exist (see the setup notes above).
           osc checkout "$OBS_PROJECT" plasmazones
@@ -1209,6 +1333,24 @@ jobs:
           cp packaging/rpm/plasmazones.spec "$PKGDIR/plasmazones.spec"
           cp packaging/rpm/plasmazones-rpmlintrc "$PKGDIR/plasmazones-rpmlintrc"
           cp packaging/obs/_service "$PKGDIR/_service"
+          # Debian recipe. debtransform maps each debian.<name> file to
+          # debian/<name> inside the generated source package, so the flat
+          # names here are load-bearing and not a stylistic choice.
+          # debian/source/format is deliberately absent: debtransform writes
+          # it itself from the .dsc's "Format: 3.0 (quilt)" line, and a second
+          # copy would be shadowed.
+          # debian.copyright is NOT optional here even though nothing reads it
+          # at compile time: obs-build runs lintian when it is present in the
+          # build root and fails the build on a non-zero exit, and a missing
+          # debian/copyright is an error-level lintian tag.
+          cp packaging/obs/plasmazones.dsc "$PKGDIR/plasmazones.dsc"
+          cp packaging/debian/control "$PKGDIR/debian.control"
+          cp packaging/debian/rules "$PKGDIR/debian.rules"
+          cp packaging/debian/changelog "$PKGDIR/debian.changelog"
+          cp packaging/debian/copyright "$PKGDIR/debian.copyright"
+          cp packaging/debian/plasmazones.postinst "$PKGDIR/debian.plasmazones.postinst"
+          cp packaging/debian/plasmazones.postrm "$PKGDIR/debian.plasmazones.postrm"
+          cp packaging/debian/plasmazones.triggers "$PKGDIR/debian.plasmazones.triggers"
           cd "$PKGDIR"
           # addremove stages new files and drops removed ones; commit only
           # when something actually changed so re-running the same tag is a
