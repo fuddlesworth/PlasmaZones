@@ -177,6 +177,13 @@ public:
      * Always zero once @c panelGeometryReady has fired.
      */
     int pendingWindowOpensCount() const;
+    /// Test seam: the deferral queue's capacity, so the overflow-valve test
+    /// trips the real cap rather than hardcoding a number that would silently
+    /// stop testing the valve if @c kMaxPendingOpens were retuned.
+    static constexpr int pendingWindowOpensCapacity()
+    {
+        return static_cast<int>(kMaxPendingOpens);
+    }
     /// Test seam: parked mid-flip opens awaiting the screens-announce
     /// retry (the m_unclaimedOpens queue).
     int pendingUnclaimedOpensCount() const
