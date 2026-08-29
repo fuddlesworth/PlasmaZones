@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation>Переключает активный столбец по предустановкам размера экрана вдоль ленты.</translation>
+        <translation>Переключает активный столбец по предустановкам размера, заданным для экрана, вдоль ленты.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,7 +846,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation>Переключает активный столбец по предустановкам размера экрана вдоль ленты в обратном порядке.</translation>
+        <translation>Переключает активный столбец по предустановкам размера, заданным для экрана, вдоль ленты в обратном порядке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
@@ -866,12 +866,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation>Переключает активное окно по предустановкам размера экрана в пределах его столбца.</translation>
+        <translation>Переключает активное окно по предустановкам размера, заданным для экрана, в пределах его столбца.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation>Переключает активное окно по предустановкам размера экрана в пределах его столбца в обратном порядке.</translation>
+        <translation>Переключает активное окно по предустановкам размера, заданным для экрана, в пределах его столбца в обратном порядке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
@@ -5071,7 +5071,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="394"/>
         <source>Snap to zones %1</source>
         <translation>
-            <numerusform>Прилепить к зоне %1</numerusform>
+            <numerusform>Прилепить к зонам %1</numerusform>
             <numerusform>Прилепить к зонам %1</numerusform>
             <numerusform>Прилепить к зонам %1</numerusform>
         </translation>
@@ -12065,7 +12065,7 @@
         <comment>@title</comment>
         <translation>
             <numerusform>Выделена %n зона</numerusform>
-            <numerusform>Выделено %n зоны</numerusform>
+            <numerusform>Выделены %n зоны</numerusform>
             <numerusform>Выделено %n зон</numerusform>
         </translation>
     </message>
@@ -18583,7 +18583,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="693"/>
         <source>Top-Main</source>
-        <translation>Сверху по центру</translation>
+        <translation>Сверху основной</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="700"/>
@@ -18593,7 +18593,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="707"/>
         <source>Bottom-Main</source>
-        <translation>Снизу по центру</translation>
+        <translation>Снизу основной</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="714"/>
@@ -20762,7 +20762,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>Master ratio at limit (%1%)</source>
-        <translation>Соотношение главного окна на пределе (%1%)</translation>
+        <translation>Соотношение главной области на пределе (%1%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
@@ -21058,12 +21058,12 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio → %1%</source>
-        <translation>Соотношение главного окна → %1%</translation>
+        <translation>Соотношение главной области → %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio changed</source>
-        <translation>Соотношение главного окна изменено</translation>
+        <translation>Соотношение главной области изменено</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
@@ -21269,7 +21269,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
         <source>How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors. With Window decides, it opens at the height the application asked for.</source>
         <oldsource>How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors.</oldsource>
-        <translation>Насколько высоко окно, когда оно присоединяется к столбцу. При «Поделить столбец поровну» новое окно делит оставшееся место с соседями. При «Решает окно» оно открывается с той высотой, которую запросило приложение.</translation>
+        <translation>Какой высоты окно, когда оно присоединяется к столбцу. При «Поделить столбец поровну» новое окно делит оставшееся место с соседями. При «Решает окно» оно открывается с той высотой, которую запросило приложение.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="283"/>
@@ -22667,7 +22667,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>Задайте порядок шаблонов при переборе комбинациями клавиш и в выборе раскладки. Перетаскивайте строки или используйте кнопки со стрелками для изменения порядка.</translation>
+        <translation>Задайте порядок приоритета шаблонов при переборе комбинациями клавиш и в выборе раскладки. Перетаскивайте строки или используйте кнопки со стрелками для изменения порядка.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
@@ -22702,7 +22702,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>В какую сторону идёт лента. «По форме экрана» ведёт её сверху вниз, когда полезная область выше, чем шире, а в остальных случаях — рядом друг с другом. Столбцы по-прежнему делятся поперёк ленты, в какую бы сторону она ни шла.</translation>
+        <translation>В какую сторону идёт лента. «По форме экрана» задаёт «Сверху вниз», когда полезная область выше, чем шире, а в остальных случаях — «Рядом друг с другом». Столбцы по-прежнему делятся поперёк ленты, в какую бы сторону она ни шла.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>

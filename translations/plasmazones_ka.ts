@@ -281,22 +281,22 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="96"/>
         <source>Span Window Left</source>
-        <translation>ფანჯრის მარცხნივ გადაფარვა</translation>
+        <translation>ფანჯრის მარცხნივ გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="101"/>
         <source>Span Window Right</source>
-        <translation>ფანჯრის მარჯვნივ გადაფარვა</translation>
+        <translation>ფანჯრის მარჯვნივ გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="106"/>
         <source>Span Window Up</source>
-        <translation>ფანჯრის მაღლა გადაფარვა</translation>
+        <translation>ფანჯრის მაღლა გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="111"/>
         <source>Span Window Down</source>
-        <translation>ფანჯრის დაბლა გადაფარვა</translation>
+        <translation>ფანჯრის დაბლა გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="118"/>
@@ -421,7 +421,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="256"/>
         <source>Open Layout Picker</source>
-        <translation>განლაგების ამრჩევის გახსნა</translation>
+        <translation>განლაგების ამომრჩევის გახსნა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="261"/>
@@ -501,12 +501,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Consume or Expel Toward the Strip Start</source>
-        <translation>შთანთქმა ან გამოძევება ზოლის დასაწყისისკენ</translation>
+        <translation>ჩამატება ან გამოძევება ზოლის დასაწყისისკენ</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Consume or Expel Toward the Strip End</source>
-        <translation>შთანთქმა ან გამოძევება ზოლის ბოლოსკენ</translation>
+        <translation>ჩამატება ან გამოძევება ზოლის ბოლოსკენ</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
@@ -694,7 +694,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="188"/>
         <source>Opens a picker to choose this screen&apos;s layout.</source>
-        <translation>გახსნის ამრჩევს ამ ეკრანის განლაგებისთვის.</translation>
+        <translation>გახსნის ამომრჩევს ამ ეკრანის განლაგებისთვის.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
@@ -972,7 +972,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
-        <translation>გახსნის ამრჩევს ამ ეკრანის სვეტის ნიმუშისთვის. მისი სვეტების სიგანეები ხდება ის სიგანეები, რომლებშიც სვეტები გადადიან.</translation>
+        <translation>გახსნის ამომრჩევს ამ ეკრანის სვეტის ნიმუშისთვის. მისი სვეტების სიგანეები ხდება ის სიგანეები, რომლებშიც სვეტები გადადიან.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
@@ -1082,7 +1082,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="629"/>
         <source>Span Window</source>
-        <translation>ფანჯრის გადაფარვა</translation>
+        <translation>ფანჯრის გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="635"/>
@@ -1147,7 +1147,7 @@
     <message>
         <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
-        <translation>განლაგების ამრჩევი: დადასტურება (ციფრული კლავიატურის Enter)</translation>
+        <translation>განლაგების ამომრჩევი: დადასტურება (ციფრული კლავიატურის Enter)</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="22"/>
@@ -2058,7 +2058,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="137"/>
         <source>Whether the window is maximized.</source>
-        <translation>გაშლილია თუ არა ფანჯარა.</translation>
+        <translation>გადიდებულია თუ არა ფანჯარა.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="139"/>
@@ -2268,12 +2268,12 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="271"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="352"/>
         <source>Border width (px)</source>
-        <translation>საზღვრის სიგანე (px)</translation>
+        <translation>საზღვრის სიგანე (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="99"/>
         <source>Open maximized (off = open at the default width)</source>
-        <translation>გახსნა მაქსიმალურად (გამორთული = გახსნა ნაგულისხმევი სიგანით)</translation>
+        <translation>გახსნა გადიდებულად (გამორთული = გახსნა ნაგულისხმევი სიგანით)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="140"/>
@@ -2285,7 +2285,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="274"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="355"/>
         <source>Corner radius (px)</source>
-        <translation>კუთხის რადიუსი (px)</translation>
+        <translation>კუთხის რადიუსი (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="236"/>
@@ -2310,12 +2310,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="293"/>
         <source>Inner gap (px)</source>
-        <translation>შიდა დაშორება (px)</translation>
+        <translation>შიდა დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="296"/>
         <source>Outer gap (px)</source>
-        <translation>გარე დაშორება (px)</translation>
+        <translation>გარე დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="299"/>
@@ -2335,22 +2335,22 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="316"/>
         <source>Top gap (px)</source>
-        <translation>ზედა დაშორება (px)</translation>
+        <translation>ზედა დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="319"/>
         <source>Bottom gap (px)</source>
-        <translation>ქვედა დაშორება (px)</translation>
+        <translation>ქვედა დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="322"/>
         <source>Left gap (px)</source>
-        <translation>მარცხენა დაშორება (px)</translation>
+        <translation>მარცხენა დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="325"/>
         <source>Right gap (px)</source>
-        <translation>მარჯვენა დაშორება (px)</translation>
+        <translation>მარჯვენა დაშორება (პქს)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="330"/>
@@ -2398,7 +2398,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="376"/>
         <source>Duration (ms)</source>
-        <translation>ხანგრძლივობა (ms)</translation>
+        <translation>ხანგრძლივობა (მწმ)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="379"/>
@@ -2680,7 +2680,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="245"/>
         <source>Layer</source>
-        <translation>შრე</translation>
+        <translation>ფენა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
@@ -2690,7 +2690,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="258"/>
         <source>Show the drag selector here (off = hide it)</source>
-        <translation>გადათრევის ამრჩევის ჩვენება აქ (გამორთული = დამალვა)</translation>
+        <translation>გადათრევის ამომრჩევის ჩვენება აქ (გამორთული = დამალვა)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="283"/>
@@ -2856,7 +2856,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="304"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="651"/>
         <source>Open maximized</source>
-        <translation>გახსნა მაქსიმალურად</translation>
+        <translation>გახსნა გადიდებულად</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="307"/>
@@ -3080,7 +3080,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="474"/>
         <source>Show the drag selector</source>
-        <translation>გადათრევის ამრჩევის ჩვენება</translation>
+        <translation>გადათრევის ამომრჩევის ჩვენება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="492"/>
@@ -3120,12 +3120,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="641"/>
         <source>Show the drag selector here</source>
-        <translation>გადათრევის ამრჩევის ჩვენება აქ</translation>
+        <translation>გადათრევის ამომრჩევის ჩვენება აქ</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="641"/>
         <source>Hide the drag selector here</source>
-        <translation>გადათრევის ამრჩევის დამალვა აქ</translation>
+        <translation>გადათრევის ამომრჩევის დამალვა აქ</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="651"/>
@@ -3236,7 +3236,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="460"/>
         <source>Set window layer</source>
-        <translation>ფანჯრის შრის დაყენება</translation>
+        <translation>ფანჯრის ფენის დაყენება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="477"/>
@@ -4402,12 +4402,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>Border width: %1 px</source>
-        <translation>საზღვრის სიგანე: %1 px</translation>
+        <translation>საზღვრის სიგანე: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
         <source>Corner radius: %1 px</source>
-        <translation>კუთხის რადიუსი: %1 px</translation>
+        <translation>კუთხის რადიუსი: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="580"/>
@@ -4435,12 +4435,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="969"/>
         <source>Gap: %1 px</source>
-        <translation>დაშორება: %1 px</translation>
+        <translation>დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="973"/>
         <source>Outer gap: %1 px</source>
-        <translation>გარე დაშორება: %1 px</translation>
+        <translation>გარე დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
@@ -4684,7 +4684,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
         <source>Open at width: %1%</source>
-        <translation>გახსნა სიგანით: %1%</translation>
+        <translation>გახსნის სიგანე: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
@@ -5047,7 +5047,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="926"/>
         <source>Highlight color: %1</source>
-        <translation>მინიშნების ფერი: %1</translation>
+        <translation>გამოკვეთის ფერი: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="392"/>
@@ -5100,7 +5100,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay border width: %1 px</source>
-        <translation>გადადების საზღვრის სიგანე: %1 px</translation>
+        <translation>გადადების საზღვრის სიგანე: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="959"/>
@@ -5110,7 +5110,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
         <source>Overlay corner radius: %1 px</source>
-        <translation>გადადების კუთხის რადიუსი: %1 px</translation>
+        <translation>გადადების კუთხის რადიუსი: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="964"/>
@@ -5130,7 +5130,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="977"/>
         <source>Top gap: %1 px</source>
-        <translation>ზედა დაშორება: %1 px</translation>
+        <translation>ზედა დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="977"/>
@@ -5140,7 +5140,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="981"/>
         <source>Bottom gap: %1 px</source>
-        <translation>ქვედა დაშორება: %1 px</translation>
+        <translation>ქვედა დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="981"/>
@@ -5150,7 +5150,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="985"/>
         <source>Left gap: %1 px</source>
-        <translation>მარცხენა დაშორება: %1 px</translation>
+        <translation>მარცხენა დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="985"/>
@@ -5160,7 +5160,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="989"/>
         <source>Right gap: %1 px</source>
-        <translation>მარჯვენა დაშორება: %1 px</translation>
+        <translation>მარჯვენა დაშორება: %1 პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel.cpp" line="229"/>
@@ -5386,7 +5386,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="56"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="38"/>
         <source>Layout Picker</source>
-        <translation>განლაგების ამრჩევი</translation>
+        <translation>განლაგების ამომრჩევი</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="58"/>
@@ -5858,7 +5858,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1045"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="39"/>
         <source>picker</source>
-        <translation>ამრჩევი</translation>
+        <translation>ამომრჩევი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="124"/>
@@ -6512,7 +6512,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
-        <translation>ზონების გაერთიანება</translation>
+        <translation>ზონების გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="85"/>
@@ -6625,7 +6625,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
         <source>hover</source>
-        <translation>თავზე გადატარება</translation>
+        <translation>თავზე დაყოვნება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="428"/>
@@ -7035,7 +7035,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="160"/>
         <source>selector</source>
-        <translation>ამრჩევი</translation>
+        <translation>ამომრჩევი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
@@ -7494,13 +7494,13 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="483"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="349"/>
         <source>Opacity and tint</source>
-        <translation>გამჭვირვალობა და შეფერვა</translation>
+        <translation>გაუმჭვირვალობა და ტონი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="485"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="378"/>
         <source>Apply opacity and tint to</source>
-        <translation>გამჭვირვალობისა და შეფერვის გადატარება</translation>
+        <translation>გაუმჭვირვალობისა და ტონის გადატარება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="490"/>
@@ -7773,14 +7773,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="35"/>
         <source>Span modifier</source>
-        <translation>გადაფარვის მოდიფიკატორი</translation>
+        <translation>გავრცობის მოდიფიკატორი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
         <source>zone span</source>
-        <translation>ზონის გადაფარვა</translation>
+        <translation>ზონის გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -7791,7 +7791,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
         <source>span</source>
-        <translation>გადაფარვა</translation>
+        <translation>გავრცობა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
@@ -8434,7 +8434,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1090"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
-        <translation>მომხმარებელი აყენებს</translation>
+        <translation>მომხმარებლის ნაკრებები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="17"/>
@@ -8508,13 +8508,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="32"/>
         <source>Layout Picker Shown</source>
-        <translation>განლაგების ამრჩევი ნაჩვენებია</translation>
+        <translation>განლაგების ამომრჩევი ნაჩვენებია</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="49"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="37"/>
         <source>Layout Picker Hidden</source>
-        <translation>განლაგების ამრჩევი დამალულია</translation>
+        <translation>განლაგების ამომრჩევი დამალულია</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="51"/>
@@ -8768,7 +8768,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="234"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="241"/>
         <source>Master ratio</source>
-        <translation>მთავარი თანაფარდობა</translation>
+        <translation>მთავრების თანაფარდობა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="164"/>
@@ -9171,7 +9171,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="196"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
-        <translation>ზონების გაერთიანების გაშვების შემდგომი შეღავათის დრო</translation>
+        <translation>ზონების გავრცობის გაშვების შემდგომი შეღავათის დრო</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
@@ -9187,7 +9187,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="91"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="97"/>
         <source>Keep floating windows above</source>
-        <translation>მოტივტივე ფანჯრები დარჩეს წინ</translation>
+        <translation>მოტივტივე ფანჯრები დარჩეს ზემოთ</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="633"/>
@@ -9691,7 +9691,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="18"/>
         <source>Hover</source>
-        <translation>თავზე დაცურება</translation>
+        <translation>თავზე დაყოვნება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="106"/>
@@ -9775,7 +9775,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="140"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="119"/>
         <source>Cursor Hover</source>
-        <translation>კურსორის დაცურება</translation>
+        <translation>კურსორის დაყოვნება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="142"/>
@@ -9954,7 +9954,7 @@
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
-            <numerusform>თქვენ მიერ არჩეული %n გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორებმა წინა ნიმუშები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
+            <numerusform>თქვენ მიერ არჩეული %n გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორმა წინა ნიმუში შეინარჩუნა. აირჩიეთ ხელახლა მიმოხილვის გვერდზე.</numerusform>
             <numerusform>თქვენ მიერ არჩეული %n გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორებმა წინა ნიმუშები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
         </translation>
     </message>
@@ -11832,14 +11832,14 @@
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="362"/>
         <source>px</source>
         <comment>@label</comment>
-        <translation>px</translation>
+        <translation>პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="196"/>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="234"/>
         <source>px (global)</source>
         <comment>@label showing global default</comment>
-        <translation>px (გლობალური)</translation>
+        <translation>პქს (გლობალური)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="205"/>
@@ -13841,7 +13841,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ColorButton.qml.cpp" line="28"/>
         <source>Color picker</source>
-        <translation>ფერის ამრჩევი</translation>
+        <translation>ფერის ამომრჩევი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ColorButton.qml.cpp" line="18"/>
@@ -14174,7 +14174,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
         <source>%1 px</source>
         <comment>pixel-unit suffix in spin box</comment>
-        <translation>%1 px</translation>
+        <translation>%1 პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="34"/>
@@ -14335,7 +14335,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="394"/>
         <source>Strikeout</source>
-        <translation>ხაზგადასმული</translation>
+        <translation>გადახაზული</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="410"/>
@@ -14459,7 +14459,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="240"/>
         <source>%1 · %2 ms</source>
         <comment>curve, then duration in milliseconds</comment>
-        <translation>%1 · %2 ms</translation>
+        <translation>%1 · %2 მწმ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="74"/>
@@ -14554,7 +14554,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="375"/>
         <source>%1 ms</source>
-        <translation>%1 ms</translation>
+        <translation>%1 მწმ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="260"/>
@@ -14636,7 +14636,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="567"/>
         <source>ms</source>
         <comment>milliseconds, unit appended to a slider value</comment>
-        <translation>ms</translation>
+        <translation>მწმ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="608"/>
@@ -15282,7 +15282,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="365"/>
         <source>Values below 1 bounce before settling. At 1 and above the spring settles without bouncing, more slowly the higher it goes.</source>
-        <translation>1-ზე ნაკლები მნიშვნელობებით ზამბარა შეჩერებამდე ირხევა. 1-დან ზემოთ ის რხევის გარეშე ჩერდება, რაც უფრო მაღალია მნიშვნელობა, მით უფრო ნელა.</translation>
+        <translation>1-ზე ნაკლები მნიშვნელობებით ზამბარა შეჩერებამდე ირხევა. 1-ის ჩათვლით და ზემოთ ის რხევის გარეშე ჩერდება, რაც უფრო მაღალია მნიშვნელობა, მით უფრო ნელა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="390"/>
@@ -17165,7 +17165,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
         <source>A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings. Save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.</source>
-        <translation>პროფილი აფიქსირებს თქვენს მიმდინარე პარამეტრებსა და წესებს. ინახება მხოლოდ ის, რაც მისი მშობელი პროფილისგან (ან ნაგულისხმევებისგან) განსხვავდება. პროფილის გააქტიურება მის პარამეტრებს დგამს. გადასატარებლად შეინახეთ, ან დასაბრუნებლად უარყავით. მონიტორის მიხედვით და სხვა აპარატურაზე დამოკიდებული პარამეტრები არ შედის, ამიტომ პროფილი მანქანებს შორის გადატანადი რჩება.</translation>
+        <translation>პროფილი აფიქსირებს თქვენს მიმდინარე პარამეტრებსა და წესებს. ინახება მხოლოდ ის, რაც მისი მშობელი პროფილისგან (ან ნაგულისხმევებისგან) განსხვავდება. პროფილის გააქტიურება მის პარამეტრებს გადასატარებლად ამზადებს. მათ ასამოქმედებლად შეინახეთ, ან დასაბრუნებლად უარყავით. მონიტორის მიხედვით და სხვა აპარატურაზე დამოკიდებული პარამეტრები არ შედის, ამიტომ პროფილი მანქანებს შორის გადატანადი რჩება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="147"/>
@@ -18431,13 +18431,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="983"/>
         <source>%1×%2 px</source>
         <comment>@info screen resolution in pixels</comment>
-        <translation>%1×%2 px</translation>
+        <translation>%1×%2 პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreenPreview.qml.cpp" line="111"/>
         <source>%1 px · %2%</source>
         <comment>@info region width in pixels and as a percentage of the screen</comment>
-        <translation>%1 px · %2%</translation>
+        <translation>%1 პქს · %2%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreenPreview.qml.cpp" line="150"/>
@@ -18627,7 +18627,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="985"/>
         <source>%1 px</source>
         <comment>@info width in pixels</comment>
-        <translation>%1 px</translation>
+        <translation>%1 პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="1001"/>
@@ -18674,7 +18674,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="396"/>
         <source>%1 px</source>
         <comment>pixel-unit suffix after slider value</comment>
-        <translation>%1 px</translation>
+        <translation>%1 პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="171"/>
@@ -18695,7 +18695,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="118"/>
         <source>%1 × %2 px</source>
         <comment>@info preview dimensions in pixels</comment>
-        <translation>%1 × %2 px</translation>
+        <translation>%1 × %2 პქს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="272"/>
@@ -19532,12 +19532,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="87"/>
         <source>How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.</source>
-        <translation>რამდენი ხნის განმავლობაში ითვლება დაგდება გამშვების გაშვების შემდეგ ისე, თითქოს ის კვლავ გეჭიროთ. ამრჩევი წყდება იმ მომენტში, როცა ფანჯარას უშვებთ, და მაშინ იმავე ხელით დაჭერილი გამშვები ჩვეულებრივ უკვე აშვებულია. 0 თიშავს მას.</translation>
+        <translation>რამდენი ხნის განმავლობაში ითვლება დაგდება გამშვების გაშვების შემდეგ ისე, თითქოს ის კვლავ გეჭიროთ. ამომრჩევი წყდება იმ მომენტში, როცა ფანჯარას უშვებთ, და მაშინ იმავე ხელით დაჭერილი გამშვები ჩვეულებრივ უკვე აშვებულია. 0 თიშავს მას.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="88"/>
         <source>Release grace period for the snap assist picker</source>
-        <translation>გაშვების შემდგომი შეღავათის დრო მიმაგრების დამხმარე ამრჩევისთვის</translation>
+        <translation>გაშვების შემდგომი შეღავათის დრო მიმაგრების დამხმარე ამომრჩევისთვის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="25"/>
@@ -19604,7 +19604,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>რამდენ ხანს რჩება გაერთიანება აქტიური გაერთიანების მოდიფიკატორის გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებულმა ფანჯარამაც დახატული ზონები დაიკავოს. ეხმარება, როცა მოდიფიკატორი არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
+        <translation>რამდენ ხანს რჩება გავრცობა აქტიური გავრცობის მოდიფიკატორის გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებულმა ფანჯარამაც დახატული ზონები დაიკავოს. ეხმარება, როცა მოდიფიკატორი არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
@@ -19621,7 +19621,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="145"/>
         <source>No decoration packs. Matched windows render undecorated.</source>
-        <translation>გაფორმების პაკეტები არაა. შესატყვისი ფანჯრები გაფორმების გარეშე დახატულა.</translation>
+        <translation>გაფორმების პაკეტები არაა. შესატყვისი ფანჯრები გაფორმების გარეშე იხატება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="148"/>
@@ -20213,7 +20213,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="144"/>
         <source>Float leaves windows beyond the max-windows cap floating. Unlimited tiles every window regardless of count.</source>
-        <translation>მოტივტივე მაქსიმალურ ფანჯრებს გადამეტებულ ფანჯრებს მოტივტივედ ტოვებს. შეუზღუდავი ყოველ ფანჯარას აფილავს რაოდენობის მიუხედავად.</translation>
+        <translation>მოტივტივე მაქსიმალური ფანჯრების ზღვარს გადაცილებულ ფანჯრებს მოტივტივედ ტოვებს. შეუზღუდავი ყოველ ფანჯარას აფილავს რაოდენობის მიუხედავად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="147"/>
@@ -20712,7 +20712,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>Master ratio at limit (%1%)</source>
-        <translation>მთავარი თანაფარდობა ზღვარზეა (%1%)</translation>
+        <translation>მთავრების თანაფარდობა ზღვარზეა (%1%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
@@ -20781,7 +20781,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="137"/>
         <source>Spanning is not available in this mode</source>
-        <translation>გაერთიანება ამ რეჟიმში ხელმისაწვდომი არაა</translation>
+        <translation>გავრცობა ამ რეჟიმში ხელმისაწვდომი არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="151"/>
@@ -21007,12 +21007,12 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio → %1%</source>
-        <translation>მთავარი თანაფარდობა → %1%</translation>
+        <translation>მთავრების თანაფარდობა → %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio changed</source>
-        <translation>მთავარი თანაფარდობა შეიცვალა</translation>
+        <translation>მთავრების თანაფარდობა შეიცვალა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
@@ -21730,7 +21730,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="145"/>
         <source>Opens matching windows maximized, so their column fills the work area along the strip when they first appear.</source>
-        <translation>შესაბამის ფანჯრებს მაქსიმალურად ხსნის, ისე რომ მათი სვეტი პირველად გამოჩენისას ზოლის გასწვრივ სამუშაო არეს ავსებს.</translation>
+        <translation>შესაბამის ფანჯრებს გადიდებულად ხსნის, ისე რომ მათი სვეტი პირველად გამოჩენისას ზოლის გასწვრივ სამუშაო არეს ავსებს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="150"/>
@@ -21945,7 +21945,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="62"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation>აჩვენებს ან მალავს გადათრევის ამრჩევის ამომხტომს შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის. გამორთულის დროს ფანჯრის გამშვებ კიდესთან გადათრევა იქ ამრჩევს არ შემოგთავაზებთ. ჩართულის დროს ის ჩნდება მაშინაც, როცა ამ ეკრანის გლობალური ამრჩევის გადამრთველი გამორთულია.</translation>
+        <translation>აჩვენებს ან მალავს გადათრევის ამომრჩევის ამომხტომს შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის. გამორთულის დროს ფანჯრის გამშვებ კიდესთან გადათრევა იქ ამომრჩევს არ შემოგთავაზებთ. ჩართულის დროს ის ჩნდება მაშინაც, როცა ამ ეკრანის გლობალური ამომრჩევის გადამრთველი გამორთულია.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="91"/>
@@ -22116,7 +22116,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="448"/>
         <source>Draws a line through the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation>შესაბამისი კონტექსტისთვის ჩანართის წარწერებს ხაზს უსვამს გადამკვეთად. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
+        <translation>შესაბამისი კონტექსტისთვის ჩანართის წარწერებს გადახაზავს. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="453"/>
@@ -22274,7 +22274,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
-        <translation>ზოლის ამრჩევის ამომხტომი</translation>
+        <translation>ზოლის ამომრჩევის ამომხტომი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
@@ -22284,7 +22284,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
-        <translation>ზოლის ამრჩევის ამომხტომის ჩართვა</translation>
+        <translation>ზოლის ამომრჩევის ამომხტომის ჩართვა</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
@@ -22613,7 +22613,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>დააყენეთ ნიმუშების პრიორიტეტის რიგი კლავიატურის მალსახმობებით გადართვისა და განლაგების ამრჩევისთვის. გადალაგებისთვის გადაათრიეთ მწკრივები ან გამოიყენეთ ისრიანი ღილაკები.</translation>
+        <translation>დააყენეთ ნიმუშების პრიორიტეტის რიგი კლავიატურის მალსახმობებით გადართვისა და განლაგების ამომრჩევისთვის. გადალაგებისთვის გადაათრიეთ მწკრივები ან გამოიყენეთ ისრიანი ღილაკები.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
@@ -22648,7 +22648,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>რომელი მიმართულებით მიდის ზოლი. „ეკრანის ფორმის მიხედვით“ მას ზემოდან ქვემოთ ატარებს, როცა გამოსაყენებელი ფართობი უფრო მაღალია, ვიდრე განიერი, სხვა შემთხვევაში კი მარცხნიდან მარჯვნივ. სვეტები ისევ ზოლის განივად იყოფა, მიუხედავად იმისა, რომელი მიმართულებით მიდის ის.</translation>
+        <translation>რომელი მიმართულებით მიდის ზოლი. „ეკრანის ფორმის მიხედვით“ მას „ზემოდან ქვემოთ“ ატარებს, როცა გამოსაყენებელი ფართობი უფრო მაღალია, ვიდრე განიერი, სხვა შემთხვევაში კი „მარცხნიდან მარჯვნივ“. სვეტები ისევ ზოლის განივად იყოფა, მიუხედავად იმისა, რომელი მიმართულებით მიდის ის.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22702,7 +22702,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation>მალსახმობების ცხრილი</translation>
+        <translation>მალსახმობების ცნობარი</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
@@ -22780,13 +22780,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>თავზე დაცურება</translation>
+        <translation>თავზე დაყოვნება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
-        <translation>განლაგების ამრჩევი</translation>
+        <translation>განლაგების ამომრჩევი</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
@@ -22798,7 +22798,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
         <source>Maximize</source>
         <comment>animation event or section</comment>
-        <translation>მაქსიმალურად გაშლა</translation>
+        <translation>გადიდება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="136"/>

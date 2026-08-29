@@ -331,7 +331,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
-        <translation>Zwevend venster omschakelen</translation>
+        <translation>Zweven van venster omschakelen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
@@ -496,7 +496,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="342"/>
         <source>Expel Window from Column</source>
-        <translation>Venster uit kolom nemen</translation>
+        <translation>Venster uit kolom stoten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
@@ -811,7 +811,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
         <source>Expel Window</source>
-        <translation>Venster uitnemen</translation>
+        <translation>Venster uitstoten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="399"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation>Doorloopt met de gefocuste kolom de voorinstellingen voor breedte van het scherm langs de strook.</translation>
+        <translation>Doorloopt met de gefocuste kolom de formaatvoorinstellingen van het scherm langs de strook.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,7 +846,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation>Doorloopt met de gefocuste kolom de voorinstellingen voor breedte van het scherm langs de strook, in omgekeerde volgorde.</translation>
+        <translation>Doorloopt met de gefocuste kolom de formaatvoorinstellingen van het scherm langs de strook, in omgekeerde volgorde.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
@@ -866,12 +866,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation>Doorloopt met het gefocuste venster de voorinstellingen voor hoogte van het scherm binnen zijn kolom.</translation>
+        <translation>Doorloopt met het gefocuste venster de formaatvoorinstellingen van het scherm binnen zijn kolom.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation>Doorloopt met het gefocuste venster de voorinstellingen voor hoogte van het scherm binnen zijn kolom, in omgekeerde volgorde.</translation>
+        <translation>Doorloopt met het gefocuste venster de formaatvoorinstellingen van het scherm binnen zijn kolom, in omgekeerde volgorde.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
@@ -1742,7 +1742,7 @@
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="628"/>
         <source>Too many copies of this algorithm already exist. Rename or delete some before duplicating.</source>
-        <translation>Er bestaan al te veel kopieën van dit algoritme. Hernoem of verwijder er enkele voordat je dupliceert.</translation>
+        <translation>Er bestaan al te veel kopieën van dit algoritme. Hernoem of verwijder er enkele voordat u dupliceert.</translation>
     </message>
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="636"/>
@@ -1784,7 +1784,7 @@
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="782"/>
         <source>Too many algorithms already share this name. Rename or delete some before creating another.</source>
-        <translation>Te veel algoritmen delen al deze naam. Hernoem of verwijder er enkele voordat je een nieuwe maakt.</translation>
+        <translation>Te veel algoritmen delen al deze naam. Hernoem of verwijder er enkele voordat u een nieuwe maakt.</translation>
     </message>
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="816"/>
@@ -4225,7 +4225,7 @@
     <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="444"/>
         <source>The daemon&apos;s rules changed while you were editing. Review or use Save anyway to overwrite.</source>
-        <translation>De regels van de daemon zijn gewijzigd terwijl je aan het bewerken was. Controleer ze of gebruik Toch opslaan om te overschrijven.</translation>
+        <translation>De regels van de daemon zijn gewijzigd terwijl u aan het bewerken was. Controleer ze of gebruik Toch opslaan om te overschrijven.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="455"/>
@@ -6625,7 +6625,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
         <source>hover</source>
-        <translation>zweven</translation>
+        <translation>aanwijzen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="428"/>
@@ -7646,7 +7646,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="702"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="708"/>
         <source>Pause while you are away</source>
-        <translation>Pauzeren wanneer je weg bent</translation>
+        <translation>Pauzeren wanneer u weg bent</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="523"/>
@@ -7780,7 +7780,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
         <source>zone span</source>
-        <translation>zonespanning</translation>
+        <translation>zone overspannen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -8434,7 +8434,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1090"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
-        <translation>Gebruiker stelt in</translation>
+        <translation>Gebruikerssets</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="17"/>
@@ -9677,7 +9677,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="35"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="63"/>
         <source>Fade In</source>
-        <translation>Invagen</translation>
+        <translation>Infaden</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="104"/>
@@ -9685,13 +9685,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="40"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="68"/>
         <source>Fade Out</source>
-        <translation>Uitvagen</translation>
+        <translation>Uitfaden</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="18"/>
         <source>Hover</source>
-        <translation>Zweven</translation>
+        <translation>Aanwijzen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="106"/>
@@ -9775,7 +9775,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="140"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="119"/>
         <source>Cursor Hover</source>
-        <translation>Cursor zweven</translation>
+        <translation>Cursor erboven</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="142"/>
@@ -9793,7 +9793,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="32"/>
         <source>Snap Resize (Drag Preview)</source>
-        <translation>Vastklikken bij formaat wijzigen (sleepvoorbeeld)</translation>
+        <translation>Formaat wijzigen bij vastklikken (sleepvoorbeeld)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="608"/>
@@ -9954,7 +9954,7 @@
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
-            <numerusform>%n scrollsjabloon dat u had gekozen, is verwijderd, dus die monitoren hebben hun vorige sjablonen behouden. Kies ze opnieuw op de overzichtspagina.</numerusform>
+            <numerusform>%n scrollsjabloon dat u had gekozen, is verwijderd, dus die monitor heeft zijn vorige sjabloon behouden. Kies er opnieuw een op de overzichtspagina.</numerusform>
             <numerusform>%n scrollsjablonen die u had gekozen, zijn verwijderd, dus die monitoren hebben hun vorige sjablonen behouden. Kies ze opnieuw op de overzichtspagina.</numerusform>
         </translation>
     </message>
@@ -13264,7 +13264,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="58"/>
         <source>Releases</source>
-        <translation>Uitgaven</translation>
+        <translation>Releases</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
@@ -13435,7 +13435,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="263"/>
         <source>Hold this key while dropping a zone to expand it into available space</source>
-        <translation>Houd deze toets ingedrukt terwijl je een zone loslaat om die uit te breiden in de beschikbare ruimte</translation>
+        <translation>Houd deze toets ingedrukt terwijl u een zone loslaat om die uit te breiden in de beschikbare ruimte</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="266"/>
@@ -13573,7 +13573,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="502"/>
         <source>Snapping and tiling stay off until you assign a layout. A rule can re-enable the default per monitor.</source>
-        <translation>Vastklikken en tegelen blijven uit totdat je een indeling toewijst. Een regel kan de standaard per scherm opnieuw inschakelen.</translation>
+        <translation>Vastklikken en tegelen blijven uit totdat u een indeling toewijst. Een regel kan de standaard per scherm opnieuw inschakelen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="528"/>
@@ -13928,7 +13928,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="327"/>
         <source>Did you mean “%1”?</source>
         <comment>@action search did-you-mean suggestion</comment>
-        <translation>Bedoelde je ‘%1’?</translation>
+        <translation>Bedoelde u ‘%1’?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="340"/>
@@ -14185,7 +14185,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="35"/>
         <source>Are you sure you want to reset all settings to their default values?</source>
-        <translation>Weet je zeker dat je alle instellingen wilt herstellen naar hun standaardwaarden?</translation>
+        <translation>Weet u zeker dat u alle instellingen wilt herstellen naar hun standaardwaarden?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="47"/>
@@ -14208,7 +14208,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="60"/>
         <source>Reset the settings on this page to their default values? You can still review the result and Save or Discard afterwards.</source>
-        <translation>De instellingen op deze pagina herstellen naar hun standaardwaarden? Je kunt het resultaat daarna nog bekijken en Opslaan of Verwerpen.</translation>
+        <translation>De instellingen op deze pagina herstellen naar hun standaardwaarden? U kunt het resultaat daarna nog bekijken en Opslaan of Verwerpen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="64"/>
@@ -14243,17 +14243,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Snapping will discard your unsaved Snapping changes. Continue?</source>
-        <translation>Vastklikken uitschakelen verwerpt je niet-opgeslagen wijzigingen voor Vastklikken. Doorgaan?</translation>
+        <translation>Vastklikken uitschakelen verwerpt uw niet-opgeslagen wijzigingen voor Vastklikken. Doorgaan?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Tiling will discard your unsaved Tiling changes. Continue?</source>
-        <translation>Tegelen uitschakelen verwerpt je niet-opgeslagen wijzigingen voor Tegelen. Doorgaan?</translation>
+        <translation>Tegelen uitschakelen verwerpt uw niet-opgeslagen wijzigingen voor Tegelen. Doorgaan?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Scrolling will discard your unsaved Scrolling changes. Continue?</source>
-        <translation>Scrollen uitschakelen verwerpt je niet-opgeslagen wijzigingen voor Scrollen. Doorgaan?</translation>
+        <translation>Scrollen uitschakelen verwerpt uw niet-opgeslagen wijzigingen voor Scrollen. Doorgaan?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
@@ -14290,7 +14290,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/DiscardChangesDialog.qml.cpp" line="33"/>
         <source>Your edits to this rule will be lost. Discard them?</source>
-        <translation>Je bewerkingen aan deze regel gaan verloren. Wil je ze verwerpen?</translation>
+        <translation>Uw bewerkingen aan deze regel gaan verloren. Wilt u ze verwerpen?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="213"/>
@@ -14475,7 +14475,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="79"/>
         <source>Using library defaults</source>
-        <translation>Bibliotheekstandaarden gebruikt</translation>
+        <translation>Bibliotheekstandaarden worden gebruikt</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="97"/>
@@ -14507,7 +14507,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="166"/>
         <source>%1 of the events this card controls hold different values right now, and it shows only one of them. The next change you make to the timing or the shader here applies that setting to all %2 of them.</source>
-        <translation>%1 van de gebeurtenissen die deze kaart beheert, hebben nu verschillende waarden en er wordt er maar één getoond. De volgende wijziging die je hier aanbrengt aan de timing of de shader, past die instelling toe op alle %2 ervan.</translation>
+        <translation>%1 van de gebeurtenissen die deze kaart beheert, hebben nu verschillende waarden en er wordt er maar één getoond. De volgende wijziging die u hier aanbrengt aan de timing of de shader, past die instelling toe op alle %2 ervan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="177"/>
@@ -14625,7 +14625,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="537"/>
         <source>A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.</source>
-        <translation>Een veercurve leidt zijn eigen instellingstijd af van zijn parameters, dus er is geen duur om in te stellen. Schakel de timingmodus over naar Versoepeling om een duur te gebruiken.</translation>
+        <translation>Een veercurve leidt zijn eigen rusttijd af van zijn parameters, dus er is geen duur om in te stellen. Schakel de timingmodus over naar Versoepeling om een duur te gebruiken.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="545"/>
@@ -14835,7 +14835,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="27"/>
         <source>Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn&apos;t cover are left unchanged.</source>
-        <translation>Bewegingssets bundelen je overschrijvingen per gebeurtenis in één deelbaar JSON-bestand. Het toepassen van een set voegt samen met je huidige overschrijvingen. Paden die niet worden gedekt, blijven ongewijzigd.</translation>
+        <translation>Bewegingssets bundelen uw overschrijvingen per gebeurtenis in één deelbaar JSON-bestand. Het toepassen van een set voegt samen met uw huidige overschrijvingen. Paden die niet worden gedekt, blijven ongewijzigd.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="28"/>
@@ -14845,7 +14845,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="29"/>
         <source>Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
-        <translation>Bewegingssets zijn losse JSON-bestanden in je gegevensmap. Zet hier een setbestand neer om het te importeren, of gebruik de knoppen hieronder.</translation>
+        <translation>Bewegingssets zijn losse JSON-bestanden in uw gegevensmap. Zet hier een setbestand neer om het te importeren, of gebruik de knoppen hieronder.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="30"/>
@@ -14866,7 +14866,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="39"/>
         <source>Global</source>
         <comment>@label motion event group</comment>
-        <translation>Algemeen</translation>
+        <translation>Globaal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="41"/>
@@ -15135,7 +15135,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowDraggingPage.qml.cpp" line="19"/>
         <source>Animation while you drag a window. Drag shaders are physics driven and follow the pointer until you let go, so only those shaders are offered here.</source>
-        <translation>Animatie terwijl je een venster sleept. Sleepshaders worden aangedreven door fysica en volgen de aanwijzer totdat je loslaat, dus alleen die shaders worden hier aangeboden.</translation>
+        <translation>Animatie terwijl u een venster sleept. Sleepshaders worden aangedreven door fysica en volgen de aanwijzer totdat u loslaat, dus alleen die shaders worden hier aangeboden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="24"/>
@@ -15219,7 +15219,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="217"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="223"/>
         <source>Overshoot</source>
-        <translation>Overschot</translation>
+        <translation>Doorschot</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="217"/>
@@ -15387,7 +15387,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="199"/>
         <source>Overshoot (Back)</source>
-        <translation>Overschot (back)</translation>
+        <translation>Doorschot (back)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="90"/>
@@ -15551,7 +15551,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
         <source>Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
-        <translation>Decoratiesets bundelen je pakketketens per oppervlak in één deelbaar JSON-bestand. Het toepassen van een set voegt samen met je huidige decoratie. Oppervlakken die niet worden gedekt, blijven ongewijzigd.</translation>
+        <translation>Decoratiesets bundelen uw pakketketens per oppervlak in één deelbaar JSON-bestand. Het toepassen van een set voegt samen met uw huidige decoratie. Oppervlakken die niet worden gedekt, blijven ongewijzigd.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
@@ -15561,7 +15561,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="25"/>
         <source>Decoration sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
-        <translation>Decoratiesets zijn losse JSON-bestanden in je gegevensmap. Zet hier een setbestand neer om het te importeren, of gebruik de knoppen hieronder.</translation>
+        <translation>Decoratiesets zijn losse JSON-bestanden in uw gegevensmap. Zet hier een setbestand neer om het te importeren, of gebruik de knoppen hieronder.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="26"/>
@@ -15651,7 +15651,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="235"/>
         <source>Using global defaults</source>
-        <translation>Globale standaardwaarden gebruiken</translation>
+        <translation>Globale standaardwaarden worden gebruikt</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="251"/>
@@ -15909,7 +15909,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
         <source>Stop animating decorations once you have been idle, and start again on the first key press or mouse movement.</source>
-        <translation>Stop met animeren van decoraties zodra je inactief bent, en begin opnieuw bij de eerste toetsaanslag of muisbeweging.</translation>
+        <translation>Stop met animeren van decoraties zodra u inactief bent, en begin opnieuw bij de eerste toetsaanslag of muisbeweging.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="716"/>
@@ -16384,12 +16384,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
         <source>Drop a layout file here to import it, or use the buttons below. User layouts live under your data directory.</source>
-        <translation>Zet hier een indelingsbestand neer om het te importeren, of gebruik de knoppen hieronder. Gebruikersindelingen bevinden zich in je gegevensmap.</translation>
+        <translation>Zet hier een indelingsbestand neer om het te importeren, of gebruik de knoppen hieronder. Gebruikersindelingen bevinden zich in uw gegevensmap.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
         <source>Drop a Luau algorithm file here to import it, or use the buttons below. User algorithms live under your data directory.</source>
-        <translation>Zet hier een Luau-algoritmebestand neer om het te importeren, of gebruik de knoppen hieronder. Gebruikersalgoritmen bevinden zich in je gegevensmap.</translation>
+        <translation>Zet hier een Luau-algoritmebestand neer om het te importeren, of gebruik de knoppen hieronder. Gebruikersalgoritmen bevinden zich in uw gegevensmap.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
@@ -16592,7 +16592,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="475"/>
         <source>Try adjusting your filters or search terms</source>
-        <translation>Probeer je filters of zoektermen aan te passen</translation>
+        <translation>Probeer uw filters of zoektermen aan te passen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
@@ -16706,7 +16706,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
         <source>Are you sure you want to delete &quot;%1&quot;?</source>
-        <translation>Weet je zeker dat je &quot;%1&quot; wilt verwijderen?</translation>
+        <translation>Weet u zeker dat u &quot;%1&quot; wilt verwijderen?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="43"/>
@@ -17165,7 +17165,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
         <source>A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings. Save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.</source>
-        <translation>Een profiel legt je huidige instellingen en regels vast. Alleen wat verschilt van het bovenliggende profiel (of de standaardwaarden) wordt opgeslagen. Het activeren van een profiel zet de instellingen klaar. Sla op om toe te passen, of verwerp om terug te draaien. Instellingen per scherm en andere hardwarespecifieke instellingen zijn niet inbegrepen, zodat een profiel overdraagbaar blijft tussen machines.</translation>
+        <translation>Een profiel legt uw huidige instellingen en regels vast. Alleen wat verschilt van het bovenliggende profiel (of de standaardwaarden) wordt opgeslagen. Het activeren van een profiel zet de instellingen klaar. Sla op om toe te passen, of verwerp om terug te draaien. Instellingen per scherm en andere hardwarespecifieke instellingen zijn niet inbegrepen, zodat een profiel overdraagbaar blijft tussen machines.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="147"/>
@@ -17889,12 +17889,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="73"/>
         <source>Add at least one action before saving.</source>
-        <translation>Voeg minstens één actie toe voordat je opslaat.</translation>
+        <translation>Voeg minstens één actie toe voordat u opslaat.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="76"/>
         <source>Choose a type for every action before saving.</source>
-        <translation>Kies een type voor elke actie voordat je opslaat.</translation>
+        <translation>Kies een type voor elke actie voordat u opslaat.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="78"/>
@@ -18106,7 +18106,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="434"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
-        <translation>De regels op schijf zijn gewijzigd terwijl je aan het bewerken was. Nu opslaan overschrijft die wijzigingen. Controleer je bewerkingen voordat je opslaat, of verwerp ze om opnieuw te laden.</translation>
+        <translation>De regels op schijf zijn gewijzigd terwijl u aan het bewerken was. Nu opslaan overschrijft die wijzigingen. Controleer uw bewerkingen voordat u opslaat, of verwerp ze om opnieuw te laden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="445"/>
@@ -18126,7 +18126,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
-        <translation>Opslaan vervangt de regelset die de daemon momenteel op schijf heeft door je klaargezette bewerkingen. Alle regels die daar zijn gewijzigd terwijl je aan het bewerken was, gaan verloren.</translation>
+        <translation>Opslaan vervangt de regelset die de daemon momenteel op schijf heeft door uw klaargezette bewerkingen. Alle regels die daar zijn gewijzigd terwijl u aan het bewerken was, gaan verloren.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
@@ -18647,7 +18647,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="104"/>
         <source>The zone selector popup appears when dragging windows to screen edges, allowing quick layout selection.</source>
-        <translation>De pop-up van de zonekiezer verschijnt wanneer je vensters naar de schermranden sleept, zodat je snel een indeling kunt kiezen.</translation>
+        <translation>De pop-up van de zonekiezer verschijnt wanneer u vensters naar de schermranden sleept, zodat u snel een indeling kunt kiezen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="115"/>
@@ -18700,7 +18700,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="272"/>
         <source>Size scales automatically with your screen resolution</source>
-        <translation>Grootte past zich automatisch aan je schermresolutie aan</translation>
+        <translation>Grootte past zich automatisch aan uw schermresolutie aan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="276"/>
@@ -18733,7 +18733,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="408"/>
         <source>Preview size adjusts automatically based on your screen resolution.</source>
-        <translation>Voorbeeldgrootte past zich automatisch aan op basis van je schermresolutie.</translation>
+        <translation>Voorbeeldgrootte past zich automatisch aan op basis van uw schermresolutie.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ImportDropCard.qml.cpp" line="47"/>
@@ -18752,8 +18752,8 @@
         <source>%n use</source>
         <comment>@info shader usage count</comment>
         <translation>
-            <numerusform>%n gebruik</numerusform>
-            <numerusform>%n gebruiken</numerusform>
+            <numerusform>%n keer gebruikt</numerusform>
+            <numerusform>%n keer gebruikt</numerusform>
         </translation>
     </message>
     <message>
@@ -18896,7 +18896,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="58"/>
         <source>User-installed shader packs live under your data directory. Drop a shader pack folder here to make it available to PlasmaZones.</source>
-        <translation>Door gebruikers geïnstalleerde shaderpakketten bevinden zich in je gegevensmap. Zet een map met een shaderpakket hierop neer om deze beschikbaar te maken voor PlasmaZones.</translation>
+        <translation>Door gebruikers geïnstalleerde shaderpakketten bevinden zich in uw gegevensmap. Zet een map met een shaderpakket hierop neer om deze beschikbaar te maken voor PlasmaZones.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="59"/>
@@ -19512,12 +19512,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="110"/>
         <source>Offer to fill the remaining empty zones after you snap a window</source>
-        <translation>Aanbieden om de resterende lege zones te vullen nadat je een venster vastklikt</translation>
+        <translation>Aanbieden om de resterende lege zones te vullen nadat u een venster vastklikt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="131"/>
         <source>Show the window picker after every snap, without waiting for you to hold anything</source>
-        <translation>De vensterkiezer tonen na elke keer vastklikken, zonder te wachten tot je iets ingedrukt houdt</translation>
+        <translation>De vensterkiezer tonen na elke keer vastklikken, zonder te wachten tot u iets ingedrukt houdt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="47"/>
@@ -19547,7 +19547,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="41"/>
         <source>Snap every newly opened window into whichever zone you most recently snapped a window into</source>
-        <translation>Elk nieuw geopend venster vastklikken in de zone waarin je het laatst een venster hebt vastgeklikt</translation>
+        <translation>Elk nieuw geopend venster vastklikken in de zone waarin u het laatst een venster hebt vastgeklikt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="57"/>
@@ -19583,7 +19583,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
         <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>Wanneer je een venster niet meer laat zweven dat nog nooit is vastgeklikt, klik het dan vast in een terugvalzone (laatst gebruikt, dan eerste lege, dan de eerste zone) in plaats van het te laten zweven.</translation>
+        <translation>Wanneer u een venster niet meer laat zweven dat nog nooit is vastgeklikt, klik het dan vast in een terugvalzone (laatst gebruikt, dan eerste lege, dan de eerste zone) in plaats van het te laten zweven.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -19611,7 +19611,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="62"/>
         <source>Zone span toggle mode</source>
-        <translation>Schakelmodus voor zonespanning</translation>
+        <translation>Schakelmodus voor het overspannen van zones</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="90"/>
@@ -19722,7 +19722,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="94"/>
         <source>Remembers split positions when you resize a split</source>
-        <translation>Onthoudt splitsposities wanneer je een splitsing van grootte verandert</translation>
+        <translation>Onthoudt splitsposities wanneer u een splitsing van grootte verandert</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="97"/>
@@ -19854,7 +19854,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="471"/>
         <source>Lays out a lone window itself instead of filling the screen</source>
-        <translation>Legt een alleenstaand venster zelf vast in plaats van het scherm te vullen</translation>
+        <translation>Plaatst een enkel venster zelf in plaats van het scherm te vullen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="475"/>
@@ -20243,7 +20243,7 @@
     <message>
         <location filename=".qml-stubs/src/shared/CapabilityBadgeRow.qml.cpp" line="75"/>
         <source>Reflows neighbouring windows when you resize a tiled window</source>
-        <translation>Herschikt aangrenzende vensters wanneer je een getegeld venster van grootte verandert</translation>
+        <translation>Herschikt aangrenzende vensters wanneer u een getegeld venster van grootte verandert</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CapabilityBadgeRow.qml.cpp" line="85"/>
@@ -20604,7 +20604,7 @@
         <location filename=".qml-stubs/src/ui/LayoutPickerContent.qml.cpp" line="492"/>
         <source>Layout is locked. Unlock the current layout before switching to another one.</source>
         <comment>@info:whatsthis layout picker lock overlay</comment>
-        <translation>De indeling is vergrendeld. Ontgrendel de huidige indeling voordat je naar een andere overschakelt.</translation>
+        <translation>De indeling is vergrendeld. Ontgrendel de huidige indeling voordat u naar een andere overschakelt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="93"/>
@@ -21148,7 +21148,7 @@
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="645"/>
         <source>Layout is locked. Switch to this layout before selecting a zone.</source>
         <comment>@info:whatsthis zone selector lock overlay</comment>
-        <translation>De indeling is vergrendeld. Schakel over naar deze indeling voordat je een zone selecteert.</translation>
+        <translation>De indeling is vergrendeld. Schakel over naar deze indeling voordat u een zone selecteert.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="750"/>
@@ -22444,7 +22444,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="193"/>
         <source>The window decides</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation>Het venster beslist</translation>
+        <translation>Het venster bepaalt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
@@ -22648,7 +22648,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>Welke kant de strook op loopt. “Volg de vorm van het scherm” zet de kolommen boven elkaar wanneer het bruikbare gebied hoger is dan breed, en anders naast elkaar. Kolommen verdelen zich nog steeds dwars op de strook, welke kant die ook op loopt.</translation>
+        <translation>Welke kant de strook op loopt. “Volg de vorm van het scherm” laat de strook “Boven elkaar” lopen wanneer het bruikbare gebied hoger is dan breed, en anders “Naast elkaar”. Kolommen verdelen zich nog steeds dwars op de strook, welke kant die ook op loopt.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22744,13 +22744,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation>Invagen</translation>
+        <translation>Infaden</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation>Uitvagen</translation>
+        <translation>Uitfaden</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
@@ -22768,7 +22768,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation>Algemeen</translation>
+        <translation>Globaal</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
@@ -22780,7 +22780,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>Zweven</translation>
+        <translation>Aanwijzen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>

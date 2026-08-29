@@ -331,7 +331,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
-        <translation>Växla flytande fönster</translation>
+        <translation>Växla fönstrets flytande läge</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
@@ -501,12 +501,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Consume or Expel Toward the Strip Start</source>
-        <translation>Uppta eller mata ut mot remsans början</translation>
+        <translation>Ta in eller mata ut mot remsans början</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Consume or Expel Toward the Strip End</source>
-        <translation>Uppta eller mata ut mot remsans slut</translation>
+        <translation>Ta in eller mata ut mot remsans slut</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
@@ -921,7 +921,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="420"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
-        <translation>Gör det fokuserade fönstret flytande. Till skillnad från flytväxlaren panelägger den aldrig tillbaka.</translation>
+        <translation>Gör det fokuserade fönstret flytande. Till skillnad från flytväxlaren panelindelar den aldrig tillbaka.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="423"/>
@@ -1007,7 +1007,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Det vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
+        <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Den vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
@@ -1017,7 +1017,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Det vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
+        <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Den vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
@@ -1967,7 +1967,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="75"/>
         <source>Taskbar &amp; switcher</source>
-        <translation>Aktivitetsfält &amp; växlare</translation>
+        <translation>Aktivitetsfält och växlare</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="178"/>
@@ -2850,7 +2850,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="298"/>
         <source>Set sticky window handling</source>
-        <translation>Ange hantering av klistriga fönster</translation>
+        <translation>Ange hantering av klistrade fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="304"/>
@@ -3338,12 +3338,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="550"/>
         <source>Set focused border color</source>
-        <translation>Ange kantfärg för fokuserad</translation>
+        <translation>Ange kantfärg för fokuserat fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="553"/>
         <source>Set unfocused border color</source>
-        <translation>Ange kantfärg för ofokuserad</translation>
+        <translation>Ange kantfärg för ofokuserat fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="556"/>
@@ -5171,7 +5171,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="30"/>
         <source>Monitor &amp; Layout</source>
-        <translation>Skärm &amp; layout</translation>
+        <translation>Skärm och layout</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="32"/>
@@ -8434,7 +8434,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1090"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
-        <translation>Användaren anger</translation>
+        <translation>Användaruppsättningar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="17"/>
@@ -8655,7 +8655,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="964"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="110"/>
         <source>sticky</source>
-        <translation>klistrig</translation>
+        <translation>klistrad</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="286"/>
@@ -8768,7 +8768,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="234"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="241"/>
         <source>Master ratio</source>
-        <translation>Huvudförhållande</translation>
+        <translation>Huvudfönsterförhållande</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="164"/>
@@ -8828,7 +8828,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="334"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="341"/>
         <source>Master count</source>
-        <translation>Huvudantal</translation>
+        <translation>Antal huvudfönster</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="662"/>
@@ -9954,7 +9954,7 @@
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
-            <numerusform>%n rullningsmall du valt har tagits bort, så de skärmarna behöll sina tidigare mallar. Välj dem igen på översiktssidan.</numerusform>
+            <numerusform>%n rullningsmall du valt har tagits bort, så den skärmen behöll sin tidigare mall. Välj den igen på översiktssidan.</numerusform>
             <numerusform>%n rullningsmallar du valt har tagits bort, så de skärmarna behöll sina tidigare mallar. Välj dem igen på översiktssidan.</numerusform>
         </translation>
     </message>
@@ -10660,7 +10660,7 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
-        <translation>Använd ingen layout på den här skärmen, så att fönster flyter och inget fäster eller panelägger dem</translation>
+        <translation>Använd ingen layout på den här skärmen, så att fönster flyter och inget fäster eller panelindelar dem</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -10850,7 +10850,7 @@
         <location filename=".qml-stubs/src/editor/qml/CanvasMouseHandler.qml.cpp" line="196"/>
         <source>Canvas background, drag to select zones, double-click to create a zone</source>
         <comment>@info:accessibility</comment>
-        <translation>Rityta i bakgrunden, dra för att välja zoner, dubbelklicka för att skapa en zon</translation>
+        <translation>Ritytans bakgrund, dra för att välja zoner, dubbelklicka för att skapa en zon</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ColorPickerRow.qml.cpp" line="84"/>
@@ -11427,7 +11427,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="61"/>
         <source>File &amp; Window</source>
         <comment>@title:group</comment>
-        <translation>Fil &amp; fönster</translation>
+        <translation>Fil och fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="71"/>
@@ -15219,7 +15219,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="217"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="223"/>
         <source>Overshoot</source>
-        <translation>Överslag</translation>
+        <translation>Översläng</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="217"/>
@@ -15387,7 +15387,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="199"/>
         <source>Overshoot (Back)</source>
-        <translation>Överslag (Back)</translation>
+        <translation>Översläng (Back)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="90"/>
@@ -16379,7 +16379,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="114"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="50"/>
         <source>User templates</source>
-        <translation>Egna mallar</translation>
+        <translation>Användarmallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
@@ -18543,22 +18543,22 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="693"/>
         <source>Top-Main</source>
-        <translation>Topp-huvud</translation>
+        <translation>Övre huvuddel</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="700"/>
         <source>Top-Side</source>
-        <translation>Topp-sido</translation>
+        <translation>Övre sidodel</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="707"/>
         <source>Bottom-Main</source>
-        <translation>Botten-huvud</translation>
+        <translation>Nedre huvuddel</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="714"/>
         <source>Bottom-Side</source>
-        <translation>Botten-sido</translation>
+        <translation>Nedre sidodel</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="739"/>
@@ -19434,7 +19434,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="99"/>
         <source>How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>Hur länge överlägget förblir aktiv efter att aktiveringsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
+        <translation>Hur länge överlägget förblir aktivt efter att aktiveringsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
@@ -19572,7 +19572,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="105"/>
         <source>When an unsnapped window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A rule can override this either way, opting individual windows in or out.</source>
-        <translation>När ett ofäst fönster öppnas igen efter en utloggning återgår det till den position och skärm det befann sig på, i stället för där compositorn annars skulle placera det. En regel kan åsidosätta detta åt endera hållet och ställa in enskilda fönster in eller ut.</translation>
+        <translation>När ett ofäst fönster öppnas igen efter en utloggning återgår det till den position och skärm det befann sig på, i stället för där kompositorn annars skulle placera det. En regel kan åsidosätta detta åt båda håll och ta med eller undanta enskilda fönster.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="121"/>
@@ -19583,7 +19583,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
         <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>När du avflyter ett fönster som aldrig har fästs, fäst det i en reservzon (senast använda, sedan första tomma, sedan första zonen) i stället för att lämna det flytande.</translation>
+        <translation>När du tar ett fönster som aldrig har fästs ur flytläge, fäst det i en reservzon (senast använda, sedan första tomma, sedan första zonen) i stället för att lämna det flytande.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20107,7 +20107,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="42"/>
         <source>Prevent windows from being resized below their minimum, which may leave gaps</source>
-        <translation>Förhindra att fönster ändras storlek under sitt minimum, vilket kan lämna mellanrum</translation>
+        <translation>Förhindra att fönster ändrar storlek under sitt minimum, vilket kan lämna mellanrum</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="37"/>
@@ -20154,7 +20154,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
         <source>Sticky window handling</source>
-        <translation>Hantering av klistriga fönster</translation>
+        <translation>Hantering av klistrade fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="151"/>
@@ -20187,7 +20187,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="77"/>
         <source>When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A rule can override this either way, opting individual windows in or out.</source>
-        <translation>När ett opanelindelat (flytande) fönster öppnas igen efter en utloggning återgår det till den position och skärm det befann sig på, i stället för där compositorn annars skulle placera det. En regel kan åsidosätta detta åt endera hållet och ställa in enskilda fönster in eller ut.</translation>
+        <translation>När ett opanelindelat (flytande) fönster öppnas igen efter en utloggning återgår det till den position och skärm det befann sig på, i stället för där kompositorn annars skulle placera det. En regel kan åsidosätta detta åt båda håll och ta med eller undanta enskilda fönster.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="93"/>
@@ -20198,7 +20198,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="126"/>
         <source>Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.</source>
-        <translation>Flytande gör en dragen panel fritt flytande. Ändra ordning behåller den panelindelad och byter in den i släppplatsen.</translation>
+        <translation>Flytande gör en dragen panel fritt flytande. Ändra ordning behåller den panelindelad och byter in den i släpplatsen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="129"/>
@@ -20208,7 +20208,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="130"/>
         <source>Selects how dragging a tiled window on an autotile screen behaves. Float converts it to free-floating and Reorder keeps it tiled, swapping it into the drop slot.</source>
-        <translation>Väljer hur dragning av ett panelindelat fönster på en autopanelindelad skärm beter sig. Flytande gör det fritt flytande och Ändra ordning behåller det panelindelat genom att byta in det i släppplatsen.</translation>
+        <translation>Väljer hur dragning av ett panelindelat fönster på en autopanelindelad skärm beter sig. Flytande gör det fritt flytande och Ändra ordning behåller det panelindelat genom att byta in det i släpplatsen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="144"/>
@@ -21328,7 +21328,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="147"/>
         <source>Titled chips label each window. A segment bar is thinner and shows only how many there are.</source>
         <oldsource>Titled chips name each window. A segment bar is thinner and shows only how many there are.</oldsource>
-        <translation>Namngivna brickor namnger varje fönster. En segmentrad är tunnare och visar bara hur många de är.</translation>
+        <translation>Brickor med titel etiketterar varje fönster. En segmentrad är tunnare och visar bara hur många de är.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="270"/>
@@ -21397,7 +21397,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="294"/>
         <source>How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.</source>
-        <translation>Hur tjock indikatorn är. När den gör plats inuti kolumnen är det exakt så mycket plats den tar. En segmentrad läser bra redan vid några bildpunkter. Namngivna brickor behöver tillräckligt för sina etiketter, vilket vid en vänster- eller högerkant betyder mycket.</translation>
+        <translation>Hur tjock indikatorn är. När den gör plats inuti kolumnen är det exakt så mycket plats den tar. En segmentrad är lättläst redan vid några bildpunkter. Namngivna brickor behöver tillräckligt för sina etiketter, vilket vid en vänster- eller högerkant betyder mycket.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="495"/>

@@ -431,7 +431,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="272"/>
         <source>Cycle Placement Mode</source>
-        <translation>Przełącz tryb rozmieszczenia</translation>
+        <translation>Przełącz tryb rozmieszczania</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="277"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ekranu wzdłuż pasa.</translation>
+        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ustawione dla ekranu wzdłuż pasa.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,7 +846,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ekranu wzdłuż pasa, w odwrotnej kolejności.</translation>
+        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ustawione dla ekranu wzdłuż pasa, w odwrotnej kolejności.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
@@ -866,12 +866,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation>Przełącza aktywne okno przez nastawy rozmiaru ekranu w obrębie jego kolumny.</translation>
+        <translation>Przełącza aktywne okno przez nastawy rozmiaru ustawione dla ekranu w obrębie jego kolumny.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation>Przełącza aktywne okno przez nastawy rozmiaru ekranu w obrębie jego kolumny, w odwrotnej kolejności.</translation>
+        <translation>Przełącza aktywne okno przez nastawy rozmiaru ustawione dla ekranu w obrębie jego kolumny, w odwrotnej kolejności.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
@@ -8443,7 +8443,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1090"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
-        <translation>Ustawienia użytkownika</translation>
+        <translation>Zestawy użytkownika</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="17"/>
@@ -13520,7 +13520,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="293"/>
         <source>Additional smoothing applied on top of noise reduction</source>
-        <translation>Dodatkowe wygładzanie stosowane po redukcji szumów</translation>
+        <translation>Dodatkowe wygładzanie stosowane oprócz redukcji szumów</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="311"/>
@@ -16389,7 +16389,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="441"/>
         <source>Hidden from zone selector. Click to show.</source>
-        <translation>Ukryty w selektorze stref. Kliknij, aby pokazać.</translation>
+        <translation>Ukryty przed selektorem stref. Kliknij, aby pokazać.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="441"/>
@@ -17640,7 +17640,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
-        <translation>Tryb rozmieszczenia</translation>
+        <translation>Tryb rozmieszczania</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="706"/>
@@ -18164,7 +18164,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
-        <translation>Zapisanie zastąpi zestaw reguł, który demon aktualnie ma na dysku, twoimi przygotowanymi zmianami. Wszystkie reguły zmienione tam podczas edycji zostaną utracone.</translation>
+        <translation>Zapisanie zastąpi zestaw reguł, który demon aktualnie ma na dysku, Twoimi przygotowanymi zmianami. Wszystkie reguły zmienione tam podczas edycji zostaną utracone.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
@@ -20186,7 +20186,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="102"/>
         <source>When a floated window reopens, it returns to the position and size it had before, rather than being placed by the compositor. A rule can override this either way, opting individual windows in or out.</source>
-        <translation>Gdy pływające okno otworzy się ponownie, wraca do położenia i rozmiaru sprzed zamknięcia zamiast być rozmieszczone przez kompozytor. Reguła może to nadpisać w obie strony, włączając lub wyłączając pojedyncze okna.</translation>
+        <translation>Gdy pływające okno otworzy się ponownie, wraca do położenia i rozmiaru sprzed zamknięcia zamiast być rozmieszczone przez kompozytora. Reguła może to nadpisać w obie strony, włączając lub wyłączając pojedyncze okna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="118"/>
@@ -20762,7 +20762,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>Master ratio at limit (%1%)</source>
-        <translation>Współczynnik głównego okna osiągnął limit (%1%)</translation>
+        <translation>Proporcja głównego obszaru osiągnęła limit (%1%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
@@ -21058,12 +21058,12 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio → %1%</source>
-        <translation>Współczynnik głównego okna → %1%</translation>
+        <translation>Proporcja głównego obszaru → %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio changed</source>
-        <translation>Współczynnik głównego okna zmieniony</translation>
+        <translation>Proporcja głównego obszaru zmieniona</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
@@ -21252,7 +21252,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
         <source>How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.</source>
-        <translation>Jak szeroka jest kolumna zaraz po otwarciu. Ekran z własnym szablonem układu bierze szerokość z tego szablonu, wraz z szerokością ustawioną dla tego monitora.</translation>
+        <translation>Jak szeroka jest kolumna zaraz po otwarciu. Ekran z własnym szablonem układu bierze szerokość z tego szablonu, nadpisując także szerokość ustawioną dla tego monitora.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="229"/>
@@ -22667,7 +22667,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>Ustal kolejność szablonów przy przełączaniu skrótami klawiszowymi i w wyborze układu. Przeciągaj wiersze lub użyj przycisków strzałek, aby zmienić kolejność.</translation>
+        <translation>Ustal kolejność priorytetów szablonów przy przełączaniu skrótami klawiszowymi i w wyborze układu. Przeciągaj wiersze lub użyj przycisków strzałek, aby zmienić kolejność.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>

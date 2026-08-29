@@ -196,7 +196,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="59"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation>Einrasten, Kacheln und Bildlauf für Fenster unter Wayland-Compositor</translation>
+        <translation>Einrasten, Kacheln und Bildlauf für Fenster unter Wayland-Compositoren</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="72"/>
@@ -412,7 +412,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
-        <translation>Schwebendes Fenster umschalten</translation>
+        <translation>Fenster-Schweben umschalten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
@@ -582,12 +582,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Consume or Expel Toward the Strip Start</source>
-        <translation>Zum Streifenanfang aufnehmen oder ausstoßen</translation>
+        <translation>Zum Streifenanfang aufnehmen oder herauslösen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Consume or Expel Toward the Strip End</source>
-        <translation>Zum Streifenende aufnehmen oder ausstoßen</translation>
+        <translation>Zum Streifenende aufnehmen oder herauslösen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
@@ -1594,14 +1594,14 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="38"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="32"/>
         <source>Shift</source>
-        <translation>Shift</translation>
+        <translation>Umschalt</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="42"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="36"/>
         <source>Ctrl</source>
-        <translation>Ctrl</translation>
+        <translation>Strg</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="136"/>
@@ -1620,17 +1620,17 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="138"/>
         <source>Ctrl + Alt</source>
-        <translation>Ctrl + Alt</translation>
+        <translation>Strg + Alt</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="139"/>
         <source>Ctrl + Shift</source>
-        <translation>Ctrl + Shift</translation>
+        <translation>Strg + Umschalt</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="140"/>
         <source>Alt + Shift</source>
-        <translation>Alt + Shift</translation>
+        <translation>Alt + Umschalt</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="141"/>
@@ -1645,7 +1645,7 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="143"/>
         <source>Ctrl + Alt + Meta</source>
-        <translation>Ctrl + Alt + Meta</translation>
+        <translation>Strg + Alt + Meta</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="154"/>
@@ -1918,7 +1918,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="433"/>
         <source>Opacity: %1%</source>
-        <translation>Deckkraft: %1%</translation>
+        <translation>Deckkraft: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="448"/>
@@ -2012,7 +2012,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="916"/>
         <source>Scroll speed: %1%</source>
-        <translation>Bildlauf-Geschwindigkeit: %1%</translation>
+        <translation>Bildlauf-Geschwindigkeit: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="969"/>
@@ -2150,7 +2150,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="605"/>
         <source>Tint strength: %1%</source>
-        <translation>Tönungsstärke: %1%</translation>
+        <translation>Tönungsstärke: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="614"/>
@@ -2175,7 +2175,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
         <source>Master count (invalid)</source>
-        <translation>Anzahl der Hauptfenster (ungültig)</translation>
+        <translation>Hauptbereich-Anzahl (ungültig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
@@ -2185,7 +2185,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
         <source>Split ratio: %1%</source>
-        <translation>Teilungsverhältnis: %1%</translation>
+        <translation>Teilungsverhältnis: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
@@ -2245,7 +2245,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
         <source>Open at width: %1%</source>
-        <translation>Öffnen mit Breite: %1 %</translation>
+        <translation>Startbreite: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
@@ -2260,7 +2260,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="684"/>
         <source>Window height: %1%</source>
-        <translation>Fensterhöhe: %1%</translation>
+        <translation>Fensterhöhe: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
@@ -2275,7 +2275,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
         <source>Open at height: %1%</source>
-        <translation>Starthöhe: %1%</translation>
+        <translation>Starthöhe: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
@@ -2385,7 +2385,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
         <source>Tab indicator length: %1%</source>
-        <translation>Länge der Reiteranzeige: %1%</translation>
+        <translation>Länge der Reiteranzeige: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
@@ -2451,7 +2451,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
         <source>Strip scroll limit: %1%</source>
-        <translation>Bildlaufgrenze des Streifens: %1%</translation>
+        <translation>Bildlaufgrenze des Streifens: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
@@ -2522,7 +2522,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="851"/>
         <source>Drop indicator fill opacity: %1%</source>
-        <translation>Deckkraft der Füllung der Ablageanzeige: %1%</translation>
+        <translation>Deckkraft der Füllung der Ablageanzeige: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
@@ -2661,12 +2661,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Active opacity: %1%</source>
-        <translation>Deckkraft aktiv: %1%</translation>
+        <translation>Deckkraft aktiv: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="954"/>
         <source>Inactive opacity: %1%</source>
-        <translation>Deckkraft inaktiv: %1%</translation>
+        <translation>Deckkraft inaktiv: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
@@ -7840,14 +7840,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="35"/>
         <source>Span modifier</source>
-        <translation>Modifikatortaste zum Übergreifen</translation>
+        <translation>Zusammenfass-Sondertaste</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
         <source>zone span</source>
-        <translation>Zonenübergreifend</translation>
+        <translation>Zonen zusammenfassen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -7858,7 +7858,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
         <source>span</source>
-        <translation>Übergreifen</translation>
+        <translation>Zusammenfassen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
@@ -8187,14 +8187,14 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1066"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Scrolling Quick Shortcuts</source>
-        <translation>Schnelle Kurzbefehle für Bildlauf</translation>
+        <translation>Bildlauf-Schnelltasten</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1084"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1090"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
-        <translation>Benutzervorgaben</translation>
+        <translation>Benutzersätze</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="17"/>
@@ -8365,13 +8365,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="141"/>
         <source>Unfloat to a zone when there is no previous zone</source>
-        <translation>In eine Zone einrasten, wenn keine vorherige Zone vorhanden ist</translation>
+        <translation>Beim Aufheben des Schwebens in eine Zone einrasten, wenn keine vorherige Zone vorhanden ist</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <source>unfloat</source>
-        <translation>Entschweben</translation>
+        <translation>Schweben aufheben</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
@@ -10194,7 +10194,7 @@
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
-            <numerusform>%n von Ihnen gewählte Bildlauf-Vorlage wurde gelöscht, daher haben diese Bildschirme ihre vorherigen Vorlagen behalten. Wählen Sie sie auf der Übersichtsseite erneut aus.</numerusform>
+            <numerusform>%n von Ihnen gewählte Bildlauf-Vorlage wurde gelöscht, daher hat dieser Bildschirm seine vorherige Vorlage behalten. Wählen Sie sie auf der Übersichtsseite erneut aus.</numerusform>
             <numerusform>%n von Ihnen gewählte Bildlauf-Vorlagen wurden gelöscht, daher haben diese Bildschirme ihre vorherigen Vorlagen behalten. Wählen Sie sie auf der Übersichtsseite erneut aus.</numerusform>
         </translation>
     </message>
@@ -10247,7 +10247,7 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="449"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="545"/>
         <source>A set named &quot;%1&quot; already exists.</source>
-        <translation>Ein Satz mit dem Namen &quot;%1&quot; existiert bereits.</translation>
+        <translation>Ein Satz mit dem Namen „%1“ existiert bereits.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="355"/>
@@ -10256,7 +10256,7 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="617"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="622"/>
         <source>Could not read the set &quot;%1&quot;.</source>
-        <translation>Der Satz &quot;%1&quot; konnte nicht gelesen werden.</translation>
+        <translation>Der Satz „%1“ konnte nicht gelesen werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
@@ -10271,17 +10271,17 @@
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="359"/>
         <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
-        <translation>&quot;%1&quot; wurde von einer neueren Version von PlasmaZones geschrieben.</translation>
+        <translation>„%1“ wurde von einer neueren Version von PlasmaZones geschrieben.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="367"/>
         <source>&quot;%1&quot; does not match this page.</source>
-        <translation>&quot;%1&quot; passt nicht zu dieser Seite.</translation>
+        <translation>„%1“ passt nicht zu dieser Seite.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="371"/>
         <source>Could not apply &quot;%1&quot;.</source>
-        <translation>&quot;%1&quot; konnte nicht angewendet werden.</translation>
+        <translation>„%1“ konnte nicht angewendet werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="439"/>
@@ -10298,7 +10298,7 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
         <source>Could not delete &quot;%1&quot;.</source>
-        <translation>&quot;%1&quot; konnte nicht gelöscht werden.</translation>
+        <translation>„%1“ konnte nicht gelöscht werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="432"/>
@@ -10433,18 +10433,18 @@
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="159"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="178"/>
         <source>Could not save the preset &quot;%1&quot;.</source>
-        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gespeichert werden.</translation>
+        <translation>Die Voreinstellung „%1“ konnte nicht gespeichert werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="261"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
-        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gefunden werden.</translation>
+        <translation>Die Voreinstellung „%1“ konnte nicht gefunden werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="269"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="279"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
-        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gelöscht werden.</translation>
+        <translation>Die Voreinstellung „%1“ konnte nicht gelöscht werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
@@ -10850,7 +10850,7 @@
         <location filename=".qml-stubs/src/editor/qml/CanvasMouseHandler.qml.cpp" line="196"/>
         <source>Canvas background, drag to select zones, double-click to create a zone</source>
         <comment>@info:accessibility</comment>
-        <translation>Arbeitsflächenhintergrund, ziehen, um Zonen auszuwählen, Doppelklick, um eine Zone zu erstellen</translation>
+        <translation>Zeichenflächenhintergrund, ziehen, um Zonen auszuwählen, Doppelklick, um eine Zone zu erstellen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ColorPickerRow.qml.cpp" line="84"/>
@@ -10880,13 +10880,13 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="58"/>
         <source>Add a new zone to the layout. The zone will be created centered on the canvas.</source>
         <comment>@tooltip</comment>
-        <translation>Eine neue Zone zum Layout hinzufügen. Die Zone wird zentriert auf der Arbeitsfläche erstellt.</translation>
+        <translation>Eine neue Zone zum Layout hinzufügen. Die Zone wird zentriert auf der Zeichenfläche erstellt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="82"/>
         <source>Apply Template…</source>
         <comment>@item:inmenu</comment>
-        <translation>Vorlage anwenden…</translation>
+        <translation>Vorlage anwenden …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="90"/>
@@ -11051,7 +11051,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="337"/>
         <source>Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.</source>
         <comment>@tooltip</comment>
-        <translation>Rastereinrasten aktiviert (H:%1% V:%2%). Zonen richten sich an Rasterlinien aus. Klicken, um zu deaktivieren.</translation>
+        <translation>Rastereinrasten aktiviert (H:%1 % V:%2 %). Zonen richten sich an Rasterlinien aus. Klicken, um zu deaktivieren.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="337"/>
@@ -11083,13 +11083,13 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="438"/>
         <source>%1%</source>
         <comment>@info grid interval percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="400"/>
         <source>Horizontal interval: %1%</source>
         <comment>@info</comment>
-        <translation>Horizontales Intervall: %1%</translation>
+        <translation>Horizontales Intervall: %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="404"/>
@@ -11114,7 +11114,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="441"/>
         <source>Vertical interval: %1%</source>
         <comment>@info</comment>
-        <translation>Vertikales Intervall: %1%</translation>
+        <translation>Vertikales Intervall: %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="450"/>
@@ -11126,7 +11126,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="456"/>
         <source>Toggle grid overlay visibility. Shows or hides the visual grid lines on the canvas.</source>
         <comment>@info</comment>
-        <translation>Sichtbarkeit des Raster-Overlays umschalten. Zeigt oder verbirgt die sichtbaren Rasterlinien auf der Arbeitsfläche.</translation>
+        <translation>Sichtbarkeit des Raster-Overlays umschalten. Zeigt oder verbirgt die sichtbaren Rasterlinien auf der Zeichenfläche.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="458"/>
@@ -11192,7 +11192,7 @@
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="65"/>
         <source>Position: %1%, %2%  Size: %3% × %4%</source>
         <comment>@info:accessibility</comment>
-        <translation>Position: %1%, %2%  Größe: %3% × %4%</translation>
+        <translation>Position: %1 %, %2 %  Größe: %3 % × %4 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="77"/>
@@ -11210,7 +11210,7 @@
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="83"/>
         <source>%1%, %2%</source>
         <comment>@info Position as percentages</comment>
-        <translation>%1%, %2%</translation>
+        <translation>%1 %, %2 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="91"/>
@@ -11228,7 +11228,7 @@
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="97"/>
         <source>%1% × %2%</source>
         <comment>@info Size as percentages</comment>
-        <translation>%1% × %2%</translation>
+        <translation>%1 % × %2 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DividerHandle.qml.cpp" line="190"/>
@@ -11409,13 +11409,13 @@
         <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
         <source>Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.</source>
         <comment>@info:accessibility</comment>
-        <translation>Ausgewählte Zone. Position: %1%, %2%, Größe: %3% × %4%. Klicken, um die Auswahl aufzuheben, ziehen zum Verschieben, Griffe zum Ändern der Größe verwenden.</translation>
+        <translation>Ausgewählte Zone. Position: %1 %, %2 %, Größe: %3 % × %4 %. Klicken, um die Auswahl aufzuheben, ziehen zum Verschieben, Griffe zum Ändern der Größe verwenden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
         <source>Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.</source>
         <comment>@info:accessibility</comment>
-        <translation>Zone. Position: %1%, %2%, Größe: %3% × %4%. Klicken zum Auswählen.</translation>
+        <translation>Zone. Position: %1 %, %2 %, Größe: %3 % × %4 %. Klicken zum Auswählen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="49"/>
@@ -11557,7 +11557,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="219"/>
         <source>Shift+Arrows</source>
-        <translation>Shift+Pfeiltasten</translation>
+        <translation>Umschalt+Pfeiltasten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="294"/>
@@ -11665,7 +11665,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="264"/>
         <source>Ctrl+Click</source>
-        <translation>Ctrl+Klick</translation>
+        <translation>Strg+Klick</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="269"/>
@@ -11773,7 +11773,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="367"/>
         <source>Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates zones.</source>
-        <translation>Zoneninformationen werden Bildschirmlesegeräten mitgeteilt. Tab navigiert durch die Oberfläche, Ctrl+Tab durch die Zonen.</translation>
+        <translation>Zoneninformationen werden Bildschirmlesegeräten mitgeteilt. Tab navigiert durch die Oberfläche, Strg+Tab durch die Zonen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="367"/>
@@ -12039,7 +12039,7 @@
         <location filename=".qml-stubs/src/editor/qml/OpacitySliderRow.qml.cpp" line="77"/>
         <source>%1%</source>
         <comment>@label opacity percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="223"/>
@@ -12675,7 +12675,7 @@
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
         <source>Select shader…</source>
         <comment>@action:button</comment>
-        <translation>Shader auswählen…</translation>
+        <translation>Shader auswählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
@@ -12775,7 +12775,7 @@
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
         <source>Loading preview…</source>
         <comment>@info:placeholder</comment>
-        <translation>Vorschau wird geladen…</translation>
+        <translation>Vorschau wird geladen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="939"/>
@@ -15606,8 +15606,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="50"/>
         <source>%n Surface</source>
         <translation>
-            <numerusform>%n Fläche</numerusform>
-            <numerusform>%n Flächen</numerusform>
+            <numerusform>%n Oberfläche</numerusform>
+            <numerusform>%n Oberflächen</numerusform>
         </translation>
     </message>
     <message>
@@ -16154,7 +16154,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="333"/>
         <source>Set a priority order on the Priority page first</source>
-        <translation>Legen Sie zuerst auf der Seite Reihenfolge eine Reihenfolge fest</translation>
+        <translation>Legen Sie zuerst auf der Seite Priorität eine Reihenfolge fest</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="368"/>
@@ -16442,7 +16442,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="120"/>
         <source>Import Layout File…</source>
-        <translation>Layout-Datei importieren…</translation>
+        <translation>Layout-Datei importieren …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="128"/>
@@ -16452,7 +16452,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="135"/>
         <source>Import KZones File…</source>
-        <translation>KZones-Datei importieren…</translation>
+        <translation>KZones-Datei importieren …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="163"/>
@@ -16515,12 +16515,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search layouts…</source>
-        <translation>Layouts suchen…</translation>
+        <translation>Layouts suchen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search algorithms…</source>
-        <translation>Algorithmen suchen…</translation>
+        <translation>Algorithmen suchen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
@@ -16911,7 +16911,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="166"/>
         <source>Profile name…</source>
-        <translation>Profilname…</translation>
+        <translation>Profilname …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="106"/>
@@ -16925,7 +16925,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="331"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="171"/>
         <source>Description (optional)…</source>
-        <translation>Beschreibung (optional)…</translation>
+        <translation>Beschreibung (optional) …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="117"/>
@@ -17353,13 +17353,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="590"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="547"/>
         <source>Choose a monitor…</source>
-        <translation>Bildschirm wählen…</translation>
+        <translation>Bildschirm wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="634"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="500"/>
         <source>Choose a desktop…</source>
-        <translation>Arbeitsfläche wählen…</translation>
+        <translation>Arbeitsfläche wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="775"/>
@@ -17369,24 +17369,24 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="782"/>
         <source>Choose an event…</source>
-        <translation>Ereignis wählen…</translation>
+        <translation>Ereignis wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="894"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
-        <translation>Paket hinzufügen…</translation>
+        <translation>Paket hinzufügen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1012"/>
         <source>Choose a shader…</source>
-        <translation>Shader wählen…</translation>
+        <translation>Shader wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
         <source>Choose an overlay shader…</source>
-        <translation>Overlay-Shader wählen…</translation>
+        <translation>Overlay-Shader wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="382"/>
@@ -17397,7 +17397,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="386"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="207"/>
         <source>Choose…</source>
-        <translation>Wählen…</translation>
+        <translation>Wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="387"/>
@@ -17592,17 +17592,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="582"/>
         <source>Choose an activity…</source>
-        <translation>Aktivität wählen…</translation>
+        <translation>Aktivität wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="628"/>
         <source>Choose a window type…</source>
-        <translation>Fenstertyp wählen…</translation>
+        <translation>Fenstertyp wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="670"/>
         <source>Choose a mode…</source>
-        <translation>Modus wählen…</translation>
+        <translation>Modus wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
@@ -17613,7 +17613,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="706"/>
         <source>Choose an orientation…</source>
-        <translation>Ausrichtung wählen…</translation>
+        <translation>Ausrichtung wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="742"/>
@@ -17623,7 +17623,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="781"/>
         <source>Choose a layout…</source>
-        <translation>Layout wählen…</translation>
+        <translation>Layout wählen …</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
@@ -17652,7 +17652,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <source>Column %1, %2% wide, %3</source>
         <comment>@info accessible column summary; %3 is Stacked or Tabbed</comment>
-        <translation>Spalte %1, %2% breit, %3</translation>
+        <translation>Spalte %1, %2 % breit, %3</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17672,7 +17672,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="493"/>
         <source>%1%</source>
         <comment>@info column width percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="500"/>
@@ -18136,7 +18136,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
         <source>Search rules…</source>
-        <translation>Regeln suchen…</translation>
+        <translation>Regeln suchen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
@@ -18615,13 +18615,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="969"/>
         <source>%1% × %2%</source>
         <comment>@info virtual screen size as width by height percentages</comment>
-        <translation>%1% × %2%</translation>
+        <translation>%1 % × %2 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="971"/>
         <source>%1%</source>
         <comment>@info virtual screen width as a percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="985"/>
@@ -18738,7 +18738,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ImportDropCard.qml.cpp" line="47"/>
         <source>Import…</source>
-        <translation>Importieren…</translation>
+        <translation>Importieren …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ImportDropCard.qml.cpp" line="66"/>
@@ -18804,13 +18804,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="347"/>
         <source>Load Preset…</source>
         <comment>@action:button</comment>
-        <translation>Voreinstellung laden…</translation>
+        <translation>Voreinstellung laden …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="358"/>
         <source>Save Preset…</source>
         <comment>@action:button</comment>
-        <translation>Voreinstellung speichern…</translation>
+        <translation>Voreinstellung speichern …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="569"/>
@@ -19038,7 +19038,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="501"/>
         <source>Search shaders…</source>
         <comment>@info:placeholder shader search</comment>
-        <translation>Shader suchen…</translation>
+        <translation>Shader suchen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="502"/>
@@ -19159,7 +19159,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="321"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="158"/>
         <source>Set name…</source>
-        <translation>Satzname…</translation>
+        <translation>Satzname …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
@@ -19583,7 +19583,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
         <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>Wenn Sie ein Fenster, das nie eingerastet war, wieder andocken, es in eine Ausweichzone einrasten (zuletzt verwendete, dann erste leere, dann die erste Zone), statt es schwebend zu belassen.</translation>
+        <translation>Wenn Sie das Schweben eines Fensters aufheben, das nie eingerastet war, es in eine Ausweichzone einrasten (zuletzt verwendete, dann erste leere, dann die erste Zone), statt es schwebend zu belassen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -19599,7 +19599,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="56"/>
         <source>Tap the span modifier once to start spanning, tap again to stop, instead of holding it</source>
-        <translation>Die Spann-Taste einmal antippen, um das Überspannen zu starten, erneut antippen, um es zu stoppen, statt sie gedrückt zu halten</translation>
+        <translation>Die Zusammenfass-Sondertaste einmal antippen, um das Zusammenfassen zu starten, erneut antippen, um es zu stoppen, statt sie gedrückt zu halten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
@@ -20304,7 +20304,7 @@
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="99"/>
         <source>Select…</source>
         <comment>@action:button</comment>
-        <translation>Auswählen…</translation>
+        <translation>Auswählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="103"/>
@@ -20400,7 +20400,7 @@
         <location filename=".qml-stubs/src/shared/ParameterRow.qml.cpp" line="414"/>
         <source>Choose Image…</source>
         <comment>@action:button</comment>
-        <translation>Bild wählen…</translation>
+        <translation>Bild wählen …</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/ParameterRow.qml.cpp" line="428"/>
@@ -20712,7 +20712,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>Master ratio at limit (%1%)</source>
-        <translation>Hauptbereich-Verhältnis am Limit (%1%)</translation>
+        <translation>Hauptbereich-Verhältnis am Limit (%1 %)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
@@ -21007,7 +21007,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
         <source>Master ratio → %1%</source>
-        <translation>Hauptbereich-Verhältnis → %1%</translation>
+        <translation>Hauptbereich-Verhältnis → %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
@@ -21262,13 +21262,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Spaltenbreiten-Voreinstellung %1%</translation>
+        <translation>Spaltenbreiten-Voreinstellung %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Die Spaltenbreiten-Voreinstellung %1% entfernen</translation>
+        <translation>Die Spaltenbreiten-Voreinstellung %1 % entfernen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
@@ -21292,13 +21292,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Fensterhöhen-Voreinstellung %1%</translation>
+        <translation>Fensterhöhen-Voreinstellung %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Die Fensterhöhen-Voreinstellung %1% entfernen</translation>
+        <translation>Die Fensterhöhen-Voreinstellung %1 % entfernen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
@@ -21610,7 +21610,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation>Weisen Sie Bildlauf-Vorlagen Kurzbefehle zu, um schnell zu wechseln.</translation>
+        <translation>Bildlauf-Vorlagen Tastenkürzeln zuweisen, um schnell zu wechseln.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="31"/>
@@ -22202,7 +22202,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="302"/>
         <source>%1%</source>
         <comment>a whole-number percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
@@ -22242,7 +22242,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
         <source>%1%</source>
         <comment>a preset size as a percentage of the work area</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
@@ -22309,13 +22309,13 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="306"/>
         <source>%1%</source>
         <comment>@info preset percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation>Die Voreinstellung %1% in %2 bearbeiten</translation>
+        <translation>Die Voreinstellung %1 % in %2 bearbeiten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
@@ -22333,7 +22333,7 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation>%1% aus %2 entfernen</translation>
+        <translation>%1 % aus %2 entfernen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
@@ -22480,7 +22480,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
         <source>%1%</source>
         <comment>@info:spinbox width percentage</comment>
-        <translation>%1%</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
@@ -22504,7 +22504,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation>Voreinstellung %1 (%2%)</translation>
+        <translation>Voreinstellung %1 (%2 %)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
@@ -22702,7 +22702,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation>Kurzbefehlübersicht</translation>
+        <translation>Tastenkürzel-Übersicht</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
@@ -22936,7 +22936,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
-        <translation>Lösen</translation>
+        <translation>Ausrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>

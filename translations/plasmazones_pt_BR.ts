@@ -4729,7 +4729,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
         <source>Sticky windows (invalid)</source>
-        <translation>Janelas fixas (inválido)</translation>
+        <translation>Janelas fixas (inválidas)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
@@ -22648,7 +22648,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>Em qual sentido a faixa corre. Acompanhar o formato da tela a faz correr de cima para baixo quando a área utilizável é mais alta que larga, e de lado a lado nos demais casos. As colunas continuam se dividindo no sentido transversal à faixa, seja qual for o sentido dela.</translation>
+        <translation>Em qual sentido a faixa corre. “Acompanhar o formato da tela” a faz correr “De cima para baixo” quando a área utilizável é mais alta que larga, e “De lado a lado” nos demais casos. As colunas continuam se dividindo no sentido transversal à faixa, seja qual for o sentido dela.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
