@@ -1153,6 +1153,14 @@ private Q_SLOTS:
         QCOMPARE(reply.arguments().size(), 1);
         const QVariant raw = reply.arguments().at(0);
 
+        // The next assertion and the last one in this slot pin QT's OWN
+        // behaviour, not PlasmaZones code, and they are here on purpose: this
+        // whole slot exists because the qdbus_cast requirement is a Qt detail
+        // that is easy to "simplify" back to toMap() in a reviewer's head. If
+        // a future Qt made toMap() work over the bus, these would fail and the
+        // right response would be to delete the qdbus_cast requirement, not to
+        // patch the test.
+        //
         // Negative case: the plain accessor loses the whole map.
         QVERIFY(raw.toMap().isEmpty());
 

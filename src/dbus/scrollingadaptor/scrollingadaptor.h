@@ -460,6 +460,11 @@ private:
     std::function<int()> m_viewScrollStep;
     /// The per-context disable gate (setContextGateProvider).
     std::function<bool(const QString&)> m_contextGated;
+    /// The shared entry guard for the screen-scoped verbs: no engine, empty
+    /// screen id, engine not active there, or the context gate refusing.
+    /// Order is load-bearing; the definition says why, and why scrollView and
+    /// focusColumn are deliberately not folded into it.
+    bool refusesScreenVerb(const QString& screenId) const;
     /// Whether the verb must refuse for @p screenId's context: the gate
     /// says so, or no gate is installed (fail-closed, see the setter). Called
     /// AFTER the ownership gate, which is the cheaper test and the one the
