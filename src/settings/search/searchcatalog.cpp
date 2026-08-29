@@ -702,7 +702,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnWidthKind"),
                PhosphorI18n::tr("Default width"),
                {PhosphorI18n::tr("width"), PhosphorI18n::tr("column"), PhosphorI18n::tr("proportion"),
-                PhosphorI18n::tr("pixels")});
+                PhosphorI18n::tr("pixels"), PhosphorI18n::tr("client")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnWidthProportion"),
                PhosphorI18n::tr("Proportion of the screen"),
                {PhosphorI18n::tr("width"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("percent")});
@@ -715,9 +715,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnDisplay"),
                PhosphorI18n::tr("Open new columns as"),
                {PhosphorI18n::tr("tabbed"), PhosphorI18n::tr("tabs"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightKind"),
-               PhosphorI18n::tr("Default height"),
-               {PhosphorI18n::tr("height"), PhosphorI18n::tr("window"), PhosphorI18n::tr("auto")});
+    addSetting(
+        search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightKind"),
+        PhosphorI18n::tr("Default height"),
+        {PhosphorI18n::tr("height"), PhosphorI18n::tr("window"), PhosphorI18n::tr("auto"), PhosphorI18n::tr("client")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightFixed"),
                PhosphorI18n::tr("Fixed height"), {PhosphorI18n::tr("height"), PhosphorI18n::tr("pixels")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightPresetIndex"),

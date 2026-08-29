@@ -31,8 +31,8 @@ QDBusArgument& operator<<(QDBusArgument& arg, const TileRequestEntry& e)
 {
     arg.beginStructure();
     arg << e.windowId << e.x << e.y << e.width << e.height << e.zoneId << e.screenId << e.monocle << e.floating
-        << e.windowedFullscreen << e.stacking << e.scrollEdge << e.viewDelta << e.visualX << e.visualY << e.hasVisualPos
-        << e.tabFrom << e.viewImmediate;
+        << e.windowedFullscreen << e.columnMaximized << e.stacking << e.scrollEdge << e.viewDelta << e.visualX
+        << e.visualY << e.hasVisualPos << e.tabFrom << e.viewImmediate;
     arg.endStructure();
     return arg;
 }
@@ -41,8 +41,8 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, TileRequestEntry& e)
 {
     arg.beginStructure();
     arg >> e.windowId >> e.x >> e.y >> e.width >> e.height >> e.zoneId >> e.screenId >> e.monocle >> e.floating
-        >> e.windowedFullscreen >> e.stacking >> e.scrollEdge >> e.viewDelta >> e.visualX >> e.visualY >> e.hasVisualPos
-        >> e.tabFrom >> e.viewImmediate;
+        >> e.windowedFullscreen >> e.columnMaximized >> e.stacking >> e.scrollEdge >> e.viewDelta >> e.visualX
+        >> e.visualY >> e.hasVisualPos >> e.tabFrom >> e.viewImmediate;
     arg.endStructure();
     return arg;
 }

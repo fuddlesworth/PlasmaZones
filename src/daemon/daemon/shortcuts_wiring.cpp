@@ -420,11 +420,14 @@ void Daemon::connectShortcutSignals()
     connect(m_overlayService.get(), &OverlayService::cheatsheetDismissed, this, [this]() {
         onCheatsheetDismissed();
     });
-    // Live refilter while the sheet is open: catalog changes (rebinds,
-    // external System Settings edits), per-screen mode switches, and the
-    // global autotile feature gate all re-push into the visible slot.
-    // Each refresh re-resolves the mode for the sheet's BOUND screen, so
-    // over-triggering is safe and cheap (no-op when hidden).
+    // Live refilter while the sheet is open on catalog changes (rebinds,
+    // external System Settings edits). Each refresh re-resolves the mode for
+    // the sheet's BOUND screen, so over-triggering is safe and cheap (no-op
+    // when hidden). The other two refilter families are wired elsewhere:
+    // per-screen mode switches in connectLayoutSignals(), and all three
+    // master switches in the consolidated settingsChanged handler
+    // (init_services.cpp), which is one hook instead of three per-mode
+    // xxxEnabledChanged wires that kept missing one.
     connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
         refreshCheatsheetIfVisible();
     });
@@ -433,21 +436,6 @@ void Daemon::connectShortcutSignals()
     // connectLayoutSignals(): this function runs BEFORE
     // initializeUnifiedController() creates the controller, so a connect
     // guarded on m_unifiedLayoutController here would never fire.
-    if (m_settings) {
-        // Tracked handle: m_settings is deliberately excluded from stop()'s
-        // per-sender sweep (its ctor/init connections must survive), so this
-        // per-start connection is severed individually.
-        m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
-            refreshCheatsheetIfVisible();
-        }));
-        // Scrolling needs the same twin now that it is a first-class
-        // cheatsheet mode: the sheet filters its rows on the resolved mode,
-        // and disabling the master switch while it is open otherwise leaves
-        // the Scrolling group on screen for a mode that is no longer live.
-        m_perStartConnections.append(connect(m_settings.get(), &Settings::scrollingEnabledChanged, this, [this]() {
-            refreshCheatsheetIfVisible();
-        }));
-    }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap
         // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the

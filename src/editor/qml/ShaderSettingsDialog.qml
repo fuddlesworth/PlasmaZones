@@ -128,7 +128,12 @@ Kirigami.Dialog {
         var w = Math.max(1, Math.floor(previewBackground.width));
         var h = Math.max(1, Math.floor(previewBackground.height));
         var zones = editorController.zonesForShaderPreview(w, h);
-        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {});
+        // Same width the zones were scaled into: a px-denominated shader
+        // parameter (border width, corner radius) is absolute against the
+        // screen, so on a preview a fraction of its size it has to shrink with
+        // the geometry it decorates or it draws an effect several times too
+        // coarse for the zones beside it.
+        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {}, w);
         if (root.cachedShaderInfoId !== root.pendingShaderId) {
             root.cachedShaderInfoForPreview = editorController.getShaderInfo(root.pendingShaderId);
             root.cachedShaderParamPreamble = editorController.shaderParamPreamble(root.pendingShaderId);
@@ -252,7 +257,13 @@ Kirigami.Dialog {
         if (!editorController)
             return;
 
-        pendingParams = extractDefaults(shaderParams);
+        // Delegate so the lock handling lives in one place, beside
+        // computeRandomized's. `extractDefaults` stays a pure schema-default
+        // extractor because its other caller, initializePendingParamsForShader,
+        // runs when the user picks a DIFFERENT shader — preserving "current"
+        // values there would carry the previous shader's settings across on
+        // any id that happens to collide.
+        pendingParams = paramEditor.computeDefaults();
     }
 
     function randomizeParameters() {
@@ -575,10 +586,12 @@ Kirigami.Dialog {
                 lockedParams: root.lockedParams
                 enableLocking: true
                 enableRandomize: true
-                // This dialog has its own "Defaults" button in the footer
-                // button row, so suppress the editor's header reset to avoid a
-                // duplicate (same pattern as ShaderBrowserDetailDialog).
-                enableReset: false
+                // Reset lives in the shared editor's header beside lock-all and
+                // randomize, as it does everywhere else ParameterEditor is
+                // used. This dialog used to suppress it in favour of its own
+                // footer "Defaults" button (same pattern the shader browser had
+                // and has since dropped).
+                enableReset: true
                 enableGroups: true
                 enableImage: true
                 onValueChanged: function (id, value) {
@@ -591,6 +604,7 @@ Kirigami.Dialog {
                     root.toggleAllLocks(lock);
                 }
                 onRandomizeRequested: root.randomizeParameters()
+                onResetRequested: root.resetToDefaults()
                 onRequestColorPicker: function (id, name, current) {
                     root.openColorDialog(id, name, current);
                 }
@@ -610,6 +624,8 @@ Kirigami.Dialog {
                             return info && info.presets && info.presets.length > 0;
                         }
                         ToolTip.text: i18nc("@info:tooltip", "Apply a built-in preset")
+                        ToolTip.visible: hovered
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         Accessible.name: i18nc("@action:button", "Presets")
                         Accessible.description: ToolTip.text
                         onClicked: metadataPresetMenu.open()
@@ -717,7 +733,7 @@ Kirigami.Dialog {
                 ]
             }
 
-            // ── Footer (Load/Save preset, Defaults, Apply) ────────────
+            // ── Footer (Load/Save preset, Apply) ──────────────────────
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
@@ -726,6 +742,8 @@ Kirigami.Dialog {
                     text: i18nc("@action:button", "Load Preset")
                     icon.name: "document-open"
                     ToolTip.text: i18nc("@info:tooltip", "Load shader settings from a preset file")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     Accessible.name: text
                     Accessible.description: ToolTip.text
                     onClicked: {
@@ -739,6 +757,8 @@ Kirigami.Dialog {
                     icon.name: "document-save-as"
                     enabled: root.hasShaderEffect
                     ToolTip.text: i18nc("@info:tooltip", "Save current shader settings as a preset file")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     Accessible.name: text
                     Accessible.description: ToolTip.text
                     onClicked: {
@@ -749,15 +769,6 @@ Kirigami.Dialog {
 
                 Item {
                     Layout.fillWidth: true
-                }
-
-                Button {
-                    text: i18nc("@action:button", "Defaults")
-                    icon.name: "edit-undo"
-                    visible: root.shaderParams.length > 0
-                    Accessible.name: i18nc("@action:button", "Defaults")
-                    Accessible.description: i18n("Reset every shader parameter to its default value")
-                    onClicked: root.resetToDefaults()
                 }
 
                 Button {

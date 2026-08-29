@@ -17,8 +17,9 @@
 // own contentOpacity parameter fades the window content so the rippled
 // backdrop shows on opaque windows; a theme's own translucent pixels reveal
 // it the same way with no parameter involved.
-// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
-// the pane degrades to a faint tint slab with the same corner rounding.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pane degrades to a faint tint slab with the same
+// corner rounding.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
@@ -48,7 +49,10 @@ vec4 pSurface(vec2 uv) {
         // size, so the pattern is DPI-stable and does not stretch with the
         // pane (unlike a frame-normalized uv).
         float sizePx = max(p_rippleSize, 1.0) * max(uSurfaceScale, 0.001);
-        vec2 q = px / sizePx;
+        // Anchored to the frame, not the canvas, so the pattern stays put when
+        // a padding-declaring pack joins or leaves the chain and moves the
+        // canvas origin under it. Mosaic and rain-glass anchor the same way.
+        vec2 q = (px - uSurfaceFrameTopLeft) / sizePx;
         float t = iTime * max(p_rippleSpeed, 0.0);
 
         // Central-difference gradient of the height field. The epsilon is a
@@ -77,7 +81,8 @@ vec4 pSurface(vec2 uv) {
         // the glint never brightens the cleared off-capture margin.
         float slope = length(grad);
         if (slope > 0.0001) {
-            float facing = clamp(dot(grad / slope, vec2(-0.6, 0.8)), 0.0, 1.0);
+            // px space is top-down, so up-left is negative in BOTH components.
+            float facing = clamp(dot(grad / slope, vec2(-0.6, -0.8)), 0.0, 1.0);
             float glint = pow(facing * min(slope, 1.0), 2.0) * clamp(p_highlightStrength, 0.0, 1.0);
             lit += glint * g.a;
         }

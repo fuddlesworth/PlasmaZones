@@ -104,9 +104,10 @@ PhosphorAudio::SpectrumOptions EditorController::audioOptions() const
     return opts;
 }
 
-QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const
+QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                    int previewWidth) const
 {
-    return m_shaderPreview->translateShaderParams(shaderId, params);
+    return m_shaderPreview->translateShaderParams(shaderId, params, previewWidth);
 }
 
 bool EditorController::saveShaderPreset(const QString& filePath, const QString& shaderId,

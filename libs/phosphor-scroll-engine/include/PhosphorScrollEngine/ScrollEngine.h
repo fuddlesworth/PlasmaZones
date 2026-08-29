@@ -24,6 +24,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -237,7 +238,22 @@ public:
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
-    void toggleMaximizeColumn(const QString& screenId);
+    /// Toggle the maximized state of a column on @p screenId. An empty
+    /// @p windowId targets the ACTIVE column (the keyboard shortcut's
+    /// meaning); a named window targets the column owning it and refuses when
+    /// the strip does not hold it, which is what the compositor's maximize
+    /// interception needs — that request names one window and the active
+    /// column is frequently a different one.
+    ///
+    /// Answers whether the strip actually CHANGED. The compositor's maximize
+    /// interception needs that distinction and not merely "the call arrived":
+    /// it no longer writes KWin's maximize bit before dispatching, so a request
+    /// this engine quietly does nothing with (no state for the context, an
+    /// empty strip, a window no column holds, a column the verb refuses) leaves
+    /// the window holding the state the USER asked for with no batch coming to
+    /// impose the strip's answer. False is the effect's cue to put the bit back
+    /// where the engine last had it.
+    bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -250,9 +266,10 @@ public:
     void minimizeColumnWidth(const QString& screenId);
     /// Every column on the screen back to the context's default width and
     /// display, every window back to the even split: the scrolling half of
-    /// the mode-neutral Retile shortcut. Widths are left as they are when
-    /// the context's default is "the client decides" and no rule pins one
-    /// (see resetDefaultColumnWidthFor); display and heights still reset.
+    /// the mode-neutral Retile shortcut. Either extent is left as it is when
+    /// the context's default for it is "the client decides" and no rule pins
+    /// one (see resetDefaultColumnWidthFor and resetDefaultWindowHeightFor);
+    /// the display always resets.
     /// Re-applies the layout the way the autotile and snapping halves
     /// re-apply theirs.
     void resetStripToDefaults(const QString& screenId);
@@ -709,6 +726,24 @@ public:
     /// already have a stash entry or a live populated state are skipped, so
     /// a second load cannot re-stage stale structure over adopted windows.
     void restoreStripState(const QJsonObject& state);
+    /// TEST SEAM: shorten (or lengthen) the cross-session fuzzy-claim grace
+    /// window — the period after a stash is staged, or its screen re-enters
+    /// scrolling, during which an appId-only claim may take a dead sibling's
+    /// slot. See StashedStrip::fuzzyClaimWindow.
+    ///
+    /// It exists because the grace is measured by a QElapsedTimer against a
+    /// 60 s constant, which leaves the REFUSAL half of the contract — the
+    /// half that stops a stash hijacking every same-app window the user opens
+    /// for the rest of the session — reachable in a test only by sleeping a
+    /// minute. Passing 0 expires the window immediately, so a test can assert
+    /// a late arrival opens fresh instead of adopting a stashed slot.
+    ///
+    /// Production never calls this; the constructor's seed is the shipped
+    /// value.
+    void setFuzzyClaimGraceMsForTesting(qint64 graceMs)
+    {
+        m_fuzzyClaimGraceMs = graceMs;
+    }
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
     void refreshConfigFromSettings() override;
     void retile(const QString& screenId = QString()) override;
@@ -857,8 +892,12 @@ public:
 
 Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
-    /// as AutotileEngine::windowsTiled ({windowId, screenId, x, y, width,
-    /// height}). Float transitions are signalled separately via
+    /// as AutotileEngine::windowsTiled. The field list and semantics live
+    /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
+    /// which is the single source: an inline copy here named a handful of
+    /// the fields actually emitted and drifted every time one was added,
+    /// which is why no count is repeated here. Float transitions are
+    /// signalled separately via
     /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same
@@ -1142,6 +1181,19 @@ private:
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
+    /// Queue-time stamps for m_pendingSelfActivations (latest-wins per id),
+    /// against m_selfActivationClock. An echo the compositor genuinely
+    /// DROPPED (show desktop, focus-stealing prevention) leaves its entry
+    /// stranded — there is no reclaim-on-genuine-focus any more (see the
+    /// windowFocused drain for why that reclaim was wrong) — and without an
+    /// expiry the stranded entry ate the FIRST real click on that window.
+    /// An entry older than kSelfActivationEchoExpiryMs cannot be a live echo
+    /// (echo round trips are milliseconds), so the drain treats a match on
+    /// one as genuine focus. Entries are unstamped/removed at every sweep
+    /// that removes them from the list.
+    QHash<QString, qint64> m_pendingSelfActivationQueuedAt;
+    QElapsedTimer m_selfActivationClock;
+    static constexpr qint64 kSelfActivationEchoExpiryMs = 10000;
     /// The one arrival whose focus an `openFocused = false` rule declined, held
     /// until its compositor focus report arrives and is consumed exactly once.
     ///
@@ -1222,6 +1274,35 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
+    /// the animation duration): a close-triggered reflow — and the
+    /// focus-adoption reflow the compositor's successor pick fires
+    /// milliseconds later — waits this long so the closing window's
+    /// disappear animation plays over an unchanged strip before the
+    /// neighbours move in. 0 (the no-IScrollSettings seed and the
+    /// animations-off answer) keeps the historical immediate reflow.
+    /// User-driven verbs deliberately bypass the hold: a deliberate action
+    /// mid-animation outranks the settle, and the scheduled flush behind it
+    /// is an idempotent re-apply. windowOpened bypasses it too, accepted
+    /// knowingly: an arrival must place itself (and usually takes focus, so
+    /// its apply cannot wait), which means a close-then-immediate-open chain
+    /// (a file dialog handing back to its parent) reflows over the corpse as
+    /// it always did — best-effort degradation to the pre-hold behaviour,
+    /// not a correctness bug. Only windowClosed and windowFocused defer.
+    /// scheduleRetileForScreen's queued apply is outside the hold for the
+    /// same reason and on the same terms: a config/per-screen change or a
+    /// min-size report landing mid-hold reflows on its own turn.
+    int m_closeReflowDelayMs = 0;
+    /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
+    /// guard that keeps one timer per screen however many closes land inside
+    /// one hold window (each close pushes the deadline; the flush lambda
+    /// reschedules itself for the remainder instead of applying early).
+    QHash<QString, qint64> m_closeReflowHoldUntil;
+    QSet<QString> m_closeReflowFlushScheduled;
+    QElapsedTimer m_closeReflowClock;
+    void startCloseReflowHold(const QString& screenId);
+    bool deferForCloseReflowHold(const QString& screenId);
+    void scheduleCloseReflowFlush(const QString& screenId);
     /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
     /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
     /// is false: tiling defaults this on because a sole window fills the screen
@@ -1233,6 +1314,11 @@ private:
     bool m_smartGaps = false;
     /// Default height intent for fresh tiles (Auto = historical even split).
     WindowHeight m_defaultWindowHeight{};
+    /// "Client decides" default height: a fresh tile joins its column at the
+    /// client's own CROSS extent. The GLOBAL verdict only, on the same terms
+    /// as m_defaultWidthClientDecides — open-path consumers must ask
+    /// effectiveHeightClientDecides so a per-screen kind answers for itself.
+    bool m_defaultHeightClientDecides = false;
     /// Where a fresh open's column enters the strip (config default; the
     /// openColumnPlacement rule and remembered positions outrank it).
     ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
@@ -1252,6 +1338,17 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
+    /// Windows whose last EMITTED batch entry carried columnMaximized. The
+    /// column twin of m_lastAppliedWindowedFs and its own leg of the same
+    /// emit-on-change gate, for the same reason and one more: this flag can
+    /// flip with every committed rect byte-identical. It is derived partly
+    /// from extentPinnedByMinimum, which moves when a client reports a
+    /// minimum anywhere in [resolveColumnWidthPx(width), workAreaMain] on an
+    /// already-full-width column, or when respectMinimumSize is toggled over
+    /// one. Without this leg the batch is suppressed and the compositor keeps
+    /// asserting a maximize the engine has dropped. Maintained wherever
+    /// m_lastAppliedWindowedFs is.
+    QSet<QString> m_lastAppliedColumnMaximized;
     /// Which screen edge each currently-parked window went out by — one of
     /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
     /// the screen's strip axis: a horizontal strip goes out left/right, a
@@ -1345,6 +1442,11 @@ private:
     /// ScrollStashTypes.h (hoisted for the file-size ceiling).
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
+    /// How long StashedStrip::fuzzyClaimWindow stays open, in ms. Seeded from
+    /// kFuzzyClaimGraceMs in the constructor (the constant lives in the
+    /// engine-internal enginelimits.h, which this exported header must not
+    /// pull in) and only ever changed by the test seam below.
+    qint64 m_fuzzyClaimGraceMs;
     /// Ever-increasing stamp source for StashedStrip::sequence.
     quint64 m_stashSequence = 0;
     /// Screens with a retile queued this event-loop pass (coalescing).
@@ -1362,7 +1464,7 @@ private:
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
     /// screen (layoutParamsForScreen resolves eleven per relayout, and the open
-    /// path four more) fetches the override map ONCE and threads it through
+    /// path five more) fetches the override map ONCE and threads it through
     /// instead of re-looking it up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
@@ -1417,7 +1519,6 @@ private:
     /// effectiveDefaultColumnWidth falls through. The open path must use this
     /// rather than the raw global, or a monitor scoped TO ClientDecides reads
     /// as "pinned to a width" and gets the opposite of what the user chose.
-    bool effectiveWidthClientDecides(const QString& screenId) const;
     bool effectiveWidthClientDecides(const QVariantMap& overrides) const;
     /// The width resetStripToDefaults hands the strip for the screen whose
     /// resolved @p overrides these are: params.defaultColumnWidth (which
@@ -1444,6 +1545,40 @@ private:
     /// Vocabulary-taking overload — the height twin of the width one above.
     WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea, StripAxis axis,
                                               const QList<qreal>& presetHeights) const;
+    /// The RULE channel's bare default-height fraction, when the map carries
+    /// one that clears the range effectiveDefaultWindowHeight accepts. The
+    /// height twin of ruleColumnWidthFraction, and it exists for the same
+    /// reason: the open path's ClientDecides gate must ask what the RESOLVER
+    /// answers, not whether the key is present, or an out-of-range rule value
+    /// would suppress the client-sized open while contributing no height.
+    static std::optional<qreal> ruleWindowHeightFraction(const QVariantMap& overrides);
+    /// Whether "the client decides" is the EFFECTIVE default-height verdict
+    /// for the screen these @p overrides resolve: a per-screen kind override
+    /// answers for itself, an absent or unrecognised one defers to the cached
+    /// global flag. The width twin's doc carries the full rationale.
+    bool effectiveHeightClientDecides(const QVariantMap& overrides) const;
+    /// Commit @p windowId's own cross extent as its tile height intent, when
+    /// the effective default-height verdict for @p overrides is "the client
+    /// decides" and no rule height pinned one. The single definition of that
+    /// commit: the open path runs it for a fresh column and the unfloat path
+    /// for a window that was floated at open (which never held a tile, so it
+    /// has no remembered height to restore and the fresh insert seeds only
+    /// the concrete Auto fallback the kind leaves behind).
+    ///
+    /// Silent no-op when the verdict is no, a rule pinned a height, no
+    /// tracker is wired, the window has no free-geometry record, or the
+    /// extents are unusable — the tile then keeps the context default. Bounds
+    /// the intent to @p params' work-area cross extent, because the answer is
+    /// PERSISTED pixels and an intent no column can hold is one the relayout
+    /// re-clamps on every pass. Returns whether an intent was written.
+    bool commitClientDecidedHeight(ScrollStrip& strip, const QString& windowId, const QString& screenId,
+                                   const QVariantMap& overrides, const ScrollLayoutParams& params);
+    /// The height resetStripToDefaults hands the strip: the even split, or
+    /// std::nullopt when the effective verdict is "the client decides" and no
+    /// rule pins a height, in which case the tiles keep the heights they have.
+    /// The height twin of resetDefaultColumnWidthFor. No params: the reset
+    /// height is the even split, which needs no work area to resolve.
+    std::optional<WindowHeight> resetDefaultWindowHeightFor(const QVariantMap& overrides) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
     ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;
     /// Per-property override, so a rule that sets only the position leaves the

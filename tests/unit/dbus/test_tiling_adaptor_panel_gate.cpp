@@ -20,6 +20,7 @@
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
@@ -33,10 +34,122 @@ namespace {
 /// is only emitted from within PhosphorScreens::ScreenManager's D-Bus panel callback in
 /// production; for unit tests we need a way to simulate that moment without
 /// running a real Plasma shell.
-void emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
+bool emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
 {
-    QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
+    // The bool is RETURNED, and every call site QVERIFYs it. Invoking by
+    // string name means a rename is a runtime warning rather than a compile
+    // error, and one slot here asserts a count that is already zero before the
+    // emit — so it would pass against a helper that fired nothing at all.
+    return QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
 }
+
+/// Records DISPATCH ORDER and the arrival-burst brackets.
+///
+/// The engines the rest of this file uses answer set membership
+/// (isWindowTracked), which cannot tell "a before b" from "b before a" — so
+/// reversing the replay loop in flushPendingWindowOpens failed nothing in the
+/// repo, even though deferUntilPanelReady's own comment calls replay order
+/// load-bearing ("replay order decides strip column order and master
+/// assignment"). Same for the beginArrivalBurst/endArrivalBurst pair: deleting
+/// either bracket was invisible, because nothing observed them.
+///
+/// A recorder rather than a real engine on purpose. The property under test
+/// belongs to the ADAPTOR (what it dispatches, in what order, inside which
+/// brackets), and routing it through a placement engine would make the
+/// assertion depend on that engine's own ordering rules as well.
+class RecordingEngine : public PhosphorEngine::IPlacementEngine
+{
+public:
+    QStringList dispatched;
+    int burstDepth = 0;
+    int maxBurstDepth = 0;
+    int burstsOpened = 0;
+    /// Windows dispatched while NO burst bracket was open. The brackets exist
+    /// to suppress partial intermediates, so a dispatch outside them is
+    /// exactly the visual glitch they were added to prevent.
+    QStringList dispatchedOutsideBurst;
+
+    bool isActiveOnScreen(const QString&) const override
+    {
+        return true;
+    }
+    void windowOpened(const QString& windowId, const QString&, int, int) override
+    {
+        dispatched.append(windowId);
+        if (burstDepth == 0) {
+            dispatchedOutsideBurst.append(windowId);
+        }
+    }
+    void beginArrivalBurst() override
+    {
+        ++burstDepth;
+        ++burstsOpened;
+        maxBurstDepth = std::max(maxBurstDepth, burstDepth);
+    }
+    void endArrivalBurst() override
+    {
+        --burstDepth;
+    }
+    void windowClosed(const QString&) override
+    {
+    }
+    void windowFocused(const QString&, const QString&) override
+    {
+    }
+    void toggleWindowFloat(const QString&, const QString&) override
+    {
+    }
+    void setWindowFloat(const QString&, bool, const QString&) override
+    {
+    }
+    void focusInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void moveFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void swapFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void moveFocusedToPosition(int, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void rotateWindows(bool, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void reapplyLayout(const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void snapAllWindows(const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void cycleFocus(bool, const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void pushToEmptyZone(const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void restoreFocusedWindow(const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void toggleFocusedFloat(const PhosphorEngine::NavigationContext&) override
+    {
+    }
+    void saveState() override
+    {
+    }
+    void loadState() override
+    {
+    }
+    PhosphorEngine::IPlacementState* stateForScreen(const QString&) override
+    {
+        return nullptr;
+    }
+    const PhosphorEngine::IPlacementState* stateForScreen(const QString&) const override
+    {
+        return nullptr;
+    }
+};
 } // namespace
 
 class TestTilingAdaptorPanelGate : public QObject
@@ -44,6 +157,168 @@ class TestTilingAdaptorPanelGate : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    // -------------------------------------------------------------------------
+    // The deferral queue's DROP path. A window that opens behind the panel gate
+    // and closes before the gate lifts must never reach an engine.
+    //
+    // Untested until now, and the sibling close-sweep case covers the OTHER
+    // queue (the mid-flip park), so deleting removePendingOpen's call site left
+    // the whole suite green. What it guards is a phantom tile for the session:
+    // the flush would dispatch a dead window into the engine, and there is no
+    // later windowClosed to shed it, because the close already happened before
+    // the dispatch. A splash screen or a session-restore dialog that opens and
+    // closes inside the startup window is exactly this shape.
+    //
+    // The assertion is on ENGINE TRACKING, not on the queue count: every other
+    // deferral case here pins only that the queue drained, which cannot tell a
+    // dispatch from a drop.
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Replay ORDER out of the deferral queue, and the burst brackets around it.
+    //
+    // deferUntilPanelReady's comment calls replay order load-bearing: it
+    // "decides strip column order and master assignment". Nothing pinned it.
+    // Reversing the loop over toFlush passed the entire repo, because every
+    // other slot here observes set membership, which is order-blind.
+    //
+    // The brackets are pinned in the same slot rather than a separate one
+    // because they are a property OF this dispatch: every deferred window must
+    // land inside one bracket pair, not merely somewhere near them. Asserting
+    // "begin was called" would survive deleting the loop that calls it per
+    // engine, and asserting a count would survive the pair being emitted
+    // after the dispatches.
+    // -------------------------------------------------------------------------
+    void testDeferredOpensReplayInArrivalOrderInsideOneBurst()
+    {
+        PhosphorScreens::ScreenManager mgr;
+        RecordingEngine engine;
+        QObject adaptorParent;
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        QVERIFY2(!mgr.isPanelGeometryReady(), "the gate must start closed, or nothing defers");
+
+        // Deliberately NOT alphabetical: sorted ids would pass against an
+        // implementation that sorted the queue, and reverse-alphabetical would
+        // pass against one that reversed it. This order is neither.
+        const QStringList arrival{QStringLiteral("mid|2"), QStringLiteral("first|1"), QStringLiteral("zed|3"),
+                                  QStringLiteral("alpha|4")};
+        for (const QString& id : arrival) {
+            adaptor.windowOpened(id, QStringLiteral("HDMI-1"), 0, 0);
+        }
+        QCOMPARE(adaptor.pendingWindowOpensCount(), arrival.size());
+        QVERIFY2(engine.dispatched.isEmpty(), "nothing may dispatch while the gate is closed");
+
+        QVERIFY(emitPanelGeometryReady(mgr));
+        QCoreApplication::processEvents();
+
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QCOMPARE(engine.dispatched, arrival);
+        // Every dispatch sat inside a bracket, and the brackets did not nest.
+        QVERIFY2(engine.dispatchedOutsideBurst.isEmpty(),
+                 "a deferred open dispatched outside the arrival burst defeats the bracket");
+        QCOMPARE(engine.burstsOpened, 1);
+        QCOMPARE(engine.maxBurstDepth, 1);
+        QCOMPARE(engine.burstDepth, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // The queue's OVERFLOW valve. The panel query is a D-Bus round trip that
+    // may never answer, so the queue is capped; past the cap an open is
+    // processed against the unreserved screen rect rather than dropped.
+    //
+    // The valve flushes the backlog BEFORE returning false, and that ordering
+    // is the whole point: returning false without draining would put the
+    // newcomer in front of every window that arrived before it, which then
+    // replays behind it on the next flush. A regression that dropped the
+    // flush call would reorder the entire session's startup silently, and
+    // nothing observed it.
+    //
+    // kMaxPendingOpens is a static constexpr with no injection seam, so the
+    // slot queues the real 512 and trips the cap with the next one. The
+    // entries are cheap POD.
+    // -------------------------------------------------------------------------
+    void testPendingOpenOverflowFlushesTheBacklogBeforeTheNewcomer()
+    {
+        PhosphorScreens::ScreenManager mgr;
+        RecordingEngine engine;
+        QObject adaptorParent;
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        QVERIFY2(!mgr.isPanelGeometryReady(), "the gate must start closed, or nothing defers");
+
+        const int cap = adaptor.pendingWindowOpensCapacity();
+        QVERIFY2(cap > 0, "capacity accessor must report the real cap");
+        for (int i = 0; i < cap; ++i) {
+            adaptor.windowOpened(QStringLiteral("q|%1").arg(i), QStringLiteral("HDMI-1"), 0, 0);
+        }
+        QCOMPARE(adaptor.pendingWindowOpensCount(), cap);
+        QVERIFY2(engine.dispatched.isEmpty(), "the queue must fill without dispatching");
+
+        // One more trips the valve.
+        adaptor.windowOpened(QStringLiteral("overflow|new"), QStringLiteral("HDMI-1"), 0, 0);
+
+        // The backlog drained, and the newcomer landed AFTER all of it.
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QCOMPARE(engine.dispatched.size(), cap + 1);
+        QCOMPARE(engine.dispatched.first(), QStringLiteral("q|0"));
+        QCOMPARE(engine.dispatched.at(cap - 1), QStringLiteral("q|%1").arg(cap - 1));
+        QCOMPARE(engine.dispatched.last(), QStringLiteral("overflow|new"));
+    }
+
+    void testDeferredOpenClosedBeforeReady_neverReachesTheEngine()
+    {
+        PhosphorScreens::ScreenManager mgr;
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(&mgr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        QVERIFY2(!mgr.isPanelGeometryReady(), "the gate must start closed, or nothing defers");
+
+        adaptor.windowOpened(QStringLiteral("splash|1"), QStringLiteral("HDMI-1"), 0, 0);
+        adaptor.windowOpened(QStringLiteral("kept|2"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 2);
+
+        adaptor.windowClosed(QStringLiteral("splash|1"));
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
+
+        QVERIFY(emitPanelGeometryReady(mgr));
+        QCoreApplication::processEvents();
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QVERIFY2(!engine.isWindowTracked(QStringLiteral("splash|1")),
+                 "a window closed before the gate lifted must not be dispatched");
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("kept|2")),
+                 "the surviving open must still dispatch, or the drop proved nothing");
+    }
+
+    // -------------------------------------------------------------------------
+    // The NO-GATE fast path: an open reaches its engine immediately rather than
+    // queueing. Every other deferral case here relies on the gate being CLOSED,
+    // so nothing pinned that an ungated open dispatches at all — and the
+    // baseline case above, which does use a null manager, has no engine
+    // claiming the screen, so it can only assert that nothing queued.
+    //
+    // This drives the `!m_screenManager` half of the bail. The other half,
+    // isPanelGeometryReady() answering TRUE, is NOT reachable from this
+    // harness: the flag is set inside ScreenManager's own Plasma D-Bus
+    // callback, and the test helper can only emit the notification signal, not
+    // flip the state behind it. Stating that rather than leaving a
+    // half-covered predicate looking fully covered.
+    // -------------------------------------------------------------------------
+    void testNoPanelGate_dispatchesImmediatelyWithoutQueueing()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        adaptor.windowOpened(QStringLiteral("app|now"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("app|now")),
+                 "with no panel gate an open must dispatch immediately rather than queue");
+    }
 
     // -------------------------------------------------------------------------
     // Baseline: with no ScreenManager injected, windowOpened must not force a
@@ -189,7 +464,7 @@ private Q_SLOTS:
 
         // Fire panelGeometryReady. The adaptor's auto-connection fires the flush
         // slot on the same thread, synchronously.
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
 
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
@@ -217,7 +492,7 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("ok|uuid"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
 
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
 
@@ -244,7 +519,7 @@ private Q_SLOTS:
         adaptor.windowsOpenedBatch(batch);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 5);
 
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
         // The contract pinned here is only that the flush drained the queue.
     }
@@ -259,12 +534,16 @@ private Q_SLOTS:
     // ensurePipeline()'s empty check, even though the comment here used to claim
     // it did — that claim was false in both directions. The count is already 0
     // before emitPanelGeometryReady runs (clearEngine cleared it), so the
-    // closing QCOMPARE would pass with the empty check deleted outright; and the
-    // check cannot be reached with a non-empty queue at all, because
-    // windowOpened calls ensurePipeline BEFORE deferUntilPanelReady, so nothing
-    // can enqueue once the engine list is empty. ensurePipeline's empty branch
-    // on the flush path is therefore unreachable-by-construction defence, and
-    // the reachable contract is the drain plus crash-freedom.
+    // closing QCOMPARE would pass with the empty check deleted outright.
+    //
+    // The branch cannot be reached with a non-empty queue, but the ordering
+    // argument alone did not establish that. windowOpened calling
+    // ensurePipeline before deferUntilPanelReady stops anything enqueueing
+    // once the list is already empty; it says nothing about entries queued
+    // BEFORE the list was emptied. That hole was real until
+    // setLifecycleEngines({}) started clearing the deferral queue as well as
+    // the parked one — both are equally un-retryable without a pipeline. The
+    // reachable contract this slot pins is still the drain plus crash-freedom.
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {
@@ -284,7 +563,7 @@ private Q_SLOTS:
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
 
         // And a late flush against the cleared adaptor must not crash.
-        emitPanelGeometryReady(mgr);
+        QVERIFY(emitPanelGeometryReady(mgr));
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
 
@@ -359,7 +638,7 @@ private Q_SLOTS:
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
             "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
-            "\"windowedFullscreen\":true,\"tabFrom\":\"a|1\"},"
+            "\"windowedFullscreen\":true,\"columnMaximized\":true,\"tabFrom\":\"a|1\"},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
@@ -396,6 +675,23 @@ private Q_SLOTS:
         // absence on a|1 reads false.
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
+        // columnMaximized rides the same JSON hop, and needs pinning for the
+        // same reason the two above do: a typo or a dropped parse line yields
+        // false with no error.
+        //
+        // What this pins is the CONSUMER half only. The fixture below hand-
+        // writes its own JSON, so it is a third literal rather than the
+        // engine's — a rename in engine_apply.cpp's producer would leave this
+        // green. That side is covered by the engine suite, which reads the key
+        // out of the engine's real emitted JSON. Neither compares the two
+        // literals, so a coordinated rename passes both; sharing one constant
+        // between producer and consumer is what would close that.
+        // Paired with windowedFullscreen on b|2 deliberately: that combination
+        // is explicitly legal (they drive different compositor state, and a
+        // maximized column can hold a windowed-fullscreen tile), so this also
+        // pins that validationError does not reject the pair.
+        QCOMPARE(requests.at(1).columnMaximized, true);
+        QCOMPARE(requests.at(0).columnMaximized, false);
         // tabFrom parses through the same JSON hop on a tiled entry (key
         // spelling pinned against the engine producer), and its absence on
         // a|1 reads empty.

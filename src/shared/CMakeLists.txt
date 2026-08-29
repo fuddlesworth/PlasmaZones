@@ -48,12 +48,15 @@ qt_add_qml_module(plasmazones_shared_qml
         LayoutCard.qml
         PopupFrame.qml
         ShaderCompileErrorBanner.qml
+        ShaderPreviewPlaceholder.qml
+        SurfaceDecoration.qml
         StripEmptyState.qml
         ParameterEditor.qml
         ShaderParamsEditor.qml
         ParameterRow.qml
         ParameterSection.qml
         CategoryMenuButton.qml
+        DecorationPreviewCard.qml
         ZoneColorDefaults.qml
         ZonePreview.qml
         ZoneShaderRenderer.qml

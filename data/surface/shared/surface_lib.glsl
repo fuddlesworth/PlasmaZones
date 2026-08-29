@@ -28,8 +28,10 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 }
 
 // True before a host has wired a real frame rect (uSurfaceFrameSize == 0). The
-// SDF would otherwise collapse to "edge everywhere"; packs pass content through
-// untouched in this state.
+// SDF would otherwise collapse to "edge everywhere", so the border and glow
+// family test this and pass content through untouched. The backdrop-slab packs
+// do NOT: they fall through to a zero-extent frame, whose mask collapses to
+// nothing, so the pane simply does not draw.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }
@@ -147,14 +149,19 @@ struct SurfaceSlab {
 };
 SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     SurfaceSlab s;
-    s.window = surfaceTexel(uv);
     s.px = surfacePixel(uv);
     s.fs = frameSdf(s.px, cornerRadiusPx);
     s.mask = frameMask(s.fs.d);
+    // The window sample is clipped to the same rounded frame as the pane. The
+    // capture is square-cornered (the pack owns the corner radius), so an
+    // unmasked window pokes its square corners past the rounded slab at any
+    // contentOpacity below 1 — and at 1.0 the radius parameter does nothing.
+    // Premultiplied, so one multiply rounds both colour and coverage.
+    s.window = surfaceTexel(uv) * s.mask;
     return s;
 }
 
-// The backdrop-slab family's shared no-backdrop fallback (daemon hosts, where
+// The backdrop-slab family's shared no-backdrop fallback (any host where
 // uHasBackdrop is 0): a faint premultiplied tint slab at 0.35 * tintStrength,
 // clipped to the slab `mask`. Only packs that use exactly this constant (blur /
 // glass / rippled-glass) call it; siblings with a different fallback keep theirs.
@@ -170,7 +177,14 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
-    float t = max(d, 0.0) / reach;
+    // reach is caller-supplied and a zero would make this inf, then NaN through
+    // exp(), and a NaN propagates through the whole composite rather than
+    // showing up as one bad pixel. Defensive rather than live: both in-tree
+    // callers (glow, shadow) already floor it at 1.0, so this changes no
+    // output today. It does NOT make a zero reach wholly safe either — the
+    // smoothstep below still collapses to edge0 == edge1 there — so a caller
+    // that stops flooring needs both guarded, not just this one.
+    float t = max(d, 0.0) / max(reach, 1e-3);
     float halo = exp(-4.0 * t * t);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
@@ -184,10 +198,19 @@ vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
 }
 
-// px-space (top-down) vector -> canvas UV offset. vTexCoord is Y-up on the
-// compositor, so this flips Y; used for backdrop refraction offsets.
+// px-space (top-down) vector -> canvas UV offset, used for backdrop
+// refraction offsets. The flip is per-runtime for the same reason
+// surfacePixel's is: px space is top-down on both hosts, but the compositor
+// reaches it from a Y-up vTexCoord while the daemon's is already Y-down. A
+// vector converted with the wrong sign refracts the backdrop the opposite way
+// vertically, which only became reachable on the daemon once a host could
+// raise uHasBackdrop by binding a stand-in backdrop.
 vec2 pxToUv(vec2 v) {
+#ifdef PLASMAZONES_KWIN
     return vec2(v.x, -v.y) / max(uSurfaceSize, vec2(1.0));
+#else
+    return v / max(uSurfaceSize, vec2(1.0));
+#endif
 }
 
 // Normalized perimeter angle in [-0.5, 0.5) around the frame centre, aspect-

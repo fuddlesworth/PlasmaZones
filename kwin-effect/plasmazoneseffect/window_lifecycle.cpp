@@ -22,6 +22,7 @@
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -451,6 +452,39 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     if (!parkedOffAllOutputs) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/true);
+        // Freeze the corpse's strip displacement BEFORE the removals below
+        // and before onWindowClosed's untrack funnel scrubs the tracked
+        // screen. The paint path cannot re-derive either term for a deleted
+        // window (scrollManagedOutputFor's isDeleted gate), so without this
+        // the delta removal below pulled the relocation out from under a
+        // still-painting corpse and it snapped to its raw committed rect —
+        // for a panned strip's parked-committed tile, the park row at the
+        // bottom of the screen. Applies with or without our close shader:
+        // KWin's own close animation paints the corpse either way. The
+        // corpse's frame is frozen at death, so a one-shot constant is
+        // exact; a mid-leg view offset freezes at its close-instant value,
+        // which just means a dying window stops riding the strip.
+        //
+        // Two accepted approximations. (1) The freeze derives from the
+        // TRACKED screen alone, while the live draw's predicate additionally
+        // exempts user-move/resize and floats from displacement — a tracked
+        // window closed mid-drag mid-leg would inherit an offset it was not
+        // drawn with. The pre-death exemption state is not recoverable from
+        // a Deleted window, so it cannot be honoured here. (2) Damage for
+        // the displaced draw region: our close shader's grab pump repaints
+        // the output per frame; under a purely FOREIGN close animation the
+        // foreign effect's own damage is what keeps the corpse fresh, which
+        // in practice the reflow and neighbour legs also cover.
+        QPointF frozen = scrollVisualTranslationFor(closingWindowId, closingFrame);
+        const QString corpseScreen = m_tilingHandler->scrollTrackedScreenFor(closingWindowId);
+        if (!corpseScreen.isEmpty()) {
+            if (KWin::LogicalOutput* corpseOutput = outputForScreenId(corpseScreen)) {
+                frozen += m_stripViewAnimator->offsetFor(corpseOutput);
+            }
+        }
+        if (!frozen.isNull()) {
+            m_scrollCorpseFreeze.insert(w, frozen);
+        }
     }
     m_windowAnimator->removeAnimation(w);
     // Pairs with damage like every other remover. Note this is not the only

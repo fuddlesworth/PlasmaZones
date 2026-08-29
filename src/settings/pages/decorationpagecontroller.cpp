@@ -4,6 +4,7 @@
 #include "decorationpagecontroller.h"
 
 #include "decoration_controller_detail.h"
+#include "decorationpreviewcontroller.h"
 
 #include "core/interfaces/isettings.h"
 
@@ -113,6 +114,7 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
     : PhosphorControl::PageController(QStringLiteral("decoration-staging"), parent)
     , m_registry(registry)
     , m_settings(settings)
+    , m_preview(new DecorationPreviewController(registry, settings, this))
 {
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
@@ -135,6 +137,16 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
 }
 
 DecorationPageController::~DecorationPageController() = default;
+
+QObject* DecorationPageController::previewController() const
+{
+    return m_preview;
+}
+
+QString DecorationPageController::previewKind() const
+{
+    return QStringLiteral("decoration");
+}
 
 // ── Available packs ───────────────────────────────────────────────────────
 
@@ -435,7 +447,9 @@ bool DecorationPageController::clearOverride(const QString& path)
         return false;
     // Reject unsupported paths for parity with the chain mutators (setChain /
     // setChainParam / setChainLayerEnabled) — an unsupported path has no
-    // override to clear anyway, so this only tightens the contract.
+    // override to clear anyway, so this only tightens the contract. The
+    // descendants variant below needs no such guard: it matches by prefix over
+    // paths that ARE overridden, and an unsupported path is never one of them.
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
     DecorationProfileTree tree = this->tree();
@@ -447,8 +461,10 @@ bool DecorationPageController::clearOverride(const QString& path)
 
 int DecorationPageController::overrideDescendantCount(const QString& path) const
 {
-    if (!m_settings)
-        return 0;
+    // No !m_settings guard: tree() already answers with a default-constructed
+    // tree when settings are null, which has no overrides, so the count is 0
+    // either way. The sibling readers (hasOverride, chainAt, rawProfile) lean on
+    // the same thing rather than each repeating the check.
     return overrideDescendantsOf(tree(), path).size();
 }
 

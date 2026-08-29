@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The repeatable SIZE verbs' refusal and entry contract: where
-// adjustActiveColumnWidth and adjustActiveWindowHeight stop, which states
-// they and the two preset cycles decline outright, and which vocabulary entry
-// a cycle press lands on when the list is not what the shipped defaults look
-// like. Placed in its own file rather than grown into test_scrollstrip_ops,
+// adjustActiveWindowHeight stops, which states it and the two preset cycles
+// decline outright, and which vocabulary entry a cycle press lands on when
+// the list is not what the shipped defaults look like. adjustActiveColumnWidth
+// is named here only for its clamp (the widen that lands exactly on the work
+// area); its own refusal contract lives with the width verbs in
+// test_scrollstrip_ops.cpp. Placed in its own file rather than grown into test_scrollstrip_ops,
 // which owns the per-operation surface over one shared strip fixture and already
 // carries a file-size exception; every slot here builds its own strip against
 // the shared screen constants.
@@ -51,11 +53,19 @@ private Q_SLOTS:
     void heightAdjustResizesATabbedColumn();
     void heightPresetCycleResizesATabbedColumn();
     void heightAdjustMeasuresATabbedColumnInColumnSpace();
+    void heightPresetCycleMeasuresATabbedColumnInColumnSpace();
+    void maximizeToggleRefusesAColumnPinnedByItsMinimum();
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
+    void aZeroMovementHeightPressStillReportsTheOwnershipClaim();
+    void bothPresetCyclesRefuseADeltaThatIsNotOneStep();
+    void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
+    void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
+    void maximizeToggleEntersOnRenderedWidthNotIntentKind();
+    void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -163,6 +173,85 @@ void TestScrollStripSizing::heightPresetCycleResizesATabbedColumn()
 // tabs measure the same. With the indicator placed WITHIN the column and
 // eating the CROSS axis the two differ, and a verb that compared in the tab's
 // space would enter one reservation off and settle short of the press.
+void TestScrollStripSizing::heightPresetCycleMeasuresATabbedColumnInColumnSpace()
+{
+    // The CYCLE verb's half of the reservation correction, which its adjust
+    // twin above has always covered and it has not. The two share one entry
+    // rule — enter in COLUMN space, so the tab lands one reservation under the
+    // column rather than the column being shortened from the tab's own extent
+    // — and deleting the correction from the cycle alone left the suite green,
+    // because the only tabbed cycle test runs on defaultParams where the
+    // reservation is zero.
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.placeWithinColumn = true;
+    // Picked by axis for the reason the twin states: a Left/Right indicator is
+    // thick along the CROSS axis only while the strip runs vertically, so a
+    // hardcoded position leaves one of the two registered arms reserving
+    // nothing and testing nothing.
+    params.tabIndicator.position = params.axis.isHorizontal() ? TabIndicatorPosition::Top : TabIndicatorPosition::Left;
+    const int reservation = params.tabIndicator.reservedThickness(2);
+    QVERIFY2(reservation > 0, "the fixture must actually reserve, or the slot proves nothing");
+    const int crossExtent = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
+    params.presetWindowHeights = {0.5, 1.0};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // The RELATIONSHIP, read from the strip, not a predicted absolute: what
+    // the entry rule decides is whether the tab sits exactly one reservation
+    // under its own column, and asserting a computed pixel figure would also
+    // pin what the preset fraction is a fraction OF, which is a separate
+    // contract this slot has no business restating.
+    const auto tabUnderItsColumn = [&](const char* whenLabel) {
+        const auto resolved = strip.relayout(params);
+        const int tabCross = Ax::crossLen(rectOf(resolved, QStringLiteral("b")));
+        const int columnCross = Ax::crossLen(resolved.columns.at(0).rect);
+        QVERIFY2(columnCross > reservation, whenLabel);
+        QCOMPARE(tabCross, columnCross - reservation);
+    };
+    tabUnderItsColumn("the starting column must be taller than the reservation");
+
+    // And it still holds after the cycle moves the column, which is the press
+    // whose entry rule was uncovered.
+    QVERIFY(strip.cycleActiveWindowPresetHeight(1, params));
+    tabUnderItsColumn("the cycled column must be taller than the reservation");
+    QVERIFY2(Ax::crossLen(strip.relayout(params).columns.at(0).rect) != crossExtent,
+             "the cycle must have moved the column, or the entry rule is untested");
+}
+
+void TestScrollStripSizing::maximizeToggleRefusesAColumnPinnedByItsMinimum()
+{
+    // The verb-side twin of the published flag's min-pinned exclusion, and the
+    // arm this suite exists for: a bool that says "changed" while nothing moved
+    // costs a relayout and a success OSD per press, forever.
+    //
+    // A column whose tiles' declared minimum alone reaches the work area
+    // renders full width whatever the intent says, so both toggle arms are
+    // dead for it — maximizing changes nothing visible, and un-maximizing
+    // cannot shrink it past its own floor. The verb must refuse rather than
+    // report success.
+    ScrollLayoutParams params = defaultParams();
+    const int mainExtent = Ax::mainLen(ScrollTestUtils::defaultScreenRect());
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    // BY ROLE: a symmetric minimum would set the cross floor past the cross
+    // extent, which is a different refusal entirely.
+    const QSize pinned = Ax::t(QSize(mainExtent, 0));
+    // Verdict wrapped like the ~25 siblings in this file: this was the only
+    // bare call, and a setter that started refusing would leave the column
+    // unpinned, turning the refusal assertion below into a test of nothing.
+    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("a"), pinned.width(), pinned.height()));
+
+    const int beforeMain = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    QCOMPARE(beforeMain, mainExtent);
+    QVERIFY2(!strip.toggleMaximizeActiveColumn(params),
+             "a column pinned full by its minimum must refuse, not report a change");
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), beforeMain);
+}
+
 void TestScrollStripSizing::heightAdjustMeasuresATabbedColumnInColumnSpace()
 {
     ScrollLayoutParams params = defaultParams();
@@ -266,10 +355,12 @@ void TestScrollStripSizing::switchingTabsDoesNotResizeATabbedColumn()
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), resized);
 }
 
-// The write half of that invariant: a height press claims ownership, clearing
-// every other tab back to Auto (niri's convert_heights_to_auto). Without the
-// claim two tabs would hold intents at once and the resolver would answer with
-// whichever it met first, which is a layout that depends on tile order.
+// The write half of that invariant: a height press takes ownership of the
+// column's extent. Ownership is an explicit pointer (Column::heightOwnerId),
+// so the tab that loses it KEEPS its own height — the column is decided by one
+// tab without the others' intents being destroyed to arrange it. Without the
+// claim the resolver would fall back to whichever non-Auto tab it met first,
+// which is a layout that depends on tile order.
 void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
 {
     ScrollLayoutParams params = defaultParams();
@@ -291,14 +382,218 @@ void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
     QVERIFY2(aHeight < bHeight, "the second press must keep shrinking from where the first left the column");
 
     // One owner, and it is the tab that was pressed.
+    //
+    // The pointer is read across several relayout() calls below, which is safe
+    // because relayout() is const and cannot reallocate m_columns. Any
+    // MUTATING call in between would invalidate it, so re-fetch rather than
+    // extending this pointer's life past one — the sibling slot below does
+    // exactly that after its ownership press.
     const Column* col = strip.activeColumn();
     QVERIFY(col);
-    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Auto);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
     QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height.kind, WindowHeight::Fixed);
+    // "b" is no longer the owner, but its own intent is untouched — losing the
+    // claim is not losing the height. This is what makes the tab toggle
+    // reversible: untabbing hands "b" back the height it had.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Fixed);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
 
     // So switching back to "b" still shows the column "a" set.
     QVERIFY(strip.focusAdjacentTile(1));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
+}
+
+// The one arm of these verbs that returns TRUE without writing a height, and
+// the inverse of the failure shape this file's header says it exists to pin.
+//
+// adjustActiveWindowHeight claims tabbed ownership BEFORE its no-move bail and
+// then returns whether the claim happened, so a press whose own target lands
+// exactly on the current pixel is still a real state change. It is emphatically
+// NOT a no-op: a tabbed column resolves its extent from the OWNER's intent, so
+// moving the owner re-resolves the column even though this press wrote no
+// height of its own. Here the claiming tab still carries Auto, which resolves
+// to the whole work area, and the column jumps from the outgoing owner's 600
+// to 800.
+//
+// That is exactly why the bail returns `claimed` rather than false. The verdict
+// is what drives the caller's relayout; a false here would leave the column
+// painted at the old owner's extent while the model had already moved on.
+//
+// Untested until now, which matters because the bail reads like a redundant
+// `target != currentPx` waiting to be tidied up. That edit looks obviously
+// right and breaks the handover silently.
+void TestScrollStripSizing::aZeroMovementHeightPressStillReportsTheOwnershipClaim()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // "b" (the shown tab) takes ownership with a press that DOES move.
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    const int settled = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+
+    // Now "a" presses by an amount that rounds to zero pixels. deltaPercent is
+    // a percentage of the work-area cross extent, so this is well under half a
+    // pixel and target lands exactly on currentPx.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    // Strictly UNDER half a pixel: the verb qRounds the pixel delta, and
+    // qRound rounds a half away from zero, so exactly 0.5 would move one pixel
+    // and stop testing the zero-movement arm.
+    const qreal subPixel = 0.2 / Ax::crossLen(ScrollTestUtils::defaultScreenRect()) * 100.0;
+    QVERIFY2(strip.adjustActiveWindowHeight(-subPixel, params),
+             "a press that moves nothing but takes the extent owner is still a change");
+
+    // The claim landed...
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
+    // ...and "a" wrote NO height of its own: it still carries the Auto it was
+    // inserted with. This is the arm's signature — the true verdict came from
+    // the claim, not from a resize.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height.kind, WindowHeight::Auto);
+    // Which is why the verdict has to be true. The column now resolves from
+    // "a"'s Auto (the whole work area) instead of the 600 "b" had set, so a
+    // caller told "nothing happened" would skip the relayout and leave the
+    // column painted at a value the model no longer holds.
+    const int afterClaim = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    QVERIFY2(afterClaim != settled, "moving the extent owner must re-resolve the column");
+    QCOMPARE(afterClaim, Ax::crossLen(ScrollTestUtils::defaultScreenRect()));
+
+    // Pressing again as the SITTING owner, still by a sub-pixel amount, has
+    // nothing left to claim and nothing to move: now it must report false.
+    QVERIFY2(!strip.adjustActiveWindowHeight(-subPixel, params),
+             "with the claim already held and no movement there is nothing to report");
+}
+
+// The tab toggle is REVERSIBLE, which is the whole reason ownership is a
+// pointer rather than a wipe. A Normal column legitimately holds several sized
+// tiles — nothing arbitrates a stack, so the height verbs cannot maintain a
+// single owner there — and the flip into tabbed has to choose one of them
+// WITHOUT destroying the rest, or untabbing returns a stack the user never
+// built. It also has to choose the tab on show: picking by stack order hands
+// the column to whichever tile sits first, regardless of what was in front of
+// the user when they pressed the key.
+void TestScrollStripSizing::tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // Two sized tiles in a NORMAL column, which is ordinary: each governs its
+    // own slice of the stack, so both intents are legitimate at once.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(200)));
+    QVERIFY(strip.focusAdjacentTile(1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height, WindowHeight::makeFixed(300));
+
+    // "b" is the tab on show when the flip lands, so "b" owns the extent —
+    // NOT "a", which is the tile stack order would have handed it to.
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 300);
+
+    // Nothing was destroyed to arrange that: "a" still carries its own height
+    // while "b" owns the column.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+
+    // So untabbing gives the stack back exactly as it was, and the ownership
+    // is dropped rather than left to go stale.
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QVERIFY(col->heightOwnerId.isEmpty());
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height, WindowHeight::makeFixed(300));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 200);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 300);
+
+    // An owner named at the TRANSITION may legitimately be Auto, and then the
+    // column takes the whole work area rather than scanning past it to a sized
+    // sibling — the tab on show asked for full height, so that is the answer.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeAuto()));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), ScrollTestUtils::kCrossExtent);
+
+    // But WRITING Auto is not a bid for the column. "b" takes it with a real
+    // height, and a later Auto write on "a" must not seize it back and blow
+    // the column up to full height. This is the rule that stops every
+    // arrival — a cross-output move, an unfloat, a drag cancel, a stash
+    // restore, each of which re-states a tile's intent — from resizing a
+    // tabbed column it merely joined.
+    QVERIFY(strip.focusAdjacentTile(1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(250)));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QVERIFY(strip.focusAdjacentTile(-1));
+    // The verdict is asserted rather than discarded, and it is FALSE: the tile
+    // already holds Auto, so the write moves nothing and the verb correctly
+    // refuses. Spelling that out is the point — a bare discarded call reads as
+    // an oversight in a suite whose whole subject is which presses report a
+    // change, and a future reader would not know whether the refusal was
+    // expected or unnoticed.
+    QVERIFY(!strip.setActiveWindowHeight(WindowHeight::makeAuto()));
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 250);
+}
+
+// The owner is a window id, so a tab leaving the column would otherwise leave
+// it dangling. The resolver would still answer (it falls back to a scan), but
+// by STACK ORDER — so closing a neighbour could resize the column to a tab the
+// user is not looking at. The ownership follows the tab on show instead.
+void TestScrollStripSizing::closingTheOwningTabHandsTheExtentToTheTabOnShow()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+
+    // "a" is sized and sits FIRST, so it is what a stack-order fallback would
+    // pick. "c" is sized too and is the tab on show.
+    QVERIFY(strip.focusAdjacentTile(-1)); // c -> b
+    QVERIFY(strip.focusAdjacentTile(-1)); // b -> a
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(200)));
+    QVERIFY(strip.focusAdjacentTile(1)); // a -> b
+    QVERIFY(strip.focusAdjacentTile(1)); // b -> c
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("c"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("c"))), 300);
+
+    // Close the owner. "b" is the tab that comes on show, and it is Auto, so
+    // the column takes the whole work area — NOT "a"'s 200, which is what the
+    // stack-order fallback would have answered.
+    QVERIFY(strip.removeWindow(QStringLiteral("c"), params));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), ScrollTestUtils::kCrossExtent);
+    // "a" kept its height throughout, so untabbing still restores the stack.
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height, WindowHeight::makeFixed(200));
 }
 
 // The grow side's budget invariant. Deliberately NOT an exact ceiling
@@ -335,6 +630,49 @@ void TestScrollStripSizing::heightGrowLeavesTheColumnTilingItsBudget()
 // to be by extent too: wrapping to position 0 in a list typed 1/2, 1/3, 2/3
 // hands a forward press the MIDDLE width and leaves 1/3 reachable only
 // backwards, so the cycle never comes back round to the narrowest column.
+// SURVIVING MUTATION until now: dropping `(delta != -1 && delta != 1)` from
+// either preset cycle failed nothing in the repo. Both verbs are wired to a
+// one-step-per-press shortcut, so every existing fixture passes ±1 and the
+// guard was never exercised.
+//
+// It is not decoration. Both cycles hand delta to cyclePresetIndexByExtent,
+// whose contract is a SINGLE step in a direction; a 0 asks for a step with no
+// direction, and anything larger asks it to skip entries the extent search is
+// not written to skip. The refusal is also the only thing standing between a
+// D-Bus caller and that state, since both verbs are reachable from the wire.
+//
+// Zero is the boundary this slot cares about most (it is what an
+// uninitialised or mis-parsed delta looks like) and is one of the three
+// boundary values no fixture in this file previously carried.
+void TestScrollStripSizing::bothPresetCyclesRefuseADeltaThatIsNotOneStep()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.presetColumnWidths = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+    params.presetWindowHeights = {0.5, 1.0};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    const int widthBefore = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    const int heightBefore = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+
+    // Verdict AND geometry on every arm: a verdict-only assertion passes for a
+    // refusal that already mutated the model, which is this file's own rule.
+    for (const int delta : {0, 2, -2, 7}) {
+        QVERIFY2(!strip.cycleActiveColumnPresetWidth(delta, params), "a width cycle must step by exactly one");
+        QVERIFY2(!strip.cycleActiveWindowPresetHeight(delta, params), "a height cycle must step by exactly one");
+        QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), widthBefore);
+        QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), heightBefore);
+    }
+
+    // Positive control: ±1 still works, so the refusals above are attributable
+    // to the delta and not to a fixture that could never cycle at all.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(1, params));
+    QVERIFY(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) != widthBefore);
+    QVERIFY(strip.cycleActiveWindowPresetHeight(1, params));
+}
+
 void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
 {
     ScrollLayoutParams params = defaultParams();
@@ -361,6 +699,67 @@ void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
     // the press comes back round to the widest entry.
     QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 797);
+}
+
+void TestScrollStripSizing::maximizeToggleEntersOnRenderedWidthNotIntentKind()
+{
+    // The toggle decides "is this column already maximized" in RESOLVED
+    // PIXELS, not on the ColumnWidth value. operator== compares kind first,
+    // so Fixed(<work area main>) is not == Proportion(1.0) even though the two
+    // render identically — and a Fixed full-width column is ordinary, not
+    // exotic: adjustActiveColumnWidth clamps to exactly that when a widen
+    // press hits the work area, and so does an interactive edge-drag's
+    // reconcile.
+    //
+    // On the old kind compare such a column took the MAXIMIZE arm: it stored
+    // the current width in the slot, wrote Proportion(1.0), rendered exactly
+    // the same pixels, and reported success. The user's press did nothing
+    // visible and the titlebar button snapped straight back.
+    const auto params = defaultParams();
+    const int workMain = Ax::mainLen(params.workArea);
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(workMain), ColumnDisplay::Normal, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), workMain);
+
+    // The press must UN-maximize, so the column has to get narrower.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < workMain,
+             "a Fixed full-width column must un-maximize, not silently re-store itself");
+
+    // And the press back returns it to full width, so the verb is a genuine
+    // toggle from this entry rather than a one-way trip.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), workMain);
+}
+
+void TestScrollStripSizing::maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot()
+{
+    // The stored pre-maximize intent is re-validated against the CURRENT work
+    // area rather than trusted. Nothing invalidates the slot when the output
+    // resizes, so a Fixed width captured on a WIDER work area resolves
+    // clamped back to full width on a narrower one — restoring it would spend
+    // the slot, move nothing, and report success.
+    ScrollLayoutParams params = defaultParams();
+    const int wideMain = Ax::mainLen(params.workArea);
+    ScrollStrip strip;
+    QVERIFY(
+        strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(wideMain - 100), ColumnDisplay::Normal, params));
+    // Maximize on the wide area: the slot now holds Fixed(wideMain - 100).
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), wideMain);
+
+    // The output shrinks below the stored width, so that intent now resolves
+    // to the full (narrower) work area.
+    const int narrowMain = wideMain - 400;
+    const int cross = Ax::crossLen(params.workArea);
+    params.workArea = Ax::vertical() ? QRect(0, 0, cross, narrowMain) : QRect(0, 0, narrowMain, cross);
+
+    // The un-maximize press must still leave the column NARROWER than the new
+    // work area, taking the default-width arm rather than consuming the slot
+    // on a value that renders full width.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < narrowMain,
+             "restoring a stale full-width slot must fall through to the default width");
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

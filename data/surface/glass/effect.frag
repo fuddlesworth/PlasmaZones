@@ -29,8 +29,9 @@
 // p_contentOpacity parameter, so the pane stays solid and translucency
 // reveals the refracted backdrop. A theme's own transparent pixels reveal
 // it the same way with no parameter involved.
-// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
-// the pane degrades to a faint tint slab with the same corner rounding.
+// NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
+// (uHasBackdrop = 0), the pane degrades to a faint tint slab with the same
+// corner rounding.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
@@ -112,7 +113,11 @@ vec4 pSurface(vec2 uv) {
                              sdRoundedBox(pos + vec2(0.0, h), halfSz, rr) - sdRoundedBox(pos - vec2(0.0, h), halfSz, rr));
             vec2 inward = length(grad) > 0.001 ? -normalize(grad) : vec2(0.0, 1.0);
             float strengthUv = min(0.4 * concave * strength, 1.0);
-            vec2 dirUv = vec2(inward.x, -inward.y) * strengthUv * (uSurfaceFrameSize / max(uSurfaceSize, vec2(1.0)));
+            // Same px -> uv conversion the Snell branch gets from pxToUv, so
+            // the two modes share one Y convention instead of hand-rolling a
+            // second copy that only tracked the compositor. The frame/canvas
+            // ratio stays: this offset is expressed relative to the frame.
+            vec2 dirUv = pxToUv(inward * strengthUv * uSurfaceFrameSize);
             vec4 g = texture(iChannel1, clamp(uv + dirUv, 0.0, 1.0));
             lit = vec3(texture(iChannel1, clamp(uv + dirUv * (1.0 + fringe), 0.0, 1.0)).r, g.g,
                        texture(iChannel1, clamp(uv + dirUv * (1.0 - fringe), 0.0, 1.0)).b);

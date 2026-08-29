@@ -26,6 +26,14 @@
  *     silently (inclusive at both bounds), and write the intent kind each
  *     form documents — width proportion exact, width/height px Fixed, height
  *     proportion a Preset anchor that relayout snaps to the height vocabulary.
+ *  4. toggleMaximizeColumn takes the same ownership, empty-screen and
+ *     per-context gates as the setters, its toggle round trip returns the
+ *     column to the width it started at, and — the one thing no other call
+ *     here can see — its windowId argument is FORWARDED rather than dropped.
+ *     The engine's parameter is defaulted, so an adaptor that swallowed the
+ *     id would compile and silently revert to acting on whichever column
+ *     happens to be active, which is the behaviour the wire argument exists
+ *     to replace.
  */
 
 #include <QTest>
@@ -296,9 +304,117 @@ private Q_SLOTS:
             m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
             QCOMPARE(activeColumn().width, widthBeforeGate);
             QCOMPARE(activeHeight(), heightBeforeGate);
+            // toggleMaximizeColumn takes the same per-context gate. It is the
+            // one verb in this adaptor with a real in-tree caller (the KWin
+            // effect's maximize interception), so a gate regression here is
+            // user-reachable in a way the four setters' is not.
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QCOMPARE(activeColumn().width, widthBeforeGate);
+
+            // The NO-PROVIDER arm, which this block's own "per-method code"
+            // reasoning demands and which only focusColumn and scrollView had.
+            //
+            // An absent gate FAILS CLOSED: refusesForContext is
+            // `!m_contextGated || m_contextGated(screenId)`, so a null
+            // std::function refuses outright. That is the deliberate stance —
+            // the daemon installs the gate during bring-up, and a verb
+            // arriving before it must not act on a context whose disabled
+            // state is not yet knowable — and it is a DIFFERENT code path
+            // from the refusing gate above, which exercises the second
+            // operand. A mis-written `m_contextGated && ...` would pass every
+            // assertion above and fail here.
+            const ColumnWidth widthBeforeNoGate = activeColumn().width;
+            const WindowHeight heightBeforeNoGate = activeHeight();
+            m_adaptor->setContextGateProvider({});
+            m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.31);
+            m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 712);
+            m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.43);
+            m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 301);
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QCOMPARE(activeColumn().width, widthBeforeNoGate);
+            QCOMPARE(activeHeight(), heightBeforeNoGate);
+
             m_adaptor->setContextGateProvider([](const QString&) {
                 return false;
             });
+        }
+
+        // toggleMaximizeColumn's ownership and boundary gates, on the same
+        // terms as the setters above: a foreign screen and an empty screen id
+        // must leave the width intent untouched. The windowId argument is
+        // deliberately NOT range-checked — empty means "the active column",
+        // which is what the keyboard shortcut sends — so the unknown-window
+        // refusal belongs to the strip and is pinned in the engine's own
+        // suite, not here.
+        {
+            const ColumnWidth beforeToggle = activeColumn().width;
+            // The boundary refusals answer false as well as doing nothing.
+            // These two arms returned false before ApiVersion 7 tightened the
+            // boolean too, so on their own they do not discriminate the new
+            // contract from the old — they complete the pair with the accepted
+            // no-op case asserted in the named-window block below.
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QStringLiteral("HDMI-2"), QString()),
+                     "a screen the engine does not own must answer false");
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QString(), QString()), "an empty screen id must answer false");
+            QCOMPARE(activeColumn().width, beforeToggle);
+            // And the accepted call does act, so the refusals above are
+            // genuine gates rather than a verb that never does anything.
+            QVERIFY2(m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString()),
+                     "an accepted call that changes the strip must answer true");
+            QVERIFY(activeColumn().width != beforeToggle);
+            m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            // The round trip lands back where it started, which is the whole
+            // promise of a toggle and was previously unasserted here.
+            QCOMPARE(activeColumn().width, beforeToggle);
+        }
+
+        // The windowId is FORWARDED, not swallowed.
+        //
+        // ScrollEngine::toggleMaximizeColumn defaults that argument, so an
+        // adaptor that dropped it would compile and silently revert to the
+        // screen-scoped v5 behaviour — acting on whichever column happens to
+        // be active rather than the one holding the named window, which is
+        // exactly the defect the wire argument was added to fix. Every other
+        // call in this file passes an empty id, so nothing else here can tell
+        // the two spellings apart. The engine-side targeting test does not
+        // cross this boundary.
+        {
+            using PhosphorScrollEngine::ColumnWidth;
+            m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+            auto* st =
+                static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
+            QVERIFY(st);
+            const auto widthOfWindow = [st](const QString& id) -> ColumnWidth {
+                const int idx = st->strip().columnOfWindow(id);
+                return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
+            };
+            // Focus the OTHER column, so "the named window's column" and "the
+            // active column" are different answers.
+            m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+            QVERIFY2(st->strip().columnOfWindow(QStringLiteral("app|a"))
+                         != st->strip().columnOfWindow(QStringLiteral("app|b")),
+                     "the two windows must be in different columns, or this proves nothing");
+            const ColumnWidth aBefore = widthOfWindow(QStringLiteral("app|a"));
+            const ColumnWidth bBefore = widthOfWindow(QStringLiteral("app|b"));
+            QVERIFY2(m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|b")),
+                     "a toggle the strip acts on must answer true");
+            QVERIFY2(widthOfWindow(QStringLiteral("app|b")) != bBefore,
+                     "the NAMED window's column must be the one that changed");
+            QCOMPARE(widthOfWindow(QStringLiteral("app|a")), aBefore);
+
+            // THE BOUNDARY CONTRACT, and the only assertion in the suite that
+            // discriminates it. ApiVersion 7 tightened this boolean from "the
+            // daemon accepted the request" to "the strip changed", and the
+            // KWin effect steers on it: a false answer is its only cue to put
+            // KWin's maximize bit back, because a call that changes nothing
+            // emits no tile batch to correct the window later.
+            //
+            // The engine-layer suite cannot see this. It calls the engine
+            // directly, so reverting the adaptor's `return m_engine->...` to
+            // the old unconditional `return true` passes every other test in
+            // the tree. This is the one that goes red.
+            QVERIFY2(!m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|nosuchwindow")),
+                     "an ACCEPTED call the strip does nothing with must answer false, not true");
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a

@@ -152,6 +152,15 @@ SettingsFlickable {
         return result;
     }
     readonly property bool _hasTypeAxis: _allTypes.length > 1
+    /// Whether the settings app is frontmost.
+    ///
+    /// Drives the cards' `previewAnimating` — the per-frame tick — and ONLY
+    /// that. It must never gate `previewLive`: focus loss is not occlusion
+    /// (the window is fully exposed under a Plasma applet), and tearing the
+    /// chains down there made every decoration preview vanish while the
+    /// overlay previews carried on. Freezing is the whole of what "not
+    /// frontmost" may cost a preview, matching the detail dialog's clock.
+    readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
     // ── Group / sort options (data-driven; dispatched by option id) ─────
     // The Type option only appears when the type axis is live. Grouping and
     // sorting dispatch on the option `id`, never a raw index, so a model that
@@ -613,6 +622,8 @@ SettingsFlickable {
             model: root._displayGroups
 
             delegate: SettingsCard {
+                id: groupCard
+
                 required property var modelData
 
                 Layout.fillWidth: true
@@ -662,6 +673,30 @@ SettingsFlickable {
                                 width: shaderFlow._cardWidth
                                 effect: modelData
                                 bridge: root.bridge
+                                // The page root IS the scrolling Flickable. The
+                                // card uses it to keep a live decoration
+                                // preview off every off-screen delegate — the
+                                // Flow/Repeater layout instantiates them all.
+                                viewport: root
+                                // A collapsed section clips its body to zero
+                                // height and fades it out without unloading it,
+                                // so the cards inside still map into the
+                                // viewport. _bodyLive is what actually tracks
+                                // whether the body is worth rendering.
+                                // _appActive is deliberately NOT in this gate.
+                                // previewLive tears the chain down, and focus
+                                // loss is not occlusion: under a Plasma applet
+                                // the window is fully exposed, and gating on it
+                                // here made every decoration preview vanish
+                                // while the overlay previews carried on
+                                // drawing. Focus loss only FREEZES, below.
+                                previewLive: groupCard.bodyLive
+                                // The frontmost check pauses the animated
+                                // packs' per-frame tick instead — the preview
+                                // holds its last frame, exactly what the
+                                // zone/overlay preview does when its clock
+                                // stops.
+                                previewAnimating: root._appActive
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
                                 typeBadgeFn: function (e) {

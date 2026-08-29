@@ -44,7 +44,22 @@ public:
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
     /// Translate stored params to uniform names (delegates to the backend).
-    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params) const;
+    ///
+    /// @p previewWidth is the logical width the preview renders at. Pass it
+    /// and every px-denominated parameter the shader declares is scaled by
+    /// how much the preview shrinks the real screen (`previewWidth /
+    /// targetScreenSize().width()`), so a 4px border over a 300px pane reads
+    /// as the hairline a 4px border is on a 2560px screen instead of the slab
+    /// it would otherwise be. Pass 0 for the raw values the daemon uses.
+    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                  int previewWidth = 0) const;
+
+    /// The linear reduction a @p previewWidth-wide preview applies to the
+    /// backend's target screen, or 1.0 when either is unusable. Exposed
+    /// because zone geometry is scaled by this same factor
+    /// (zonesForShaderPreview) and a host drawing its own px-denominated
+    /// chrome over the preview has to agree with both.
+    Q_INVOKABLE double previewPixelScale(int previewWidth) const;
 
     /// Shader metadata map (delegates to the backend).
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
@@ -90,6 +105,19 @@ Q_SIGNALS:
     void shaderPresetLoadFailed(const QString& error);
 
 private:
+    /// The shader's declared parameter metadata, memoized by shader id.
+    ///
+    /// shaderInfo() is cheap in the settings app (an in-process registry hit)
+    /// and expensive in the editor (an uncached blocking D-Bus round-trip to
+    /// the daemon), and translateShaderParams needs it on every debounced
+    /// slider move and every resize. Cached here rather than per-backend so
+    /// both hosts pay the same once-per-shader cost.
+    ///
+    /// NOTE: this controller observes no registry / effects-changed signal, so
+    /// there is nothing to hook invalidation to — the cache is keyed on the
+    /// shader id alone and turns over when the previewed shader changes.
+    QVariantList parameterInfos(const QString& shaderId) const;
+
     // Borrowed. In the settings app the owner (a unique_ptr backend declared
     // before the controller) outlives it. In the editor the backend IS the
     // EditorController, which owns the controller as a QObject child — there the
@@ -99,6 +127,9 @@ private:
     IShaderPreviewBackend* m_backend;
     PhosphorAudio::CavaSpectrumProvider* m_audioProvider = nullptr;
     QVector<float> m_audioSpectrum;
+    // Mutable: parameterInfos() is called from const preview accessors.
+    mutable QString m_paramInfoShaderId;
+    mutable QVariantList m_paramInfoCache;
 };
 
 } // namespace PlasmaZones

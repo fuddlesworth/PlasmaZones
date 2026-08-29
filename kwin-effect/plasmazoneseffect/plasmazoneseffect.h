@@ -384,6 +384,11 @@ public:
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
+    /// Wire the window's virtual-desktop-set handling (departure arm, arrival
+    /// arm, and the m_trackedDesktopsPerWindow stamp both diff against) and
+    /// seed that stamp. Called once per window from setupWindowConnections,
+    /// inside its idempotency guard; defined in window_desktop_connections.cpp.
+    void wireDesktopChangeHandler(KWin::EffectWindow* w);
 
     /**
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
@@ -1985,6 +1990,22 @@ private:
     /// folding every audio border forever. -1 until the first spectrum arrives.
     qint64 m_audioSpectrumLastChangeMs = -1;
 
+    /// Pinned-clock ms of the last postPaintScreen pass on which the strip
+    /// view animator had a leg in flight. The park reap's quiet gate reads
+    /// it: a DUE reap holds (short-retry re-arm) until the strip has been
+    /// still for its quiet window, so fast column stepping does not pay a
+    /// cold refold for every column reaped mid-navigation. -1 until the
+    /// strip first moves, which the gate treats as quiet.
+    qint64 m_lastStripMotionMs = -1;
+
+    /// Last StripViewAnimator::viewMotionGeneration() this effect observed.
+    /// The stamp above advances when it CHANGES, which is what covers the two
+    /// kinds of strip motion no spring represents — an animations-off session
+    /// and the drag edge auto-scroll heartbeat. See the stamp site in
+    /// postPaintScreen for why polling the springs alone left the quiet gate
+    /// inert for both.
+    quint64 m_lastSeenStripMotionGeneration = 0;
+
     /// The daemon's audio-viz master toggle + the full CAVA parameter set,
     /// pulled via getSetting in loadCachedSettings exactly like
     /// snapAssistEnabled. The effect's cava run gate ANDs the toggle with an
@@ -2500,6 +2521,23 @@ private:
     /// question — and give any NEW commit-half mover its own repaint pairing
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
+
+    /// Frozen strip displacement for a CLOSE-GRABBED corpse. A deleted window
+    /// cannot re-derive its relocation or view offset in the paint path —
+    /// scrollManagedOutputFor answers null on isDeleted, and the close slot's
+    /// untrack funnel scrubs the tracked screen anyway — yet the corpse keeps
+    /// painting for the whole close animation (ours via holdCloseGrab, or any
+    /// other effect's). Without this, a panned strip's corpse snapped to its
+    /// raw committed rect the frame it died (the park row, for a
+    /// parked-committed tile: a slide to the bottom of the screen). The value
+    /// is the relocation + view offset at the instant of death, applied
+    /// verbatim by paintWindow's deleted-window arm; the corpse's frame is
+    /// frozen too, so a constant is exact. Keyed by EffectWindow* because the
+    /// id caches drop at the end of the close slot. Written only in
+    /// slotWindowClosed (never for a fully-parked corpse, which paints
+    /// nothing anyone can see), erased in the windowDeleted handler with the
+    /// other pointer-keyed maps.
+    QHash<KWin::EffectWindow*, QPointF> m_scrollCorpseFreeze;
 
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
@@ -3322,6 +3360,18 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Per-window VirtualDesktop id set as of the last windowDesktopsChanged, so
+    // that handler can tell a genuine MOVE onto the desktop in view from the
+    // other edits KWin reports through the same signal: a set that merely grew
+    // (desktop 1 → desktops 1 and 2), one that shrank, and an un-stick. Only a
+    // move makes the window newly present on the desktop the user is looking
+    // at, and only a move may be placed. An EMPTY value means the window was on
+    // all desktops (KWin's sticky encoding), which counts as already present;
+    // contains() is what distinguishes that from an unseeded entry. Keyed on
+    // the raw EffectWindow* like m_trackedScreenPerWindow, seeded at wire time
+    // and erased in the windowDeleted cleanup alongside it.
+    QHash<KWin::EffectWindow*, QSet<QString>> m_trackedDesktopsPerWindow;
 
     // Windows that already have their per-window connections. setupWindowConnections
     // issues raw connects with lambda slots, so a second call on the same window

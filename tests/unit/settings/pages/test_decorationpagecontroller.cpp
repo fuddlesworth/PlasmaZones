@@ -26,9 +26,13 @@
  * lives in its own TU, test_decoration_sets.cpp, mirroring the motion side's
  * test_animations_motion_sets.cpp.
  *
- * The controller is constructed with a null SurfaceShaderRegistry — every
- * path exercised here is registry-independent (the registry only feeds the
- * available-packs listing, which is out of scope). Settings is a
+ * The controller is constructed with a null SurfaceShaderRegistry for most of
+ * this file, because the paths exercised here are registry-independent (the
+ * registry only feeds the available-packs listing, which is out of scope). The
+ * previewKind slot is the exception: it passes a real registry, since the
+ * controller now builds a DecorationPreviewController in its constructor. That
+ * preview controller is parented, so it goes away with each stack-allocated
+ * controller and takes its application event filter with it. Settings is a
  * TreeStubSettings: a StubSettings that actually stores the tree and emits
  * decorationProfileTreeChanged, so the controller's read-mutate-write loop
  * round-trips without the real PhosphorConfig::Store.
@@ -876,6 +880,35 @@ private Q_SLOTS:
         QVERIFY2(offeredIds.contains(QStringLiteral("border")), "the border pack must be selectable");
         QVERIFY2(offeredIds.contains(QStringLiteral("opacity-tint")), "the opacity-tint pack must be selectable");
         QVERIFY2(offeredIds.contains(QStringLiteral("glowish")), "an ordinary pack must still be offered");
+    }
+
+    /// The route token the shader browser switches its preview pane on.
+    ///
+    /// The literal is duplicated across this controller and the QML that
+    /// compares against it (ShaderBrowserCard's live-preview gate and
+    /// ShaderBrowserDetailDialog's pane choice), and the QML side reads it
+    /// through a guarded `bridge.previewKind ? ... : "zone"` fallback. So
+    /// changing it here does not fail anything loudly: the decoration route
+    /// silently reverts to the zone pane and the live preview just disappears.
+    /// Both halves are pinned here so that cannot happen quietly.
+    void preview_kind_is_the_token_the_browser_switches_on()
+    {
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings);
+        QCOMPARE(c.previewKind(), QStringLiteral("decoration"));
+
+        const QString qmlDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        for (const QString& name :
+             {QStringLiteral("/ShaderBrowserCard.qml"), QStringLiteral("/ShaderBrowserDetailDialog.qml")}) {
+            QFile f(qmlDir + name);
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(name));
+            const QString src = QString::fromUtf8(f.readAll());
+            QVERIFY2(src.contains(QStringLiteral("previewKind === \"decoration\"")),
+                     qPrintable(QStringLiteral("%1 no longer compares previewKind against \"decoration\" — the "
+                                               "controller's token and the QML's have drifted")
+                                    .arg(name)));
+        }
     }
 };
 

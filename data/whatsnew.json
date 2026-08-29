@@ -12,6 +12,45 @@
             ]
         },
         {
+            "version": "3.4.3",
+            "date": "2026-08-29",
+            "highlights": [
+                "New: Debian testing and unstable have an apt repository, published through the openSUSE Build Service and rebuilt whenever KWin moves. The install lines are in the README (#1000)",
+                "New: a window moved to another desktop from the pager or the Overview is placed on the desktop it arrives on instead of sitting on top of the stack until you leave and come back (#996)",
+                "New: Default height under Scrolling → New columns offers Window decides, so a window joining a column can keep the height the application asked for (#995)",
+                "Changed: maximizing a window on a scrolling monitor maximizes its column along the strip instead of handing the window to the compositor's maximize. Pressing it again gives the column its width back, and the button lights up whenever a column fills the monitor (#994)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#994)",
+                "Fixed: closing a window in the middle of a panned scrolling strip no longer sends it sliding off the bottom of the screen, and the strip settles once afterwards instead of bouncing between two focus picks (#1003)",
+                "Fixed: restoring a maximized scrolling column no longer snaps out to full width first, a maximize animates from where the window actually was, and a fast double-click does both presses (#1001)",
+                "Fixed: zone shader previews number their zones again, decoration previews show the wallpaper behind the window, and a pack looks the same on its browser card as in its detail preview (#998)",
+                "Fixed: turning a column into tabs keeps every window's height, and the tab in front of you decides the column's height (#995)",
+                "Fixed: clicking the window that already has focus brings it back into view on a strip you had scrolled away from (#992)",
+                "Fixed: the shortcut cheatsheet lists a mode that is actually switched on, and follows the enable switches while it is open (#993)",
+                "Fixed: 345 strings across the German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish translations said the wrong thing and have been corrected (#1004)"
+            ]
+        },
+        {
+            "version": "3.4.2",
+            "date": "2026-08-27",
+            "highlights": [
+                "Fixed: on a scrolling screen, windows opened long after login land in the strip with focus instead of off screen. The loose match to a remembered slot now only applies right after the strip is restored (#991)",
+                "Fixed: stepping quickly between scrolling columns no longer stutters. A column's drawing resources are freed once the strip has been still for a few seconds rather than while you are still scrolling (#991)",
+                "Fixed: columns parked off screen stop being nudged a few pixels on every scroll step (#991)"
+            ]
+        },
+        {
+            "version": "3.4.1",
+            "date": "2026-08-26",
+            "highlights": [
+                "Added: decoration packs now have live previews. Every card in the decoration browser renders the pack over a stand-in window, and opening one gives a large preview with the pack's parameters beside it (#984)",
+                "Changed: the eight glass-family decoration packs start at 70% content opacity so the blur or refraction has something to show through. Set it back to 1.0 on the pack for the old look (#984)",
+                "Fixed: multi-pass decoration packs render as glass on the OSD and pop-ups instead of a flat tint, packs react to focus again, and effects with an outer margin are centred in it instead of clipped (#984)",
+                "Fixed: the glass-family packs clip the window to their rounded corners, so square corners no longer show past the pane (#988)",
+                "Fixed: Phosphor Vortex tracks the cursor for the whole drag instead of snapping to the window centre when the pointer leaves the frame (#986)",
+                "Fixed: zones hold still while Plasma's floating panels dock and undock mid-drag, and panel space is charged to the edge that actually reserves it (#985, #987)"
+            ]
+        },
+        {
             "version": "3.4.0",
             "date": "2026-08-25",
             "highlights": [

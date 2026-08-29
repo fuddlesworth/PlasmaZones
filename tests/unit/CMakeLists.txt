@@ -952,7 +952,13 @@ target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6:
 add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 
 add_executable(test_surface_shader_item ui/zones/test_surface_shader_item.cpp)
-target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+# Qt6::Qml as well as Quick: one slot drives the item's wallpaperTexture from a
+# real QML binding, which is the only shape that reproduces the silent write
+# failure a QImage-typed property had.
+target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+# P_SOURCE_DIR: one slot sweeps the two QML hosts to keep them off the binding
+# shapes that silently drop a QImage on the way to the item.
+target_compile_definitions(test_surface_shader_item PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
@@ -1643,6 +1649,10 @@ add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 # test below, so a new controller TU can't silently miss one of the two.
 set(_decoration_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller.cpp
+    # The page controller constructs one of these in its ctor, so every TU that
+    # links the controller needs it — omitting it is a link error in each of the
+    # three consumers of this list, not a silent degradation.
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_browser.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller_sets.cpp
@@ -1671,10 +1681,42 @@ target_link_libraries(test_decorationpagecontroller
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+# P_SOURCE_DIR: the previewKind slot pins the controller's route token against
+# the QML that compares literally against it. The QML side falls back to the
+# zone pane when the token does not match, so a drift is silent otherwise.
+target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
+
+# Data surface behind the settings app's live decoration preview: chain
+# composition, the extended-FBO padding request, and the degraded paths a
+# browsing user can reach (unknown pack, no registry). Links only the preview
+# controller — it has no page-controller dependency.
+add_executable(test_decorationpreviewcontroller
+    settings/pages/test_decorationpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpreviewcontroller.cpp
+)
+target_link_libraries(test_decorationpreviewcontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
+        plasmazones_core
+)
+# P_SOURCE_DIR: the QML-contract slot scrapes the decoration preview QML for
+# `previewController.*` names and checks each against the controller's
+# metaobject. The animations route has the same guard for its `bridge.*`
+# surface, but it only ever instantiates AnimationsPageController, so it cannot
+# speak for this route's controllers.
+target_compile_definitions(test_decorationpreviewcontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
 
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,
@@ -1690,6 +1732,8 @@ target_link_libraries(test_decoration_sets
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1708,6 +1752,8 @@ target_link_libraries(test_decoration_sets_validation
         Qt6::Core
         Qt6::Gui
         PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
         PhosphorControl::PhosphorControl
         plasmazones_core
 )

@@ -82,28 +82,59 @@ int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& 
     if (c.tiles.isEmpty()) {
         return fullCross;
     }
-    // The column's ONE non-Auto tab decides, NOT the tab on show. niri's rule
-    // verbatim (scrolling.rs: "All tiles have the same height, equal to the
-    // height of the only fixed tile (if any)"), and the reason is that the
-    // alternative is unstable: reading the SHOWN tab makes the column's extent
-    // a function of which tab is focused, so a plain tab switch resizes the
-    // column. That is both a shape change nobody asked for and a broken
-    // premise for the compositor's tab-switch cross-fade, which is built on
-    // the arriving tab occupying the rect the outgoing one just vacated
+    // ONE tab decides, NOT the tab on show. niri's rule verbatim
+    // (scrolling.rs: "All tiles have the same height, equal to the height of
+    // the only fixed tile (if any)"), and the reason is that the alternative
+    // is unstable: reading the SHOWN tab makes the column's extent a function
+    // of which tab is focused, so a plain tab switch resizes the column. That
+    // is both a shape change nobody asked for and a broken premise for the
+    // compositor's tab-switch cross-fade, which is built on the arriving tab
+    // occupying the rect the outgoing one just vacated
     // (kwin-effect/tilinghandler/tiling.cpp).
     //
-    // The height verbs keep at most one tab non-Auto
-    // (claimTabbedHeightOwnership), so "the first" IS "the only" in practice.
-    // Scanning rather than trusting that is what keeps a strip restored from
-    // disk, or written through the rule and handoff seams, resolve to one
-    // deterministic answer instead of a focus-dependent one. Minimized tabs
-    // are skipped: they are dropped from the layout entirely, so a height they
-    // carry must not size a column they do not appear in.
-    const WindowHeight* owner = nullptr;
-    for (const Tile& tile : c.tiles) {
-        if (!tile.minimized && tile.height.kind != WindowHeight::Auto) {
-            owner = &tile.height;
-            break;
+    // Which tab owns it is EXPLICIT state (Column::heightOwnerId), set when
+    // the column becomes tabbed and moved by a height write. The tabs that do
+    // not own it keep their own intents untouched, so untabbing restores the
+    // stack the user built rather than the flattened one an ownership wipe
+    // would leave behind.
+    //
+    // This is where the parity ends, and deliberately. niri keeps the
+    // invariant that at most ONE tile per column is non-Auto — it normalizes
+    // the others to weighted Auto at the height-write sites, preserving their
+    // apparent heights — so a scan for "the fixed one" is safe there and its
+    // display toggle needs no bookkeeping at all. A column here may legitimately
+    // carry several sized tiles (the stack branch renormalizes them
+    // proportionally), so that invariant does not hold and the scan cannot
+    // stand in for an owner.
+    const Tile* ownerTile = c.heightOwner();
+    const WindowHeight* owner = ownerTile ? &ownerTile->height : nullptr;
+    if (owner && owner->kind == WindowHeight::Auto) {
+        // An owner that asked for Auto is asking for the whole work area,
+        // which is the no-owner answer. Resolved here rather than falling
+        // through to the scan: the owner has spoken, and scanning past it
+        // would hand the column a height its own owner did not choose.
+        owner = nullptr;
+    } else if (!owner && c.heightOwnerId.isEmpty()) {
+        // NO ownership recorded at all: a column tabbed before this field
+        // existed (an older persisted blob), or one built by the rule,
+        // template and handoff seams. Infer it the way it used to be
+        // inferred — the first non-Auto tab — which is a deterministic answer
+        // rather than a focus-dependent one.
+        //
+        // Deliberately NOT the fallback when an owner IS named but cannot be
+        // resolved (its tab closed, or is minimized and so dropped from the
+        // layout). The tabs that do not own the column now keep their own
+        // heights, so scanning there would adopt some other tab's extent the
+        // moment the owner minimizes — a resize the user did not ask for, and
+        // one that did not happen under the old model because the siblings had
+        // all been flattened to Auto. An unresolvable owner leaves the column
+        // at the no-owner answer, the full work area, until something claims
+        // it again.
+        for (const Tile& tile : c.tiles) {
+            if (!tile.minimized && tile.height.kind != WindowHeight::Auto) {
+                owner = &tile.height;
+                break;
+            }
         }
     }
     // No owner: every tab is Auto, which means the whole work area — what
@@ -514,7 +545,12 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // silently undo an explicit centerActiveColumn at the strip's edges
     // (whose centered anchor implies out-of-range viewOffset by design) and
     // reclaim removeWindowInternal's deliberate right-edge dead space.
-    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0) {
+    // BOTH ends, like every sibling bounds test in this file: this one indexes
+    // m_columns directly rather than delegating to a qBound, so an
+    // out-of-range active index would be an out-of-bounds read in release
+    // rather than an assertion. Not reachable today — every writer of the
+    // index clamps — so this is consistency, not a latent crash.
+    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0 && m_activeColumnIdx < m_columns.size()) {
         const int viewMain = mainExtent(params);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);
@@ -692,9 +728,15 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
+        // Published so a consumer can tell "the user asked for this extent"
+        // from "this column cannot be any narrower" — columnExtentPx takes the
+        // max of the two and the answer is indistinguishable afterwards.
+        rc.extentPinnedByMinimum = columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
-        // rewrites this rect from the shown tab's height intent.
+        // rewrites this rect from the height intent of the tab that OWNS the
+        // column (see tabbedColumnCrossPx), which is not necessarily the tab
+        // on show and is not the only tab that may carry an intent.
         rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
 
         QVector<int> visible;
@@ -706,9 +748,14 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         }
 
         if (rc.tabbed) {
-            // A tabbed column takes its CROSS extent from the shown tab's own
-            // height intent (niri parity: a tabbed column may be shorter than
-            // the work area), so the rect the full-cross default above wrote
+            // A tabbed column takes its CROSS extent from the height intent
+            // of the tab that OWNS it (Column::heightOwnerId), not from
+            // whichever tab is on show. niri parity for the SHAPE (a tabbed
+            // column may be shorter than the work area) but not for the
+            // bookkeeping: niri holds at most one non-Auto tile per column
+            // and so can scan for it, while a column here may carry several
+            // sized tiles and names its owner instead. So the rect the
+            // full-cross default above wrote
             // is replaced before anything derives from it. Everything below —
             // the indicator rect, the content rect the tabs are committed at —
             // then follows the shortened column on its own.

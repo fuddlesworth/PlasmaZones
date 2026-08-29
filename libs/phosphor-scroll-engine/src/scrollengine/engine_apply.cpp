@@ -476,8 +476,88 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 }
             }
         }
+        // Column maximize, for the effect to mirror onto KWin's maximize bit.
+        // Measured on the RENDERED column rather than read off the strip's
+        // pre-maximize slot: the slot says "we own a stored width to go back
+        // to", which is not the same question. toggleMaximizeColumnAt has
+        // a deliberate arm for a column sitting at full width with NO stored
+        // slot (maximized in an earlier session, or another column's maximize
+        // discarded the single slot), and that column is maximized as far as
+        // the user and the titlebar button are concerned.
+        //
+        // ResolvedColumn::rect is the column's FULL extent, before any
+        // within-column tab-indicator reservation — which is exactly why the
+        // flag is measured here and not effect-side off a tile rect: the
+        // tiles carry the REDUCED rects, so a maximized tabbed column would
+        // measure under full width there.
+        //
+        // The degenerate work area is guarded belt-and-braces: applyLayout
+        // already returned on an invalid work area, so unlike
+        // toggleMaximizeColumnAt's bail — which IS reachable, since a verb
+        // can be driven at any time — this one cannot currently fire. Kept
+        // because the compare it protects reads true for every column at a
+        // zero main extent, which would tell the effect to maximize the whole
+        // strip against a viewport that does not exist.
+        //
+        // A column PINNED BY ITS MINIMUM is excluded. Its extent comes from
+        // its tiles' declared minimum rather than from any width the user
+        // chose, so when that floor alone reaches the work area the column
+        // renders full width whatever the intent says. Measured off the rect
+        // alone it would report maximized permanently: the titlebar button
+        // would latch with no way to un-latch it, and every toggle press
+        // would rewrite persisted intent invisibly while reporting success.
+        // The toggle takes the same exclusion at its pinned-by-minimum bail
+        // (scrollstrip_sizing.cpp, the `columnMinExtentPx >= mainSize` arm),
+        // so the verb and the published verdict agree about which columns are
+        // out of scope. That agreement covers the pinned half ONLY; see below.
+        //
+        // A column is also excluded when the context's DEFAULT width itself
+        // renders full. Under such a setting every column on the strip spans
+        // the work area simply by existing, so a rect-only measure reports
+        // every one of them maximized in every batch, and the effect then
+        // asserts KWin MaximizeFull on every scroll-managed window on the
+        // screen with an is-maximized window rule firing strip-wide. That is
+        // not what the flag means. It names a column the user made full when
+        // full is not the norm.
+        //
+        // THE TOGGLE AND THIS PREDICATE DIVERGE HERE, deliberately on both
+        // sides, and it is worth being plain about it rather than implying
+        // they agree. Under a full-width default the toggle still acts: its
+        // fallback arm (the `defaultIsFullWidth` line in
+        // scrollstrip_sizing.cpp) halves the column and reports true, because
+        // a user whose default is itself full width would otherwise dead-end
+        // with no way to shrink a column. This predicate still publishes
+        // false, for the strip-wide latch reason above. So on such a strip a
+        // maximize press changes the column's width without the flag ever
+        // going true, and the effect's own anti-ballooning clear is what keeps
+        // KWin's maximize bit in step. The two answer different questions:
+        // this one is "should the titlebar button read toggled, safely, for
+        // every column on the strip", the toggle's is "did this press change
+        // the column".
+        const int workAreaMain = params.axis.mainSize(params.workArea);
+        const bool defaultRendersFull =
+            workAreaMain > 0 && ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params) >= workAreaMain;
+        const bool columnMaximized = workAreaMain > 0 && !column.extentPinnedByMinimum && !defaultRendersFull
+            && params.axis.mainSize(column.rect) >= workAreaMain;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                // The dragged window gets NO entry at all for the whole
+                // gesture, columnMaximized included — and since absence is the
+                // only encoding of "not maximized", it is worth stating what
+                // the effect does with that.
+                //
+                // Nothing: the effect's batch consumer is a per-entry loop, so
+                // a window that appears in no entry is never visited and its
+                // claim is neither released nor re-asserted. That is the
+                // wanted outcome here. Releasing mid-drag would hand the
+                // window's maximize bit back under the user's hand, and
+                // re-asserting would fight the drag.
+                //
+                // The claim is closed at the OTHER end instead:
+                // TilingHandler::reconcileMaximizeAfterGesture re-drives it
+                // when the gesture finishes, which exists because the engine
+                // emits on change and a drag that moves no column schedules
+                // no batch to carry the answer.
                 columnHadSkippedTile.insert(column.columnIndex);
                 continue;
             }
@@ -502,6 +582,24 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
+            // NOTE: a parked tile's committed x is deliberately NOT retained
+            // from the last batch here, though an earlier fix did exactly
+            // that. The instability it was chasing — a parked column
+            // re-committed a few pixels over on every scroll step — is gone at
+            // the source: parkRect now aligns to the END of the screen span
+            // that the tile's DEPARTURE SIDE implies (ParkAlign), which does
+            // not slide with the view, instead of clamping the live strip x,
+            // which does.
+            //
+            // Retaining here on top of that would be strictly worse than
+            // redundant. It keyed on m_lastAppliedRect, which some fifteen
+            // unrelated paths drop for their own reasons — onWindowResized's
+            // refused-ack arm most often, and that fires for exactly the
+            // off-screen hidden tabs this was meant to steady — so the
+            // retention silently lapsed and the ping-pong came back (seen live
+            // as a hidden tab alternating x=1924/1932 while never unparking).
+            // And when it did hold it would pin a stale x across a width
+            // change, fighting the alignment above.
             anyEmittedUnparked = anyEmittedUnparked || !parkedNow;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is
@@ -535,6 +633,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             const bool windowedFs = tile.windowedFullscreen;
             if (windowedFs) {
                 obj[QLatin1String("windowedFullscreen")] = true;
+            }
+            // Rides every tile of the column, and UNGATED by presentation for
+            // the same reason the flag above is: a parked column and a hidden
+            // tab keep the state, so scrolling past a maximized column does
+            // not cycle its clients' maximize bit off and on. Repeating it per
+            // tile rather than per column is what the flat per-window wire
+            // shape requires — the effect has no column identity to hang it
+            // on, and every tile of a maximized column is genuinely in a
+            // maximized column.
+            if (columnMaximized) {
+                obj[QLatin1String("columnMaximized")] = true;
             }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
@@ -652,6 +761,23 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 m_lastAppliedWindowedFs.insert(tile.windowId);
             } else {
                 m_lastAppliedWindowedFs.remove(tile.windowId);
+            }
+            // The column-maximize flag needs the same leg, and for a stronger
+            // reason than its sibling. It is not just that a toggle moves no
+            // rect: the flag is derived partly from extentPinnedByMinimum, so
+            // it flips whenever a client reports a minimum anywhere in
+            // [resolveColumnWidthPx(width), workAreaMain] on a column already
+            // at full width, or whenever respectMinimumSize is toggled over
+            // one — in both cases with every committed rect byte-identical.
+            // Without this the batch is suppressed and the compositor keeps
+            // asserting a maximize the engine has already dropped.
+            if (m_lastAppliedColumnMaximized.contains(tile.windowId) != columnMaximized) {
+                anyEntryChanged = true;
+            }
+            if (columnMaximized) {
+                m_lastAppliedColumnMaximized.insert(tile.windowId);
+            } else {
+                m_lastAppliedColumnMaximized.remove(tile.windowId);
             }
         }
     }
@@ -839,9 +965,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // Remember the request so windowFocused can tell this
             // activation's echo apart from genuine user focus (the echo
             // contract on windowFocused's drain). Bounded: an effect-side
-            // drop leaves an entry behind until the clear-on-mismatch
-            // reclaims it, and the cap keeps a pathological run of drops
-            // from growing the queue without limit.
+            // drop leaves an entry behind until the per-entry expiry lets
+            // the next genuine click on that window through (see
+            // kSelfActivationEchoExpiryMs), and the cap keeps a pathological
+            // run of drops from growing the queue without limit.
             queueSelfActivation(active);
             Q_EMIT activateWindowRequested(active);
         }
@@ -856,9 +983,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 
 void ScrollEngine::queueSelfActivation(const QString& windowId)
 {
+    if (!m_selfActivationClock.isValid()) {
+        m_selfActivationClock.start();
+    }
     m_pendingSelfActivations.append(windowId);
+    // Latest-wins stamp per id: a re-queue refreshes the entry's liveness,
+    // which is the right answer for the expiry (the newest request's echo is
+    // the one still plausibly in flight).
+    m_pendingSelfActivationQueuedAt.insert(windowId, m_selfActivationClock.elapsed());
     while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
-        m_pendingSelfActivations.removeFirst();
+        const QString dropped = m_pendingSelfActivations.takeFirst();
+        if (!m_pendingSelfActivations.contains(dropped)) {
+            m_pendingSelfActivationQueuedAt.remove(dropped);
+        }
     }
 }
 

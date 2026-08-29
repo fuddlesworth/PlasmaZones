@@ -72,6 +72,18 @@ private Q_SLOTS:
         // `<receiver>.<name>`, with or without a call paren. Word-boundary
         // anchored so a longer identifier ending in the receiver name cannot
         // match.
+        //
+        // What this deliberately does NOT see, so its greenness is not
+        // overread. It matches a LITERAL `receiver.name` only, so it is blind
+        // to bracket access (`bridge["previewChain"]`), to a JS-local rebind
+        // (`const b = bridge; b.foo()`), and to names reached through a
+        // `Connections { target: bridge }` handler — signal names are never
+        // checked at all. It also checks existence by NAME, so an arity or
+        // parameter-type change is invisible: reducing
+        // `previewChain(packId, params)` to `previewChain(packId)` passes here
+        // and fails at runtime. Each of those is a real gap rather than a
+        // theoretical one; they are accepted because the common regression is a
+        // rename, which this does catch.
         const auto namesUsedOn = [](const QString& src, const QString& receiver) {
             QSet<QString> names;
             const QRegularExpression re(QStringLiteral("\\b%1\\.([A-Za-z_][A-Za-z0-9_]*)").arg(receiver));
@@ -453,7 +465,16 @@ private Q_SLOTS:
     void shaderBrowserTypeCatalogCoversEveryEventClass()
     {
         const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
-        const QString src = readFile(qmlPath);
+        // Comments stripped before the window is taken, like every sibling
+        // scrape in this file. Without it a commented-out or merely
+        // explanatory `// "key": "..."` inside the block satisfies the
+        // coverage check for a class that has no real catalog entry, and
+        // inverts the negative assertion below — the exact false pass this
+        // slot exists to prevent.
+        static const QRegularExpression catalogLineCommentRe(QStringLiteral("//[^\n]*"));
+        static const QRegularExpression catalogBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                              QRegularExpression::DotMatchesEverythingOption);
+        const QString src = readFile(qmlPath).remove(catalogBlockCommentRe).remove(catalogLineCommentRe);
         QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
 
         const int start = src.indexOf(QStringLiteral("_typeCatalog"));
@@ -523,14 +544,23 @@ private Q_SLOTS:
     /// The Animations → Shaders page routes AnimationsPageController through
     /// ShaderBrowserPage as `bridge`, so names the browser tree calls on
     /// `bridge.` must resolve on the controller — except the documented
-    /// optional surface (`previewController`), which the detail dialog
-    /// null-checks and treats as "no preview pane" (its docstring says so).
+    /// optional surface (`previewController` and `previewKind`), which the
+    /// detail dialog guards and treats as "no preview pane" / "the zone pane"
+    /// respectively (see the set built at the top of the slot).
     void everyBridgeCallFromTheShaderBrowserIsReachable()
     {
-        const QSet<QString> documentedOptional{QStringLiteral("previewController")};
+        // `previewKind` joins `previewController` as documented-optional: the
+        // detail dialog reads it to choose between the zone/overlay and
+        // decoration preview panes, and guards the read
+        // (`bridge && bridge.previewKind ? … : …`). A bridge that omits it —
+        // the animations controller here, and the zone/overlay controllers
+        // that predate the property — falls back to the zone pane, which is
+        // exactly what keeps those routes unchanged.
+        const QSet<QString> documentedOptional{QStringLiteral("previewController"), QStringLiteral("previewKind")};
 
-        // Only the files the animations route instantiates: the browser page
-        // and its detail dialog. ShaderSetsPage lives in the same directory
+        // Only the files the animations route instantiates: the browser page,
+        // its card delegate and its detail dialog. ShaderSetsPage lives in the
+        // same directory
         // but is a DIFFERENT route with a set-capable bridge the animations
         // controller never provides, so sweeping the whole directory would
         // demand its API of the wrong controller.
@@ -560,7 +590,17 @@ private Q_SLOTS:
                 if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {
                     continue;
                 }
-                QVERIFY2(!readFile(path).contains(bridgeUseRe),
+                // Comments stripped first, matching the scrape below: a file
+                // that merely MENTIONS bridge. in a doc comment is not a route
+                // file, and failing it here would send whoever hits it looking
+                // for a call that does not exist.
+                static const QRegularExpression sweepLineCommentRe(QStringLiteral("//[^\\n]*"));
+                static const QRegularExpression sweepBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                                    QRegularExpression::DotMatchesEverythingOption);
+                QString swept = readFile(path);
+                swept.remove(sweepBlockCommentRe);
+                swept.remove(sweepLineCommentRe);
+                QVERIFY2(!swept.contains(bridgeUseRe),
                          qPrintable(QStringLiteral("%1 uses bridge.* but is not in routeFiles — add it or exclude it "
                                                    "like the ShaderSetsPage route")
                                         .arg(QFileInfo(path).fileName())));
@@ -777,6 +817,125 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("; "))));
+    }
+
+    /// The shared detail dialog resets preview STATE early and arms the zone
+    /// renderer LATE, and those two must not be merged.
+    ///
+    /// One dialog serves the zone/overlay browser and the decoration browser,
+    /// and the two want opposite timing from it. That has now broken in both
+    /// directions, each time by moving one line:
+    ///
+    ///   - Resetting state in onOpened (after the enter transition) was too
+    ///     late for the decoration pane, whose Loader activates on `visible`.
+    ///     It composed with the PREVIOUS pack's parameters, then recomposed
+    ///     when the reset landed: preview / unavailable / preview on every open.
+    ///
+    ///   - Moving the WHOLE reset to onAboutToShow fixed that and broke the
+    ///     other side, because it dragged the zone renderer's arm along with
+    ///     it. Creating a ZoneShaderItem compiles and links a shader, and doing
+    ///     that before the popup is visible spent it on a window nobody could
+    ///     see — the dialog appeared only once the compile had finished, with
+    ///     no placeholder phase at all.
+    ///
+    /// So: state in onAboutToShow, arm in onOpened. This pins the split by
+    /// where the call sites are, because neither failure shows up in a headless
+    /// test — both are timing, and the zone renderer needs a GPU.
+    ///
+    /// Source-scrape, with the limitations this file documents elsewhere: it
+    /// checks WHERE the arm is called from, not what it does.
+    void theDetailDialogArmsTheZoneRendererOnOpenedNotAboutToShow()
+    {
+        const QString path =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml");
+        QString src = readFile(path);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("cannot read ") + path));
+
+        // Comments carry the rationale for this very split, so leaving them in
+        // would let the prose satisfy the assertions the code has to.
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+        src.remove(blockCommentRe);
+        src.remove(lineCommentRe);
+
+        const int aboutToShow = src.indexOf(QLatin1String("onAboutToShow:"));
+        const int opened = src.indexOf(QLatin1String("onOpened:"));
+        const int closed = src.indexOf(QLatin1String("onClosed:"));
+        QVERIFY2(aboutToShow >= 0, "onAboutToShow handler not found");
+        QVERIFY2(opened > aboutToShow, "onOpened handler not found after onAboutToShow");
+        QVERIFY2(closed > opened, "onClosed handler not found after onOpened");
+
+        const QString aboutToShowBody = src.mid(aboutToShow, opened - aboutToShow);
+        const QString openedBody = src.mid(opened, closed - opened);
+
+        QVERIFY2(openedBody.contains(QLatin1String("_armZoneRenderer")),
+                 "onOpened must arm the zone renderer: arming it earlier makes the shader compile "
+                 "before the popup is visible, so the dialog appears only once the preview is finished "
+                 "and the placeholder never shows");
+        QVERIFY2(!aboutToShowBody.contains(QLatin1String("_armZoneRenderer")),
+                 "onAboutToShow must NOT arm the zone renderer — see the comment on _armZoneRenderer");
+        QVERIFY2(aboutToShowBody.contains(QLatin1String("_resetPreview")),
+                 "onAboutToShow must reset preview state: resetting it later hands the decoration pane "
+                 "the previous pack's parameters and makes it compose twice");
+
+        // The arm itself must stay gated on `opened`. A guard weakened to
+        // `visible` re-admits the broken ordering without moving the call.
+        QVERIFY2(src.contains(QLatin1String("_rendererActive = root.opened")),
+                 "_armZoneRenderer must gate on `opened`, not `visible`");
+
+        // ── The DECORATION half of the same shared lifecycle ──────────────
+        //
+        // The decoration pane's Loader must gate on the armed flag, not on
+        // `visible` alone: a Popup keeps `visible` true until its exit
+        // transition finishes, so a `visible`-only gate never tears the pane
+        // down on a fast pack switch and the previous pack's stale
+        // composition leads the open (stale / unavailable / preview).
+        QVERIFY2(src.contains(QLatin1String("root._decorationArmed")),
+                 "the decoration pane's Loader must gate on _decorationArmed — `visible` alone cannot "
+                 "tear it down on a fast pack switch, so the previous pack's stale composition shows first");
+
+        // Teardown of BOTH panes is one shared function, and the reset path
+        // must go through it. One pane's flag written somewhere the other's
+        // is not is how every one of these regressions started.
+        QVERIFY2(src.contains(QLatin1String("function _teardownPanes")),
+                 "_teardownPanes must exist: both panes tear down through one function");
+        const int teardownAt = src.indexOf(QLatin1String("function _teardownPanes"));
+        const QString teardownBody = src.mid(teardownAt, src.indexOf(QLatin1String("}"), teardownAt) - teardownAt);
+        QVERIFY2(teardownBody.contains(QLatin1String("_rendererActive = false"))
+                     && teardownBody.contains(QLatin1String("_decorationArmed = false")),
+                 "_teardownPanes must drop BOTH panes' flags");
+        QVERIFY2(!src.contains(QLatin1String("active: root.visible && root._decorationPreview\n")),
+                 "the decoration Loader has lost its _decorationArmed gate");
+
+        // A pack switch on a still-visible dialog must reset: aboutToShow is
+        // not guaranteed to re-fire on a popup that never finished closing.
+        const int effectChanged = src.indexOf(QLatin1String("onEffectChanged:"));
+        QVERIFY2(effectChanged >= 0, "onEffectChanged handler not found");
+        const QString effectChangedBody = src.mid(effectChanged, 200);
+        QVERIFY2(effectChangedBody.contains(QLatin1String("_resetPreview")),
+                 "onEffectChanged must reset the preview while visible, or a fast pack switch keeps "
+                 "the previous pack's pane alive under the new effect");
+
+        // Focus may FREEZE a preview, never tear it down. Focus loss is not
+        // occlusion — the window is fully exposed under a Plasma applet — and
+        // an `active:` gated on frontmost made every decoration preview
+        // vanish while the overlay previews carried on drawing. The frontmost
+        // check belongs only on pause-class properties (animating /
+        // previewAnimating / a clock's running).
+        QVERIFY2(!src.contains(QLatin1String("active: root.visible && root._appActive")),
+                 "the decoration pane's `active` must not fold in _appActive: focus loss tears the "
+                 "chain down instead of freezing it");
+        const QString browserDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        for (const QString& browserFile :
+             {QStringLiteral("/ShaderBrowserPage.qml"), QStringLiteral("/ShaderBrowserCard.qml")}) {
+            const QString bsrc = readFile(browserDir + browserFile);
+            QVERIFY2(!bsrc.contains(QLatin1String("previewLive: groupCard.bodyLive && root._appActive"))
+                         && !bsrc.contains(QLatin1String("_inViewport && root._appActive")),
+                     qPrintable(browserFile
+                                + QStringLiteral(": previewLive/_inViewport must not fold in _appActive — "
+                                                 "teardown on focus loss, not a freeze")));
+        }
     }
 };
 

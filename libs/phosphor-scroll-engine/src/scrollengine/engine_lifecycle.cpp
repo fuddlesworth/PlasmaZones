@@ -5,10 +5,12 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <QTimer>
 #include <QVariant>
 
 #include <algorithm>
@@ -80,9 +82,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const int minWidth = qMax(0, minWidthIn);
     const int minHeight = qMax(0, minHeightIn);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    // ONE fetch for the whole open path. Four effective* values are resolved
-    // out of this map below (sticky handling, default display, the
-    // client-decides verdict and the insert position) plus the template
+    // ONE fetch for the whole open path. Five effective* values are resolved
+    // out of this map below (sticky handling, default display, the two
+    // client-decides verdicts and the insert position) plus the template
     // blueprint, and the screenId-taking wrappers would each rebuild it.
     const QVariantMap screenOverrides = overridesForScreen(screenId);
 
@@ -205,7 +207,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
+        // exactOnly: a column width is a PER-WINDOW contract, and the
+        // non-exact default admits a same-app SIBLING's record (the interface
+        // documents that sharing as being for free POSITIONS). Minting one
+        // window's sizing intent out of another instance's remembered rect
+        // opens the column at a size this window never asked for.
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true)) {
             // The tracked geometry is a PHYSICAL rect from the compositor, so
             // it has to be decoded by role. Reading .width() unconditionally
             // would, on a vertical strip, feed the client's cross extent into
@@ -264,6 +271,15 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // focus and re-anchor the view (insertWindow does both, insertWindowAt and
     // insertWindowIntoActiveColumn do neither), so an arrival that lands
     // off-screen is diagnosable only by naming the arm that placed it.
+    // Whether the insert APPENDED to a column that already existed rather
+    // than creating one. Derived from the column count, not from which arm
+    // ran: insertWindowIntoActiveColumn delegates to insertWindow when there
+    // is no active column and still returns true, so an arm-keyed flag would
+    // call that a join. The client-decides height gate below excludes joins —
+    // a joining window shares its host column's shape, which is why the width
+    // twin never reaches these arms either (insertWindowIntoActiveColumn
+    // honours @p width only on its empty-strip fallback).
+    const int columnsBeforeInsert = state->strip().columnCount();
     const char* insertArm = "none";
     // Whether the tile came back out of the mode-round-trip stash. The height
     // commit at the tail reads it: a stash restore rebuilds the remembered
@@ -490,6 +506,37 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                                                  WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent))));
         }
     }
+    // "The client decides" default HEIGHT, the twin of the width gate above
+    // the insert. Every term of that gate applies here for its own reason:
+    // a stash restore's remembered shape outranks an open-time default (the
+    // rule arm just above documents that precedence), a per-window
+    // openWindowHeight rule outranks the kind and is handled there, and a
+    // per-screen rule height means the resolver already pinned one.
+    //
+    // A window that JOINED an existing column is excluded, which is where the
+    // width twin's reach ends too: that arm passes the width to
+    // insertWindowIntoActiveColumn, which honours it only on the empty-strip
+    // fallback, so a joining window keeps its host column's shape. Committing
+    // a height there is not merely redundant, it is disruptive — the intent
+    // is Fixed, so on a TABBED host setWindowHeightIntent hands the arrival
+    // the column's extent and resizes every tab to a window that just showed
+    // up, and on a Normal host the relayout renormalizes the siblings down to
+    // fit the newcomer. A joining tile takes the column's even split, as
+    // before.
+    //
+    // Placed AFTER the insert rather than folded into params.defaultWindowHeight
+    // because the insert is what puts the tile in the strip: unlike the
+    // width, which the insert takes as an argument, a tile's height is
+    // written by the insert from params and can only be re-stated through
+    // setWindowHeightIntent afterwards.
+    const bool joinedExistingColumn = inserted && state->strip().columnCount() == columnsBeforeInsert;
+    if (inserted && !restoredFromStash && !joinedExistingColumn && !openParams.heightFraction) {
+        // Re-resolved after the insert for the rule arm's reason: with smart
+        // gaps the work area depends on the strip's column count, and the
+        // committed pixels are PERSISTED intent that would not self-heal.
+        commitClientDecidedHeight(state->strip(), windowId, screenId, screenOverrides,
+                                  layoutParamsForScreen(screenId, state->strip().columnCount()));
+    }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
         // A refusal is still an OUTCOME, and the seed's "consumed on every
@@ -607,6 +654,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
     }
     bool migratedWindowedFs = false;
+    std::optional<WindowHeight> migratedHeight;
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
         // context's per-window bookkeeping goes with it: a stale
@@ -619,6 +667,25 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // silently default false; read it off the old tile before takeWindow
         // destroys it (the boundary-crossing verb carries it the same way).
         migratedWindowedFs = oldState->strip().isWindowedFullscreen(windowId);
+        // The tile's HEIGHT intent is carried the same way and for a sharper
+        // reason: the insert below re-runs the whole open path, so a
+        // ClientDecides screen would re-stamp the window with its recorded
+        // client extent and discard whatever height the user had given it on
+        // the old context. A migration is a move, not an open — the height
+        // the window already had outranks the open-time default. Carried
+        // verbatim, Auto included, so a window the user never resized keeps
+        // sharing its column rather than acquiring an intent on every hop.
+        // Only from a real TILE. A window that was FLOATING on the old
+        // context is not in its strip, and windowHeightIntent answers a
+        // default-constructed Auto for a window it does not hold — an engaged
+        // optional carrying a height that never belonged to a tile, which the
+        // re-apply below would then stamp over the client-decided height the
+        // new screen's open path just committed. The windowed-fullscreen twin
+        // gets away with the unconditional read because a false flag is a
+        // no-op write; an Auto height is not.
+        if (oldState->strip().containsWindow(windowId)) {
+            migratedHeight = oldState->strip().windowHeightIntent(windowId);
+        }
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
         m_floatRestore.remove(windowId);
@@ -630,6 +697,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // redundant emit, but the exit sets should stay identical).
         m_scrollFloatedWindows.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         if (wasFloating) {
             // Announce the dropped float bit: signal-driven subscribers
             // (the effect's FloatingCache) would otherwise keep believing
@@ -702,6 +770,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
                                       << "— migrated windowed-fullscreen state dropped";
         }
         return;
+    }
+    // Re-state the migrated height intent on the fresh tile, overwriting
+    // whatever the open path just seeded (a ClientDecides screen re-stamps
+    // the client extent there, which on a migration would discard the user's
+    // height). Guarded on the window actually being a tile: insertOpenedWindow
+    // returns true on its float exits too, and a float has no tile to carry.
+    if (migratedHeight && state->strip().containsWindow(windowId)) {
+        state->strip().setWindowHeightIntent(windowId, *migratedHeight);
     }
     // Hand the migrated windowed-fullscreen flag to the fresh tile (captured
     // above, before takeWindow destroyed the old one). insertOpenedWindow
@@ -891,6 +967,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // lands can never be answered; without this a later genuine focus of a
     // reused id would be eaten as that echo.
     m_pendingSelfActivations.removeAll(windowId);
+    m_pendingSelfActivationQueuedAt.remove(windowId);
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
@@ -935,16 +1012,34 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // is different — it is retained on purpose for the close capture.)
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
 
     if (inStrip && key == currentKeyForScreen(key.screenId)) {
         // Background-context guard: applyLayout resolves the screen's
         // CURRENT context, so a close on another desktop's state would
         // relayout the wrong strip (the mutated one must stay silent
         // until its desktop returns).
-        applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        //
+        // Close-settle hold: with a configured delay, the reflow waits out
+        // the closing window's disappear animation instead of moving the
+        // neighbours over the still-painting corpse (the two animations
+        // fighting for the vacated slot is exactly the visual mess the hold
+        // exists to prevent). The deferred flush passes focusAfter=false on
+        // purpose: the compositor activates its own successor immediately
+        // and windowFocused adopts it long before the flush fires, so the
+        // engine re-asserting its pick a delay later would only re-open the
+        // dueling-activations bounce the pending-self-activation fix closed.
+        if (m_closeReflowDelayMs > 0) {
+            startCloseReflowHold(key.screenId);
+        } else {
+            applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
+        }
     }
     Q_EMIT placementChanged(key.screenId);
 }
+
+// startCloseReflowHold / deferForCloseReflowHold / scheduleCloseReflowFlush
+// live in engine_closehold.cpp (this TU is over the file-size ceiling).
 
 void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
 {
@@ -967,9 +1062,25 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // never this engine's emit, so its echo still drives the strip
     // (signals.cpp documents that contract).
     if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
+        // Expiry check BEFORE swallowing: an entry whose echo the compositor
+        // dropped (show desktop, focus-stealing prevention) has no reclaim
+        // path any more (see below), and without this it ate the FIRST real
+        // click on its window. Echo round trips are milliseconds; a stamp
+        // this old means the echo is dead and this report is the user.
+        const qint64 queuedAt = m_pendingSelfActivationQueuedAt.value(windowId, -1);
+        const bool expired = queuedAt < 0 || !m_selfActivationClock.isValid()
+            || m_selfActivationClock.elapsed() - queuedAt > kSelfActivationEchoExpiryMs;
         m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
                                        m_pendingSelfActivations.begin() + selfIdx + 1);
-        return;
+        for (auto stampIt = m_pendingSelfActivationQueuedAt.begin();
+             stampIt != m_pendingSelfActivationQueuedAt.end();) {
+            stampIt = m_pendingSelfActivations.contains(stampIt.key()) ? std::next(stampIt)
+                                                                       : m_pendingSelfActivationQueuedAt.erase(stampIt);
+        }
+        if (!expired) {
+            return;
+        }
+        // Fall through: adopt as genuine focus.
     }
     // Declined-open consume, m_declinedOpenFocus' read side. An
     // `openFocused = false` arrival was focused by the compositor anyway, and
@@ -984,9 +1095,22 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (m_declinedOpenFocus.remove(windowId)) {
         return;
     }
-    // A genuine focus report implies every previously-sent echo already
-    // landed, so whatever is left in the queue was dropped — reclaim it.
-    m_pendingSelfActivations.clear();
+    // Deliberately NO reclaim of m_pendingSelfActivations here. An earlier
+    // form cleared the queue on every genuine report, reasoning that a
+    // genuine focus implies every previously-sent echo already landed. That
+    // inference is false ACROSS DIRECTIONS: on a window close the compositor
+    // activates its own successor pick and that genuine report is in flight
+    // BEFORE this engine queues its competing self-activation (the close
+    // handler's focusWindowAfter), so the queued entry's echo is still
+    // legitimately in flight when the genuine report lands. The clear wiped
+    // it, the echo then arrived against an empty queue, was mis-read as user
+    // focus, and the two picks re-anchored the strip against each other —
+    // the post-close anchor ping-pong (0↔1916 several times in two seconds,
+    // re-parking live windows on every bounce). The queue stays bounded
+    // without the reclaim: the prefix-drop at match above, the close-time
+    // removeAll, and the kMaxPendingSelfActivations cap all still run — and
+    // the dropped-echo case the reclaim used to (over-)serve is now handled
+    // precisely by the per-entry expiry at the match above.
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -1004,19 +1128,71 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // whether or not the strip's own focus slot moves below.
     state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-    if (state->strip().focusWindow(windowId, params)) {
-        // The focus change may scroll the viewport; never re-activate here
-        // (the compositor initiated this focus). Background-context guard:
-        // see windowClosed.
-        if (key == currentKeyForScreen(key.screenId)) {
+    // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
+    // screen owns the view for the rest of the hold, and picking the dragged
+    // window up activates it. Handing the view back here would slide the
+    // layout under a stationary cursor, the hazard applyLayout's own
+    // dragPreviewSteersView guard exists for. screensMatch, not ==, for that
+    // guard's reason. Read before the focus move so both outcomes below share
+    // one answer.
+    const bool dragPreviewSteersView = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId);
+    const bool focusMoved = state->strip().focusWindow(windowId, params);
+    // A view still detached AFTER the focus move is one no re-anchor took
+    // back, and there are two ways to arrive here holding one. focusWindow
+    // REFUSED the report, because it names the window the strip already calls
+    // active (scrollstrip_navigation.cpp's same-column, same-tile bail); or it
+    // accepted a same-COLUMN tile move, which re-anchors nothing because no
+    // strip geometry moved. Both are right about the focus SLOT and wrong
+    // about the VIEW. A pan detaches the view from the centering policy, and
+    // the re-anchor that re-attaches it (reanchorAfterFocusChange) is reached
+    // from focusWindow on a COLUMN change and on nothing else, so neither of
+    // these two outcomes gets there. No later pass revisits the question
+    // either: updateViewForFocus returns early while detached, so even the
+    // applyLayout a desktop return runs cannot re-derive the anchor. The
+    // result was that clicking the focused window, or switching away from its
+    // desktop and back, did nothing at all — the whole report was dropped,
+    // latch and all.
+    //
+    // Re-attach and let the POLICY answer, rather than re-anchoring outright.
+    // Under Never/OnOverflow updateViewForFocus leaves a fully-visible column
+    // alone, so a pan that kept the focused column on screen survives an
+    // incidental activation — KWin re-fires windowActivated on restacking,
+    // fullscreen exit and desktop switches, not only on real focus moves.
+    // Under Always it re-centres, which is what that setting asks for.
+    //
+    // The report must NAME the active window: a minimized tile in the active
+    // column is refused by focusWindow without becoming the column's active
+    // tile, and that report has no claim on the view.
+    const bool handBackView =
+        state->strip().viewDetached() && state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
+    if (!focusMoved && !handBackView) {
+        return;
+    }
+    if (handBackView) {
+        state->strip().setViewDetached(false);
+    }
+    // The focus change may scroll the viewport; never re-activate here (the
+    // compositor initiated this focus). Background-context guard: see
+    // windowClosed. The latch is cleared for a background context too (it is
+    // persisted state), but only the on-screen context re-derives the anchor
+    // now — a background one re-derives on the applyLayout its own desktop
+    // return runs, which is the pass that used to return early.
+    if (key == currentKeyForScreen(key.screenId)) {
+        // Close-settle hold, second arm: the compositor's successor pick
+        // lands here milliseconds after a close, and its reanchor reflow
+        // moving the neighbours would defeat the hold windowClosed just
+        // started. The anchor/focus state above is already updated — only
+        // the geometry emission waits; the scheduled flush replays it.
+        if (!deferForCloseReflowHold(key.screenId)) {
             applyLayout(key.screenId, false);
         }
-        // Focus and view anchor are persisted (serializeStripState), and
-        // placementChanged is the only thing that marks DirtyScrollStrips.
-        // Emitted for a background context too: the strip that changed is
-        // serialized whether or not it is the one on screen right now.
-        Q_EMIT placementChanged(key.screenId);
     }
+    // Focus and view anchor are persisted (serializeStripState), and
+    // placementChanged is the only thing that marks DirtyScrollStrips.
+    // Emitted for a background context too: the strip that changed is
+    // serialized whether or not it is the one on screen right now.
+    Q_EMIT placementChanged(key.screenId);
 }
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the

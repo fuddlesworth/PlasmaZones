@@ -10,7 +10,7 @@
 
 namespace PhosphorSurfaceShaders {
 
-class SurfaceShaderEffect;
+struct SurfaceShaderEffect;
 
 /**
  * @brief Theme colours a host supplies to resolveThemeParamColors().

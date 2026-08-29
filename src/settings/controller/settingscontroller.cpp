@@ -117,9 +117,10 @@ namespace PlasmaZones {
 // value bounds, the height kinds and their fixed-pixel range, the editing
 // steps for each, the preset-index ceiling, the shortcut adjust-step percent
 // bounds, and the tab indicator's numeric ranges and its fully-rounded
-// corner-radius sentinel. Only the height kind the QML actually keys rows off is
-// exported — Auto has no row of its own (it is the fall-through when neither
-// Fixed nor Preset matches), so exporting it would be an unread entry.
+// corner-radius sentinel. Only the height kinds the QML actually keys rows off
+// are exported. Auto and ClientDecides have no rows of their own (they are the
+// fall-through when neither Fixed nor Preset matches), so exporting them would
+// be unread entries.
 QVariantMap SettingsController::scrollingConstants() const
 {
     return {

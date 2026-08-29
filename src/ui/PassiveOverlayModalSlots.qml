@@ -71,6 +71,13 @@ Item {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // The desktop wallpaper, standing in for the scene a daemon surface has
+        // no way to capture. Under the SAME declare-and-forward contract as
+        // decorationChain above, and it is the case that proved the contract:
+        // applyDecoration wrote this and nothing declared it, so it became a
+        // dead dynamic property and every needsBackdrop pack on the daemon
+        // silently took its no-backdrop fallback.
+        property var backdropTexture: null
         // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
         // Same declare-and-forward contract as decorationChain: C++ writes it
         // with setProperty, so an undeclared name would silently become a dead
@@ -127,11 +134,15 @@ Item {
         // Captures the loaded content's shaderAnchor (the SnapAssistContent root
         // itself carries `shaderAnchor: true`) and re-renders it through the
         // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
             decorationOuterPadding: snapAssistSlot.decorationOuterPadding
+            backdropTexture: snapAssistSlot.backdropTexture
+            // Screen-spanning slot, so its rect is the area the wallpaper
+            // backdrop covers — see PassiveOverlayShell's OSD slot.
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: snapAssistSlot.audioSpectrum
         }
     }
@@ -183,6 +194,13 @@ Item {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // The desktop wallpaper, standing in for the scene a daemon surface has
+        // no way to capture. Under the SAME declare-and-forward contract as
+        // decorationChain above, and it is the case that proved the contract:
+        // applyDecoration wrote this and nothing declared it, so it became a
+        // dead dynamic property and every needsBackdrop pack on the daemon
+        // silently took its no-backdrop fallback.
+        property var backdropTexture: null
         // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
         // Same declare-and-forward contract as decorationChain: C++ writes it
         // with setProperty, so an undeclared name would silently become a dead
@@ -255,11 +273,13 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.layoutPicker" surface pack. Inert when the
         // source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
+            backdropTexture: layoutPickerSlot.backdropTexture
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: layoutPickerSlot.audioSpectrum
         }
     }
@@ -307,6 +327,13 @@ Item {
         // an undeclared name silently becomes a dead dynamic property.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // The desktop wallpaper, standing in for the scene a daemon surface has
+        // no way to capture. Under the SAME declare-and-forward contract as
+        // decorationChain above, and it is the case that proved the contract:
+        // applyDecoration wrote this and nothing declared it, so it became a
+        // dead dynamic property and every needsBackdrop pack on the daemon
+        // silently took its no-backdrop fallback.
+        property var backdropTexture: null
         property var audioSpectrum: []
 
         anchors.fill: parent
@@ -347,11 +374,13 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and
         // re-renders it through the resolved "popup.cheatsheet" surface
         // pack. Inert when the source is empty.
-        SurfaceDecoration {
+        QFZCommon.SurfaceDecoration {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
+            backdropTexture: cheatsheetSlot.backdropTexture
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: cheatsheetSlot.audioSpectrum
         }
     }

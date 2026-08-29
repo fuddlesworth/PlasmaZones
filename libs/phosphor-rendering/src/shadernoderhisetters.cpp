@@ -207,6 +207,19 @@ void ShaderNodeRhi::setSurfaceSize(float width, float height)
     }
 }
 
+void ShaderNodeRhi::setBackdropRect(float x, float y, float w, float h)
+{
+    if (m_backdropRect[0] == x && m_backdropRect[1] == y && m_backdropRect[2] == w && m_backdropRect[3] == h) {
+        return;
+    }
+    m_backdropRect[0] = x;
+    m_backdropRect[1] = y;
+    m_backdropRect[2] = w;
+    m_backdropRect[3] = h;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
 void ShaderNodeRhi::setSurfaceFrameTopLeft(float x, float y)
 {
     if (m_surfaceFrameTopLeft[0] != x || m_surfaceFrameTopLeft[1] != y) {
@@ -348,6 +361,13 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     m_userTextureWraps[slot] = use;
     m_userTextureSamplers[slot].reset();
     resetAllBindingsAndPipelines();
+    // Schedule the frame that rebuilds them. Dropping the sampler and the
+    // bindings changes what the next paint would produce but does not by
+    // itself ask for a next paint, so on a static pack (a plain border, a
+    // non-animated glass config) the new wrap mode would not appear until some
+    // unrelated repaint happened to come along. setUseWallpaper and
+    // setUseDepthBuffer mark dirty for exactly this reason.
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
@@ -391,8 +411,12 @@ void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
     }
     m_wallpaperImage = image;
     m_wallpaperDirty = true;
-    // Wallpaper is a plain texture at binding 11 with no BaseUniforms field —
-    // its upload goes through m_wallpaperDirty and doesn't need a UBO roundtrip.
+    // The texture upload itself goes through m_wallpaperDirty. The UBO still
+    // has to follow, because the surface profile derives uHasBackdrop from
+    // wallpaperBindingLive(), which reads the image's nullness — swapping a
+    // real wallpaper for a null one (or back) moves the gate.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setUseWallpaper(bool use)
@@ -409,6 +433,14 @@ void ShaderNodeRhi::setUseWallpaper(bool use)
     // release path (releaseRhiResources) frees them and clears m_initialized,
     // which is the one recreate trigger that exists. Freeing eagerly needs a
     // lazy ensureWallpaperResources() first.
+    // The UBO must follow the binding: the surface profile derives
+    // uHasBackdrop from wallpaperBindingLive(), so a flip that reset the
+    // bindings without re-uploading would leave a pack believing it still had
+    // the previous backdrop state. A time-animated pack self-heals on its next
+    // tick; a static one (a plain border, a non-animated glass config) never
+    // would.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
     resetAllBindingsAndPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }
@@ -599,6 +631,8 @@ void ShaderNodeRhi::setBufferWrap(const QString& wrap)
         m_bufferSamplers[i].reset();
     }
     resetAllBindingsAndPipelines();
+    // Ask for the frame that rebuilds them — see setUserTextureWrap.
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
@@ -614,6 +648,7 @@ void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
     }
     if (changed) {
         resetAllBindingsAndPipelines();
+        markDirty(QSGNode::DirtyMaterial);
     }
 }
 
@@ -629,6 +664,7 @@ void ShaderNodeRhi::setBufferFilter(const QString& filter)
         m_bufferSamplers[i].reset();
     }
     resetAllBindingsAndPipelines();
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
@@ -644,6 +680,7 @@ void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
     }
     if (changed) {
         resetAllBindingsAndPipelines();
+        markDirty(QSGNode::DirtyMaterial);
     }
 }
 
@@ -794,7 +831,20 @@ void ShaderNodeRhi::invalidateUniforms()
 
 void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 {
+    if (m_shaderIncludePaths == paths) {
+        return;
+    }
     m_shaderIncludePaths = paths;
+    // Belt-and-braces, NOT the mechanism that makes a path change take effect.
+    // Re-expansion happens in the owning ShaderEffect, which raises its own
+    // dirty flag and re-runs loadVertexShader / loadFragmentShader; those
+    // setters raise this one themselves. The node's flag only re-bakes the
+    // source it already holds, so it cannot re-expand anything on its own.
+    // Every caller today sets these paths immediately before such a reload, so
+    // this changes nothing for them — it is here so a future caller that sets
+    // them WITHOUT a reload still gets a re-bake rather than a silently stale
+    // pipeline.
+    m_shaderDirty = true;
 }
 
 void ShaderNodeRhi::setParamPreamble(const QString& preamble)

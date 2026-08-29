@@ -69,6 +69,7 @@ private Q_SLOTS:
     void centerVisibleColumnsCentersOnceThenRefuses();
     void scrollViewByPercentPansWithoutMovingFocus();
     void scrollViewSurvivesALateStashClaim();
+    void refocusingTheActiveWindowHandsAPannedViewBack();
     void edgeAutoScrollThenCancelKeepsTheScrolledView();
     void equalizeAndMinimizeReportTheirFeedback();
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
@@ -449,6 +450,105 @@ void TestScrollEngineVerbs::scrollViewSurvivesALateStashClaim()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
     QVERIFY(state->strip().viewDetached());
     QCOMPARE(state->strip().viewAnchor(), pannedAnchor);
+}
+
+void TestScrollEngineVerbs::refocusingTheActiveWindowHandsAPannedViewBack()
+{
+    // A compositor focus report naming the window the strip ALREADY calls
+    // active is refused by focusWindow (same column, same tile), and the
+    // engine used to drop the whole report on that refusal. The refusal is
+    // right about the focus slot and wrong about the VIEW: a pan detaches the
+    // view, and the re-anchor that re-attaches it sits behind the very branch
+    // the report just failed. Nothing else revisits it either, since
+    // updateViewForFocus returns early while detached — so the pan outlived
+    // both a click on the focused window and a desktop round trip, and the
+    // user's window stayed off to one side. Live report
+    // plasmazones-report-20260828-194258.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const auto params = ScrollTestUtils::engineParams();
+    const auto viewX = [&]() {
+        return state->strip().relayout(params).viewOffset;
+    };
+    const int policyView = viewX();
+    QVERIFY(!state->strip().viewDetached());
+
+    // Pan far enough to carry the focused column off the viewport, so the
+    // default Never policy has an answer to give back (a fully-visible column
+    // it would leave alone, which is the survival case the next arm pins).
+    engine->scrollViewByPercent(-75, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    QVERIFY(viewX() != policyView);
+
+    QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+    // The report the compositor sends when the user clicks the focused window,
+    // and the one it sends on a desktop return. Focus does not move — there is
+    // nowhere for it to move — but the view comes back to the policy.
+    engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(!state->strip().viewDetached());
+    QCOMPARE(viewX(), policyView);
+    // The latch and anchor are persisted, so the producer has to fire. Count
+    // is not pinned: applyLayout carries its own anchorMoved persist, so an
+    // on-screen context legitimately emits twice, where a background one
+    // (applyLayout skipped) emits only the report's own.
+    QVERIFY(placement.count() >= 1);
+
+    // And the re-attach is the POLICY's answer, not a forced re-centre: under
+    // Never a pan that leaves the focused column fully visible is left exactly
+    // where the user put it (updateViewForFocus's own early return). KWin
+    // re-fires windowActivated on restacking and fullscreen exit as well as on
+    // real focus moves, and none of those may yank a view the user is still
+    // reading. The middle column is the one with slack to prove it: every
+    // policy-derived view under Never sits flush against an edge, so the
+    // end column has nowhere to pan that keeps it whole.
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    engine->scrollViewByPercent(-25, QStringLiteral("S1"));
+    const int gentlePan = viewX();
+    QVERIFY(state->strip().viewDetached());
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QCOMPARE(viewX(), gentlePan);
+    QVERIFY(!state->strip().viewDetached());
+
+    // The refusal is not the only way to reach a detached view on a report
+    // naming the active window: a same-COLUMN tile move is ACCEPTED by
+    // focusWindow and re-anchors nothing (no strip geometry moved), so it
+    // used to leave the pan owning the view exactly the way the refusal did.
+    // Switching between two windows stacked in one column has to hand the
+    // view back too, or the tab you just focused stays off screen.
+    engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // b and c share a column
+    QCOMPARE(state->strip().columnCount(), 2);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    engine->scrollViewByPercent(-75, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    const int stackPan = viewX();
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
+    QVERIFY(!state->strip().viewDetached());
+    QVERIFY(viewX() != stackPan);
+
+    // DETACH-ONCE: a live drag-insert preview on this screen owns the view
+    // for the rest of the hold. Picking a window up activates it, and the
+    // report that follows must NOT hand the view back — re-deriving the
+    // anchor mid-hold slides the layout under a stationary cursor, which is
+    // the hazard applyLayout's own drag guard exists for.
+    engine->scrollViewByPercent(-75, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|a"), QStringLiteral("S1")));
+    const int heldView = viewX();
+    QVERIFY(state->strip().viewDetached());
+    engine->windowFocused(state->strip().activeWindowId(), QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(viewX(), heldView);
+    engine->cancelDragInsertPreview();
 }
 
 void TestScrollEngineVerbs::edgeAutoScrollThenCancelKeepsTheScrolledView()

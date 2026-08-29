@@ -64,6 +64,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -71,8 +72,26 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     FloatRestore restore;
     restore.column = columnIdx;
     const Column& sourceColumn = state->strip().columns().at(columnIdx);
+    // Captured VERBATIM, a full width included, and that is the intended
+    // trade rather than an oversight.
+    //
+    // A minimize/unminimize round trip of a maximized column's only window
+    // therefore rebuilds a full-width column, which publishes columnMaximized
+    // again — correct, since the user did maximize it — but WITHOUT the
+    // strip's pre-maximize slot, which is per-strip state this restore does
+    // not carry. The consequence is bounded: the un-maximize press falls
+    // through to the context default instead of a remembered width, which is
+    // the same arm a column maximized in an earlier session takes.
+    //
+    // Deliberately not "fixed" by capturing a narrower width. That would drop
+    // the maximized state across a minimize, which is a visible regression for
+    // the ordinary case, to avoid losing a remembered width in the rare one.
+    // This is the opposite call from expelWindowFromColumn, which DOES narrow
+    // the new column, because there the copy created a SECOND maximized column
+    // rather than restoring the one the user made.
     restore.width = sourceColumn.width;
     restore.display = sourceColumn.display;
+    restore.ownedTabbedHeight = sourceColumn.display == ColumnDisplay::Tabbed && sourceColumn.heightOwnerId == windowId;
     const QSize minSize = state->strip().windowMinimumSize(windowId);
     restore.minWidth = minSize.width();
     restore.minHeight = minSize.height();
@@ -113,6 +132,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // not carry it — float and windowed fullscreen are exclusive), so the
     // emit-gate memory goes with it.
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {
@@ -234,6 +254,29 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         // unfloated came back at Auto instead of the configured default.
         if (restore.column >= 0 || restore.tileIndex >= 0) {
             state->strip().setWindowHeightIntent(windowId, restore.height);
+            // And the extent ownership, when this window held it. Not implied
+            // by the height write: that claims nothing for an Auto intent, and
+            // a tab can legitimately own the column while asking for the whole
+            // work area. Without this the column keeps the height of whichever
+            // tab came on show when this one floated out.
+            if (restore.ownedTabbedHeight) {
+                state->strip().setTabbedHeightOwner(windowId);
+            }
+        } else {
+            // A seeded entry has no remembered height, so the tile carries the
+            // context default the fresh insert seeded. Under "the client
+            // decides" that default is the concrete Auto fallback the kind
+            // leaves behind, and the commit that gives the window its own
+            // height lives on the open path, which an unfloat does not run —
+            // so a window floated at open and then unfloated came back sharing
+            // its column, the one shape the setting exists to avoid.
+            // Post-insert params, for the reason the open path's own call
+            // documents: with smart gaps the outer gaps switch off at exactly
+            // one column, so an unfloat that takes the strip 0->1 or 1->2
+            // changes the work area the bound is measured against, and these
+            // are persisted pixels that do not self-heal.
+            commitClientDecidedHeight(state->strip(), windowId, contextScreen, overridesForScreen(contextScreen),
+                                      layoutParamsForScreen(contextScreen, state->strip().columnCount()));
         }
         state->strip().focusWindow(windowId, params);
         // No setFloatingHasFocus(false) here: removeFloating already cleared
@@ -301,6 +344,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

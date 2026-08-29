@@ -49,11 +49,17 @@ namespace PhosphorSurfaceShaders {
  * ## Multipass buffer passes
  *
  * Surface shaders support opt-in multipass: when `isMultipass` is set and
- * `bufferShaderPaths` is non-empty, the daemon's surface-layer runtime
- * runs those buffer passes before the main fragment shader. The
- * kwin-effect compositor path is single-pass only; multipass effects
- * degrade to single-pass there with a diagnostic log, matching the
- * overlay / animation packs.
+ * `bufferShaderPaths` is non-empty, the daemon runs those buffer passes
+ * before the main fragment shader. Concretely that is the overlay
+ * decoration host (`src/shared/SurfaceDecoration.qml`), whose per-stage
+ * SurfaceShaderItem inherits the whole multipass property set from
+ * PhosphorRendering::ShaderEffect; `OverlayService::applyDecoration`
+ * forwards the fields below into each stage. A multipass stage is
+ * layered (`layer.enabled`) because the render node drives its own
+ * passes and needs a target isolated from the scene graph's batch
+ * renderer. The kwin-effect compositor path is single-pass only;
+ * multipass effects degrade to single-pass there with a diagnostic log,
+ * matching the overlay / animation packs.
  *
  * ## Trimmed vs AnimationShaderEffect
  *
@@ -131,12 +137,14 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     bool animated = false;
 
     /// Declares that the pack samples the scene BEHIND the window
-    /// (backdropTexel() / uBackdrop). Compositor-only: the kwin effect
-    /// captures the backdrop under the window's (padded) canvas each frame,
-    /// routes the pack through the composite fold, and drives the window to
-    /// repaint continuously. Daemon hosts have no scene behind their
-    /// surfaces: uHasBackdrop stays 0 there and backdropTexel() returns
-    /// transparent, so a pack must style a fallback on that gate.
+    /// (backdropTexel() / uBackdrop). The kwin effect captures the backdrop
+    /// under the window's (padded) canvas each frame, routes the pack through
+    /// the composite fold, and drives the window to repaint continuously.
+    /// Daemon and preview hosts have no scene to capture, but MAY bind the
+    /// desktop wallpaper as a stand-in, in which case uHasBackdrop reads 1
+    /// there too. It is 0 only when nothing was bound, and backdropTexel()
+    /// returns transparent then, so a pack must still style a fallback on
+    /// that gate rather than assuming the sampler.
     bool needsBackdrop = false;
 
     /// Declares that the pack never writes a texel with alpha below the
@@ -186,8 +194,15 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     bool audio = false;
 
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
-    /// and `isMultipass` is true, the daemon's surface-layer runtime runs
-    /// these as intermediate passes before the main fragment shader.
+    /// and `isMultipass` is true, the host runs these as intermediate passes
+    /// before the main fragment shader.
+    ///
+    /// The two hosts reach them differently, which is why some of the buffer
+    /// fields below are daemon-only. The daemon's `SurfaceDecoration.qml`
+    /// (via `OverlayService::applyDecoration`) receives them through
+    /// `composeStageMap()`; the KWin effect reads this struct directly and
+    /// never calls that helper, so a field added only to composeStageMap
+    /// reaches the daemon and not the compositor.
     QStringList bufferShaderPaths;
 
     /// Enable per-pass feedback (last frame's buffer is sampleable as
@@ -220,6 +235,16 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
+    /// Whether the intermediate buffers hold half-float texels. Daemon-only.
+    ///
+    /// True keeps RGBA16F, which a buffer legitimately needs when it stores
+    /// HDR radiance, signed data, or a feedback accumulator whose decay would
+    /// quantise to a standstill at 8 bits. A pack whose buffers hold plain
+    /// clamped colour sets `"halfFloatBuffers": false` and halves the bandwidth
+    /// its passes cost, which is the scarce resource on an integrated GPU.
+    /// Mirrors the overlay category's key of the same name.
+    bool halfFloatBuffers = true;
+
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
     /// `<PhosphorShaders/CustomParamsKey.h>` (see there for the 0.125
@@ -243,8 +268,12 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     static constexpr int kMaxBufferPasses = 4;
 
     /// Declared shader inputs beyond the standard surface set
-    /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). Each entry maps
-    /// `parameterId → { type, default, min, max, ... }`. Field names
+    /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). An ORDERED list of
+    /// `{ id, type, default, min, max, ... }` entries, not a map: declaration
+    /// order is what assigns the customParams / customColors slots, so the
+    /// sequence is part of the contract. A duplicate id is dropped at parse
+    /// time, because two entries sharing one would redefine the same p_ macro
+    /// and fail the shader compile. Field names
     /// mirror the regular shader pack format
     /// (`AnimationShaderEffect::ParameterInfo` /
     /// `PhosphorRendering::ShaderRegistry::ParameterInfo`) so surface

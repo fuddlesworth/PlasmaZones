@@ -48,8 +48,11 @@ class WindowTrackingAdaptor;
  * All engine→adaptor signal connections are made at the composition root
  * (init_engines.cpp), not by the adaptor itself. Most land on a relay entry
  * point that gates or reshapes the payload before the D-Bus signal goes out.
- * tilingChanged and focusWindowRequested are the exceptions: they are direct
- * signal→signal forwards from each engine, because there is nothing to gate.
+ * focusWindowRequested is the exception, and the only unconditional direct
+ * signal-to-signal forward from both engines, because there is nothing to
+ * gate. tilingChanged is a direct forward from the autotile engine but a
+ * GATED relay from the scroll engine, which drops the tick while edge
+ * auto-scroll is running (see the connect in init_engines.cpp).
  */
 class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
 {
@@ -174,6 +177,13 @@ public:
      * Always zero once @c panelGeometryReady has fired.
      */
     int pendingWindowOpensCount() const;
+    /// Test seam: the deferral queue's capacity, so the overflow-valve test
+    /// trips the real cap rather than hardcoding a number that would silently
+    /// stop testing the valve if @c kMaxPendingOpens were retuned.
+    static constexpr int pendingWindowOpensCapacity()
+    {
+        return static_cast<int>(kMaxPendingOpens);
+    }
     /// Test seam: parked mid-flip opens awaiting the screens-announce
     /// retry (the m_unclaimedOpens queue).
     int pendingUnclaimedOpensCount() const
@@ -379,10 +389,10 @@ Q_SIGNALS:
      * many windows are retiled (e.g. rotate).
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
-     *        a(siiiissbbbssiiibsb): (windowId, x, y, width, height, zoneId,
-     *        screenId, monocle, floating, windowedFullscreen, stacking,
-     *        scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom,
-     *        viewImmediate)
+     *        a(siiiissbbbbssiiibsb): (windowId, x, y, width, height, zoneId,
+     *        screenId, monocle, floating, windowedFullscreen, columnMaximized,
+     *        stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos,
+     *        tabFrom, viewImmediate)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

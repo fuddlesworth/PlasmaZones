@@ -222,6 +222,23 @@ bool ScrollingAdaptor::refusesForContext(const QString& screenId) const
     return !m_contextGated || m_contextGated(screenId);
 }
 
+bool ScrollingAdaptor::refusesScreenVerb(const QString& screenId) const
+{
+    // The four-term entry guard the screen-scoped verbs share. Written once
+    // because it had drifted into five identical copies, and a fifth term
+    // added to four of them is the shape this whole interface's refusal bugs
+    // take. ORDER IS LOAD-BEARING: the engine test comes first so the two
+    // calls below it are never made through a null pointer, and the context
+    // gate comes last because it is the only term that can call out into the
+    // daemon.
+    //
+    // scrollView and focusColumn deliberately do NOT use this: they carry
+    // extra terms of their own (a step provider, a delta range) and check the
+    // engine earlier, so folding them in would either reorder their guards or
+    // hide the extra terms.
+    return !m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId);
+}
+
 void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
 {
     // focusColumn's wire-boundary gate, plus the provider: without a step
@@ -244,7 +261,7 @@ void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double 
     // the range refusal is silent per the interface's documented convention.
     // The bounds are the same accessors the settings UI and the hand-written
     // width setter enforce.
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    if (refusesScreenVerb(screenId)) {
         return;
     }
     // Negated inclusive form rather than "< min || > max": both of those
@@ -260,7 +277,7 @@ void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double 
 
 void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    if (refusesScreenVerb(screenId)) {
         return;
     }
     if (px < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()
@@ -272,7 +289,7 @@ void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
 
 void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    if (refusesScreenVerb(screenId)) {
         return;
     }
     // Height-proportion accessors (they delegate to the width range today;
@@ -288,7 +305,7 @@ void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double
 
 void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    if (refusesScreenVerb(screenId)) {
         return;
     }
     if (px < ConfigDefaults::scrollingDefaultWindowHeightMin()
@@ -298,10 +315,51 @@ void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
     m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
+bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QString& windowId)
+{
+    // Same gate chain as the width setters above: ownership, engine activity
+    // on the screen, and the per-context gate. There is no value to range
+    // check — the verb is a toggle. windowId is deliberately NOT rejected when
+    // empty: that spelling means "the focused column" and is what the keyboard
+    // shortcut sends. An unknown windowId is refused by the strip itself,
+    // which is the only place that knows which columns it holds.
+    //
+    // WHETHER THE STRIP CHANGED IS REPORTED, unlike every other verb on this
+    // interface, because this one is the only one whose caller is holding
+    // compositor state that only the answer can settle. The KWin effect leaves
+    // KWin's maximize bit exactly where the user's click put it and dispatches,
+    // so a request nothing acts on leaves the window in the state the USER
+    // asked for with no batch coming to impose the strip's own. A void method
+    // still replies success on a silent no-op, so only a real return value can
+    // carry that back.
+    //
+    // False therefore covers BOTH refusals, and deliberately does not
+    // distinguish them: refused here at the boundary (no engine, empty screen
+    // id, the engine not active on that screen, the per-context gate closed),
+    // and accepted but acted on by nothing (no state for the context, an empty
+    // strip, a window no column holds, a column the toggle itself refuses).
+    // The effect's response is identical either way — put the bit back where
+    // the engine last had it — so splitting them would be a distinction with
+    // no consumer.
+    if (refusesScreenVerb(screenId)) {
+        return false;
+    }
+    return m_engine->toggleMaximizeColumn(screenId, windowId);
+}
+
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
-    // Same wire-boundary policy as focusColumn: malformed input is a silent
-    // no-op, and the engine's own lookup rejects an untracked window.
+    // Malformed input is a silent no-op and the engine's own lookup rejects an
+    // untracked window.
+    //
+    // NOT the same gate chain as focusColumn, and the difference is deliberate.
+    // The screen-scoped verbs also carry ownership and the per-context gate;
+    // this one is window-keyed, so ownership does not apply, and it skips the
+    // CONTEXT gate on purpose. It is a reconciliation call reporting something
+    // that has already happened to the client, so it must follow reality even
+    // into a context whose scrolling the user has switched off. Refusing there
+    // would leave the strip holding a windowed-fullscreen flag for a window
+    // that is no longer fullscreen, with nothing to clear it later.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }
@@ -310,9 +368,10 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 
 void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 {
-    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
-    // is a silent no-op, and the engine's own lookup rejects an untracked
-    // window.
+    // Same wire-boundary policy as clearWindowedFullscreen above, including
+    // its deliberate skip of the per-context gate and the reason for it:
+    // malformed input is a silent no-op, and the engine's own lookup rejects
+    // an untracked window.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }
@@ -448,6 +507,17 @@ void ScrollingAdaptor::clearEngine()
     // this object exists — clearing them would replace a true answer with an
     // empty one that reads as "no screen has any of the three" and "the scroll
     // cap refuses nothing".
+    //
+    // The two LATE-BOUND PROVIDERS (setViewScrollStepProvider,
+    // setContextGateProvider) are not cleared either, and unlike the pair
+    // above that is inertness rather than a decision worth defending. Every
+    // verb that consults them refuses on `!m_engine` first, so a surviving
+    // std::function is unreachable once the pointer is null. They are also
+    // owned by the daemon and re-installed on the next cycle, and clearing
+    // them would not make this object any more detached than nulling the
+    // engine already did. Noted because the general shutdown rule is to clear
+    // late-bound dependencies symmetrically, and this is a deliberate
+    // exception rather than an omission.
 }
 
 } // namespace PlasmaZones

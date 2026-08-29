@@ -509,9 +509,14 @@ public:
      * @brief Translate shader params from param IDs to the uniform names the renderer reads
      * @param shaderId Shader UUID
      * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
+     * @param previewWidth Logical width the preview renders at; scales the
+     *        shader's px-denominated parameters down by the same factor
+     *        zonesForShaderPreview scales the zone geometry (see
+     *        ShaderPreviewController::translateShaderParams). 0 leaves them raw.
      * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
      */
-    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params) const;
+    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params,
+                                                  int previewWidth = 0) const;
 
     /**
      * @brief Gets shader info from daemon via D-Bus (for shader preview in dialogs)

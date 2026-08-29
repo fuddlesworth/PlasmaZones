@@ -241,6 +241,16 @@ void PlasmaZonesEffect::clearAllDecorations()
     // dismissed at the instant the daemon dies loses its decoration for the tail of
     // its slide — and nothing leaks, because resolveDecorationTarget falls back to
     // the frozen reverse mapping, so releaseDecorationGl still runs on the corpse.
+    // Disarm the animated-teardown polls first. Their timers take `this` as
+    // context, which cancels them when the EFFECT goes away but not on the
+    // daemon-lost path, where the effect deliberately stays alive with its
+    // cached state authoritative. A poll armed just before the daemon died
+    // would otherwise fire after this loop and call updateWindowDecoration,
+    // re-resolving from the still-populated tree and re-inserting a decoration
+    // this teardown had just released. Clearing the set is what stops it: the
+    // poll's lambda (deferDecorationTeardownWhileAnimated, in decorations.cpp)
+    // bails when its id is no longer a member.
+    m_animatedDecoTeardownPending.clear();
     const QStringList ids = m_windowDecorations.keys();
     for (const QString& windowId : ids) {
         if (KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(windowId)) {

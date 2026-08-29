@@ -154,12 +154,30 @@ struct UboFrameState
     float surfaceScale = 1.0f;
     /// 1.0 when the surface is focused, 0.0 otherwise.
     float surfaceFocused = 0.0f;
+    /// 1.0 when a backdrop texture (the scene / wallpaper BEHIND the surface)
+    /// is actually bound for this draw, 0.0 otherwise. Feeds the surface UBO's
+    /// uHasBackdrop gate, which a needsBackdrop pack branches on to choose
+    /// between sampling the backdrop and its own fallback appearance.
+    ///
+    /// Derived by the node from whether the binding is live rather than set by
+    /// a host: the gate and the sampler must never disagree, or a pack samples
+    /// a texture that was never bound.
+    float hasBackdrop = 0.0f;
     /// Decorated surface size in device px.
     float surfaceSize[2] = {};
     /// Frame top-left in device px.
     float surfaceFrameTopLeft[2] = {};
     /// Frame size in device px.
     float surfaceFrameSize[2] = {};
+    /// The slice of the bound backdrop this surface samples, in normalized
+    /// texture coords (xy = min, zw = size).
+    ///
+    /// Defaults to the whole texture, which is right for the compositor (its
+    /// capture already covers this window's canvas) and is the degraded answer
+    /// for a host that knows of no placement. A daemon or preview host hands
+    /// every surface the SAME desktop wallpaper, so it narrows this to the part
+    /// lying behind each one.
+    float backdropRect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
 };
 
 /// Pluggable UBO concern for the shared shader render engine.

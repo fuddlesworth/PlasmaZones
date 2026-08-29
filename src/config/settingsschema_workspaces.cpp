@@ -72,20 +72,32 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
     // Dynamic per-monitor workspaces: the gate scalars, plus the two consent /
     // takeover latches the enable flow writes.
     schema.groups[CD::workspacesBehaviorGroup()] = {
-        {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool},
-        {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool},
-        {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool},
-        {CD::rebindKWinShortcutsKey(), CD::workspacesRebindKWinShortcuts(), QMetaType::Bool},
+        {CD::enabledKey(), CD::workspacesEnabled(), QMetaType::Bool,
+         QStringLiteral("Gives every monitor its own list of workspaces instead of one global set shared by all "
+                        "screens. Requires KWin's per-output virtual desktops.")},
+        {CD::manageKWinPerOutputKey(), CD::workspacesManageKWinPerOutput(), QMetaType::Bool,
+         QStringLiteral("Records that the user consented to PlasmaZones writing KWin's PerOutputVirtualDesktops key. "
+                        "The key is never written without this, and never reverted when the feature is disabled.")},
+        {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool,
+         QStringLiteral("Shows an OSD hint when switching to another monitor's workspace through the Pager or the "
+                        "Overview snaps back to the owning monitor.")},
+        {CD::rebindKWinShortcutsKey(), CD::workspacesRebindKWinShortcuts(), QMetaType::Bool,
+         QStringLiteral("Takes over KWin's stock Switch One Desktop shortcuts while the feature is on, since they "
+                        "walk the whole shared desktop pool rather than one monitor's list. Restored on disable.")},
     };
     schema.groups[CD::workspacesNamedGroup()] = {
-        {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList, {}, canonicalNamedEntries},
+        {CD::entriesKey(), CD::workspacesNamedEntries(), QMetaType::QVariantList,
+         QStringLiteral("The named workspaces, each of which persists while empty and may be pinned to a monitor."),
+         canonicalNamedEntries},
     };
     // Quick-slot targets: the named workspace each move slot sends the
     // active window to; empty = unassigned (the slot's chord does nothing).
     auto& slots = schema.groups[CD::workspacesSlotsGroup()];
     slots.reserve(CD::WorkspaceSlotCount);
     for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
-        slots.append({CD::workspaceSlotTargetKey(slot), CD::workspaceSlotTarget(), QMetaType::QString});
+        slots.append(
+            {CD::workspaceSlotTargetKey(slot), CD::workspaceSlotTarget(), QMetaType::QString,
+             QStringLiteral("The named workspace quick slot %1 targets. Empty leaves the slot unassigned.").arg(slot)});
     }
 }
 

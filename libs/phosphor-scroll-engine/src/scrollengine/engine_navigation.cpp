@@ -67,19 +67,6 @@ bool isDirectionToken(const QString& direction)
     return horizontalDelta(direction) != 0 || verticalDelta(direction) != 0;
 }
 
-/// A tile's height INTENT read out of the strip model, which exposes a
-/// writer (setWindowHeightIntent) but no reader. Default for an unknown id.
-WindowHeight heightIntentOf(const ScrollStrip& strip, const QString& windowId)
-{
-    const int col = strip.columnOfWindow(windowId);
-    if (col < 0) {
-        return {};
-    }
-    const Column& column = strip.columns().at(col);
-    const int tile = column.indexOfWindow(windowId);
-    return tile >= 0 ? column.tiles.at(tile).height : WindowHeight{};
-}
-
 /// The tile slot a window holds inside a SHARED column, plus a surviving
 /// sibling to re-locate that column by once the window is gone. tileIndex
 /// stays -1 when the window has its own column. The anchor exists for the
@@ -418,6 +405,7 @@ void ScrollEngine::adoptAsFloatAfterRefusal(ScrollState* owner, const QString& w
     m_lastAppliedRect.remove(windowId);
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedColumnMaximized.remove(windowId);
     Q_EMIT windowFloatingStateSynced(windowId, true, announceScreen);
 }
 
@@ -528,7 +516,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // Value-anchored intent is screen-independent: the target's relayout
     // snaps the fraction into ITS vocabulary, so no cross-screen remap is
     // needed (the old index-based intent required one here).
-    const WindowHeight windowHeight = heightIntentOf(state->strip(), windowId);
+    const WindowHeight windowHeight = state->strip().windowHeightIntent(windowId);
     // Windowed fullscreen is per-tile state too (niri keeps it across
     // move-column-to-monitor); without the carry the fresh tile on the
     // target defaults false and the crossing silently un-toggles it.
@@ -566,7 +554,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         const int partnerColIdx = targetState->strip().columnOfWindow(partner);
         columnIdx = qMax(0, partnerColIdx);
         partnerMinSize = targetState->strip().windowMinimumSize(partner);
-        partnerHeight = heightIntentOf(targetState->strip(), partner);
+        partnerHeight = targetState->strip().windowHeightIntent(partner);
         moverLandingSlot = stackSlotOf(targetState->strip(), partner);
         if (partnerColIdx >= 0) {
             partnerWidth = targetState->strip().columns().at(partnerColIdx).width;
@@ -595,6 +583,20 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         // happened; applyLayout below is the geometry apply it must precede.
         Q_EMIT windowOutputMoveExpected(windowId, target);
         targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
+        // A non-Auto height claims the destination column's extent when that
+        // column is tabbed, and unlike the unfloat and drag-cancel paths this
+        // one carries no prior-ownership flag to restore. None is wanted: the
+        // move focuses the window on arrival, so it IS the tab on show, and
+        // the tab on show owning the column is the same rule the flip into
+        // tabbed follows.
+        //
+        // Re-stated VERBATIM, not rescaled to the target's cross extent, the
+        // same way the column width above crosses unrescaled. A Fixed intent
+        // is a number the user (or the client) asked for, and this engine
+        // does not reinterpret one against a different output; the relayout
+        // clamps it to what the target can hold. The consequence worth
+        // knowing: crossing to a shorter output clamps a tall intent and
+        // moving back does not restore it, on both axes alike.
         targetState->strip().setWindowHeightIntent(windowId, windowHeight);
         if (windowWindowedFs) {
             targetState->strip().setWindowedFullscreen(windowId, true);
@@ -611,6 +613,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId); // eviction symmetry with the float/handoff paths
+        m_lastAppliedColumnMaximized.remove(windowId);
     } else {
         // Refused, with the window already out of the source strip: adopt it
         // as a FLOAT of the source state rather than leaving it held by
@@ -658,6 +661,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                 m_lastAppliedRect.remove(partner); // same rationale as the mover's
                 m_parkedScrollEdge.remove(partner);
                 m_lastAppliedWindowedFs.remove(partner);
+                m_lastAppliedColumnMaximized.remove(partner);
             }
             // The put-back changed no output: the partner keeps its target
             // key, its last-applied rect and its edge memory untouched.

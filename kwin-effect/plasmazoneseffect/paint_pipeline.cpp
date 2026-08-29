@@ -807,6 +807,30 @@ void PlasmaZonesEffect::postPaintScreen()
     // last decoration was just removed — a pending timer must be stopped in
     // that case too, or its stray fire composites an idle desktop.
     qint64 nextParkReapInMs = -1;
+    // Strip-activity stamp for the reap's quiet gate below. Read here, once
+    // per pass, off the same pinned clock as every other consumer.
+    //
+    // TWO terms, and the generation one is load-bearing rather than a
+    // belt. hasActiveAnimations() answers "is a spring in flight", which is
+    // NOT the same as "is the user driving the strip": StripViewAnimator
+    // declines to start a leg at all when the master animation toggle is off
+    // or the output has no clock, and the drag edge auto-scroll heartbeat
+    // (applyImmediateDelta) cancels any leg and never starts one because its
+    // ~60 Hz commits ARE the motion. On the spring term alone this stamp
+    // would stay -1 for the whole session for an animations-off user, the
+    // gate would read every moment as quiet, and the mid-navigation reap this
+    // gate exists to hold would fire exactly as before — for the population
+    // most likely to be on hardware where the cold refold is felt.
+    //
+    // The generation counter is bumped by both apply entry points ahead of
+    // either decline, so a change since the last pass means a view delta
+    // landed. The spring term stays because a leg spans many passes while
+    // bumping the counter only once, and "in flight" is motion too.
+    const quint64 stripMotionGeneration = m_stripViewAnimator->viewMotionGeneration();
+    if (stripMotionGeneration != m_lastSeenStripMotionGeneration || m_stripViewAnimator->hasActiveAnimations()) {
+        m_lastSeenStripMotionGeneration = stripMotionGeneration;
+        m_lastStripMotionMs = frameClockMs;
+    }
     if (!m_windowDecorations.isEmpty()) {
         // `frameClockMs` is the pinned per-frame clock read above the
         // suppression loop, shared by every consumer in this function.
@@ -893,6 +917,13 @@ void PlasmaZonesEffect::postPaintScreen()
                 // parked stamp is inside the state so the erase disposes of it
                 // with everything else.
                 constexpr qint64 kParkReapMs = 10000;
+                // Shared by the refused-release retry AND the due-but-held
+                // floor in the tail branch, so it is hoisted beside the
+                // threshold rather than declared at its first use.
+                constexpr qint64 kParkReapRetryMs = 1000;
+                // How long the strip view must have been still before a DUE
+                // reap actually releases — see the quiet gate below.
+                constexpr qint64 kStripQuietMs = 5000;
                 if (const auto sit = m_surfaceMultipass.find(it.key()); sit != m_surfaceMultipass.end()) {
                     qint64 remainingMs = -1;
                     if (sit->second.parkedSinceMs < 0) {
@@ -905,7 +936,20 @@ void PlasmaZonesEffect::postPaintScreen()
                         // session, which is invisible from the outside.
                         qCDebug(lcEffect) << "park reap: stamped" << it.key()
                                           << (cededToTransition ? "(slot ceded to a live transition)" : "");
-                    } else if (frameClockMs - sit->second.parkedSinceMs >= kParkReapMs) {
+                    } else if (frameClockMs - sit->second.parkedSinceMs >= kParkReapMs
+                               && (m_lastStripMotionMs < 0 || frameClockMs - m_lastStripMotionMs >= kStripQuietMs)) {
+                        // The quiet gate: while the user is actively driving
+                        // the strip (a view leg ran within kStripQuietMs),
+                        // hold every due reap. A column reaped mid-navigation
+                        // is a column the user is likely about to scroll back
+                        // to, and its wake is the cold fold this reap's own
+                        // contract calls "paid mid-scroll" — seen live as
+                        // stutter while demonstrating fast column stepping.
+                        // The hold costs only time-held VRAM: the timer
+                        // re-arms below through the ordinary remainingMs path
+                        // (the elapsed entry reports kParkReapRetryMs), so
+                        // the release fires on the first probe after the
+                        // strip has been quiet for kStripQuietMs.
                         releaseSurfaceState(it.key(), sw);
                         // The refusal case needs its own wake. The note above
                         // says the retry is "driven by the transition's own
@@ -926,14 +970,21 @@ void PlasmaZonesEffect::postPaintScreen()
                         // and the next attempt fires immediately once the
                         // transition drops. The successful erase invalidates
                         // sit, so this goes by key rather than through it.
-                        constexpr qint64 kParkReapRetryMs = 1000;
                         const bool refused = m_surfaceMultipass.find(it.key()) != m_surfaceMultipass.end();
                         if (refused) {
                             remainingMs = kParkReapRetryMs;
                         }
                         qCDebug(lcEffect) << "park reap:" << (refused ? "refused, retrying" : "released") << it.key();
                     } else {
-                        remainingMs = kParkReapMs - (frameClockMs - sit->second.parkedSinceMs);
+                        // Floored at the retry interval rather than allowed
+                        // negative: a reap that is DUE but held by the quiet
+                        // gate above lands here with elapsed past kParkReapMs,
+                        // and a negative remaining would fail the >= 0 arm
+                        // test below — stopping the timer and stranding the
+                        // targets resident for the session (the exact failure
+                        // the refused-release retry documents).
+                        remainingMs =
+                            qMax<qint64>(kParkReapRetryMs, kParkReapMs - (frameClockMs - sit->second.parkedSinceMs));
                     }
                     if (remainingMs >= 0 && (nextParkReapInMs < 0 || remainingMs < nextParkReapInMs)) {
                         nextParkReapInMs = remainingMs;
@@ -1314,6 +1365,17 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // probe instead of paying the resolve.
     if (w && !m_scrollVisualDelta.isEmpty() && m_scrollVisualDelta.contains(windowId) && scrollManagedOutputFor(w)
         && !parkedOffscreen) {
+        data.setTransformed();
+    }
+
+    // A close-grabbed corpse with a frozen strip displacement (see
+    // m_scrollCorpseFreeze) is moved by paintWindow's deleted-window arm, so
+    // it needs the same TRANSFORMED treatment. Membership is the whole
+    // predicate: entries are only ever written for corpses whose drawn rect
+    // was on screen, so no parked test applies, and the two conditions are
+    // mutually exclusive (a live window never has an entry; a deleted one
+    // fails scrollManagedOutputFor above).
+    if (w && !m_scrollCorpseFreeze.isEmpty() && m_scrollCorpseFreeze.contains(w)) {
         data.setTransformed();
     }
 
@@ -1735,6 +1797,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
             }
+            // No m_scrollCorpseFreeze arm here on purpose: this whole block is
+            // gated on !w->isDeleted(), and freeze entries exist only for the
+            // slotWindowClosed→windowDeleted span, during which the window IS
+            // deleted — a corpse never re-captures its backdrop; it reuses the
+            // frozen composite (see the gate's comment above).
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
         }
     }
@@ -1849,6 +1916,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!viewOffset.isNull()) {
                 data += viewOffset;
             }
+        } else if (const auto fit = m_scrollCorpseFreeze.constFind(w); w && fit != m_scrollCorpseFreeze.constEnd()) {
+            // The deleted-window arm: scrollManagedOutputFor answers null the
+            // moment a window dies, so a close-grabbed corpse takes its
+            // displacement from the value frozen at death instead — both
+            // terms in one constant (see m_scrollCorpseFreeze). This is what
+            // keeps a panned strip's corpse playing its close animation where
+            // the window visually was rather than at its raw committed rect.
+            data += fit.value();
         }
     }
 

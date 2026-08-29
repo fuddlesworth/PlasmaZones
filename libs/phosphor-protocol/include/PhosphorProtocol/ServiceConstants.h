@@ -284,6 +284,12 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       scrollTabPaintOverrides / scrollTabPaintOverridesChanged,
 //       scrollTabColors / scrollTabColorsChanged).
 //
+//       org.plasmazones.Overlay GAINED setWindowThumbnailDmabuf, the zero-copy
+//       thumbnail path. A false reply routes the caller back to the existing
+//       setSnapAssistThumbnail, which is what makes it safe for a peer to try
+//       the dma-buf form first, so the two are one transport with a fallback
+//       rather than two independent methods.
+//
 //       windowsTileRequested. TileRequestEntry widened from a(siiiissbbs) to
 //       a(siiiissbbbssiiibsb). The added fields, in wire order: scrollEdge
 //       (which side of the strip a column departed towards, a closed set of
@@ -325,8 +331,75 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       vertical view delta as a horizontal slide. The version handshake is the
 //       ONLY thing that refuses such a pairing, which is why both sides must be
 //       built and shipped from the same source.
-inline constexpr int ApiVersion = 5;
-inline constexpr int MinPeerApiVersion = 5;
+//   v6: columnMaximized on TileRequestEntry, widening it from
+//       a(siiiissbbbssiiibsb) to a(siiiissbbbbssiiibsb). The flag is inserted
+//       after windowedFullscreen, its nearest sibling in both meaning and
+//       handling: both are scrolling-only compositor states the effect imposes
+//       on the client while the strip keeps owning the rect.
+//
+//       It exists because the effect intercepts a window's maximize request
+//       and routes it to the scrolling engine's maximize-column verb, which
+//       makes KWin's maximize bit a VIEW of engine state rather than state in
+//       its own right. Something has to drive that bit when the verb is
+//       reached any other way (the Meta+Alt+F shortcut, a width verb that
+//       lands full width), or the titlebar button renders un-toggled and the
+//       two entry points disagree about one window.
+//
+//       Carried as data rather than inferred from the committed rect, which
+//       the effect already has. A tile's main extent is the column's main
+//       extent LESS any within-column tab-indicator reservation, so a
+//       maximized tabbed column measures under full width and would read as
+//       not-maximized. The engine measures the column's FULL rect against the
+//       work area's main extent — the quantity the effect cannot reconstruct
+//       from the tile rects it receives. It is NOT read off the strip's
+//       pre-maximize slot, which answers "is there a stored width to go back
+//       to" rather than "is this column maximized". Same doctrine as tabFrom:
+//       the engine names what it did instead of leaving the compositor to
+//       infer it from rect coincidence.
+//
+//       Scrolling.toggleMaximizeColumn gains a windowId argument in the same
+//       step, (s) -> (ss). A method signature change breaks a mismatched peer
+//       the same way a widened struct does, and it folds in here rather than
+//       taking a bump of its own for the reason v5 states above: neither form
+//       ever shipped, so no released peer spoke an intermediate version.
+//
+//       The first form of the verb was screen-scoped, acting on the strip's
+//       ACTIVE column, while the effect dispatches it from ONE window's
+//       maximize request. Those are the same column only when the requesting window is
+//       already focused. A client's own maximize request from a background
+//       window, and a titlebar click that does not raise first, both cancelled
+//       the clicked window's maximize and then resized a different column.
+//       The window is now named on the wire so the engine can act on the
+//       column holding it. An empty windowId keeps the old meaning (the active
+//       column), which is the in-process spelling the keyboard shortcut uses.
+//   v7: Scrolling.toggleMaximizeColumn gains a BOOLEAN RETURN, (ss) -> (ss)b.
+//       A signature change, so it takes a bump like any other.
+//
+//       It is the only verb on that interface that reports what it did, and it
+//       needs to because it is the only one whose caller is holding compositor
+//       state that only the answer can settle: the effect leaves KWin's
+//       maximize bit where the user's click put it and dispatches, so a request
+//       nothing acts on leaves the window in the state the user asked for with
+//       no batch coming to impose the strip's own. A void method still replies
+//       success on a silent no-op, so nothing short of a return value can carry
+//       that back.
+//
+//       False means THE STRIP DID NOT CHANGE, from either kind of refusal:
+//       refused at the boundary (no engine, empty screen id, the engine not
+//       active on that screen, the per-context gate closed), or accepted and
+//       acted on by nothing (no state for the context, an empty strip, a window
+//       no column holds, a column the toggle refuses). The effect's response is
+//       the same to both — put the bit back where the engine last had it — so
+//       the two are deliberately not distinguished on the wire.
+//
+//       The MEANING of that boolean tightened after it was first introduced,
+//       from "the daemon accepted the request" to "the strip changed", and it
+//       was rewritten in place rather than taking a bump of its own for the
+//       reason v5 states above: no released peer ever spoke an intermediate
+//       version, so the steps within this cycle are unobservable outside the
+//       branch. A change to it AFTER v7 ships needs v8.
+inline constexpr int ApiVersion = 7;
+inline constexpr int MinPeerApiVersion = 7;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

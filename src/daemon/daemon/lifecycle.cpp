@@ -892,12 +892,6 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->disconnect(this);
     }
-    // The per-start connections the sweep above cannot reach by sender
-    // (the m_settings cheatsheet refilter), severed by handle.
-    for (const QMetaObject::Connection& conn : std::as_const(m_perStartConnections)) {
-        disconnect(conn);
-    }
-    m_perStartConnections.clear();
     // The restart-scoped handles too. connectLayoutSignals() drops them at its
     // own top on the NEXT start(), which is enough to prevent stacking, but it
     // leaves them live for the whole stopped interval — and their senders

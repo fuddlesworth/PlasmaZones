@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 2000 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 2300 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Eight siblings carry the rest of the suite (enumerated below),
+// been done. Ten siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -24,7 +24,7 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Eight siblings carry the rest of the suite, split off at this file's size
+// Ten siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
@@ -35,8 +35,12 @@
 // vocabulary (column focus polarity, tile-end focus, absolute width/height
 // intents, the float moves and the layer switch),
 // test_scrollengine_behaviour.cpp owns the per-screen BEHAVIOUR overrides,
-// and test_scrollengine_snapshot.cpp owns stripSnapshot and its index
-// contract.
+// test_scrollengine_snapshot.cpp owns stripSnapshot and its index contract,
+// test_scrollengine_template.cpp owns the strip-template seed and its
+// blueprint progress, and test_scrollengine_maximize.cpp owns the
+// maximize-column claim (the flag riding tiles the user cannot see, two
+// columns maximized at once, the named verb's second press, and survival
+// across a mode round trip).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -52,6 +56,7 @@ using namespace PhosphorScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
 using ScrollTestUtils::defaultScreenRect;
+using ScrollTestUtils::GeometryFn;
 using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEngineSmoke : public QObject
@@ -80,7 +85,10 @@ private Q_SLOTS:
     void pruneRemovedScreenAndActivitiesSweep();
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
+    void columnMaximizeFlagRidesEveryTileOfTheColumn();
+    void columnMaximizeTargetsTheNamedWindowsColumn();
     void minSizeOutgrowingWorkAreaFloatsTheWindow();
+    void minPinnedFullWidthColumnDoesNotPublishMaximized();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -578,6 +586,197 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
     QCOMPARE(state->strip().columns().at(bCol).tiles.size(), 1);
 }
 
+void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
+{
+    // The columnMaximized wire flag: it must ride EVERY tile of a maximized
+    // column (the wire is per window and the effect has no column identity to
+    // hang a per-column flag on), must not leak onto a sibling column, and
+    // must clear on the toggle back.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // A third window stays in its OWN column, so the "must not leak onto a
+    // sibling" half of the claim above has something to bite on. Without it
+    // the fixture held a single column and that clause was untested prose.
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    // Two tiles in ONE column, so the "every tile" half of the claim has
+    // something to bite on: a single-tile column would pass a per-column
+    // emit just as well.
+    // Focus the LEADING column first: consume pulls the NEXT column's window
+    // into the active one, so consuming while the trailing column is already
+    // active has nothing to take and leaves two single-tile columns.
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    {
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(st);
+        QCOMPARE(st->strip().columnCount(), 2);
+        QCOMPARE(st->strip().columns().at(0).tiles.size(), 2);
+        QCOMPARE(st->strip().columns().at(1).tiles.size(), 1);
+    }
+
+    const auto flagsByWindow = [](const QSignalSpy& spy) {
+        QHash<QString, bool> out;
+        const QJsonArray batch = QJsonDocument::fromJson(spy.last().at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QJsonObject o = v.toObject();
+            out.insert(o.value(QLatin1String("windowId")).toString(),
+                       o.value(QLatin1String("columnMaximized")).toBool(false));
+        }
+        return out;
+    };
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY(tiled.count() > 0);
+    QHash<QString, bool> flags = flagsByWindow(tiled);
+    QVERIFY2(flags.contains(QStringLiteral("app|a")), "the batch must carry the maximized column's first tile");
+    QVERIFY2(flags.contains(QStringLiteral("app|b")), "the batch must carry the maximized column's second tile");
+    QVERIFY2(flags.value(QStringLiteral("app|a")), "columnMaximized must ride the first tile");
+    QVERIFY2(flags.value(QStringLiteral("app|b")), "columnMaximized must ride the SECOND tile too");
+    QVERIFY2(flags.contains(QStringLiteral("app|c")), "the batch must carry the sibling column's tile");
+    QVERIFY2(!flags.value(QStringLiteral("app|c")), "columnMaximized must NOT leak onto the sibling column");
+
+    // Toggle back: the flag is absent again, so the effect's Release arm has
+    // something to fire on. Absence rather than an explicit false — the emit
+    // is gated on the flag being set, the way windowedFullscreen is.
+    //
+    // contains() FIRST on every window, then the value. value(k, false) alone
+    // would pass just as well if the batch stopped carrying these windows at
+    // all, which is the failure this leg most needs to catch: a Release the
+    // effect never sees is indistinguishable from a Release it sees as false.
+    tiled.clear();
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY(tiled.count() > 0);
+    flags = flagsByWindow(tiled);
+    QVERIFY2(flags.contains(QStringLiteral("app|a")), "the un-maximizing batch must still carry the first tile");
+    QVERIFY2(flags.contains(QStringLiteral("app|b")), "the un-maximizing batch must still carry the second tile");
+    QVERIFY2(!flags.value(QStringLiteral("app|a")), "un-maximizing must drop the flag");
+    QVERIFY2(!flags.value(QStringLiteral("app|b")), "un-maximizing must drop it on every tile");
+}
+
+void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
+{
+    // The verb aims at the column owning the NAMED window, not at the active
+    // one. This is what the compositor's maximize interception needs: that
+    // request arrives for a single window — a client maximizing itself from
+    // the background, a titlebar click that does not raise first — and the
+    // active column is frequently a different one. Aimed at the active column
+    // it cancelled the clicked window's maximize and then resized somebody
+    // else's column, which is two wrong things at once.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    {
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(st);
+        QCOMPARE(st->strip().columnCount(), 2);
+        // The ACTIVE column is a's, so b's is deliberately not the one the
+        // screen-scoped spelling would have picked.
+        QCOMPARE(st->strip().activeWindowId(), QStringLiteral("app|a"));
+        QCOMPARE(st->strip().columnOfWindow(QStringLiteral("app|b")), 1);
+    }
+
+    // Asserted on the STRIP rather than on the emitted batch: which column the
+    // verb aims at is a strip fact, and reading it back through the wire would
+    // also make the test depend on the batch emit-gate, which legitimately
+    // stays silent when a width rewrite happens to move no rect.
+    //
+    // That does mean these assertions read stored INTENT and not resolved
+    // geometry, so on their own they would pass for a column whose intent
+    // moved while its rendered extent did not. The rendered side is covered
+    // where it belongs: test_scrollengine_maximize.cpp asserts the PUBLISHED
+    // columnMaximized flag, which the apply path derives by measuring the
+    // rect, and test_scrollstrip_sizing.cpp asserts resolved pixels for the
+    // toggle's own arms.
+    const auto widthOf = [engine](const QString& windowId) {
+        // Both guards, matching columnDisplayOf above and the null-guard rule
+        // this file states at stateFor: a dropped state or a window the strip
+        // no longer holds must fail the comparison, not index .at(-1), which
+        // is undefined and takes the whole binary down with the remaining
+        // slots' results. The sentinel is deliberately unreachable — a
+        // default-constructed ColumnWidth is Proportion(0.5), a value a REAL
+        // column can hold, so a genuine lookup miss would compare equal and
+        // pass.
+        const auto* st = stateFor(engine, QStringLiteral("S1"));
+        if (!st) {
+            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
+        }
+        const int idx = st->strip().columnOfWindow(windowId);
+        if (idx < 0) {
+            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
+        }
+        return st->strip().columns().at(idx).width;
+    };
+    const PhosphorScrollEngine::ColumnWidth aBefore = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBefore = widthOf(QStringLiteral("app|b"));
+
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBefore, "the NAMED window's column must be the one that changed");
+    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBefore, "the ACTIVE column must be left alone");
+
+    // A window this strip does not hold refuses outright rather than falling
+    // back to the active column — that fallback is exactly what made the
+    // screen-scoped spelling wrong, so it must not creep back in via an
+    // unknown id.
+    const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(QStringLiteral("app|b"));
+    // The VERDICT, not just the geometry. Asserting rects alone leaves the
+    // refusal's return value unpinned, and that bool keys the relayout and
+    // placementChanged. Flipping the out-of-range arm to return true leaves
+    // every rect assertion above green, so without the batch spy the mutation
+    // ships.
+    //
+    // The NAMED spelling raises no OSD at all, refusal included. This request
+    // shape does not come from a key press — it is a titlebar click or a
+    // client maximizing itself — so narrating it would pop "Resized" over
+    // whatever the user is working on, and narrating the failure would do it
+    // for a window they never touched. The empty spelling below still speaks.
+    QSignalSpy namedFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
+    QSignalSpy refusalBatches(engine, &PhosphorScrollEngine::ScrollEngine::windowsTiled);
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|missing"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBeforeMiss, "an unknown window must not touch the active column");
+    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeMiss, "an unknown window must not touch any other column");
+    QVERIFY2(namedFeedback.isEmpty(), "a named-window request must not raise the navigation OSD");
+    QCOMPARE(refusalBatches.count(), 0);
+
+    // And the SUCCEEDING named spelling is equally quiet: it is the ordinary
+    // compositor-interception case, and it is the one that would otherwise
+    // interrupt the user.
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
+    QCoreApplication::processEvents();
+    QVERIFY2(namedFeedback.isEmpty(), "a successful named-window request must not raise the navigation OSD either");
+    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBeforeMiss, "the quiet path must still do the work");
+
+    // The EMPTY spelling still means the active column, which is what the
+    // keyboard shortcut sends — and unlike the named spelling it DOES speak,
+    // because the user pressed a key and is owed an answer. That contrast is
+    // the whole point of the split; asserting the silence above without this
+    // would pass just as well against a verb that had gone mute entirely.
+    const PhosphorScrollEngine::ColumnWidth aBeforeKey = widthOf(QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeKey = widthOf(QStringLiteral("app|b"));
+    QSignalSpy keyFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
+    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeKey, "an empty windowId must still target the active column");
+    // The sibling is checked here too, matching the two named arms above: on
+    // its own, "the active column changed" passes for a verb that widened
+    // BOTH columns.
+    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeKey, "the empty spelling must leave the other column alone");
+    QCOMPARE(keyFeedback.count(), 1);
+    QCOMPARE(keyFeedback.at(0).at(0).toBool(), true);
+    QCOMPARE(keyFeedback.at(0).at(1).toString(), QStringLiteral("resize"));
+}
+
 void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
 {
     // Pins that a scheduled retile is genuinely DEFERRED to the event loop
@@ -625,6 +824,58 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     QVERIFY2(sawA, "the batch must carry the window whose minimum grew");
 }
 
+void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
+{
+    // extentPinnedByMinimum is the whole reason the published columnMaximized
+    // flag is not just "the rect fills the work area", and nothing exercised
+    // it: deleting that term from the conjunction left the entire suite green.
+    // What it prevents is a column whose TILES' declared minimum alone reaches
+    // the work area reporting maximized forever — the titlebar button latches
+    // with no way to un-latch, because the verb refuses the same column.
+    //
+    // The band is exactly one value. Below kMainExtent the column does not
+    // render full and the flag is false for an ordinary reason; above it the
+    // oversized verdict floats the window out of the strip before any of this
+    // matters (the float test above pins that at 1300). Only a minimum equal
+    // to the work area's main extent is both full-width and still tiled.
+    //
+    // Set BY ROLE, never symmetrically: passing (1200, 1200) would set a cross
+    // minimum of 1200 against an 800 cross extent on the horizontal arm and
+    // float the window instead, silently testing nothing.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    const QSize minFull = Ax::t(QSize(ScrollTestUtils::kMainExtent, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), minFull.width(), minFull.height());
+    QCoreApplication::processEvents();
+
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY2(!state->isFloating(QStringLiteral("app|a")),
+             "a minimum EQUAL to the work area must stay tiled, or this test proves nothing");
+    QVERIFY2(tiled.count() > 0, "the min-size update must produce a batch to inspect");
+
+    const QJsonArray arr = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    bool sawA = false;
+    for (const QJsonValue& v : arr) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("windowId")).toString() != QLatin1String("app|a")) {
+            continue;
+        }
+        sawA = true;
+        // Renders full width...
+        QCOMPARE(Ax::entryMainLen(o), ScrollTestUtils::kMainExtent);
+        // ...and still must not claim to be maximized, because the user chose
+        // none of it and the toggle cannot undo it.
+        QVERIFY2(!o.contains(QLatin1String("columnMaximized")),
+                 "a column pinned full width by its minimum must not publish columnMaximized");
+    }
+    QVERIFY2(sawA, "the batch must carry the pinned window");
+}
+
 void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
 {
     // windowMinSizeUpdated re-runs insertOpenedWindow's oversized verdict:
@@ -649,6 +900,14 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // widens the column, 1300 outgrows the work area entirely.
     const QSize min900 = Ax::t(QSize(900, 0));
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
+    // Re-acquired, per this file's own rule: a float can rebuild the state, and
+    // windowMinSizeUpdated is precisely the call that can trigger one. Reading
+    // the pre-call pointer here is safe only BECAUSE of the outcome the next
+    // line asserts, which is the wrong direction of dependency — if the
+    // verdict ever floats at this size the assertion would be reading freed
+    // memory rather than failing.
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QVERIFY(!state->isFloating(QStringLiteral("app|a")));
     QCOMPARE(floatSpy.count(), 0);
 
@@ -676,6 +935,8 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // may have been rearranged, and the manual unfloat restores the slot.
     const QSize min400 = Ax::t(QSize(400, 0));
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), min400.width(), min400.height());
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
 }
 
@@ -1499,11 +1760,34 @@ void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
     // lexicographic minimum of the active set — QSet iteration order is
     // unspecified, so reverting the deterministic pick is invisible to a
     // casual repro but not to this assertion.
+    //
+    // EIGHT screens, not two. The reverted implementation this pins against
+    // reads QSet iteration order, and against a two-element set that lands on
+    // the right answer about half the time — so the old fixture passed for a
+    // broken engine on a coin flip. The set is also seeded in an order whose
+    // first-inserted element is NOT the answer, so an implementation reading
+    // insertion order fails too.
+    //
+    // The residual is 1 in 8: if the hash order happened to start at "S1"
+    // AND the pick were reverted, this would still pass. Driving it a second
+    // time with a set whose minimum is a different string closes most of what
+    // is left, since one hash order cannot favour both.
     QObject owner;
     auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
-    engine->setActiveScreens({QStringLiteral("S2"), QStringLiteral("S1")});
+    engine->setActiveScreens({QStringLiteral("S7"), QStringLiteral("S3"), QStringLiteral("S5"), QStringLiteral("S8"),
+                              QStringLiteral("S1"), QStringLiteral("S4"), QStringLiteral("S6"), QStringLiteral("S2")});
     engine->setWindowFloat(QStringLiteral("app|f"), false, QString());
     QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("app|f")), QStringLiteral("S1"));
+
+    // Same question, different answer, so no single iteration order satisfies
+    // both arms.
+    QObject owner2;
+    auto* engine2 = new ScrollEngine(nullptr, nullptr, &owner2);
+    engine2->setActiveScreens({QStringLiteral("eDP-1"), QStringLiteral("HDMI-2"), QStringLiteral("DP-9"),
+                               QStringLiteral("DP-3"), QStringLiteral("HDMI-1"), QStringLiteral("DP-1"),
+                               QStringLiteral("eDP-2"), QStringLiteral("DP-2")});
+    engine2->setWindowFloat(QStringLiteral("app|g"), false, QString());
+    QCOMPARE(engine2->screenForTrackedWindow(QStringLiteral("app|g")), QStringLiteral("DP-1"));
 }
 
 void TestScrollEngineSmoke::minSizeSeedsAndCarries()
@@ -1580,7 +1864,16 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     // no-op re-apply; the tab-strip payload is change-gated with the empty
     // latch broadcasting exactly one "[]".
     QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // A MUTABLE work area, so the positive arm below has a change that only
+    // retile can publish. Every other assertion here is "the count did not
+    // go up", and a suite made only of those passes just as well against a
+    // retile() that became a no-op — which is the regression the emit-on-change
+    // gate is most likely to be tidied into.
+    auto sharedRect = std::make_shared<QRect>(defaultScreenRect());
+    const GeometryFn geometry = [sharedRect](const QString&) {
+        return *sharedRect;
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
 
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
     QSignalSpy stripSpy(engine, &ScrollEngine::tabStripsChanged);
@@ -1592,6 +1885,19 @@ void TestScrollEngineSmoke::applyPathEmitsOnChangeOnly()
     engine->retile(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), afterOpen);
+
+    // The POSITIVE half: the work area genuinely changes, so the same retile
+    // call that was silent above must now deliver. Without this the whole slot
+    // is satisfied by an apply path that never emits at all.
+    sharedRect->setWidth(sharedRect->width() - 200);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(tiledSpy.count() > afterOpen, "a retile after a real work-area change must emit");
+    const int afterResize = tiledSpy.count();
+    // And it re-latches: the new rect is now the no-change baseline.
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(tiledSpy.count(), afterResize);
 
     // Tabbed column: the strip payload appears once and does not re-emit
     // byte-identically on a plain retile.

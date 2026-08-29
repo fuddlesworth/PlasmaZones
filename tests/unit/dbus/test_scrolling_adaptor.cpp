@@ -536,6 +536,10 @@ private Q_SLOTS:
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
+        // Same `!m_engine` conjunct, and the verb most likely to be called on
+        // the shutdown path: the KWin effect dispatches it from a user's
+        // maximize click, which can land while the daemon is going down.
+        m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -573,8 +577,18 @@ private Q_SLOTS:
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
 
         // Opening a window is a placement change on an owned screen.
+        //
+        // Bounded ABOVE as well as below. A lower bound alone is the only
+        // constraint on multiplicity anywhere in this suite, so a regression
+        // that fanned the signal out once per window, per column or per tile
+        // would pass every assertion here — and this signal exists to wake a
+        // preview, so an N-times-per-change storm is exactly the defect worth
+        // catching. Two is not a contract, it is headroom: the open legitimately
+        // produces a placement change and may settle the view, and pinning
+        // exactly one would fail on an ordering change that is not a defect.
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         QVERIFY(spy.count() >= 1);
+        QVERIFY2(spy.count() <= 2, "stripChanged must not fan out per window or per tile");
         QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-1"));
 
         // The other owned screen names itself, not the first one.
@@ -644,14 +658,6 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
     }
 
-    // The scrollingScreens property's DocString promises that changes are
-    // announced on scrollingScreensChanged and NOT through
-    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
-    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
-    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
-    // telling consumers to ignore a signal they were in fact receiving, and a
-    // consumer that believed it would poll instead of subscribing.
-    //
     // The focus-follows-mouse scroll cap's blocked-window list rides its own
     // property rather than a fourth key on the behaviour map, and the reason is
     // the update rate: the daemon re-derives it on every relayout of a capped
@@ -693,6 +699,19 @@ private Q_SLOTS:
         QCOMPARE(blocked.count(), 2);
         QVERIFY(m_adaptor->scrollFocusScrollBlockedWindows().isEmpty());
         QCOMPARE(behaviour.count(), 1);
+
+        // The MAP's own emit-on-change gate, which nothing else pinned. Every
+        // assertion above drives the map exactly once, so a
+        // setScrollEffectBehaviour that re-emitted for an identical push would
+        // have left the whole slot green — and this setter is on the daemon's
+        // settings path, where an unchanged republish is the common case.
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-1")}, {}, {});
+        QCOMPARE(behaviour.count(), 1);
+        // A genuine change still speaks, so the gate is not simply mute.
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-2")}, {}, {});
+        QCOMPARE(behaviour.count(), 2);
+        // And the block list stayed out of it throughout.
+        QCOMPARE(blocked.count(), 2);
     }
 
     // clearEngine drops the ENGINE-derived screen set, because leaving it
@@ -716,6 +735,14 @@ private Q_SLOTS:
                  QStringList({QStringLiteral("DP-1")}));
     }
 
+    // The scrollingScreens property's DocString promises that changes are
+    // announced on scrollingScreensChanged and NOT through
+    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
+    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
+    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
+    // telling consumers to ignore a signal they were in fact receiving, and a
+    // consumer that believed it would poll instead of subscribing.
+    //
     // Driven over a REAL bus, because the claim is about what reaches the wire
     // rather than about the adaptor's own emissions.
     void testScrollingScreensProperty_doesNotEmitPropertiesChanged()
@@ -768,6 +795,13 @@ private Q_SLOTS:
 
         QSignalSpy placement(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
 
+        // NOT DISCRIMINATING, and kept deliberately: an empty id that got past
+        // the isEmpty conjunct would fall through to the same lookup, find
+        // nothing and refuse anyway, so deleting that conjunct leaves this leg
+        // green. It documents the wire boundary rather than defending it. The
+        // two legs below it DO discriminate — "tracked but unflagged"
+        // especially, which is the only one that separates "this adaptor
+        // checks the flag" from "this adaptor checks membership".
         m_adaptor->clearWindowedFullscreen(QString()); // empty id
         m_adaptor->clearWindowedFullscreen(QStringLiteral("nobody|9")); // unknown window
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|b")); // tracked but unflagged
@@ -793,6 +827,9 @@ private Q_SLOTS:
 
         QSignalSpy tiled(m_engine, &ScrollEngine::windowsTiled);
 
+        // Empty-id leg is documentation, not discrimination, for the reason
+        // spelled out in the sibling slot above: it reaches the same refusal
+        // through the lookup even with the isEmpty conjunct deleted.
         m_adaptor->reapplyWindowGeometry(QString()); // empty id
         m_adaptor->reapplyWindowGeometry(QStringLiteral("nobody|9")); // unknown window
         QCOMPARE(tiled.count(), 0);

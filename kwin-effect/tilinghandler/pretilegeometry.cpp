@@ -187,10 +187,37 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 });
                 // Clear any lingering KWin maximize flag first or KWin re-asserts
                 // the maximize-area rect and defeats the restore (discussion #461).
-                if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-                    ++m_suppressMaximizeChanged;
-                    kw->maximize(KWin::MaximizeRestore);
-                    --m_suppressMaximizeChanged;
+                //
+                // Through the ledger when the ledger owns the bit, so membership
+                // and the bit move TOGETHER — the same shape the two sibling
+                // pre-tile restores in screenschanged.cpp use, and for the reason
+                // stated there: a bare clear strips a column-maximize member's bit
+                // while leaving the effect recorded as still holding it, which is
+                // the exact split m_columnMaximizedWindows' contract forbids.
+                if (m_columnMaximizedWindows.contains(windowId)) {
+                    releaseColumnMaximized(windowId, safeW);
+                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
+                           && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
+                           && !safeW->isUserResize()) {
+                    // The fullscreen and gesture pair every sibling maximize
+                    // write in this tree carries: maximize() has no fullscreen
+                    // conditional and would moveResize a presenting surface
+                    // down to its restore rect, and mid-gesture it snaps the
+                    // window under the user's pointer.
+                    //
+                    // Unlike releaseColumnMaximized, which skips on the same
+                    // conditions and RETAINS membership so a later arm pays
+                    // the bit, this is the non-member arm and holds no ledger,
+                    // so a skip here is permanent rather than deferred. That
+                    // is the accepted trade against shrinking a presenting
+                    // surface.
+                    //
+                    // The gesture terms are REDUNDANT in this file: the
+                    // enclosing lambda already returns early on the same pair
+                    // above. They are kept so this arm reads identically to
+                    // its twin in screenschanged.cpp, where they are live.
+                    // Do not treat this as the place that guard lives.
+                    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
                 m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
@@ -247,6 +274,27 @@ void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
         qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
                           << bucketScreenId << "rect=" << rect;
     }
+}
+
+void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const QString& screenId)
+{
+    auto savedIt = m_savedPreTileForDesktopMove.find(windowId);
+    if (savedIt == m_savedPreTileForDesktopMove.end()) {
+        return;
+    }
+    // Only apply when the source screen matches the destination — saved rects
+    // are in absolute coordinates of the source monitor and would land
+    // off-target on a different screen after a cross-desktop + cross-screen
+    // move. Consumed either way: a rect that cannot be applied here has no
+    // later consumer, and leaving it behind would let a much later re-add on
+    // the original screen restore a rect from a session-old position.
+    if (savedIt.value().first == screenId) {
+        m_preTileGeometries[screenId][windowId] = savedIt.value().second;
+    } else {
+        qCDebug(lcEffect) << "Desktop move: dropping cross-screen pre-autotile rect for" << windowId
+                          << "source=" << savedIt.value().first << "dest=" << screenId;
+    }
+    m_savedPreTileForDesktopMove.erase(savedIt);
 }
 
 } // namespace PlasmaZones

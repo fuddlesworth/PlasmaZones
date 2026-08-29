@@ -40,11 +40,20 @@ QString SurfaceShaderRegistry::resolveBuiltinBufferShader(const QString& token, 
             return QFileInfo(sibling).canonicalFilePath();
         }
     }
-    // User packs (~/.local/share/plasmazones/surface/<pack>) have no shared
-    // sibling; fall back to the installed data dirs, mirroring how
-    // SurfaceShaderItem::surfaceIncludePaths() locates the shared includes.
-    // Canonicalize like the sibling branch so both paths return the same
-    // form (symlinks resolved).
+    // No sibling shared dir, which is the usual case for a user pack under
+    // ~/.local/share/plasmazones/surface/<pack>. Fall back to the data dirs,
+    // mirroring how SurfaceShaderItem::surfaceIncludePaths() locates the
+    // shared includes. Canonicalize like the sibling branch so both paths
+    // return the same form (symlinks resolved).
+    //
+    // Neither step is a guarantee about WHICH copy wins. The sibling probe is
+    // a plain existence check, so a user pack that ships its own ../shared/
+    // is served from it; and QStandardPaths searches the user data dir before
+    // the system ones, so a file dropped in ~/.local/share/plasmazones/surface/
+    // shared/ shadows the installed builtin for every pack. That is ordinary
+    // search-path precedence for user-installed content, not a hole — the
+    // builtin NAMES are a closed whitelist, it is only the file each resolves
+    // to that follows the search path.
     const QString located = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                                    QStringLiteral("plasmazones/surface/shared/") + fileName);
     return located.isEmpty() ? QString() : QFileInfo(located).canonicalFilePath();

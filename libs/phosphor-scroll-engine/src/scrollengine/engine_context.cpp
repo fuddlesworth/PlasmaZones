@@ -40,6 +40,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // Same treatment for the column-maximize leg, which is maintained
+    // alongside it everywhere.
+    for (auto it = m_lastAppliedColumnMaximized.begin(); it != m_lastAppliedColumnMaximized.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_lastAppliedColumnMaximized.erase(it);
+        } else {
+            ++it;
+        }
+    }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen. windowClosed drops the entry
     // (with the fs memory above) at close, and every path that drops
@@ -98,6 +107,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // left behind it would eat the first genuine focus of a reused id
         // (windowClosed and releaseScreenState sweep for the same reason).
         m_pendingSelfActivations.removeAll(windowId);
+        m_pendingSelfActivationQueuedAt.remove(windowId);
         // The declined-open marker with it. This sweep matters more for that
         // map than for the one above: the marker's other three sweeps all hang
         // off a windowClosed signal, and a window that dies WITHOUT one — the
@@ -446,6 +456,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         for (const QString& windowId : std::as_const(displacedWindows)) {
             m_lastAppliedRect.remove(windowId);
             m_lastAppliedWindowedFs.remove(windowId);
+            m_lastAppliedColumnMaximized.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
@@ -571,6 +582,7 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -660,6 +672,7 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -809,6 +822,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
+        m_lastAppliedColumnMaximized.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);

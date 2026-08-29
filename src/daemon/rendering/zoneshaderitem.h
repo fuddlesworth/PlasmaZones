@@ -62,7 +62,7 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
     // Labels payload (sparse pre-rendered zone-number glyph tiles for shader pass)
-    Q_PROPERTY(PhosphorRendering::ZoneLabelTexture labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY
+    Q_PROPERTY(QVariant labelsTexture READ labelsTextureVariant WRITE setLabelsTextureVariant NOTIFY
                    labelsTextureChanged FINAL)
 
 public:
@@ -93,7 +93,38 @@ public:
 
     // Labels texture getter/setter
     PhosphorRendering::ZoneLabelTexture labelsTexture() const;
+
+    /// QML-facing form of `labelsTexture`, and the reason the Q_PROPERTY is a
+    /// QVariant rather than the payload type.
+    ///
+    /// The payload itself survives a QML `Binding`, but a QImage does not, and
+    /// the settings and editor shader previews hand this property a full
+    /// QImage and lean on the registered QImage→ZoneLabelTexture converter
+    /// (see the converter's registration in the constructor). Through a
+    /// Binding element that image arrived as an invalid QVariant and the
+    /// labels silently vanished, so those previews drew their zones with no
+    /// numbers on them. Converting here accepts every shape any host produces.
+    /// A Binding's invalid delivery is indistinguishable from a host
+    /// legitimately clearing the property, so the QML-source sweep test is what
+    /// forbids driving this property from two places at once.
+    /// The daemon additionally writes this property from C++ via
+    /// `setProperty`, which delivers the payload intact like a direct QML
+    /// assignment does.
+    ///
+    /// The property is asymmetric on purpose: a WRITE accepts a QImage through
+    /// the converter, but a READ always returns the payload type, so a QML
+    /// round-trip (read the property back after writing an image) does not
+    /// hand back what was written.
+    QVariant labelsTextureVariant() const;
     void setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels);
+    /// Accepts the payload, a QImage (converted as a single full-size tile),
+    /// or null / undefined / an absent key / an invalid QVariant for "no
+    /// labels". Measured: `null` arrives VALID (std::nullptr_t) while
+    /// `undefined`, an absent JS-object key, and BOTH `Binding` shapes all
+    /// arrive INVALID, so an invalid variant clears silently — it cannot be
+    /// told apart from a legitimate clear. A VALID but unconvertible value
+    /// clears too, but logs first.
+    void setLabelsTextureVariant(const QVariant& labels);
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering

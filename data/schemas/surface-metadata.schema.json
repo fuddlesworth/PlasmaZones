@@ -2,9 +2,10 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:surface-metadata",
     "title": "PlasmaZones Surface Shader Metadata",
-    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (providesBorder, providesOpacityTint, needsBackdrop, interiorOpaque, multipass, bufferShaders, bufferScale, bufferFeedback, bufferWrap, bufferWraps, bufferFilter, bufferFilters, depthBuffer, animated, audio, paddingParam, vertexShader, textures, and the retired handlesOpacity) and descriptive metadata (description, author, version, category, preview) are allowed through.",
+    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (providesBorder, providesOpacityTint, needsBackdrop, interiorOpaque, multipass, bufferShaders, bufferScale, bufferFeedback, bufferWrap, bufferWraps, bufferFilter, bufferFilters, depthBuffer, halfFloatBuffers, animated, audio, paddingParam, vertexShader, textures, and the retired handlesOpacity) and descriptive metadata (description, author, version, category, preview) are allowed through.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
+    "additionalProperties": false,
     "properties": {
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -28,24 +29,29 @@
         "multipass": { "type": "boolean" },
         "bufferShaders": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "maxItems": 4
         },
-        "bufferScale": { "type": "number" },
+        "bufferScale": { "type": "number", "minimum": 0.125, "maximum": 1.0 },
         "bufferFeedback": { "type": "boolean" },
         "bufferWrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
         "bufferWraps": {
             "type": "array",
-            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+            "maxItems": 4
         },
         "bufferFilter": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
         "bufferFilters": {
             "type": "array",
-            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] }
+            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+            "maxItems": 4
         },
         "depthBuffer": { "type": "boolean" },
+        "halfFloatBuffers": { "type": "boolean" },
         "paddingParam": { "type": "string" },
         "textures": {
             "type": "array",
+            "maxItems": 3,
             "items": {
                 "type": "object",
                 "required": ["path"],
@@ -57,6 +63,7 @@
         },
         "parameters": {
             "type": "array",
+            "maxItems": 48,
             "items": { "$ref": "#/definitions/parameter" }
         }
     },
@@ -81,7 +88,8 @@
                 "min": { "type": "number" },
                 "max": { "type": "number" },
                 "step": { "type": "number" }
-            }
+            },
+            "additionalProperties": false
         }
     }
 }

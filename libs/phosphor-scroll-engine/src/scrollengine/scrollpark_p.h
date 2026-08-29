@@ -66,6 +66,34 @@ struct ParkResult
     std::optional<QString> rememberedEdge;
 };
 
+/// Where along the screen's horizontal span a park lands.
+///
+/// The park x USED to be "the live strip x, clamped into the span", and that
+/// is what made a parked tile's committed rect move on every scroll step: the
+/// strip x slides with the view, so a tile whose strip x sat partly inside the
+/// span was re-committed a few pixels over on every retile, indefinitely. Seen
+/// live as a full-width column alternating between x=8 and x=16, and a hidden
+/// tab alternating 1924/1932 — pure moveResize churn for a rect nobody can
+/// see, since a parked tile is DRAWN from its visualPos hint, never from this
+/// rect.
+///
+/// Aligning to an END of the span instead makes the answer a function of the
+/// departure side alone, which does not slide. For a fully-departed column the
+/// two rules already agreed (its strip x is far outside the span, so the old
+/// clamp pinned it to that same end); this only changes the partly-inside
+/// case, which is exactly the unstable one.
+enum class ParkAlign {
+    /// Flush with the screen's left edge.
+    Leading,
+    /// Right edge flush with the screen's right edge.
+    Trailing,
+    /// The historical "clamp the incoming x into the span" rule. Kept for the
+    /// VERTICAL strip, where the main axis is y and a tile's x is its
+    /// cross-axis position — which the view never slides, so it is already
+    /// stable and re-aligning it would shove tiles sideways for no reason.
+    PreserveClamped,
+};
+
 /// Park a rect: move it below every output, keeping it within its own
 /// screen's horizontal span.
 ///
@@ -73,7 +101,11 @@ struct ParkResult
 /// argument is "no point below the union of all outputs belongs to any
 /// monitor", which is a claim about the desktop, not about which way the strip
 /// runs. This will read as a missed transposition in review; it is not.
-void parkRect(QRect& rect, const QRect& screenRect, int parkTop);
+///
+/// @p align decides WHERE in the span (see ParkAlign). Every caller passes the
+/// alignment its departure side implies, so the committed park is a pure
+/// function of (screen, departure side, width) and no longer of the view.
+void parkRect(QRect& rect, const QRect& screenRect, int parkTop, ParkAlign align);
 
 /// Resolve one tile's committed placement: off-viewport parking, the
 /// main-axis straddle clamp, and the cross-axis stack-overflow clamp.

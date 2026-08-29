@@ -44,11 +44,20 @@ protected:
         // would normalize against 760 instead of 800, stay inside 0..1, and
         // agree with the engine either way. Known coverage gap, kept because
         // an absolute expected value would have to be derived from a live run.
-        const auto available = [](const QString&) {
-            return QRect(1920, 40, 1200, 760);
+        // PER SCREEN, not one rect for every id. While both providers ignored
+        // the screenId, every screen resolved to the same rect and no test in
+        // either file could catch the engine answering DP-1's geometry for a
+        // DP-2 window — the whole class of cross-screen mixups was invisible.
+        // DP-1 keeps its original rect so the existing pixel expectations
+        // stand; DP-2 sits at a different origin AND a different size, so a
+        // mixup shows up in both the offset and the normalization basis.
+        // Anything else keeps DP-1's rect, which is what the previous
+        // behaviour was for every id.
+        const auto available = [](const QString& screenId) {
+            return screenId == QLatin1String("DP-2") ? QRect(0, 30, 1024, 738) : QRect(1920, 40, 1200, 760);
         };
-        const auto screen = [](const QString&) {
-            return QRect(1920, 0, 1200, 800);
+        const auto screen = [](const QString& screenId) {
+            return screenId == QLatin1String("DP-2") ? QRect(0, 0, 1024, 768) : QRect(1920, 0, 1200, 800);
         };
         m_engine->setScreenGeometryProviders(available, screen);
         // Well-behaved-compositor echo, same as ScrollTestUtils'

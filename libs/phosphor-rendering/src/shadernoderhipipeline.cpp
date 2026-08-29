@@ -70,6 +70,19 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!m_depthTexture->create()) {
             qCWarning(lcShaderNode) << "Failed to create depth texture";
+            // Drop the failed object for the same reason the sampler below
+            // does: this branch is gated on the texture's pixelSize(), which
+            // QRhiTexture reports from the requested size whether or not
+            // create() succeeded. A latched failed texture would therefore
+            // never be retried, yet would still pass appendDepthBinding's
+            // null check and reach the SRB uncreated.
+            m_depthTexture.reset();
+            // The old depth texture was already destroyed by the reset() above,
+            // and the SRBs built against it are still installed holding raw
+            // pointers to it. prepare() bails on this false, but render() only
+            // gates on "is there a pipeline and an srb?" — both non-null here —
+            // so without this the next frame draws against freed GPU objects.
+            resetAllBindingsAndPipelines();
             return false;
         }
         if (!m_depthSampler) {
@@ -82,6 +95,10 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // the TEXTURE's state, so a latched failed sampler would never
                 // be re-created yet still pass appendDepthBinding's null check.
                 m_depthSampler.reset();
+                // The depth TEXTURE was already replaced above, so the SRBs
+                // still installed reference the one it displaced. Same
+                // freed-object draw as the texture failure path.
+                resetAllBindingsAndPipelines();
                 return false;
             }
         }
@@ -97,7 +114,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         }
     }
 
-    if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
+    if (m_useDepthBuffer && multiBufferMode) {
         if (!m_depthMultiBufferWarned) {
             m_depthMultiBufferWarned = true;
             qCWarning(lcShaderNode)
@@ -118,7 +135,24 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                      std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
         tex.reset(
             rhi->newTexture(bufferFormat, bufferSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
+        // Every failure exit clears what it allocated. Callers gate the retry
+        // on "does the object exist and is it the right pixelSize?", and
+        // pixelSize() answers from the requested size even after a failed
+        // create() — so leaving a failed object installed latches the failure
+        // permanently and lets ensureBufferPipeline build an SRB and pipeline
+        // against an uncreated texture and render target.
         if (!tex->create()) {
+            tex.reset();
+            // The caller's old texture is already gone (the reset above
+            // replaced it before create() was attempted), and any SRB or
+            // pipeline built against it is still installed holding a raw
+            // pointer. Every caller propagates this false up through
+            // ensureBufferTarget, where prepare() bails — but render() gates
+            // only on a non-null pipeline and srb, so the frame would draw
+            // against freed GPU objects. Invalidating here makes that gate
+            // catch it. Matters most in the multi-buffer loop below, where a
+            // failure at pass i>0 leaves passes 0..i-1 already swapped.
+            resetAllBindingsAndPipelines();
             return false;
         }
         QRhiTextureRenderTargetDescription desc;
@@ -130,7 +164,16 @@ bool ShaderNodeRhi::ensureBufferTarget()
         rt.reset(rhi->newTextureRenderTarget(desc));
         rpd.reset(rt->newCompatibleRenderPassDescriptor());
         rt->setRenderPassDescriptor(rpd.get());
-        return rt->create();
+        if (!rt->create()) {
+            tex.reset();
+            rt.reset();
+            rpd.reset();
+            // Same as the texture failure above: the old texture and render
+            // target are gone, the installed bindings still point at them.
+            resetAllBindingsAndPipelines();
+            return false;
+        }
+        return true;
     };
 
     if (multiBufferMode) {
@@ -445,15 +488,13 @@ bool ShaderNodeRhi::ensurePipeline()
     m_renderPassFormat = format;
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool hasMultipass = !m_bufferPath.isEmpty() || multiBufferMode;
 
     auto createImageSrbSingle = [rhi,
                                  this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
+        // No dummy substitution here: the loop below already falls back to the
+        // dummy pair for a null channel-0 texture or sampler, so pre-filling
+        // them produced identical bindings by a second route.
         QRhiSampler* channel0Sampler = (channel0Texture && m_bufferSamplers[0]) ? m_bufferSamplers[0].get() : nullptr;
-        if (!channel0Texture && !m_bufferPath.isEmpty()) {
-            channel0Texture = m_dummyChannelTexture.get();
-            channel0Sampler = m_dummyChannelSampler.get();
-        }
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
         appendUboAndExtraBindings(bindings);
@@ -494,12 +535,14 @@ bool ShaderNodeRhi::ensurePipeline()
     // uTexture<N> without a loaded texture must read the documented
     // transparent black rather than leave the declared binding without an
     // SRB entry (strict backends reject the mismatch; lenient ones sample
-    // undefined). Single call for both consumers: for a single-pass shader a
-    // failed create is best-effort (falls back to omit-the-binding), while a
-    // multipass shader hard-requires it (unwritten iChannel slots bind the
-    // dummy), so its absence fails the build below.
-    ensureDummyChannelResources(rhi);
-    if (hasMultipass && (!m_dummyChannelTexture || !m_dummyChannelSampler)) {
+    // undefined). Every consumer now hard-requires it: a multipass shader
+    // binds it into unwritten iChannel slots, and appendWallpaperBinding
+    // substitutes it at binding 11 whenever no wallpaper is bound, which a
+    // single-pass surface pack declaring uBackdrop relies on. Omitting the
+    // binding instead would reproduce the very layout mismatch the dummy
+    // exists to prevent, so a failed create fails the build here rather than
+    // degrading silently.
+    if (!ensureDummyChannelResources(rhi) || !m_dummyChannelTexture || !m_dummyChannelSampler) {
         return false;
     }
 
@@ -636,23 +679,58 @@ void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBindin
 
 void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
 {
-    if (m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler) {
-        bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage,
-                                                                  m_wallpaperTexture.get(), m_wallpaperSampler.get()));
+    // Binding 11 stays POPULATED whether or not a wallpaper is in play,
+    // substituting the 1x1 dummy — the same discipline the user-texture slots
+    // (bindings 7-10) already follow.
+    //
+    // It used to be appended only when a wallpaper existed, which was safe
+    // while binding 11 belonged solely to overlay packs that opt into the
+    // wallpaper module and always enable it. Surface packs broke that
+    // assumption: a needsBackdrop pack (the glass / blur family) declares
+    // uBackdrop at this binding unconditionally, and its SPIR-V says so on
+    // every host, including a daemon surface with nothing behind it. Leaving
+    // the binding out there is a resource-binding layout that does not match
+    // the shader, which fails the pipeline rather than degrading. The pack's
+    // fallback path is selected by uHasBackdrop (0 here), not by the absence
+    // of the binding.
+    const bool live = wallpaperBindingLive();
+    QRhiTexture* tex = live ? m_wallpaperTexture.get() : m_dummyChannelTexture.get();
+    QRhiSampler* sam = live ? m_wallpaperSampler.get() : m_dummyChannelSampler.get();
+    if (!tex || !sam) {
+        // Unreachable in practice: ensurePipeline and ensureBufferPipeline both
+        // fail closed when the dummy resources are missing, which is the only
+        // way the fallback can be null. Omitting the binding here would
+        // reproduce the exact layout mismatch this function exists to prevent,
+        // so say so once rather than leaving a silent return to be diagnosed
+        // from a pipeline failure.
+        if (!m_warnedWallpaperBindingOmitted) {
+            m_warnedWallpaperBindingOmitted = true;
+            qCWarning(lcShaderNode) << "Wallpaper binding 11 omitted: no wallpaper and no dummy substitute"
+                                    << "(texture:" << static_cast<bool>(tex) << "sampler:" << static_cast<bool>(sam)
+                                    << ") — a pack declaring uBackdrop will fail its pipeline";
+        }
+        return;
     }
+    bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage, tex, sam));
 }
 
 void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const
 {
-    if (!m_useDepthBuffer || !m_depthTexture || !m_depthSampler) {
-        return;
-    }
-    // A pass that writes the depth attachment must not also sample it — see
-    // DepthAccess. Substitute the dummy so binding 12 stays populated for a
-    // buffer shader that pulls in depth.glsl regardless.
+    // Binding 12 stays POPULATED whether or not a depth buffer is in play,
+    // the same discipline appendWallpaperBinding follows for binding 11 and
+    // the user-texture slots follow for 7-10. data/overlays/shared/depth.glsl
+    // declares the sampler unconditionally for any pack that includes it, so a
+    // pack that includes it without also setting "depthBuffer": true would
+    // otherwise present resource bindings that do not match its own SPIR-V —
+    // a pipeline-create failure with nothing naming the cause, rather than a
+    // graceful degrade to an empty depth read.
+    //
+    // A pass that WRITES the depth attachment must not also sample it (see
+    // DepthAccess), which is the other route to the same substitution.
     const bool writes = access == DepthAccess::WrittenThisPass;
-    QRhiTexture* tex = writes ? m_dummyChannelTexture.get() : m_depthTexture.get();
-    QRhiSampler* sam = writes ? m_dummyChannelSampler.get() : m_depthSampler.get();
+    const bool haveDepth = m_useDepthBuffer && m_depthTexture && m_depthSampler;
+    QRhiTexture* tex = (writes || !haveDepth) ? m_dummyChannelTexture.get() : m_depthTexture.get();
+    QRhiSampler* sam = (writes || !haveDepth) ? m_dummyChannelSampler.get() : m_depthSampler.get();
     if (!tex || !sam) {
         return;
     }

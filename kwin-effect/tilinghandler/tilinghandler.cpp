@@ -27,6 +27,7 @@
 #include <QDBusPendingReply>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QTimer>
 #include <QtMath>
 
@@ -70,9 +71,14 @@ void TilingHandler::applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen)
     // consumer nest their own brackets, and a plain set/clear here would hand
     // an outer scope back an un-suppressed window (the save/restore rule the
     // inGeometryApply guards follow for the same reason).
+    // RAII, matching applyMaximizeSuppressed. The counter's failure mode is
+    // silent and permanent: leak one increment and the paired
+    // isSuppressing... predicate answers true for the rest of the session.
     ++m_suppressFullScreenChanged;
+    const auto suppressGuard = qScopeGuard([this] {
+        --m_suppressFullScreenChanged;
+    });
     kw->setFullScreen(fullScreen);
-    --m_suppressFullScreenChanged;
 }
 
 void TilingHandler::suppressFfmUntilCursorMoves()
@@ -408,6 +414,18 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
         // animated leg, which is what a non-parked window should get.
         return false;
     }
+    return rectAtScrollPark(frame);
+}
+
+bool TilingHandler::rectAtScrollPark(const QRect& rect) const
+{
+    // Shared tail of atScrollPark, split out so the batch apply can ask the
+    // same question of a commit TARGET (see the header doc). The frame-side
+    // preconditions (null window, degenerate geometry) stay in atScrollPark;
+    // this half owns the union test and its fail-closed arms.
+    if (rect.isEmpty()) {
+        return false;
+    }
     if (!KWin::effects) {
         // The doc promises fail-closed on "no resolvable outputs", and every
         // sibling m_scrollVisualDelta damage pair guards this pointer — an
@@ -421,7 +439,7 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
     }
     // No resolvable outputs (disconnect race): the union is empty and every
     // rect is trivially "off" it. Fail closed for the same reason as above.
-    return !unionRect.isEmpty() && !unionRect.intersects(frame);
+    return !unionRect.isEmpty() && !unionRect.intersects(rect);
 }
 
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
@@ -568,7 +586,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     // then send one batch D-Bus call instead of per-window round-trips.
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
-    QStringList batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
+    QSet<QString> batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
     // Announce stamps, one PER ENTRY rather than one for the batch: a single
     // batch-wide stamp would let one superseded window (re-announced on its own
     // between dispatch and reply, or closed) disarm the rollback for every other
@@ -643,7 +661,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // the initial screen query was pending retains explicit spawn provenance.
         const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
         if (wasFresh) {
-            batchFreshWindowIds.append(windowId);
+            batchFreshWindowIds.insert(windowId);
         }
         const bool knownFreeFloating =
             wasFresh || (enteringAutotile && !TilingStateHelpers::isTiledWindow(m_border, windowId));
@@ -733,6 +751,18 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_untiledMinimizeFloats.remove(windowId);
     m_unfloatInFlight.remove(windowId);
+    // Same reasoning as the retry budget below: ids are appId-derived and
+    // reusable, so a reused id must not inherit an armed toggle. Without this
+    // a window closing inside its own round trip leaves an entry that
+    // suppresses the next occupant's repair arm until it expires.
+    //
+    // This funnel also serves the cross-output transfer of a LIVE window,
+    // where dropping the marker reopens the race for the remainder of a trip
+    // that is still genuinely in flight. Accepted rather than worked around:
+    // the window is changing screens, so the batch that would have been
+    // suppressed is describing the strip it is leaving, and the arriving
+    // strip answers on its own first batch.
+    m_maximizeToggleInFlight.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a
     // reused windowId must not inherit an exhausted budget, and every direct
     // caller of this cleanup (not just onWindowClosed) must drop the
@@ -785,11 +815,17 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // KWin-fullscreen forever — snapping emits no tile batch to un-flag
     // it). Forget-then-release, membership first, so a synchronous
     // re-entry from setFullScreen finds the entry already gone.
-    if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
-        forgetWindowedFullscreen(windowId);
-        releaseWindowedFullscreenState(windowId);
-    }
-    m_windowedFsClearInFlight.remove(windowId);
+    // UntrackFunnel, not StripExit: monocle deliberately does NOT release here
+    // — it rides cleanupClosedWindowState's scrub — and that blank is recorded
+    // in the scope table with its reasoning rather than quietly filled by the
+    // funnel. Both other claims answer, for the reason this path documents: on
+    // a cross-output transfer to a screen these engines do not manage, no later
+    // tile batch exists to hand the state back.
+    //
+    // The EffectWindow is resolved rather than dropped bare so the bit is
+    // handed back while the window is still alive, and so the release can
+    // re-seed the tracked-screen map after its suppressed move.
+    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::UntrackFunnel);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
@@ -826,6 +862,26 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // The spawn-provenance and deferred-route entries are cleared by
     // cleanupAutotileTracking, which owns them for every caller.
     cleanupAutotileTracking(windowId);
+
+    // The column ledger gets an unconditional scrub HERE and nowhere else.
+    //
+    // cleanupClosedWindowState scrubs the monocle set but has no column
+    // equivalent, and the funnel's own release retains an entry it could not
+    // pay — deliberately, so a later arm can pay it. On a dying window there
+    // is no later arm, and restoreAllColumnMaximized re-inserts on a resolve
+    // miss, so a window closing around a daemon-loss drain leaves an entry
+    // with no window and no reaper. Window ids are appId-derived and reusable,
+    // and three live readers consume that entry: interceptMaximizeRequest's
+    // already-agrees test, dispatchMaximizeColumnToggle's refusal write-back,
+    // and the batch's resolveColumnMaximizeAction inSet term. A reused id
+    // therefore feeds all three a membership the new window never earned, and
+    // the refusal write-back is the one that can act on it outright by
+    // driving KWin to MaximizeFull for a column the engine never maximized.
+    //
+    // It does NOT belong in cleanupAutotileTracking: that funnel also serves
+    // the cross-output transfer of a LIVE window, where the retained entry is
+    // a bit the effect genuinely still owes.
+    m_columnMaximizedWindows.remove(windowId);
 
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
@@ -989,7 +1045,13 @@ void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wind
                 // Re-center horizontally under the cursor so the window
                 // doesn't "jump away" from the grab point when it shrinks.
                 QRectF currentFrame = w->frameGeometry();
-                const QPointF cursor = KWin::effects->cursorPos();
+                // Guarded like every other KWin::effects read in this file.
+                // The re-centre is a nicety, so losing it on a teardown-time
+                // call is strictly better than dereferencing a null handler:
+                // without the cursor the window keeps its current origin and
+                // only its size is restored, which is what the non-immediate
+                // arm below does anyway.
+                const QPointF cursor = KWin::effects ? KWin::effects->cursorPos() : currentFrame.topLeft();
                 int newX = qRound(currentFrame.x());
                 int newY = qRound(currentFrame.y());
                 if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
@@ -1075,6 +1137,18 @@ void TilingHandler::drainDeadSessionState()
     // effect's flags are stale; the adopt-on-batch arm re-establishes them
     // from the new daemon's truth. Idempotent after the teardown's release.
     restoreAllWindowedFullscreen();
+    // Monocle belongs to the dead session on the same terms, and this was the
+    // one bulk-restore caller that omitted it — the teardown sites all call
+    // the three together. Its own re-establishment is weaker than the column
+    // mirror's, which is why leaving it is worse here than there: the sole
+    // insert site is gated on the window NOT already being maximized, so a
+    // surviving entry is never refreshed and never re-derived from the new
+    // daemon's truth. It runs after the fullscreen release, per the claim
+    // order, and before the column mirror.
+    restoreAllMonocleMaximized();
+    // The column-maximize mirror belongs to the dead session too, and the
+    // batch Apply arm re-establishes it from the new daemon's truth.
+    restoreAllColumnMaximized();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The resolved per-screen scroll behaviour belongs to the dead session
     // too, and bring-up clears it rather than trusting the teardown to have:

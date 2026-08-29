@@ -6,6 +6,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <cmath>
 
 namespace PhosphorScrollEngine {
 
@@ -37,24 +38,55 @@ int ScrollStrip::activeTileCrossPx(const ScrollLayoutParams& params) const
 
 bool ScrollStrip::claimTabbedHeightOwnership(Column& c, int tileIdx, const WindowHeight& incoming)
 {
-    if (c.display != ColumnDisplay::Tabbed || incoming.kind == WindowHeight::Auto) {
+    // Only a tabbed column HAS an extent owner; in a stack every tile's own
+    // height governs its own slice, so there is nothing to claim.
+    //
+    // An Auto write claims nothing, which is the rule that keeps an ARRIVAL
+    // from seizing the column: a tile is inserted carrying the context default
+    // height, and every re-insert path (the cross-output move, the unfloat,
+    // the drag-cancel, the stash restore) re-states it through
+    // setWindowHeightIntent. If Auto could claim, each of those would hand a
+    // tabbed column to the arriving tab and resolve it to the whole work area,
+    // discarding the extent the resident owner had.
+    if (c.display != ColumnDisplay::Tabbed || incoming.kind == WindowHeight::Auto || tileIdx < 0
+        || tileIdx >= c.tiles.size()) {
         return false;
     }
-    bool changed = false;
-    for (int ti = 0; ti < c.tiles.size(); ++ti) {
-        // Auto siblings are left alone, weight included: an Auto tab
-        // contributes nothing to tabbedColumnCrossPx's scan, so rewriting it
-        // would move no pixels while making the caller report success.
-        // MINIMIZED siblings are cleared like any other, deliberately: their
-        // intent is inert while the column is tabbed, and leaving one behind
-        // would let an unminimize hand the column a height nobody asked for.
-        if (ti == tileIdx || c.tiles.at(ti).height.kind == WindowHeight::Auto) {
-            continue;
-        }
-        c.tiles[ti].height = WindowHeight::makeAuto();
-        changed = true;
+    const QString& id = c.tiles.at(tileIdx).windowId;
+    if (c.heightOwnerId == id) {
+        return false;
     }
-    return changed;
+    // Moving the owner is the WHOLE operation. Nothing else is written: the
+    // tabs that no longer own the extent keep the heights they carry, which
+    // is what lets untabbing put the stack back the way the user built it.
+    // Writing an Auto owner is legitimate and means "the whole work area" —
+    // tabbedColumnCrossPx resolves it there rather than scanning past it.
+    c.heightOwnerId = id;
+    return true;
+}
+
+bool ScrollStrip::applyColumnDisplay(Column& c, ColumnDisplay display)
+{
+    if (c.display == display) {
+        return false;
+    }
+    c.display = display;
+    if (display == ColumnDisplay::Tabbed) {
+        // Entering tabbed: the tab on show takes the extent. It is the only
+        // defensible choice at the transition — the alternative is to let the
+        // stack order decide, which hands the column to whichever tile sits
+        // first regardless of what the user was looking at when they pressed
+        // the key. Nothing is cleared, so the flip is reversible.
+        const int owner = qBound(0, c.activeTileIdx, qMax(0, c.tiles.size() - 1));
+        c.heightOwnerId = c.tiles.isEmpty() ? QString() : c.tiles.at(owner).windowId;
+    } else {
+        // Leaving tabbed: every tile's own height governs again, so the
+        // ownership is meaningless and is dropped rather than left to go
+        // stale. Because it was only ever a POINTER, the intents it arbitrated
+        // between are all still intact and the stack comes back as it was.
+        c.heightOwnerId.clear();
+    }
+    return true;
 }
 
 bool ScrollStrip::setActiveColumnWidth(const ColumnWidth& width)
@@ -117,6 +149,14 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
 
 bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params)
 {
+    // deltaPercent is public API and reaches qRound below. qRound on a NaN or
+    // an infinity is undefined, and the D-Bus verb surface hands this straight
+    // to an external caller, so refuse a non-finite delta at the boundary
+    // rather than letting it decide a column width. qFuzzyIsNull answers false
+    // for both, so the zero test does not already cover it.
+    if (!std::isfinite(deltaPercent)) {
+        return false;
+    }
     Column* col = activeColumnMutable();
     if (!col || qFuzzyIsNull(deltaPercent)) {
         return false;
@@ -170,10 +210,25 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
 
 bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
 {
-    Column* col = activeColumnMutable();
-    if (!col) {
+    return toggleMaximizeColumnAt(m_activeColumnIdx, params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params)
+{
+    // columnOfWindow answers -1 for a window this strip does not hold, which
+    // the index guard below turns into a refusal rather than an action on
+    // some other column. That is the whole point of the window-scoped entry:
+    // a maximize request arriving for a window the strip cannot place must do
+    // nothing, not maximize whichever column happens to be active.
+    return toggleMaximizeColumnAt(columnOfWindow(windowId), params);
+}
+
+bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params)
+{
+    if (columnIndex < 0 || columnIndex >= m_columns.size()) {
         return false;
     }
+    Column* col = &m_columns[columnIndex];
     // Degenerate work area, the same bail its sibling width verbs (cycle,
     // adjust, equalize, minimize) take.
     // This one writes PERSISTED intent: with a zero main extent the
@@ -183,38 +238,97 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
     if (params.axis.mainSize(params.workArea) <= 0) {
         return false;
     }
+    // A column PINNED BY ITS MINIMUM cannot be made narrower, so neither arm
+    // below can move it. Refusing is the honest answer and the same shape the
+    // sibling width verbs take at their own floors: without it the press
+    // rewrites persisted intent, renders identical pixels, and still returns
+    // true — which costs a relayout and raises a "resize" success OSD for a
+    // press that did nothing, forever, on every press.
+    //
+    // Related to, but NOT the twin of, the suppression engine_apply applies to
+    // the published columnMaximized flag. That predicate is strictly wider: it
+    // also declines to publish when the context DEFAULT width already renders
+    // full, a column this verb happily maximizes and un-maximizes (the
+    // defaultIsFullWidth arm below exists for exactly that user). Only the
+    // pinned-by-minimum half is shared.
+    //
+    // DEAD END, deliberate and unfixable here: a column that was maximized and
+    // whose client THEN raises its minimum past the work area lands in this
+    // refusal on the un-maximize press, so it can never be un-maximized and
+    // m_preMaximizeWidth stays armed for it indefinitely. Letting the press
+    // through would not help — the relayout floors the column at the client
+    // minimum, so it would render full width regardless, and the user would
+    // get the same pixels plus a spent slot. The window has outgrown the
+    // strip; the way out is the float path (minSizeOutgrowingWorkArea), not
+    // this verb.
+    if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
+        return false;
+    }
     const ColumnWidth full = ColumnWidth::makeProportion(1.0);
-    if (m_preMaximizeColumnIdx == m_activeColumnIdx && col->width == full) {
+    // EVERY full-width test here compares RESOLVED PIXELS, never the intent
+    // value. ColumnWidth::operator== compares kind first, so Fixed(<work area
+    // main>), Preset(1.0) and Proportion(1.0) all render identically and only
+    // one of them is == full. That mattered little while this verb was the
+    // sole way to reach full width, but the batch now MEASURES the rendered
+    // column to publish columnMaximized, so every other route to a full-width
+    // column (adjustActiveColumnWidth clamping, preset cycling, expand,
+    // equalize, an interactive edge-drag's reconcile, a cross-screen handoff,
+    // expel, the minimize round trip, a restore from disk) lights the titlebar
+    // button up. On a value compare those columns took the "not full" arm,
+    // which re-stored the slot and wrote Proportion(1.0) — visually nothing,
+    // reported as success, and the button snapped straight back. The
+    // defaultIsFullWidth test below already worked in pixels for exactly this
+    // reason; the other two now agree with it.
+    const int workMain = params.axis.mainSize(params.workArea);
+    const auto rendersFullWidth = [&params, workMain](const ColumnWidth& w) {
+        return resolveColumnWidthPx(w, params) >= workMain;
+    };
+    if (!rendersFullWidth(col->width)) {
+        m_preMaximizeWidth = col->width;
+        m_preMaximizeColumnIdx = columnIndex;
+        col->width = full;
+        return true;
+    }
+    // The stored intent is re-validated against the CURRENT work area and
+    // axis, not trusted. The slot holds a raw ColumnWidth captured whenever
+    // the column was maximized, and nothing invalidates it when the output
+    // resizes or the strip flips axis — a Fixed(px) captured on a wider work
+    // area (or on the other axis) resolves clamped back to full width, so
+    // restoring it would consume the slot, change nothing visible, and report
+    // success. Falling through to the default-width arm in the same press is
+    // what keeps "the toggle always does something" true.
+    if (m_preMaximizeColumnIdx == columnIndex && !rendersFullWidth(m_preMaximizeWidth)) {
         col->width = m_preMaximizeWidth;
         m_preMaximizeColumnIdx = -1;
         return true;
     }
-    if (col->width == full) {
-        // Full-width without a stored intent for THIS column (maximized in
-        // an earlier session, or another column's maximize discarded the
-        // single stored slot): fall back to the default width so the toggle
-        // can always un-maximize instead of dead-ending.
-        //
-        // A user whose DEFAULT is itself full width would dead-end on that
-        // fallback, so take half the work area in that case. The point of the
-        // branch is that the toggle always does something.
-        //
-        // Compared in RESOLVED PIXELS, not on the intent value. ColumnWidth's
-        // operator== compares kind first, so a default spelled Fixed(<work
-        // area width>) is not == Proportion(1.0) even though it renders
-        // identically: the old value compare took the "not full" arm, left
-        // the column visually unchanged, and then reported TRUE — a false
-        // success OSD on the exact dead-end this branch exists to remove.
-        const bool defaultIsFullWidth =
-            resolveColumnWidthPx(params.defaultColumnWidth, params) >= params.axis.mainSize(params.workArea);
-        col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
-        // Unconditionally true: both arms leave the column narrower than the
-        // full width it had on entry, so the toggle always did something.
-        return true;
+    // Full width with no usable stored intent for THIS column (maximized in
+    // an earlier session, another column's maximize discarded the single
+    // stored slot, or the slot no longer resolves narrow): fall back to the
+    // default width so the toggle can always un-maximize instead of dead-
+    // ending. A user whose DEFAULT is itself full width would dead-end on
+    // that fallback, so take half the work area in that case.
+    const bool defaultIsFullWidth = rendersFullWidth(params.defaultColumnWidth);
+    col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
+    // A stale slot pointing at this column is spent either way — leaving it
+    // armed would make the NEXT maximize restore a width this press discarded.
+    //
+    // KEPT despite being unobservable today, and the reasoning is worth
+    // recording so it is not deleted as dead. Reaching here leaves the column
+    // NARROWER than full, so the next press takes the maximize arm above and
+    // overwrites the slot before anything reads it. Even the roundabout route
+    // — widening back to full through expand or equalize, then pressing —
+    // re-enters this same arm, because the stale slot still renders full and
+    // fails the restore arm's !rendersFullWidth test. So no sequence currently
+    // reads the value this line clears. It stays because "the slot describes
+    // THIS column's pre-maximize width" is the invariant the other three arms
+    // are written against, and a future arm that reads the slot without
+    // re-validating it would inherit a discarded width silently.
+    if (m_preMaximizeColumnIdx == columnIndex) {
+        m_preMaximizeColumnIdx = -1;
     }
-    m_preMaximizeWidth = col->width;
-    m_preMaximizeColumnIdx = m_activeColumnIdx;
-    col->width = full;
+    // Unconditionally true: both arms leave the column narrower than the full
+    // width it had on entry, so the toggle always did something.
     return true;
 }
 
@@ -452,7 +566,8 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     return true;
 }
 
-bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth, ColumnDisplay defaultDisplay,
+bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
+                                  const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                                   const ScrollLayoutParams& params)
 {
     if (params.axis.mainSize(params.workArea) <= 0) {
@@ -470,24 +585,45 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
             col.width = *defaultWidth;
             changed = true;
         }
-        if (col.display != defaultDisplay) {
-            col.display = defaultDisplay;
+        // Through applyColumnDisplay so a column this write turns Tabbed gets
+        // its extent owner established, and one it turns Normal drops it.
+        // Nothing is cleared either way, so the nullopt-height arm below still
+        // keeps every intent exactly as it found it.
+        if (applyColumnDisplay(col, defaultDisplay)) {
             changed = true;
         }
-        for (Tile& tile : col.tiles) {
-            const WindowHeight even = WindowHeight::makeAuto();
-            if (!(tile.height == even)) {
-                tile.height = even;
-                changed = true;
+        // No default height at all means the client's own size IS the
+        // default, exactly as for width above: the heights the windows opened
+        // at are the closest thing to it, so they are left alone.
+        if (defaultHeight) {
+            for (Tile& tile : col.tiles) {
+                if (!(tile.height == *defaultHeight)) {
+                    tile.height = *defaultHeight;
+                    changed = true;
+                }
             }
         }
+        // The nullopt-height arm leaves a column the display write just
+        // turned Tabbed holding several non-Auto tiles, and that is now
+        // harmless: applyColumnDisplay named an owner at the transition, so
+        // the extent is decided without any tile being rewritten. The
+        // forced-Auto pass used to collapse them as a side effect, which is
+        // the collapse this arm exists not to perform.
     }
     // Nothing is maximized once every column is at the default, so the slot
-    // would otherwise hand a stale intent to the next un-maximize. Only when
-    // widths were actually rewritten: under "the client decides" the widths
-    // stay as they are, a maximized column stays maximized, and clearing the
-    // slot would make the next un-maximize fall back to the half-width
-    // proportion instead of the width the user had before.
+    // would otherwise hand a stale intent to the next un-maximize. Keyed on a
+    // default width being SUPPLIED, not on one having been written: a column
+    // already sitting at a full-width default needs no write and is still
+    // un-maximized afterwards, which is the case resetToDefaultsClearsThe-
+    // PreMaximizeSlot pins. Under "the client decides" there is no default,
+    // the widths stay as they are, a maximized column stays maximized, and
+    // clearing the slot would make the next un-maximize fall back to the
+    // half-width proportion instead of the width the user had before.
+    //
+    // "Un-maximized afterwards" holds for every default except one that
+    // itself RENDERS at full width. Those columns still measure maximized on
+    // the wire, and toggleMaximizeColumnAt's no-slot arm is what gives the
+    // user a way back out of them.
     if (defaultWidth) {
         m_preMaximizeColumnIdx = -1;
     }
@@ -504,10 +640,10 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
         return false;
     }
     const int ti = col->activeTileIdx;
-    // Ownership BEFORE the no-change bail: clearing a sibling's intent moves
-    // the tabbed column even when this tile already holds the height asked
-    // for, so answering false there would report "nothing happened" for a
-    // relayout that does.
+    // Ownership BEFORE the no-change bail: moving the owner pointer moves the
+    // tabbed column even when this tile already holds the height asked for
+    // (the column resolves THROUGH the owner), so answering false there would
+    // report "nothing happened" for a relayout that does.
     const bool claimed = claimTabbedHeightOwnership(*col, ti, height);
     if (col->tiles.at(ti).height == height) {
         return claimed;
@@ -523,11 +659,17 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
+    // activeCol is dereferenced unguarded below, on the same by-construction
+    // reasoning adjustActiveWindowHeight spells out: activeTileMutable answers
+    // a tile only when activeColumnMutable answered a column, so the !tile
+    // bail already covers the null case. Kept as one story rather than
+    // guarding here and not there, which reads as a real nullability
+    // difference between two halves of the same function.
     Column* activeCol = activeColumnMutable();
     // A tabbed column sizes ITSELF from this tile's intent
     // (tabbedColumnCrossPx), so the press works there as well; what changes is
     // the space the comparison happens in. See the reservation below.
-    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
+    const bool tabbed = activeCol->display == ColumnDisplay::Tabbed;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area, the sibling verbs' bail
@@ -558,11 +700,9 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     // resolve past it and the walk could pick one that renders identically
     // to the current height.
     int visibleTiles = 0;
-    if (activeCol) {
-        for (const Tile& t : activeCol->tiles) {
-            if (!t.minimized) {
-                ++visibleTiles;
-            }
+    for (const Tile& t : activeCol->tiles) {
+        if (!t.minimized) {
+            ++visibleTiles;
         }
     }
     // A tabbed column stacks nothing, so it spends no inner gaps and its
@@ -593,6 +733,10 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
+    // Non-finite refused at the boundary, for adjustActiveColumnWidth's reason.
+    if (!std::isfinite(deltaPercent)) {
+        return false;
+    }
     // Lone tiles included: see setActiveWindowHeight.
     Tile* tile = activeTileMutable();
     if (!tile || qFuzzyIsNull(deltaPercent)) {
@@ -693,6 +837,37 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     return true;
 }
 
+WindowHeight ScrollStrip::windowHeightIntent(const QString& windowId) const
+{
+    const int ci = columnOfWindow(windowId);
+    if (ci < 0) {
+        return {};
+    }
+    const Column& col = m_columns.at(ci);
+    const int ti = col.indexOfWindow(windowId);
+    return ti >= 0 ? col.tiles.at(ti).height : WindowHeight{};
+}
+
+bool ScrollStrip::setTabbedHeightOwner(const QString& windowId)
+{
+    const int ci = columnOfWindow(windowId);
+    if (ci < 0) {
+        return false;
+    }
+    Column& col = m_columns[ci];
+    if (col.display != ColumnDisplay::Tabbed || col.heightOwnerId == windowId) {
+        return false;
+    }
+    // Assigned directly rather than through claimTabbedHeightOwnership: this
+    // is a RESTORE of an ownership that was already decided, not a bid made by
+    // writing a height, so the claim's "an Auto write claims nothing" rule
+    // does not apply. A stashed owner whose tab is Auto is a legitimate state
+    // — it means the column was showing full height — and routing it through
+    // the claim would silently drop it and fall the column back to a scan.
+    col.heightOwnerId = windowId;
+    return true;
+}
+
 bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHeight& height)
 {
     const int colIdx = columnOfWindow(windowId);
@@ -702,8 +877,10 @@ bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHei
     Column& col = m_columns[colIdx];
     const int ti = col.indexOfWindow(windowId);
     // Ownership before the no-change bail, setActiveWindowHeight's reason.
-    // This is the restore and handoff seam, so it is exactly where a strip
-    // could otherwise come back from disk with two tabs carrying intents.
+    // Note this claims only for a non-Auto height: the restore and handoff
+    // paths re-state a tile's remembered intent through here, and an Auto one
+    // must not take a tabbed column's extent away from the tab that owns it.
+    // The owner itself is restored through setTabbedHeightOwner.
     const bool claimed = claimTabbedHeightOwnership(col, ti, height);
     if (col.tiles.at(ti).height == height) {
         return claimed;

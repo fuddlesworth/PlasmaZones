@@ -140,10 +140,15 @@ pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstu
 # channel wins, but what a dying context destroys and what it must announce.
 pse_add_test(test_scrollengine_desktopreap test_scrollengine_desktopreap.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
-# sticky gate and the client-decides width both short-circuit on a null
-# tracker, so their per-screen resolution is unobservable without one.
+# sticky gate and the client-decides width and height all short-circuit on a
+# null tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
+# The close-settle reflow hold's observable contract (deferred windowsTiled
+# batch, deadline push, zero-delay immediacy). Needs the settings stub: the
+# interface default is 0, so without one the hold never arms.
+pse_add_test(test_scrollengine_closehold test_scrollengine_closehold.cpp scrollstubsettings.h)
+pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)

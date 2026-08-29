@@ -55,10 +55,25 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     m_u.uSurfaceFrameSize[0] = state.surfaceFrameSize[0];
     m_u.uSurfaceFrameSize[1] = state.surfaceFrameSize[1];
 
-    // The daemon NEVER has a scene behind a surface, so uHasBackdrop is
-    // pinned 0 here; only the compositor branch (classic uniforms, not this
-    // UBO) can raise its counterpart.
-    m_u.uHasBackdrop = 0.0f;
+    // A daemon surface has no live scene behind it the way a compositor-side
+    // window does, but it CAN be handed a stand-in for one — the desktop
+    // wallpaper. When a host binds that, the node raises state.hasBackdrop and
+    // a needsBackdrop pack (the glass / blur family) samples it instead of
+    // falling back; when nothing is bound this stays 0 and the pack takes its
+    // documented fallback appearance exactly as before.
+    //
+    // Derived by the node from the live binding rather than passed down by a
+    // host, so this gate can never claim a backdrop the shader cannot sample.
+    m_u.uHasBackdrop = state.hasBackdrop;
+    // Which slice of that stand-in lies behind THIS surface. A daemon host
+    // binds one desktop-sized image to every surface it decorates, so without
+    // this each would sample the whole desktop squeezed into its own box. The
+    // host's default is the whole texture, which is what the compositor wants
+    // (its capture already covers this window's canvas) and what a host with no
+    // placement to offer degrades to.
+    for (std::size_t i = 0; i < std::size(m_u.uBackdropRect); ++i) {
+        m_u.uBackdropRect[i] = state.backdropRect[i];
+    }
     // No rule opacity on the daemon — qt_Opacity carries host opacity.
     m_u.uSurfaceOpacity = 1.0f;
 
@@ -106,8 +121,16 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     // itself before pushing iMouse.
     m_u.iMouse[0] = state.mouseX;
     m_u.iMouse[1] = state.mouseY;
-    m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : 0.0f;
-    m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : 0.0f;
+    // The degenerate divisor passes the raw value through rather than writing
+    // zero. Zero reads as a hover at the top-left corner, and this branch is
+    // exactly the first frames of a fresh decoration item, before the host has
+    // pushed any geometry — so for a host that seeds the (-1, -1) sentinel (as
+    // SurfaceShaderItem does) .zw stays negative alongside .xy and a pack
+    // testing `iMouse.z < 0.0` still reads "off surface". A host that pushes no
+    // mouse at all leaves the UboFrameState default of 0, which this cannot
+    // improve on; the guarantee is only as good as the sentinel it is handed.
+    m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : state.mouseX;
+    m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : state.mouseY;
 
     // User texture sizes (bindings 8-10) — the node resolves these live, same
     // as the overlay profile.

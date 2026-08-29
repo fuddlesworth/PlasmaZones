@@ -41,7 +41,8 @@
             "slot": 2,
             "default": 14.0,
             "min": 3.0,
-            "max": 40.0
+            "max": 40.0,
+            "unit": "px"
         },
         {
             "id": "feedbackStrength",
@@ -119,7 +120,8 @@
             "slot": 10,
             "default": 8.0,
             "min": 2.0,
-            "max": 20.0
+            "max": 20.0,
+            "unit": "px"
         },
         {
             "id": "labelGlowSpread",

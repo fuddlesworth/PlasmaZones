@@ -29,6 +29,14 @@
 # and capture-output.py. Set PZ_NESTED_BUILD to use a configure dir other
 # than build/ (daemon.sh honours the same variable via env.sh).
 #
+# PZ_NESTED_SOCKET (default pznested) names the wayland socket. Two nested
+# sessions cannot share one — kwin locks on the name and the second dies with
+# "could not add wayland socket" — so to run one per worktree give each its
+# own PZ_NESTED_SOCKET and its own PZ_NESTED_DIR:
+#   PZ_NESTED_SOCKET=pzfoo PZ_NESTED_DIR="$XDG_RUNTIME_DIR/pz-nested-foo" \
+#     scripts/nested-kwin/run-nested.sh
+# The sibling scripts take PZ_NESTED_DIR the same way.
+#
 # Gotchas learned the hard way:
 #   - fish cannot source env.sh (POSIX `export VAR=...`); use bash -c.
 #   - The effect log needs QT_FORCE_STDERR_LOGGING=1 (set below and carried
@@ -38,9 +46,11 @@
 #     from the nested ones. Check the compositor's own output, not the
 #     journal.
 #   - Do not `pkill -f` a pattern that appears in your own command line.
-#   - The stock session bus D-Bus-activates the INSTALLED daemon the
-#     moment the effect connects; daemon.sh kills it and claims the name
-#     with the build-tree daemon.
+#   - A stock session bus D-Bus-activates the INSTALLED daemon the moment
+#     the effect connects, which then answers with the HOST's screens. This
+#     script shadows the service file so activation starts the build-tree
+#     daemon in-session instead; daemon.sh still evicts whoever holds the
+#     name, so the run has one daemon with a known pid and log.
 #   - Screenshots are NOT evidence of effect behaviour: ScreenShot2's
 #     CaptureScreen bypasses the effect chain entirely, and workspace
 #     captures run it with no output pass. Only committed geometry
@@ -62,7 +72,15 @@ HEIGHT="${3:-}"
 SCALE="${4:-}"
 for n in "$WIDTH" "$HEIGHT"; do
     case "$n" in
-        ''|*[!0-9]*) [ -z "$n" ] || { echo "width/height must be integers" >&2; exit 1; } ;;
+        '') ;;
+        *[!0-9]*) echo "width/height must be positive integers, got '$n'" >&2; exit 1 ;;
+        *)
+            # Zero is a well-formed integer and a useless output dimension:
+            # kwin takes it and comes up with a degenerate screen, which reads
+            # as the harness being broken. Rejected for the same reason
+            # output-count rejects it above.
+            [ "$n" -gt 0 ] || { echo "width/height must be positive integers, got '$n'" >&2; exit 1; }
+            ;;
     esac
 done
 if { [ -n "$WIDTH" ] && [ -z "$HEIGHT" ]; } || { [ -z "$WIDTH" ] && [ -n "$HEIGHT" ]; }; then
@@ -75,9 +93,22 @@ case "$SCALE" in
         echo "scale must be numeric, got '$SCALE'" >&2
         exit 1
         ;;
+    # Well-formed but degenerate: 0, 0.0, .0 and friends all parse as numeric
+    # and scale every output to nothing.
+    0|0.|0.0|0.00|.0|.00)
+        echo "scale must be greater than zero, got '$SCALE'" >&2
+        exit 1
+        ;;
 esac
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-NEST="${PZ_NESTED_DIR:-${XDG_RUNTIME_DIR:-/tmp/pz-nested-$USER}/pz-nested}"
+# ONE fallback for a missing XDG_RUNTIME_DIR, resolved once. The state dir and
+# the wayland socket both live under it, and giving them different fallbacks
+# (/tmp for one, /run/user/UID for the other) splits the session in half on
+# exactly the systems where the variable is absent: the socket lands somewhere
+# unwritable while env.sh reports success from /tmp.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
+mkdir -p "$RUNTIME_DIR"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
 BUILD="${PZ_NESTED_BUILD:-build}"
 HOME_N="$NEST/home"
 
@@ -89,7 +120,25 @@ HOME_N="$NEST/home"
 # unlinking what might be a live session's socket. PZ_NESTED_FORCE=1 skips
 # the check either way and unlinks; note that a compositor still holding
 # the old socket keeps running orphaned and must be killed by hand.
-SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pznested"
+# Socket name, so two worktrees can each run a nested session at once (kwin
+# takes a lockfile named after it, and a second session on the same name dies
+# with "could not add wayland socket"). Pair a distinct PZ_NESTED_SOCKET with
+# a distinct PZ_NESTED_DIR — the state dir holds the env.sh every follow-up
+# script sources, so sharing one across two sessions points them both at
+# whichever started last.
+PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested}"
+# Validated like the numeric arguments above, and for a sharper reason: this
+# one is interpolated into the `sh -c` command text and into env.sh below, so a
+# name carrying a space, a quote or a shell metacharacter either breaks every
+# follow-up script or runs as shell. It is a wayland socket NAME, so the
+# character class is not a restriction anyone will notice.
+case "$PZ_NESTED_SOCKET" in
+    ''|*[!A-Za-z0-9._-]*)
+        echo "PZ_NESTED_SOCKET must be a plain socket name matching [A-Za-z0-9._-]+, got '$PZ_NESTED_SOCKET'" >&2
+        exit 1
+        ;;
+esac
+SOCK="$RUNTIME_DIR/$PZ_NESTED_SOCKET"
 if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     echo "refusing: $SOCK exists and is not a socket; remove it by hand" >&2
     exit 1
@@ -108,14 +157,68 @@ if [ -S "$SOCK" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
 fi
 rm -f "$SOCK"
 
+# The socket guard above keys on PZ_NESTED_SOCKET while everything below
+# destroys PZ_NESTED_DIR, so two runs with distinct sockets and a shared or
+# defaulted dir sail past it and then delete the first session's state out
+# from under its running compositor. Probe the dir the same way: if the
+# previous env.sh names a bus whose socket is still there, a session is live
+# in THIS tree.
+if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
+    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
+    if [ -n "$OLDBUS" ] && [ -S "$OLDBUS" ]; then
+        echo "a nested session is live in $NEST (its bus socket $OLDBUS still exists);" >&2
+        echo "point PZ_NESTED_DIR somewhere else, kill that session, or re-run with PZ_NESTED_FORCE=1" >&2
+        exit 1
+    fi
+fi
+
+# PZ_NESTED_DIR is interpolated straight into the rm -rf and the chmod below.
+# An operator typo of / or $HOME would take out /home or open the home
+# directory up, so require something that looks like a scratch dir: absolute,
+# and at least two components deep. Unset is safe already — it falls through
+# to the default above.
+#
+# The character class matters as much as the depth. This path is also written
+# unquoted into the generated D-Bus service file's Exec= line, which is parsed
+# as a command line and cannot express a path containing whitespace, and it is
+# interpolated into two heredocs where a quote or a dollar sign would either
+# break the shim or run as shell. A scratch directory has no business carrying
+# any of that.
+case "$NEST" in
+    /*/*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must be an absolute path at least two components deep, got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+
 rm -rf "$HOME_N"
 # Stale control files must not survive into the new run: a daemon.sh run
-# against a previous session's env.sh would target a dead bus. The kill is
-# identity-gated so a recycled pid cannot take down an unrelated process.
+# against a previous session's env.sh would target a dead bus.
+#
+# The kill is identity-gated on the bus address, not on comm alone: comm only
+# proves the pid is A plasmazonesd, and after a pid recycle that can be the
+# user's real host-session daemon. Every nested daemon runs on a
+# dbus-run-session bus under /tmp/dbus-, which the login bus never does.
 if [ -f "$NEST/daemon.pid" ]; then
     OLDPID=$(cat "$NEST/daemon.pid")
-    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ]; then
+    if [ "$(cat "/proc/$OLDPID/comm" 2>/dev/null)" = "plasmazonesd" ] \
+        && tr '\0' '\n' < "/proc/$OLDPID/environ" 2>/dev/null \
+        | grep -q '^DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-'; then
         kill "$OLDPID" 2>/dev/null || true
+        # Wait for it to actually go before dropping its only pid record,
+        # otherwise a slow exit leaves an untracked daemon behind.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            [ -d "/proc/$OLDPID" ] || break
+            sleep 0.2
+        done
+        [ -d "/proc/$OLDPID" ] && kill -9 "$OLDPID" 2>/dev/null || true
     fi
 fi
 rm -f "$NEST/env.sh" "$NEST/daemon.pid" "$NEST/daemon.log"
@@ -139,6 +242,16 @@ export QT_QPA_PLATFORM=wayland
 # (wayland-shell-integration/phosphorwayland-qpa.so). Without the second
 # entry the nested daemon silently loads the INSTALLED layer-shell plugin,
 # so layer-shell changes would not actually be under test.
+# Refuse a missing build tree rather than starting a session that silently
+# tests the INSTALLED effect. With $REPO/$BUILD absent QT_PLUGIN_PATH points
+# at nothing, kwin_wayland loads whatever is installed, and the run looks
+# entirely normal while exercising code that is not under test — the exact
+# failure the header warns about.
+if [ ! -d "$REPO/$BUILD/bin" ]; then
+    echo "no build tree at $REPO/$BUILD/bin; configure and build first," >&2
+    echo "or set PZ_NESTED_BUILD to the right configure dir" >&2
+    exit 1
+fi
 export QT_PLUGIN_PATH="$REPO/$BUILD/bin:$REPO/$BUILD/plugins:${QT_PLUGIN_PATH:-}"
 export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1
 # plasmazones.* covers daemon/effect categories; kwin.effect.plasmazones.*
@@ -152,6 +265,43 @@ export QT_LOGGING_RULES="plasmazones.*=true;kwin.effect.plasmazones.*=true"
 # shows the HOST session's daemon and effect instead, which look like the
 # nested ones and are not, so a run can be read completely backwards.
 export QT_FORCE_STDERR_LOGGING=1
+
+# D-BUS ACTIVATION, redirected to the build tree.
+#
+# The system ships /usr/share/dbus-1/services/org.plasmazones.service, so the
+# nested bus activates the INSTALLED daemon the moment the effect first calls
+# org.plasmazones. That daemon inherits the bus's environment — which names the
+# HOST compositor, not this session — so it connects to the wrong Wayland
+# display, answers queries with the host's screens, and outlives the nested bus
+# when it dies. They accumulate across runs, compete for the bus name, and
+# eventually make daemon.sh lose the race, at which point a run silently tests
+# the host session. That failure reads exactly like a behaviour change.
+#
+# Shadowing the service file ahead of the system one turns activation from a
+# hazard into the correct behaviour: the name resolves to the build-tree daemon
+# started inside this session. dbus-daemon takes the FIRST match while scanning
+# XDG_DATA_DIRS in order, so prepending the shadow leaves every other service
+# (kglobalaccel, the portals) resolving from /usr/share as before.
+SVC_DIR="$NEST/dbus-services/dbus-1/services"
+mkdir -p "$SVC_DIR"
+# The service file cannot carry environment, so it execs a wrapper that sources
+# the session's own env.sh first. env.sh is written just before kwin_wayland
+# execs, and activation can only happen after a client connects, so it is
+# always present by the time this runs.
+cat > "$NEST/activate-daemon.sh" <<ACTIVATE
+#!/bin/sh
+# D-Bus activation shim for the nested session. Never invoked by hand.
+set -eu
+. "$NEST/env.sh"
+exec "$REPO/$BUILD/bin/plasmazonesd"
+ACTIVATE
+chmod +x "$NEST/activate-daemon.sh"
+cat > "$SVC_DIR/org.plasmazones.service" <<SVC
+[D-BUS Service]
+Name=org.plasmazones
+Exec=$NEST/activate-daemon.sh
+SVC
+export XDG_DATA_DIRS="$NEST/dbus-services:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
@@ -171,13 +321,20 @@ EXTRA_FLAGS=""
 [ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
 exec dbus-run-session -- sh -c "
+  # set -e inside the child: the outer set -eu does NOT cross an sh -c, so
+  # without this a failed env.sh write (full disk, read-only or unwritable
+  # runtime dir) falls straight through to the exec below and the compositor
+  # comes up healthy with no state file — after which every helper script
+  # reports 'no nested session' while a session is in fact running.
+  set -e
   {
     echo \"export DBUS_SESSION_BUS_ADDRESS='\$DBUS_SESSION_BUS_ADDRESS'\"
-    echo \"export WAYLAND_DISPLAY=pznested\"
+    echo \"export WAYLAND_DISPLAY='$PZ_NESTED_SOCKET'\"
     echo \"export XDG_CONFIG_HOME='$XDG_CONFIG_HOME'\"
     echo \"export XDG_DATA_HOME='$XDG_DATA_HOME'\"
     echo \"export XDG_CACHE_HOME='$XDG_CACHE_HOME'\"
     echo \"export XDG_STATE_HOME='$XDG_STATE_HOME'\"
+    echo \"export XDG_DATA_DIRS='$XDG_DATA_DIRS'\"
     echo \"export QT_QPA_PLATFORM=wayland\"
     echo \"export QT_PLUGIN_PATH='$QT_PLUGIN_PATH'\"
     echo \"export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1\"
@@ -188,5 +345,7 @@ exec dbus-run-session -- sh -c "
     echo \"export PZ_NESTED_BUILD='$BUILD'\"
   } > '$NEST/env.sh.tmp'
   mv '$NEST/env.sh.tmp' '$NEST/env.sh'
-  exec kwin_wayland --virtual --output-count $OUTPUTS$EXTRA_FLAGS --socket pznested --no-lockscreen --no-global-shortcuts --no-kactivities
+  # \$EXTRA_FLAGS stays unquoted on purpose: it is a flag LIST and needs word
+  # splitting. Everything else is quoted.
+  exec kwin_wayland --virtual --output-count '$OUTPUTS'$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
 "

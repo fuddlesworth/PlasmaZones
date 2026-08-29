@@ -492,9 +492,12 @@ private Q_SLOTS:
     {
         const QRect screen = screenFor(ScrollAxis::Horizontal);
 
+        // ── PreserveClamped: the historical rule, still used on a vertical
+        // strip (where x is the cross axis and nothing slides it).
+
         // Already inside the span: only the vertical move happens.
         QRect inside(100, 100, 300, 200);
-        parkRect(inside, screen, 5000);
+        parkRect(inside, screen, 5000, ParkAlign::PreserveClamped);
         QCOMPARE(inside.top(), 5000);
         QCOMPARE(inside.left(), 100);
         QCOMPARE(inside.size(), QSize(300, 200));
@@ -502,14 +505,14 @@ private Q_SLOTS:
         // Hanging off the trailing side: pulled back so its far edge sits on
         // the screen's, size untouched.
         QRect offTrail(1100, 100, 300, 200);
-        parkRect(offTrail, screen, 5000);
+        parkRect(offTrail, screen, 5000, ParkAlign::PreserveClamped);
         QCOMPARE(offTrail.top(), 5000);
         QCOMPARE(offTrail.right(), screen.right());
         QCOMPARE(offTrail.size(), QSize(300, 200));
 
         // Hanging off the leading side: pushed back to the screen's near edge.
         QRect offLead(-500, 100, 300, 200);
-        parkRect(offLead, screen, 5000);
+        parkRect(offLead, screen, 5000, ParkAlign::PreserveClamped);
         QCOMPARE(offLead.top(), 5000);
         QCOMPARE(offLead.left(), screen.left());
         QCOMPARE(offLead.size(), QSize(300, 200));
@@ -517,10 +520,36 @@ private Q_SLOTS:
         // Wider than the screen: it cannot fit, so the near edge wins and the
         // rect is never shrunk to make it fit.
         QRect oversized(-100, 100, 1500, 200);
-        parkRect(oversized, screen, 5000);
+        parkRect(oversized, screen, 5000, ParkAlign::PreserveClamped);
         QCOMPARE(oversized.top(), 5000);
         QCOMPARE(oversized.left(), screen.left());
         QCOMPARE(oversized.size(), QSize(1500, 200));
+
+        // ── Leading / Trailing: the horizontal-strip rule, and the whole
+        // point of them is that the INCOMING x does not reach the answer.
+        // Two rects that differ only in their starting x must park at the
+        // same place, which is what makes a parked column's committed rect
+        // stop moving as the view slides under it.
+        QRect leadA(100, 100, 300, 200);
+        QRect leadB(700, 100, 300, 200);
+        parkRect(leadA, screen, 5000, ParkAlign::Leading);
+        parkRect(leadB, screen, 5000, ParkAlign::Leading);
+        QCOMPARE(leadA.left(), screen.left());
+        QCOMPARE(leadA, leadB);
+
+        QRect trailA(100, 100, 300, 200);
+        QRect trailB(700, 100, 300, 200);
+        parkRect(trailA, screen, 5000, ParkAlign::Trailing);
+        parkRect(trailB, screen, 5000, ParkAlign::Trailing);
+        QCOMPARE(trailA.right(), screen.right());
+        QCOMPARE(trailA, trailB);
+
+        // Trailing degrades to left-flush for a rect too wide to fit, rather
+        // than inverting the bound and pushing it off the near edge.
+        QRect trailOversized(600, 100, 1500, 200);
+        parkRect(trailOversized, screen, 5000, ParkAlign::Trailing);
+        QCOMPARE(trailOversized.left(), screen.left());
+        QCOMPARE(trailOversized.size(), QSize(1500, 200));
     }
 };
 

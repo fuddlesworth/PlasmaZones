@@ -241,8 +241,12 @@ enum class ColumnDisplay : int {
     /// Only the active tile is laid out, at the column's content rect (its
     /// CROSS extent less whatever an in-column indicator reserved); the other
     /// tiles are hidden and represented by a tab-indicator strip. That cross
-    /// extent is the SHOWN tab's own height intent, so a tabbed column need
-    /// not span the work area (ScrollStrip::tabbedColumnCrossPx).
+    /// extent is the height intent of the tab that OWNS it
+    /// (Column::heightOwnerId), NOT the tab on show: reading the shown tab
+    /// would resize the column on every tab switch and break the
+    /// compositor's tab cross-fade, which is built on the arriving tab
+    /// occupying the rect the outgoing one just vacated. So a tabbed column
+    /// need not span the work area (ScrollStrip::tabbedColumnCrossPx).
     Tabbed = 1,
 };
 
@@ -479,15 +483,19 @@ enum class DefaultWidthKind : int {
     Preset = 3,
 };
 
-/// Wire vocabulary of the DEFAULT-window-height KIND setting. Unlike the
-/// width pair above, this one IS the model enum's vocabulary
-/// (WindowHeight::Kind values match 1:1 — Auto/Fixed/Preset, no
-/// "client decides" wrinkle on the height side), so the engine may cast the
-/// config value directly after a range guard.
+/// Wire vocabulary of the DEFAULT-window-height KIND setting. The first
+/// three members happen to share WindowHeight::Kind's values (Auto/Fixed/
+/// Preset), but this space is NOT that enum and must never be cast to it:
+/// ClientDecides has no WindowHeight::Kind counterpart at all, exactly like
+/// its width twin. The engine translates with explicit ifs.
 enum class DefaultHeightKind : int {
     Auto = 0,
     Fixed = 1,
     Preset = 2,
+    /// New windows join their column at the client's own cross extent, the
+    /// height twin of DefaultWidthKind::ClientDecides. Appended as 3 because
+    /// the other three are load-bearing wire values in stored configs.
+    ClientDecides = 3,
 };
 
 /// Where a fresh-opened window's new column enters the strip (config
@@ -789,10 +797,52 @@ struct Column
     int activeTileIdx = 0;
     ColumnWidth width;
     ColumnDisplay display = ColumnDisplay::Normal;
+    /// Which tab's height intent decides a TABBED column's cross extent, by
+    /// window id. Meaningless while the column is Normal, where every tile's
+    /// own height governs its slice of the stack.
+    ///
+    /// A tabbed column shows one tab at a time, so its extent cannot be "the
+    /// shown tab's height" — that would resize the column on every tab switch
+    /// and break the compositor's cross-fade, which is built on the arriving
+    /// tab occupying the rect the outgoing one vacated. One tab therefore owns
+    /// the extent for as long as the column is tabbed.
+    ///
+    /// Held as an ID rather than an index because tiles are inserted, removed
+    /// and reordered underneath it (an index would need re-clamping at every
+    /// one of those sites, which is precisely the bookkeeping that rots), and
+    /// because an id that no longer names a live tile is self-describing: the
+    /// resolver falls back rather than pointing at whatever moved into the
+    /// slot. Empty means "no tab has claimed it", which resolves to the
+    /// deterministic scan tabbedColumnCrossPx documents.
+    ///
+    /// This is the ONE place the ownership lives. It used to be inferred —
+    /// every height writer rewrote its siblings to Auto so a scan for the
+    /// first non-Auto tab would find the right one. That destroyed the
+    /// siblings' intents irrecoverably on a tab toggle, and it could not be
+    /// maintained at all while the column was Normal, so a Normal column with
+    /// several sized tiles handed its extent to whichever tile sat first in
+    /// the stack the moment it was tabbed.
+    QString heightOwnerId;
 
     bool isEmpty() const
     {
         return tiles.isEmpty();
+    }
+    /// The tile whose height decides this column's cross extent while tabbed,
+    /// or nullptr when no live non-minimized tab owns it. Minimized tabs are
+    /// refused: they are dropped from the layout entirely, so a height they
+    /// carry must not size a column they do not appear in.
+    const Tile* heightOwner() const
+    {
+        if (heightOwnerId.isEmpty()) {
+            return nullptr;
+        }
+        for (const Tile& tile : tiles) {
+            if (tile.windowId == heightOwnerId) {
+                return tile.minimized ? nullptr : &tile;
+            }
+        }
+        return nullptr;
     }
     /// True when every tile is minimized — the column occupies no strip MAIN
     /// extent.
@@ -937,6 +987,15 @@ struct ResolvedColumn
     /// indicator's long axis without re-deriving it from the rect's aspect (a
     /// one-tab indicator can be square).
     TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
+    /// True when the column's main extent came from its MINIMUM rather than
+    /// from its stored width intent — its tiles' declared minimum (plus any
+    /// main-axis indicator reservation) is at least as wide as the intent.
+    /// A consumer publishing "this column is maximized" must not do so off
+    /// @c rect alone: a column whose floor already reaches the work area
+    /// renders at full extent no matter what the user asks for, so it would
+    /// read as permanently maximized and every toggle would report success
+    /// while changing nothing the user can see.
+    bool extentPinnedByMinimum = false;
     QVector<ResolvedTile> tiles;
 };
 

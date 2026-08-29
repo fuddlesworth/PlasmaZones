@@ -13,7 +13,7 @@
 namespace PhosphorProtocol {
 
 /// D-Bus struct for the shared tiling-family tile requests (autotile +
-/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiibsb)
+/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbbssiiibsb)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -34,6 +34,18 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// while committing the column rect above — the tile never leaves its
     /// slot. False for every other placement.
     bool windowedFullscreen = false;
+    /// Scrolling mode: this window's column is maximized (niri
+    /// maximize-column) — the column fills the work area's extent along the
+    /// strip while staying tiled. The effect mirrors it onto KWin's maximize
+    /// bit so the titlebar button reflects the engine's state; it is NOT a
+    /// geometry input, since the committed rect above already carries the
+    /// width. False for every other placement.
+    ///
+    /// Distinct from windowedFullscreen: that one holds KWin FULLSCREEN state
+    /// and demotes the window's layer, this one only mirrors a bit. A column
+    /// can legitimately be maximized while one of its tiles is windowed
+    /// fullscreen, so the two are not exclusive and neither implies the other.
+    bool columnMaximized = false;
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;

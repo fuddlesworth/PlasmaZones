@@ -659,6 +659,18 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollOfferedColumn.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        // The corpse's frozen strip displacement dies with it. This is THE
+        // remover, not a backstop: the entry exists precisely so the corpse
+        // paints displaced until this moment, and the pointer keying makes
+        // erasing here mandatory address-reuse safety besides (a reused
+        // EffectWindow address inheriting a dead corpse's offset would draw a
+        // brand-new window a pan away).
+        m_scrollCorpseFreeze.remove(w);
+        // Desktop-set stamp, same raw-pointer keying and the same two reasons
+        // as the tracked screen above: keep the hash bounded, and stop a reused
+        // address from inheriting a dead window's desktop set (which would make
+        // the arrival arm misread the new window's first desktop edit).
+        m_trackedDesktopsPerWindow.remove(w);
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

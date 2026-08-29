@@ -21,11 +21,20 @@
  * reacts to the new window with D-Bus calls to org.plasmazones, whose
  * activation service file spawns the installed plasmazonesd (and from there
  * the daemon can launch plasmazones-settings) — processes a test run must
- * never leave behind. SpawnedServiceReaper below enforces that: it snapshots
- * which PlasmaZones well-known bus names were already owned before the run
- * and, after qExec, stops exactly the services the run activated — a daemon
- * the developer already had running is never touched, and repeated opted-in
- * runs cannot pile up stray processes. CI containers have the inverse
+ * never leave behind. SpawnedServiceReaper below covers that for a DIRECT
+ * run of this binary: it snapshots which PlasmaZones well-known bus names were
+ * already owned before the run and, after qExec, stops exactly the services the
+ * run activated — a daemon the developer already had running is never touched,
+ * and repeated opted-in runs cannot pile up stray processes.
+ *
+ * Under ctest the reaper is inert, and deliberately so rather than by
+ * oversight: phosphor_apply_test_isolation runs every test under
+ * dbus-run-session, so QDBusConnection::sessionBus() here is a PRIVATE bus on
+ * which no PlasmaZones name can ever be registered. The window still maps on
+ * the developer's real compositor, so anything the installed effect activates
+ * lands on the REAL session bus, which this process cannot see to reap. An
+ * opted-in run that must clean up after itself therefore has to invoke this
+ * binary directly rather than through ctest. CI containers have the inverse
  * problem: a display and
  * a GL context exist, so every environment gate passes, but the shader
  * pipeline never becomes ready and the grab stays a uniform placeholder,
@@ -130,7 +139,7 @@ private:
 // Minimal replica of SurfaceDecoration.qml's capture + stage fold: gradient
 // card -> hideSource snapshot -> stage 0 (border) -> tap -> stage 1 (shadow).
 // Kept in-source so the test is self-contained; the structural contract it
-// mirrors is documented in src/ui/SurfaceDecoration.qml.
+// mirrors is documented in src/shared/SurfaceDecoration.qml.
 constexpr auto kSceneQml = R"(
 import PlasmaZones 1.0
 import QtQuick
@@ -183,7 +192,11 @@ Item {
                     return prev ? prev.outputTap : null;
                 }
                 surfaceScale: 1
-                surfaceFocused: true
+                // Driven from the scene root, not pinned: the whole point of
+                // making uSurfaceFocused host-driven was that it stops being a
+                // constant, so a replica that hardcodes true renders the one
+                // state the change removed.
+                surfaceFocused: gSurfaceFocused
                 surfaceSize: Qt.size(card.width, card.height)
                 surfaceFrameTopLeft: Qt.point(0, 0)
                 surfaceFrameSize: Qt.size(card.width, card.height)
@@ -214,22 +227,60 @@ class TestSurfaceDecorationOrientation : public QObject
 {
     Q_OBJECT
 
+public:
+    /// True when the slot bailed because the ENVIRONMENT could not render, as
+    /// opposed to having actually checked the orientation. main() turns this
+    /// into ctest's SKIP_RETURN_CODE, because a QSKIP on its own leaves qExec
+    /// at 0 and ctest then reports the run as Passed — which reads as coverage
+    /// on a machine where nothing rendered at all.
+    bool environmentSkipped() const
+    {
+        return m_environmentSkipped;
+    }
+
+private:
+    bool m_environmentSkipped = false;
+
 private Q_SLOTS:
 
-    void testTwoStageChainRendersUprightOnOpenGL()
+    /// Chain lengths, because this guard is PARITY-SENSITIVE.
+    ///
+    /// The regression it exists for is the direct-to-window flip being applied
+    /// on the tap/texture passes too. Each tap render contributes one erroneous
+    /// flip, so what reaches the screen is flipped only when their count is
+    /// ODD. A two-pack chain is one tap plus one direct draw, so the bug shows;
+    /// a THREE-pack chain is two taps, the two erroneous flips cancel, and the
+    /// frame arrives upright with the bug fully present. Fixing the length at
+    /// two therefore left every even-tap-count chain unguarded, and a user
+    /// chaining three packs is ordinary rather than exotic.
+    void testChainRendersUprightOnOpenGL_data()
     {
+        QTest::addColumn<int>("stageCount");
+        QTest::newRow("one stage (direct draw only)") << 1;
+        QTest::newRow("two stages (one tap, odd parity)") << 2;
+        QTest::newRow("three stages (two taps, even parity)") << 3;
+    }
+
+    void testChainRendersUprightOnOpenGL()
+    {
+        QFETCH(int, stageCount);
+
         // GPU gate: probe a real GL context before any QQuickView exists — a
         // scene-graph init failure is fatal inside Qt, so this is the only
         // safe skip point for headless/software environments.
         {
             QOpenGLContext probe;
-            if (!probe.create())
+            if (!probe.create()) {
+                m_environmentSkipped = true;
                 QSKIP("No OpenGL context available in this environment");
+            }
             QOffscreenSurface surface;
             surface.setFormat(probe.format());
             surface.create();
-            if (!surface.isValid() || !probe.makeCurrent(&surface))
+            if (!surface.isValid() || !probe.makeCurrent(&surface)) {
+                m_environmentSkipped = true;
                 QSKIP("OpenGL context cannot be made current in this environment");
+            }
             probe.doneCurrent();
         }
 
@@ -238,8 +289,10 @@ private Q_SLOTS:
         SurfaceShaderRegistry registry;
         registry.addSearchPath(QStringLiteral(PLASMAZONES_SOURCE_ROOT "/data/surface"),
                                PhosphorFsLoader::LiveReload::Off);
-        QTRY_VERIFY_WITH_TIMEOUT(
-            registry.hasEffect(QStringLiteral("border")) && registry.hasEffect(QStringLiteral("shadow")), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(registry.hasEffect(QStringLiteral("border"))
+                                     && registry.hasEffect(QStringLiteral("shadow"))
+                                     && registry.hasEffect(QStringLiteral("glow")),
+                                 5000);
 
         const auto makeStage = [&registry](const QString& id, const QVariantMap& friendly) {
             const auto effect = registry.effect(id);
@@ -256,8 +309,21 @@ private Q_SLOTS:
         shadowParams.insert(QStringLiteral("shadowSize"), 20);
         shadowParams.insert(QStringLiteral("offsetY"), 10);
         shadowParams.insert(QStringLiteral("cornerRadius"), 24);
-        const QVariantList chain{makeStage(QStringLiteral("border"), borderParams),
-                                 makeStage(QStringLiteral("shadow"), shadowParams)};
+        QVariantMap glowParams;
+        glowParams.insert(QStringLiteral("glowSize"), 16);
+        glowParams.insert(QStringLiteral("cornerRadius"), 24);
+
+        // Ordered so every row is a PREFIX of the longest: the border stage is
+        // what paints the red/blue gradient's frame, and it must stay first so
+        // the sampled points mean the same thing at every length.
+        QVariantList chain{makeStage(QStringLiteral("border"), borderParams)};
+        if (stageCount >= 2) {
+            chain.append(makeStage(QStringLiteral("shadow"), shadowParams));
+        }
+        if (stageCount >= 3) {
+            chain.append(makeStage(QStringLiteral("glow"), glowParams));
+        }
+        QCOMPARE(chain.size(), stageCount);
 
         // QQuickView loads from a URL only; stage the scene in a tmpdir.
         QTemporaryDir dir;
@@ -266,18 +332,27 @@ private Q_SLOTS:
         {
             QFile f(qmlPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(kSceneQml);
+            // Checked: a short write leaves a truncated scene.qml, and the
+            // failure then surfaces as the far less obvious "scene.qml failed
+            // to load" further down.
+            QCOMPARE(f.write(kSceneQml), qint64(qstrlen(kSceneQml)));
         }
 
         QQuickView view;
         view.rootContext()->setContextProperty(QStringLiteral("gChain"), chain);
+        // Focused for the orientation grab itself. The value is a context
+        // property rather than a literal so the scene exercises the host-driven
+        // uniform, and so the unfocused state can be driven from here too.
+        view.rootContext()->setContextProperty(QStringLiteral("gSurfaceFocused"), true);
         view.setColor(Qt::gray);
         view.setSource(QUrl::fromLocalFile(qmlPath));
         QVERIFY2(view.status() != QQuickView::Error, "scene.qml failed to load");
         view.resize(320, 320);
         view.show();
-        if (!QTest::qWaitForWindowExposed(&view, 5000))
+        if (!QTest::qWaitForWindowExposed(&view, 5000)) {
+            m_environmentSkipped = true;
             QSKIP("Window never exposed (no compositor reachable)");
+        }
 
         // The whole point is the OpenGL path; if Qt fell back to another
         // backend despite QSG_RHI_BACKEND=opengl, the run proves nothing.
@@ -285,10 +360,14 @@ private Q_SLOTS:
         // like the others on this init path, so it skips rather than fails.
         for (int waited = 0; view.rendererInterface() == nullptr && waited < 5000; waited += 100)
             QTest::qWait(100);
-        if (view.rendererInterface() == nullptr)
+        if (view.rendererInterface() == nullptr) {
+            m_environmentSkipped = true;
             QSKIP("Scene graph renderer interface never materialized");
-        if (view.rendererInterface()->graphicsApi() != QSGRendererInterface::OpenGLRhi)
+        }
+        if (view.rendererInterface()->graphicsApi() != QSGRendererInterface::OpenGLRhi) {
+            m_environmentSkipped = true;
             QSKIP("Scene graph is not running on the OpenGL RHI backend");
+        }
 
         // Channel-dominance beats exact colors — the border pack rounds
         // corners and the sample points sit well inside the card. Upright:
@@ -337,17 +416,21 @@ private Q_SLOTS:
                 break;
             }
         }
-        if (frame.isNull())
+        if (frame.isNull()) {
+            m_environmentSkipped = true;
             QSKIP("grabWindow returned no image in this environment");
+        }
         const auto [top, bottom] = samples(frame);
         QVERIFY2(!sawFlipped,
                  qPrintable(QStringLiteral("card rendered UPSIDE DOWN (top %1, bottom %2) — the per-target "
                                            "NDC Y-flip regressed")
                                 .arg(top.name(), bottom.name())));
-        if (!sawUpright)
+        if (!sawUpright) {
+            m_environmentSkipped = true;
             QSKIP(qPrintable(QStringLiteral("chain never rendered in either orientation (top %1, bottom %2) — "
                                             "shader pipeline unavailable in this environment")
                                  .arg(top.name(), bottom.name())));
+        }
     }
 };
 
@@ -393,11 +476,21 @@ int main(int argc, char** argv)
     TestSurfaceDecorationOrientation tc;
     QTEST_SET_MAIN_SOURCE_PATH
     const int rc = QTest::qExec(&tc, argc, argv);
+    // A QSKIP inside a slot leaves qExec at 0, which ctest reports as Passed —
+    // so a machine with no GL context, the wrong RHI backend, or a scene that
+    // never rendered looked like coverage rather than an untested environment.
+    // SKIP_RETURN_CODE only covered the two gates in main() above. Report the
+    // in-slot environment skips the same way.
+    const bool environmentSkipped = tc.environmentSkipped();
     // The KWin effect's activation call is asynchronous — it can still be in
     // flight when the last test window closes. Let the bus settle so a
     // just-spawned daemon is visible to the reaper instead of leaking.
     QTest::qWait(1000);
     reaper.reap();
+    if (rc == 0 && environmentSkipped) {
+        fprintf(stderr, "SKIP: the render path never produced a decisive frame — GPU-gated test not run\n");
+        return 77;
+    }
     return rc;
 }
 
