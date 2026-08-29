@@ -363,6 +363,17 @@ struct ShaderTransition
     /// skip the morph uniforms.
     QRectF fromGeometry;
     QRectF toGeometry;
+    /// True when `fromGeometry` is a SYNTHETIC departure rect (an
+    /// originOverride from the scroll batch's origin/edge arms) rather than a
+    /// rect the window actually occupied. The old-snapshot SEED path maps the
+    /// multipass composite through fromGeometry on the assumption the
+    /// composite was folded there; for a synthetic origin no composite was
+    /// ever valid there, and a just-unparked column's composite is
+    /// additionally frozen at its last PRE-park fold — so the seed blits a
+    /// stale, mis-registered slice as the "old" content (the garbled
+    /// falling-content artifact on mid-strip closes after a pan). A synthetic
+    /// origin takes the raw capture instead, which is position-independent.
+    bool fromIsSynthetic = false;
     /// Armed by any leg that wants an old-content cross-fade and has not yet
     /// captured one: the geometry-morph installs (applyWindowGeometry), the
     /// held-move capture (window_connections, both sites), and the tab-swap

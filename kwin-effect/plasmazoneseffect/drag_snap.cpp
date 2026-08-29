@@ -816,6 +816,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     // at the already-committed previous target instead of the
                     // animator's departure rect.
                     mt->fromGeometry = morphAnchor;
+                    // See ShaderTransition::fromIsSynthetic. morphAnchor is
+                    // the originOverride whenever the caller supplied one
+                    // (fresh start), and on the retarget path it is the
+                    // displaced animation's visual position — which for a leg
+                    // that STARTED from a synthetic origin is a point along a
+                    // path the window never occupied either. Conservative
+                    // choice: any origin override in play marks the from-rect
+                    // synthetic and routes the snapshot to the raw capture.
+                    mt->fromIsSynthetic = originOverride.isValid();
                     // Gate on the compiled shader actually LINKING uOldWindow,
                     // matching the two sibling request sites (the move-start
                     // hookup and beginMaximizeShaderMorph) and the bind/unbind
