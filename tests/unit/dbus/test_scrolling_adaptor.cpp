@@ -658,14 +658,6 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
     }
 
-    // The scrollingScreens property's DocString promises that changes are
-    // announced on scrollingScreensChanged and NOT through
-    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
-    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
-    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
-    // telling consumers to ignore a signal they were in fact receiving, and a
-    // consumer that believed it would poll instead of subscribing.
-    //
     // The focus-follows-mouse scroll cap's blocked-window list rides its own
     // property rather than a fourth key on the behaviour map, and the reason is
     // the update rate: the daemon re-derives it on every relayout of a capped
@@ -743,6 +735,14 @@ private Q_SLOTS:
                  QStringList({QStringLiteral("DP-1")}));
     }
 
+    // The scrollingScreens property's DocString promises that changes are
+    // announced on scrollingScreensChanged and NOT through
+    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
+    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
+    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
+    // telling consumers to ignore a signal they were in fact receiving, and a
+    // consumer that believed it would poll instead of subscribing.
+    //
     // Driven over a REAL bus, because the claim is about what reaches the wire
     // rather than about the adaptor's own emissions.
     void testScrollingScreensProperty_doesNotEmitPropertiesChanged()

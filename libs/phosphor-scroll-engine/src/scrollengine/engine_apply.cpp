@@ -527,6 +527,23 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             && params.axis.mainSize(column.rect) >= workAreaMain;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                // The dragged window gets NO entry at all for the whole
+                // gesture, columnMaximized included — and since absence is the
+                // only encoding of "not maximized", it is worth stating what
+                // the effect does with that.
+                //
+                // Nothing: the effect's batch consumer is a per-entry loop, so
+                // a window that appears in no entry is never visited and its
+                // claim is neither released nor re-asserted. That is the
+                // wanted outcome here. Releasing mid-drag would hand the
+                // window's maximize bit back under the user's hand, and
+                // re-asserting would fight the drag.
+                //
+                // The claim is closed at the OTHER end instead:
+                // TilingHandler::reconcileMaximizeAfterGesture re-drives it
+                // when the gesture finishes, which exists because the engine
+                // emits on change and a drag that moves no column schedules
+                // no batch to carry the answer.
                 columnHadSkippedTile.insert(column.columnIndex);
                 continue;
             }

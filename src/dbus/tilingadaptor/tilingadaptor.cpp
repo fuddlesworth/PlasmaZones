@@ -464,6 +464,17 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
     // it draws rather than every window that ever changed its title; a
     // window that becomes a tab later is covered by the effect's own
     // scrollTabColors query when the strip for it arrives.
+    //
+    // The substring test is UNSCOPED — it does not check that the match sits
+    // under a "tabs" array — and that is a robustness note rather than a bug.
+    // A false positive needs some other string value in the payload to equal
+    // a full window id including its quotes, and window ids are
+    // "<class>|<uuid>" while every other string the payload carries is a
+    // screen id, a colour or a title fragment. Nothing constructible collides.
+    // The cost of a hypothetical collision is also bounded: one extra colour
+    // relay for a window the effect does not paint a pill for, which the
+    // effect ignores. Parsing the JSON per title change to close it would be
+    // strictly worse on the hot path this bound exists to keep cheap.
     const QString quoted = QLatin1Char('"') + windowId + QLatin1Char('"');
     bool named = false;
     for (auto it = m_lastScrollTabStrips.constBegin(); it != m_lastScrollTabStrips.constEnd(); ++it) {

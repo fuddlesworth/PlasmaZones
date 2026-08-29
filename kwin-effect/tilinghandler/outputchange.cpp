@@ -661,6 +661,19 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                                     // removing it here would leave that newer
                                     // connection unreachable by every cancel site.
                                     if (m_crossScreenRestoreGen.value(wid) != restoreGen) {
+                                        // Returning here leaves THIS connection's
+                                        // (already disconnected, hence invalid)
+                                        // handle sitting in m_pendingCrossScreenRestore
+                                        // until the superseding store overwrites it.
+                                        // Traced and recorded rather than tidied:
+                                        // disconnect on an invalid QMetaObject::Connection
+                                        // is a documented no-op, so a cancel site that
+                                        // reaches the stale handle does nothing and the
+                                        // newer connection is the one that matters. Do
+                                        // not "fix" this by removing the entry — that is
+                                        // exactly what the generation check exists to
+                                        // prevent, because the entry belongs to the newer
+                                        // hop.
                                         return;
                                     }
                                     m_pendingCrossScreenRestore.remove(wid);
