@@ -594,6 +594,17 @@ public:
     /// window, degenerate geometry, or no resolvable outputs.
     bool atScrollPark(KWin::EffectWindow* w) const;
 
+    /// The rect form of the same question, asked of a TARGET rect instead of
+    /// a live frame: true when @p rect lies entirely off the union of every
+    /// connected output. This is the "is this commit heading to a park?"
+    /// test the batch apply's animation guards need — a commit whose target
+    /// intersects no output must never receive an animated leg (the leg
+    /// would sweep the window visibly across the screen to a rect chosen
+    /// purely for being invisible). Fails closed (false) on an empty rect or
+    /// no resolvable outputs, mirroring atScrollPark: the fallback is the
+    /// ordinary animated leg, which is what an on-screen target should get.
+    bool rectAtScrollPark(const QRect& rect) const;
+
     /// Cheap gate for callers that want to skip scroll-specific work in a
     /// session with no scrolling screens at all. RAW set, deliberately NOT
     /// the isScrollingScreen intersection — the clip / input-filter /
