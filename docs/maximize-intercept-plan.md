@@ -81,10 +81,15 @@ twice cancels itself. Reuse the fully-maximized edge tracking already at
 or out of `MaximizeFull` drives the verb.
 
 **KWin bit.** Geometry needs no rescue, but the maximize-mode bit does: left
-set it desyncs the titlebar button and fights later frame changes. Clear it
-under the existing `m_suppressMaximizeChanged` guard (`signals.cpp`) so
-`slotWindowMaximizedStateChanged` does not read our own clear as a manual
-unmaximize.
+disagreeing with the engine it desyncs the titlebar button and fights later
+frame changes. This paragraph originally said to clear it on every
+interception. It is NOT cleared there any more, for the reason the Inbound
+section below records: KWin has already moved the window by then, so clearing
+moved it a second time. The bit is left where the user's click put it, and it
+is written back only on the reply handler's refusal path, where no batch is
+coming to impose the strip's own. Every such write goes under the existing
+`m_suppressMaximizeChanged` guard so `slotWindowMaximizedStateChanged` does not
+read our own write as a manual unmaximize.
 
 **Transport.** `ScrollingAdaptor` has no `toggleMaximizeColumn` — the verb is
 shortcut-only today, `ShortcutManager::scrollMaximizeColumnRequested` →

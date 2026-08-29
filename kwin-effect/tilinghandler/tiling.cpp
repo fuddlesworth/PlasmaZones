@@ -1713,9 +1713,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // It is also read per entry rather than once per batch,
                 // because the per-window applies are staggered and a later
                 // entry runs after the earlier ones have returned.
+                const bool kwinAlreadyFull = kwMax->requestedMaximizeMode() == KWin::MaximizeFull;
                 const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveColumnMaximizeAction(
-                    snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId),
-                    kwMax->requestedMaximizeMode() == KWin::MaximizeFull, maximizeToggleInFlight(snap.windowId));
+                    snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId), kwinAlreadyFull,
+                    maximizeToggleInFlight(snap.windowId));
                 if (maxAction == ScrollDecisions::MaximizeAction::Apply) {
                     // Membership BEFORE the compositor call, so a synchronous
                     // re-entry through maximize() (X11 emits
@@ -1755,7 +1756,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (!kwMax->isFullScreen() && !kwMax->isRequestedFullScreen() && !snap.window->isUserMove()
                         && !snap.window->isUserResize()) {
                         applyMaximizeSuppressed(kwMax, KWin::MaximizeFull);
-                        maximizeBitWrittenThisBatch = true;
+                        // NOT unconditionally true. Apply also covers the
+                        // ADOPT case (!inSet with the bit already held, an
+                        // effect restart against a daemon that kept the
+                        // state), where maximize() is called on a window
+                        // already at MaximizeFull and emits nothing — so no
+                        // windowMaximizedStateAboutToChange fires and the
+                        // captured departure rect belongs to an arbitrarily
+                        // older episode. Claiming a write there would hand the
+                        // origin arm the same stale rect this gate exists to
+                        // keep out. The monocle arm below takes the identical
+                        // precaution.
+                        maximizeBitWrittenThisBatch = !kwinAlreadyFull;
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
                     maximizeBitWrittenThisBatch = releaseColumnMaximized(snap.windowId, snap.window);

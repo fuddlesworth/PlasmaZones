@@ -762,12 +762,16 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         if (m_columnMaximizedWindows.contains(it.key())) {
             releaseColumnMaximized(it.key(), w);
         } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                   && !kw->isRequestedFullScreen() && !kw->isFullScreen()) {
-            // Fullscreen guard, the one every sibling maximize write carries:
-            // maximize() has no fullscreen conditional and would moveResize a
-            // presenting surface down to its restore rect. The
-            // releaseColumnMaximized arm above takes the same guard
-            // internally.
+                   && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+            // The fullscreen and gesture pair every sibling maximize write in
+            // this tree carries: maximize() has no fullscreen conditional and
+            // would moveResize a presenting surface down to its restore rect,
+            // and mid-gesture it snaps the window under the user's pointer.
+            //
+            // Unlike releaseColumnMaximized, which skips on the same
+            // conditions and RETAINS membership so a later arm pays the bit,
+            // this is the non-member arm and holds no ledger, so a skip here
+            // is permanent rather than deferred.
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }
         m_effect->applyWindowGeometry(w, it.value().toRect(), /*allowDuringDrag=*/false,

@@ -197,12 +197,21 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 if (m_columnMaximizedWindows.contains(windowId)) {
                     releaseColumnMaximized(windowId, safeW);
                 } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                           && !kw->isRequestedFullScreen() && !kw->isFullScreen()) {
-                    // Fullscreen guard, the one every sibling maximize write
-                    // carries: maximize() has no fullscreen conditional and
-                    // would moveResize a presenting surface down to its
-                    // restore rect. releaseColumnMaximized on the arm above
-                    // takes the same guard internally.
+                           && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
+                           && !safeW->isUserResize()) {
+                    // The fullscreen and gesture pair every sibling maximize
+                    // write in this tree carries: maximize() has no fullscreen
+                    // conditional and would moveResize a presenting surface
+                    // down to its restore rect, and mid-gesture it snaps the
+                    // window under the user's pointer.
+                    //
+                    // Unlike releaseColumnMaximized, which skips on the same
+                    // conditions and RETAINS membership so a later arm pays
+                    // the bit, this is the non-member arm and holds no ledger,
+                    // so a skip here is permanent rather than deferred. That
+                    // is the accepted trade: the window keeps a maximize the
+                    // user can clear themselves, where the alternative shrinks
+                    // a presenting surface or yanks a window mid-drag.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.

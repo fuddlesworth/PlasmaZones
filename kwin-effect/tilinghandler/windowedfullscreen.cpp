@@ -26,6 +26,7 @@
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDateTime>
 #include <QList>
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -337,6 +338,15 @@ bool TilingHandler::maximizeToggleInFlight(const QString& windowId)
     // the batch arm, which runs often enough that an expired entry is
     // collected promptly.
     if (QDateTime::currentMSecsSinceEpoch() - it->armedAtMs > MaximizeToggleFlightMs) {
+        // A recorded press SURVIVES expiry. The suppression this entry
+        // provides is time-bounded because a latched one would disable the
+        // repair arm for the session, but the user's second click is not
+        // something to throw away on a slow round trip. The reply still takes
+        // the entry and honours it; only the suppression lapses.
+        if (it->pendingPress) {
+            it->armedAtMs = 0;
+            return false;
+        }
         m_maximizeToggleInFlight.erase(it);
         return false;
     }
@@ -377,12 +387,18 @@ void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const 
     }
     // ARM BEFORE THE CALL. A batch can arrive before the reply, and the arm
     // that reads this is the one that must not act on it.
-    m_maximizeToggleInFlight[windowId] = MaximizeToggleFlight{QDateTime::currentMSecsSinceEpoch(), false};
+    //
+    // RE-ARMING PRESERVES pendingPress. A second press that DISAGREES with
+    // membership takes the dispatch path rather than the coalesce path, so
+    // this is reachable with an entry already present, and value-overwriting
+    // would silently drop a press the interception had recorded.
+    MaximizeToggleFlight& flightEntry = m_maximizeToggleInFlight[windowId];
+    flightEntry.armedAtMs = QDateTime::currentMSecsSinceEpoch();
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
                                                    QStringLiteral("toggleMaximizeColumn"), {screenId, windowId}),
         this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId, windowId](QDBusPendingCallWatcher* pw) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* pw) {
         pw->deleteLater();
         const QDBusPendingReply<bool> reply = *pw;
         // DISARM FIRST, before any write below and on every exit.
@@ -400,10 +416,29 @@ void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const 
         // has settled, so a fast double-click toggles twice instead of once.
         // Re-dispatching cannot loop: only a real user press sets this, and
         // the entry it re-arms starts with pendingPress false.
-        const auto honourPendingPress = qScopeGuard([this, screenId, windowId, flight] {
-            if (flight.pendingPress && isTiledWindow(windowId)) {
-                dispatchMaximizeColumnToggle(screenId, windowId);
+        //
+        // RE-RESOLVES the screen rather than reusing the one captured at
+        // dispatch, and re-runs both gates. This is the only thing in the
+        // lambda that sends a new verb, so it needs the round-trip re-checks
+        // at least as much as the write below does: a window that changed
+        // output mid-flight would otherwise have a toggle addressed to the
+        // strip it left.
+        const auto honourPendingPress = qScopeGuard([this, windowId, flight] {
+            if (!flight.pendingPress) {
+                return;
             }
+            KWin::EffectWindow* pw2 = m_effect->findWindowByIdExact(windowId);
+            if (!pw2 || pw2->isDeleted() || !isTiledWindow(windowId)) {
+                return;
+            }
+            QString pendingScreenId = m_notifiedWindowScreens.value(windowId);
+            if (pendingScreenId.isEmpty()) {
+                pendingScreenId = m_effect->getWindowScreenId(pw2);
+            }
+            if (!isScrollingScreen(pendingScreenId)) {
+                return;
+            }
+            dispatchMaximizeColumnToggle(pendingScreenId, windowId);
         });
         if (!reply.isError() && reply.value()) {
             return;

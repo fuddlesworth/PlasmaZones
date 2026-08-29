@@ -743,6 +743,13 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // reusable, so a reused id must not inherit an armed toggle. Without this
     // a window closing inside its own round trip leaves an entry that
     // suppresses the next occupant's repair arm until it expires.
+    //
+    // This funnel also serves the cross-output transfer of a LIVE window,
+    // where dropping the marker reopens the race for the remainder of a trip
+    // that is still genuinely in flight. Accepted rather than worked around:
+    // the window is changing screens, so the batch that would have been
+    // suppressed is describing the strip it is leaving, and the arriving
+    // strip answers on its own first batch.
     m_maximizeToggleInFlight.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a
     // reused windowId must not inherit an exhausted budget, and every direct
@@ -854,9 +861,10 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // with no window and no reaper. Window ids are appId-derived and reusable,
     // and three live readers consume that entry: interceptMaximizeRequest's
     // already-agrees test, dispatchMaximizeColumnToggle's refusal write-back,
-    // and the batch's resolveColumnMaximizeAction inSet term. So a reused id
-    // makes the next window's first maximize click restore instead of
-    // maximize.
+    // and the batch's resolveColumnMaximizeAction inSet term. A reused id
+    // therefore feeds all three a membership the new window never earned, and
+    // the refusal write-back is the one that can act on it outright by
+    // driving KWin to MaximizeFull for a column the engine never maximized.
     //
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is
