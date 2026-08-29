@@ -571,6 +571,20 @@ bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, in
     }
     Column& col = m_columns[colIdx];
     Tile& tile = col.tiles[col.indexOfWindow(windowId)];
+    // UPPER-bounded as well as lower-bounded. The ingress points all clamp
+    // negatives away, but nothing capped the top, and these values are added
+    // to gaps and to sibling floors in the relayout slack math — a client
+    // reporting a minimum near INT_MAX makes those sums overflow, which is
+    // undefined behaviour rather than a merely silly layout.
+    //
+    // The cap is deliberately far above any real display (100000px is roughly
+    // eight 8K panels side by side), because this is an overflow guard and
+    // NOT a policy about oversized windows. A minimum that legitimately
+    // exceeds the work area is already handled, and handled elsewhere: the
+    // engine floats that window rather than trying to tile it.
+    constexpr int kMaxClientMinExtent = 100000;
+    minWidth = qBound(0, minWidth, kMaxClientMinExtent);
+    minHeight = qBound(0, minHeight, kMaxClientMinExtent);
     if (tile.minWidth == minWidth && tile.minHeight == minHeight) {
         return false;
     }

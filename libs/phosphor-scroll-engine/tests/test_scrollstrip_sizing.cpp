@@ -59,6 +59,7 @@ private Q_SLOTS:
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
     void aZeroMovementHeightPressStillReportsTheOwnershipClaim();
+    void bothPresetCyclesRefuseADeltaThatIsNotOneStep();
     void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
     void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
@@ -629,6 +630,49 @@ void TestScrollStripSizing::heightGrowLeavesTheColumnTilingItsBudget()
 // to be by extent too: wrapping to position 0 in a list typed 1/2, 1/3, 2/3
 // hands a forward press the MIDDLE width and leaves 1/3 reachable only
 // backwards, so the cycle never comes back round to the narrowest column.
+// SURVIVING MUTATION until now: dropping `(delta != -1 && delta != 1)` from
+// either preset cycle failed nothing in the repo. Both verbs are wired to a
+// one-step-per-press shortcut, so every existing fixture passes ±1 and the
+// guard was never exercised.
+//
+// It is not decoration. Both cycles hand delta to cyclePresetIndexByExtent,
+// whose contract is a SINGLE step in a direction; a 0 asks for a step with no
+// direction, and anything larger asks it to skip entries the extent search is
+// not written to skip. The refusal is also the only thing standing between a
+// D-Bus caller and that state, since both verbs are reachable from the wire.
+//
+// Zero is the boundary this slot cares about most (it is what an
+// uninitialised or mis-parsed delta looks like) and is one of the three
+// boundary values no fixture in this file previously carried.
+void TestScrollStripSizing::bothPresetCyclesRefuseADeltaThatIsNotOneStep()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.presetColumnWidths = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+    params.presetWindowHeights = {0.5, 1.0};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    const int widthBefore = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    const int heightBefore = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+
+    // Verdict AND geometry on every arm: a verdict-only assertion passes for a
+    // refusal that already mutated the model, which is this file's own rule.
+    for (const int delta : {0, 2, -2, 7}) {
+        QVERIFY2(!strip.cycleActiveColumnPresetWidth(delta, params), "a width cycle must step by exactly one");
+        QVERIFY2(!strip.cycleActiveWindowPresetHeight(delta, params), "a height cycle must step by exactly one");
+        QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), widthBefore);
+        QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), heightBefore);
+    }
+
+    // Positive control: ±1 still works, so the refusals above are attributable
+    // to the delta and not to a fixture that could never cycle at all.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(1, params));
+    QVERIFY(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) != widthBefore);
+    QVERIFY(strip.cycleActiveWindowPresetHeight(1, params));
+}
+
 void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
 {
     ScrollLayoutParams params = defaultParams();

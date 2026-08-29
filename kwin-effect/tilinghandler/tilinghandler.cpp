@@ -1023,7 +1023,13 @@ void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wind
                 // Re-center horizontally under the cursor so the window
                 // doesn't "jump away" from the grab point when it shrinks.
                 QRectF currentFrame = w->frameGeometry();
-                const QPointF cursor = KWin::effects->cursorPos();
+                // Guarded like every other KWin::effects read in this file.
+                // The re-centre is a nicety, so losing it on a teardown-time
+                // call is strictly better than dereferencing a null handler:
+                // without the cursor the window keeps its current origin and
+                // only its size is restored, which is what the non-immediate
+                // arm below does anyway.
+                const QPointF cursor = KWin::effects ? KWin::effects->cursorPos() : currentFrame.topLeft();
                 int newX = qRound(currentFrame.x());
                 int newY = qRound(currentFrame.y());
                 if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
