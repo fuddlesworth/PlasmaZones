@@ -142,3 +142,4 @@ pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp scrol
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
+pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
