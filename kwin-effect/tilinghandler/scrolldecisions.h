@@ -175,6 +175,33 @@ enum class Claim {
 /// itself, and the table below says which claims answer to that name — so a
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
+///
+/// THREE OF THESE SIX HAVE NO PRODUCTION CALLER, and that is a decision, not
+/// a gap. StripExit, UntrackFunnel and PassiveFloat route their releases
+/// through releaseAllClaims. ModeFlip, FullscreenExitWhileFloating and
+/// Teardown do not, because the funnel's shape is wrong for them:
+///
+///  - ModeFlip's release is deliberately SPLIT IN TWO. The demote pass sheds
+///    before the engines re-place, and the pre-tile restores run after; one
+///    funnel call at either end would collapse a split the ordering depends
+///    on.
+///  - Teardown releases in bulk across every tracked window and has to be
+///    re-entrant (the daemon can drop mid-sweep). It handles that itself,
+///    per claimReleaseOrder; funnelling it per-window would re-enter the
+///    funnel's own guards N times to no benefit.
+///  - FullscreenExitWhileFloating has no funnel call for no argued reason:
+///    its repair site releases directly, and nobody has routed it. Unlike
+///    the two above, this one is an OMISSION rather than a decision. It is
+///    recorded as such instead of quietly fixed here, because routing it
+///    changes which claims release on a fullscreen exit and that belongs in
+///    its own commit with its own live check (the same standing as the
+///    UntrackFunnel monocle blank below).
+///
+/// All three stay in the enum because the table is what the tests drive, and
+/// because the answer to "does monocle release on a mode flip" has to be
+/// written down somewhere a reader can find it. Do not "finish the wiring"
+/// by pointing the first two at releaseAllClaims without re-deriving their
+/// reasons.
 enum class ClaimScope {
     /// The window is leaving the strip outright and no later batch will carry
     /// it: the untile diff, the active float channel, the leaving-scrolling
