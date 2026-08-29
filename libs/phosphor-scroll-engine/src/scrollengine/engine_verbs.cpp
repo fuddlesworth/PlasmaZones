@@ -178,10 +178,46 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
             resolvedScreen = windowKey.screenId;
         }
     }
-    P_SCROLL_VERB(resolvedScreen,
-                  canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
-                                        : state->strip().toggleMaximizeColumnForWindow(canonicalId, params),
-                  "resize", false, QString());
+    // Hand-expanded from P_SCROLL_VERB for the FEEDBACK alone, the way
+    // consumeOrExpelWindow above is hand-expanded for its action token.
+    //
+    // The macro raises the navigation OSD unconditionally, which was right
+    // while the keyboard shortcut was this verb's only producer: the user
+    // pressed a key, so they get told what it did. The compositor's maximize
+    // interception is a second producer with the opposite requirement. That
+    // request arrives for a NAMED window from a titlebar click or from a
+    // client maximizing itself, and a background application doing so would
+    // pop "Resized" over whatever the user is actually working on.
+    //
+    // So the named spelling is quiet and the active-column spelling is not.
+    // The split is the same one the canonicalize and resolve steps above are
+    // written around: an empty id is the user's own key press about the
+    // column in front of them, a named id is somebody else's request about a
+    // window that may not even be on screen.
+    //
+    // Suppressing the emit rather than passing a quiet flag into the OSD also
+    // sidesteps the macro's source/target slots, which report the ACTIVE
+    // window. On the named path that is frequently the wrong window entirely.
+    const bool quiet = !canonicalId.isEmpty();
+    P_SCROLL_RESOLVE(resolvedScreen);
+    if (!state || state->strip().isEmpty()) {
+        if (!quiet) {
+            Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
+                                      QString(), screen);
+        }
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
+                                               : state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
+    if (changed) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    if (!quiet) {
+        Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
+                                  sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+    }
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)

@@ -722,28 +722,46 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(QStringLiteral("app|a"));
     const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(QStringLiteral("app|b"));
     // The VERDICT, not just the geometry. Asserting rects alone leaves the
-    // refusal's return value unpinned, and that bool is what the verb macro
-    // keys three side effects on: the relayout, placementChanged, and a
-    // navigationFeedback whose success arm raises a "Resized" OSD naming the
-    // ACTIVE window — for a request about a window this strip does not hold.
-    // Flipping the out-of-range arm to return true leaves every rect
-    // assertion above green, so without these two spies the mutation ships.
-    QSignalSpy refusalFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
+    // refusal's return value unpinned, and that bool keys the relayout and
+    // placementChanged. Flipping the out-of-range arm to return true leaves
+    // every rect assertion above green, so without the batch spy the mutation
+    // ships.
+    //
+    // The NAMED spelling raises no OSD at all, refusal included. This request
+    // shape does not come from a key press — it is a titlebar click or a
+    // client maximizing itself — so narrating it would pop "Resized" over
+    // whatever the user is working on, and narrating the failure would do it
+    // for a window they never touched. The empty spelling below still speaks.
+    QSignalSpy namedFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
     QSignalSpy refusalBatches(engine, &PhosphorScrollEngine::ScrollEngine::windowsTiled);
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|missing"));
     QCoreApplication::processEvents();
     QVERIFY2(widthOf(QStringLiteral("app|a")) == aBeforeMiss, "an unknown window must not touch the active column");
     QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeMiss, "an unknown window must not touch any other column");
-    QCOMPARE(refusalFeedback.count(), 1);
-    QCOMPARE(refusalFeedback.at(0).at(0).toBool(), false);
-    QCOMPARE(refusalFeedback.at(0).at(2).toString(), QStringLiteral("no_target"));
+    QVERIFY2(namedFeedback.isEmpty(), "a named-window request must not raise the navigation OSD");
     QCOMPARE(refusalBatches.count(), 0);
 
+    // And the SUCCEEDING named spelling is equally quiet: it is the ordinary
+    // compositor-interception case, and it is the one that would otherwise
+    // interrupt the user.
+    engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
+    QCoreApplication::processEvents();
+    QVERIFY2(namedFeedback.isEmpty(), "a successful named-window request must not raise the navigation OSD either");
+    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBeforeMiss, "the quiet path must still do the work");
+
     // The EMPTY spelling still means the active column, which is what the
-    // keyboard shortcut sends.
+    // keyboard shortcut sends — and unlike the named spelling it DOES speak,
+    // because the user pressed a key and is owed an answer. That contrast is
+    // the whole point of the split; asserting the silence above without this
+    // would pass just as well against a verb that had gone mute entirely.
+    const PhosphorScrollEngine::ColumnWidth aBeforeKey = widthOf(QStringLiteral("app|a"));
+    QSignalSpy keyFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
     engine->toggleMaximizeColumn(QStringLiteral("S1"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeMiss, "an empty windowId must still target the active column");
+    QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeKey, "an empty windowId must still target the active column");
+    QCOMPARE(keyFeedback.count(), 1);
+    QCOMPARE(keyFeedback.at(0).at(0).toBool(), true);
+    QCOMPARE(keyFeedback.at(0).at(1).toString(), QStringLiteral("resize"));
 }
 
 void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
