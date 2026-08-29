@@ -102,12 +102,12 @@ sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones
 Debian testing/unstable (apt):
 
 ```bash
-curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key | gpg --dearmor | sudo tee /usr/share/keyrings/plasmazones.gpg > /dev/null
-echo 'deb [signed-by=/usr/share/keyrings/plasmazones.gpg] https://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list
+sudo curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key -o /etc/apt/keyrings/plasmazones.asc
+echo 'deb [signed-by=/etc/apt/keyrings/plasmazones.asc] https://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list
 sudo apt update && sudo apt install plasmazones
 ```
 
-`signed-by` scopes the key to this repository, so it cannot sign anything from the Debian archive itself. The two URL spellings are both correct: the repository line uses `home:/fuddlesworth/` and the key uses `home:fuddlesworth/`, which is how OBS lays them out.
+`signed-by` scopes the key to this repository, so it cannot sign anything from the Debian archive itself. apt reads the armored key as it comes, so there is no `gpg --dearmor` step and nothing to install first. The two URL spellings are both correct: the repository line uses `home:/fuddlesworth/` and the key uses `home:fuddlesworth/`, which is how OBS lays them out.
 
 On Debian testing, swap `Debian_Unstable` for `Debian_Testing` in both lines. Packages are built for x86_64 only. The same repository works on Debian-derived rolling distributions such as PikaOS.
 

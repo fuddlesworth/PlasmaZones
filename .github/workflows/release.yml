@@ -770,8 +770,8 @@ jobs:
             echo "**Debian testing/unstable (apt repository):**"
             echo "Tracks KDE as it lands in Debian and rebuilds when KWin moves."
             echo '```bash'
-            echo "curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key | gpg --dearmor | sudo tee /usr/share/keyrings/plasmazones.gpg > /dev/null"
-            echo "echo 'deb [signed-by=/usr/share/keyrings/plasmazones.gpg] https://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list"
+            echo "sudo curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key -o /etc/apt/keyrings/plasmazones.asc"
+            echo "echo 'deb [signed-by=/etc/apt/keyrings/plasmazones.asc] https://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list"
             echo "sudo apt update"
             echo "sudo apt install plasmazones"
             echo '```'
@@ -1192,10 +1192,11 @@ jobs:
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.version.outputs.version }}"
-          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # OBS builds from the committed spec, so it must carry the real
           # version (download_files resolves Source0's %{version}) and the
           # release changelog — not the 0.0.0 placeholder. Same templating
@@ -1245,8 +1246,8 @@ jobs:
           # not caught by the changelog assertion above, it overrides it, and
           # ships a package numbered differently from the RPM.
           #
-          # This is not a restatement of the arguments passed three lines up.
-          # publish-obs checks out the release tag, so it runs THAT TAG'S
+          # This is not a restatement of the arguments passed to the generator
+          # above. publish-obs checks out the release tag, so it runs THAT TAG'S
           # generate-dsc.sh while the workflow comes from the dispatched branch,
           # the same split the changelog comment describes. A tag whose
           # generator formats the version differently, or ignores the revision
@@ -1261,10 +1262,10 @@ jobs:
       - name: Commit package to OBS
         env:
           OBS_PROJECT: home:fuddlesworth
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.version.outputs.version }}"
-          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # Check out the existing OBS package working copy — the project
           # and package must already exist (see the setup notes above).
           osc checkout "$OBS_PROJECT" plasmazones

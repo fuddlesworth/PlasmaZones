@@ -14,15 +14,18 @@
 #   - KDE Neon (Ubuntu-based): `kf6-kcolorscheme-dev`, `kf6-kirigami-dev`
 #   - Ubuntu proper:           `libqt6shadertools6-dev`, `libqt6svg6-dev`
 # An alternative that does not exist on a given target is simply skipped, so
-# listing every spelling is safe everywhere. The order within a field carries
-# no meaning and does not rank the targets: apt takes the first alternative it
-# can satisfy, and each target satisfies exactly one of the spellings, so
-# whichever comes first is the only one available there anyway.
+# listing every spelling is safe everywhere. The order within a field does not
+# rank the targets. apt takes the first alternative it can satisfy, and every
+# spelling in a field resolves to the same library, so any of them is an
+# acceptable answer wherever it exists.
 #
-# Do not put a `#` comment inside the Build-Depends field. dpkg would strip it,
-# but packaging/obs/generate-dsc.sh has to re-parse the field to build the OBS
-# .dsc, and a comment inside a field is the shape that parse handles least
-# naturally. Keep them above the field, as here.
+# A `#` comment may sit inside a field, on its own line and at column 0, which
+# is the only form dpkg strips. packaging/obs/generate-dsc.sh skips that form
+# when it re-parses Build-Depends into the OBS .dsc, and skips an indented one
+# too, which dpkg would instead read as part of the field's value. Neither
+# accepts a comment trailing a dependency on the same line (`cmake, # why`).
+# generate-dsc.sh rejects that outright rather than folding it into the .dsc as
+# a bogus token.
 Source: plasmazones
 Section: kde
 Priority: optional

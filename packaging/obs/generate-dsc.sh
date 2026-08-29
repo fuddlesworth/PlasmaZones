@@ -72,7 +72,7 @@ fi
 # the dependency whose absence hurts most, since an unresolvable KWin is what
 # strands the effect plugin.
 if [[ "$BUILD_DEPENDS" != *"kwin-dev"* ]]; then
-    echo "Error: parsed Build-Depends is missing kwin-dev, parse likely truncated" >&2
+    echo "Error: parsed Build-Depends is missing kwin-dev, field likely renamed or misparsed" >&2
     echo "Got: $BUILD_DEPENDS" >&2
     exit 1
 fi
