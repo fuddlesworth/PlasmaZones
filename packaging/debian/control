@@ -2,9 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7).
-# Compatible with both KDE Neon (which ships `qt6-shadertools-dev`, `qt6-svg-dev`,
-# `kf6-kcolorscheme-dev`) and vanilla Debian/Ubuntu (which ship
-# `libqt6shadertools6-dev`, `libqt6svg6-dev`, `libkf6colorscheme-dev`).
+#
+# Build-Depends carry alternatives because the same control file feeds three
+# targets and they disagree on binary package names:
+#   - KDE Neon (Ubuntu-based): `kf6-kcolorscheme-dev`, `kf6-kirigami-dev`
+#   - Ubuntu proper:           `libqt6shadertools6-dev`, `libqt6svg6-dev`
+#   - Debian testing/unstable: `qt6-shadertools-dev`, `qt6-svg-dev`,
+#     `libkf6colorscheme-dev`, and notably `libkirigami-dev` and
+#     `libplasmaactivities-dev`, which carry neither a `kf6-` nor a `libkf6-`
+#     prefix. Verified against sid on 2026-08-28; the last two exist under no
+#     other name there, so dropping them makes the OBS Debian build
+#     unresolvable rather than failing loudly.
+# An alternative that does not exist on a given target is simply skipped, so
+# listing all three spellings is safe everywhere.
 Source: plasmazones
 Section: kde
 Priority: optional
@@ -24,14 +34,14 @@ Build-Depends:
  libkf6kcmutils-dev (>= 6.26.0),
  libkf6globalaccel-dev (>= 6.26.0),
  libkf6colorscheme-dev (>= 6.26.0) | kf6-kcolorscheme-dev (>= 6.26.0),
- libkf6kirigami-dev (>= 6.26.0) | kf6-kirigami-dev (>= 6.26.0),
+ libkf6kirigami-dev (>= 6.26.0) | kf6-kirigami-dev (>= 6.26.0) | libkirigami-dev (>= 6.26.0),
  kwin-dev (>= 6.7.0),
  libxkbcommon-dev,
  libwayland-dev,
  libvulkan-dev,
  qt6-wayland-dev (>= 6.10.0),
  qt6-wayland-private-dev (>= 6.10.0),
- plasma-activities-dev,
+ plasma-activities-dev | libplasmaactivities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
 Vcs-Git: https://github.com/fuddlesworth/PlasmaZones.git
@@ -60,7 +70,7 @@ Depends:
 Recommends:
  systemd,
 Suggests:
- plasma-activities,
+ plasma-activities-bin | plasma-activities,
  pci.ids,
 Description: Window snapping, tiling and scrolling for KDE Plasma
  PlasmaZones is a window placement tool for KDE Plasma 6.7+. It gives every

@@ -767,7 +767,17 @@ jobs:
             echo "sudo pacman -U plasmazones-${VERSION}-*-x86_64.pkg.tar.zst"
             echo '```'
             echo ""
-            echo "**KDE Neon / Debian-based:**"
+            echo "**Debian testing/unstable (apt repository):**"
+            echo "Tracks KDE as it lands in Debian and rebuilds when KWin moves."
+            echo '```bash'
+            echo "echo 'deb http://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list"
+            echo "curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/plasmazones.gpg > /dev/null"
+            echo "sudo apt update"
+            echo "sudo apt install plasmazones"
+            echo '```'
+            echo "On Debian testing, swap Debian_Unstable for Debian_Testing in both lines."
+            echo ""
+            echo "**KDE Neon / manual .deb:**"
             echo '```bash'
             echo "sudo dpkg -i plasmazones_${VERSION}-*_amd64.deb"
             echo "sudo apt-get install -f  # Install dependencies if needed"
@@ -1113,6 +1123,17 @@ jobs:
   #   3. In the project's "Repositories" tab add openSUSE_Tumbleweed for
   #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.7+, so Leap
   #      is not a viable target — Tumbleweed (and optionally Slowroll) only.
+  #      Add Debian_Unstable and Debian_Testing (x86_64) for the .deb repo.
+  #      Both satisfied every Build-Depends floor when checked on 2026-08-28
+  #      (kwin-dev 4:6.7.4-2, qt6-base-dev 6.10.2, KF6 6.28.0). If a future
+  #      Debian freeze drops testing below the floors, OBS marks the package
+  #      "unresolvable" rather than failing the build — that state is easy to
+  #      mistake for a slow build, so check it explicitly after a freeze.
+  #      This is also why the Debian .deb arm publishes through OBS at all:
+  #      OBS rebuilds automatically when KWin moves in the target repo, and
+  #      the kwin-effect plugin's IID goes inert on every KWin bump (see the
+  #      note in packaging/debian/control), so a static .deb would go stale
+  #      within days on testing/unstable.
   #   4. Add two GitHub Actions secrets (Settings -> Secrets and variables
   #      -> Actions):
   #        OBS_USERNAME — your build.opensuse.org login
@@ -1195,6 +1216,36 @@ jobs:
               exit 1
           fi
 
+      - name: Stamp version and changelog into Debian recipe
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
+          # OBS's Debian targets build from a .dsc, not from debian/control.
+          # Its Build-Depends are generated from packaging/debian/control so
+          # the two cannot drift; the version is stamped the same way the
+          # spec's is.
+          bash packaging/obs/generate-dsc.sh "$VERSION" "$PKGREL"
+          bash packaging/generate-changelog.sh debian "" "$PKGREL"
+          # The generator ships with the release tag and may predate the
+          # revision argument, so restamp the revision the same way the
+          # build-deb job does and then assert. Same reasoning as the spec.
+          sed -i "1s/-[0-9]\{1,\})/-$PKGREL)/" packaging/debian/changelog
+          GOT="$(sed -n '1s/^plasmazones (\(.*\)).*/\1/p' packaging/debian/changelog)"
+          if [[ "$GOT" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: debian/changelog version is '$GOT', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          # debtransform rewrites the changelog version to match the .dsc, so
+          # a mismatch here would be silently papered over at build time and
+          # produce a package numbered differently from the RPM. Fail instead.
+          DSC_VER="$(sed -n 's/^Version:[[:space:]]*//p' packaging/obs/plasmazones.dsc)"
+          if [[ "$DSC_VER" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: dsc Version is '$DSC_VER', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          echo "Debian recipe version: $DSC_VER"
+
       - name: Commit package to OBS
         env:
           OBS_PROJECT: home:fuddlesworth
@@ -1209,6 +1260,24 @@ jobs:
           cp packaging/rpm/plasmazones.spec "$PKGDIR/plasmazones.spec"
           cp packaging/rpm/plasmazones-rpmlintrc "$PKGDIR/plasmazones-rpmlintrc"
           cp packaging/obs/_service "$PKGDIR/_service"
+          # Debian recipe. debtransform maps each debian.<name> file to
+          # debian/<name> inside the generated source package, so the flat
+          # names here are load-bearing and not a stylistic choice.
+          # debian/source/format is deliberately absent: debtransform writes
+          # it itself from the .dsc's "Format: 3.0 (quilt)" line, and a second
+          # copy would be shadowed.
+          # debian.copyright is NOT optional here even though nothing reads it
+          # at compile time: obs-build runs lintian when it is present in the
+          # build root and fails the build on a non-zero exit, and a missing
+          # debian/copyright is an error-level lintian tag.
+          cp packaging/obs/plasmazones.dsc "$PKGDIR/plasmazones.dsc"
+          cp packaging/debian/control "$PKGDIR/debian.control"
+          cp packaging/debian/rules "$PKGDIR/debian.rules"
+          cp packaging/debian/changelog "$PKGDIR/debian.changelog"
+          cp packaging/debian/copyright "$PKGDIR/debian.copyright"
+          cp packaging/debian/plasmazones.postinst "$PKGDIR/debian.plasmazones.postinst"
+          cp packaging/debian/plasmazones.postrm "$PKGDIR/debian.plasmazones.postrm"
+          cp packaging/debian/plasmazones.triggers "$PKGDIR/debian.plasmazones.triggers"
           cd "$PKGDIR"
           # addremove stages new files and drops removed ones; commit only
           # when something actually changed so re-running the same tag is a

@@ -99,6 +99,16 @@ Fedora (COPR):
 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones
 ```
 
+Debian testing/unstable (apt):
+
+```bash
+echo 'deb http://download.opensuse.org/repositories/home:/fuddlesworth/Debian_Unstable/ /' | sudo tee /etc/apt/sources.list.d/plasmazones.list
+curl -fsSL https://download.opensuse.org/repositories/home:fuddlesworth/Debian_Unstable/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/plasmazones.gpg > /dev/null
+sudo apt update && sudo apt install plasmazones
+```
+
+On Debian testing, swap `Debian_Unstable` for `Debian_Testing` in both lines. The same repository works on Debian-derived rolling distributions such as PikaOS.
+
 openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
 
 After install, enable the daemon:
