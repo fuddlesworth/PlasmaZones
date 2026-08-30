@@ -383,6 +383,22 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       not report what the engine did with an accepted call — an unknown
 //       window refuses inside the strip and still answers true, because the
 //       effect's response to that is the same as to success.
+//
+//       Folded into this same unreleased cycle (v5's rule again — neither form
+//       ever shipped): the TileRequestEntry field is RETARGETED from
+//       columnMaximized to maximizedToEdges, same position after
+//       windowedFullscreen, signature unchanged at a(siiiissbbbbssiiibsb).
+//       The old flag was MEASURED (rendered extent vs work area) and mirrored
+//       maximize-column; the new one is DECLARED per-column state (niri
+//       maximize-window-to-edges: raw work area on both axes, gap-free),
+//       driven by the new Scrolling.toggleMaximizeToEdges verb, (ss) -> b on
+//       toggleMaximizeColumn's exact shape. The KWin maximize bit now mirrors
+//       ONLY this state; toggleMaximizeColumn reverts to a pure width verb
+//       with no wire representation (niri Mod+F), though it keeps its boolean
+//       return, and the effect's maximize interception dispatches the new
+//       verb instead. A peer mismatched on the retarget demarshals perfectly
+//       and then mirrors the wrong state — the handshake, not the signature,
+//       is what refuses that pairing.
 inline constexpr int ApiVersion = 7;
 inline constexpr int MinPeerApiVersion = 7;
 

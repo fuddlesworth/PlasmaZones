@@ -162,6 +162,9 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollMaximizeColumnRequested, plainVerb([](Scroll* s, const QString& id) {
         s->toggleMaximizeColumn(id);
     }));
+    wire(&ShortcutManager::scrollMaximizeToEdgesRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->toggleMaximizeToEdges(id);
+    }));
     wire(&ShortcutManager::scrollExpandColumnRequested, plainVerb([](Scroll* s, const QString& id) {
         s->expandColumnToAvailableWidth(id);
     }));

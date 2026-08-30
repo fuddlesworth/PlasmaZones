@@ -1095,6 +1095,7 @@ Q_SIGNALS:
     void scrollingIncreaseColumnWidthShortcutChanged();
     void scrollingDecreaseColumnWidthShortcutChanged();
     void scrollingMaximizeColumnShortcutChanged();
+    void scrollingMaximizeToEdgesShortcutChanged();
     void scrollingExpandColumnShortcutChanged();
     void scrollingCycleWindowHeightShortcutChanged();
     void scrollingCycleWindowHeightBackShortcutChanged();

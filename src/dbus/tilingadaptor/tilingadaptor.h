@@ -390,7 +390,7 @@ Q_SIGNALS:
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
      *        a(siiiissbbbbssiiibsb): (windowId, x, y, width, height, zoneId,
-     *        screenId, monocle, floating, windowedFullscreen, columnMaximized,
+     *        screenId, monocle, floating, windowedFullscreen, maximizedToEdges,
      *        stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos,
      *        tabFrom, viewImmediate)
      */

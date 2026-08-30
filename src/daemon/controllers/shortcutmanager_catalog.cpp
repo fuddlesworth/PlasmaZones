@@ -365,6 +365,13 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Toggles the focused column between filling the work area and a smaller size."));
+        // The state the titlebar button shows. Distinct from Maximize Column
+        // on purpose: that one only widens along the strip and leaves the
+        // maximize button alone.
+        add(kIdScrollMaximizeToEdges, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Toggles the focused column between covering the whole screen area with no gaps "
+                              "and its normal size."));
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
             QT_TRANSLATE_NOOP("plasmazones",

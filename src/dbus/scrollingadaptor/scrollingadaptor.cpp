@@ -345,6 +345,19 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     return true;
 }
 
+bool ScrollingAdaptor::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
+{
+    // toggleMaximizeColumn's contract, verbatim: same gate chain, same
+    // reported acceptance (the KWin effect cancels KWin's own maximize before
+    // dispatching THIS verb, so the refusal has to be visible), same
+    // boundary-only meaning of false.
+    if (refusesScreenVerb(screenId)) {
+        return false;
+    }
+    m_engine->toggleMaximizeToEdges(screenId, windowId);
+    return true;
+}
+
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
     // Same wire-boundary policy as focusColumn: malformed input is a silent

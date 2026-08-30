@@ -187,7 +187,7 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
     }
 
-    void testTileRequestValidationColumnMaximized()
+    void testTileRequestValidationMaximizedToEdges()
     {
         // The same three-arm shape as the windowedFullscreen test above, for
         // the flag that mirrors a maximized scroll column onto KWin's maximize
@@ -198,21 +198,21 @@ private Q_SLOTS:
         e.screenId = QStringLiteral("s");
         e.width = 100;
         e.height = 100;
-        e.columnMaximized = true;
+        e.maximizedToEdges = true;
         QVERIFY(e.validationError().isEmpty());
-        // Discriminating substrings on both arms, as above: "columnMaximized"
+        // Discriminating substrings on both arms, as above: "maximizedToEdges"
         // alone is shared by the two messages.
         e.floating = true;
-        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("maximizedToEdges")));
         QVERIFY(e.validationError().contains(QStringLiteral("floating")));
         e.floating = false;
         e.monocle = true;
-        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("maximizedToEdges")));
         QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
         // The pairing with windowedFullscreen is deliberately LEGAL: the two
         // drive different compositor state and a maximized column can hold a
         // windowed-fullscreen tile. Pinned because it is an absence — nothing
-        // else fails if a later tidy-up folds columnMaximized into the
+        // else fails if a later tidy-up folds maximizedToEdges into the
         // windowedFullscreen arms and starts rejecting it.
         e.monocle = false;
         e.windowedFullscreen = true;
@@ -274,7 +274,10 @@ private Q_SLOTS:
         // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
         // windowId argument, in one step, because neither form ever shipped;
         // v7 then gave that verb a boolean return so the effect can see a
-        // refusal it has already cancelled KWin's maximize for.
+        // refusal it has already cancelled KWin's maximize for, and later
+        // folded in the retarget of that field to maximizedToEdges plus the
+        // new toggleMaximizeToEdges verb, again because no form in between
+        // ever shipped.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened
         // struct or method signature does leave a stale peer's slot simply

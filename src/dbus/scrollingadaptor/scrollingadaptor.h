@@ -297,6 +297,22 @@ public Q_SLOTS:
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 
     /**
+     * @brief Toggle a column's maximize-to-edges state (the compositor's maximize)
+     *
+     * The maximize-to-edges twin of toggleMaximizeColumn above, with the same
+     * addressing, the same gates and the same acceptance-reporting contract —
+     * that method's doc carries the reasons. This is the verb the KWin
+     * effect's maximize interception dispatches, and the state it toggles is
+     * the one the effect mirrors onto KWin's maximize bit; the width verb
+     * above no longer has any wire mirror.
+     *
+     * @param screenId Screen whose column to toggle; empty is ignored
+     * @param windowId Window naming the column; empty targets the FOCUSED
+     *        column, and the interception always names the requesting window.
+     */
+    bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId);
+
+    /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
      *
      * The KWin effect calls this when a windowed-fullscreen client leaves

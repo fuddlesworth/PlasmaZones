@@ -173,22 +173,22 @@ QString TileRequestEntry::validationError() const
     if (windowedFullscreen && monocle) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // Column maximize is a strip placement for the same reason windowed
+    // Maximize-to-edges is a strip placement for the same reason windowed
     // fullscreen is, and it is an ACTION on the same terms (the effect drives
     // KWin's maximize bit from it), so the floating pair is rejected rather
     // than stripped.
-    if (columnMaximized && floating) {
-        return QStringLiteral("TileRequestEntry: columnMaximized on a floating entry (windowId=%1)").arg(windowId);
+    if (maximizedToEdges && floating) {
+        return QStringLiteral("TileRequestEntry: maximizedToEdges on a floating entry (windowId=%1)").arg(windowId);
     }
     // Disjoint producers again: monocle only from the autotile engine's
-    // layout_apply, columnMaximized only from the scroll engine's applyLayout.
+    // layout_apply, maximizedToEdges only from the scroll engine's applyLayout.
     // Acted on, the pair would hand one window's maximize bit to two
     // membership sets with independent exits — precisely the monocle ledger's
     // failure mode.
-    if (columnMaximized && monocle) {
-        return QStringLiteral("TileRequestEntry: columnMaximized on a monocle entry (windowId=%1)").arg(windowId);
+    if (maximizedToEdges && monocle) {
+        return QStringLiteral("TileRequestEntry: maximizedToEdges on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // NOT rejected: columnMaximized together with windowedFullscreen. Unlike
+    // NOT rejected: maximizedToEdges together with windowedFullscreen. Unlike
     // the pairs above these are compatible by design — a maximized column can
     // hold a windowed-fullscreen tile, the flags drive DIFFERENT compositor
     // state (maximize bit vs fullscreen state plus layer demotion), and the
