@@ -61,6 +61,7 @@ while [[ $# -gt 0 ]]; do
             echo "  journal.log      Recent plasmazonesd journal entries"
             echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
             echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
+            echo "  kwin-effects.txt Enabled/loaded KWin desktop effects (kwinrc [Plugins] + live D-Bus state)"
             exit 0
             ;;
         *)
@@ -208,7 +209,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # journal logs below) or claimed by the DATA_DIR tree; a config-dir
         # entry with the same name must not fight them for the slot.
         case "$rel" in
-            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|data|data/*)
+            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|kwin-effects.txt|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac
@@ -358,6 +359,35 @@ fi
 } | redact_home > "$STAGING/kglobalaccel.txt" || true
 # Nothing captured (no rc section, no busctl) → drop the blank file.
 [[ -s "$STAGING/kglobalaccel.txt" ]] || rm -f "$STAGING/kglobalaccel.txt"
+
+# 6. KWin desktop effects
+# Other effects interact with PlasmaZones (blur/contrast behind overlays,
+# wobbly windows and translate-style effects fighting placement animations,
+# a second tiling effect grabbing the same windows), so triagers need to know
+# what is enabled. Two views, same rationale as the kglobalaccel capture:
+# kwinrc [Plugins] is the persisted enable/disable state, while the D-Bus
+# properties show what the running compositor actually loaded and what is
+# animating right now — the two can diverge (unsupported effects, crashes,
+# scripted toggles).
+{
+    KWIN_RC="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrc"
+    if [[ -f "$KWIN_RC" ]]; then
+        echo "── kwinrc [Plugins] ──"
+        awk '/^\[/{keep=($0=="[Plugins]")} keep' "$KWIN_RC"
+        echo ""
+    fi
+    if command -v busctl &>/dev/null; then
+        echo "── org.kde.KWin /Effects loadedEffects ──"
+        busctl --user get-property org.kde.KWin /Effects \
+            org.kde.kwin.Effects loadedEffects 2>&1 || true
+        echo ""
+        echo "── org.kde.KWin /Effects activeEffects ──"
+        busctl --user get-property org.kde.KWin /Effects \
+            org.kde.kwin.Effects activeEffects 2>&1 || true
+    fi
+} | redact_home > "$STAGING/kwin-effects.txt" || true
+# Nothing captured (no kwinrc, no busctl) → drop the blank file.
+[[ -s "$STAGING/kwin-effects.txt" ]] || rm -f "$STAGING/kwin-effects.txt"
 
 # ─── Create archive ──────────────────────────────────────────────────────────
 
