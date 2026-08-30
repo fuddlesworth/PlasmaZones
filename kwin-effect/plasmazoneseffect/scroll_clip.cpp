@@ -151,6 +151,21 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     }
     const auto vit = m_scrollVisualDelta.constFind(windowId);
     if (vit == m_scrollVisualDelta.constEnd()) {
+        // A MISS on a window that IS strip-managed is the interesting case, and
+        // reporting only hits made it invisible: a missing entry and a
+        // non-strip window both produced silence, which is the difference the
+        // trace exists to show. The strip-membership resolve is done HERE
+        // rather than by reordering the probes above, so the hot path keeps its
+        // cheapest-first order and pays nothing while the category is off.
+        if (lcStripDiag().isDebugEnabled() && scrollManagedOutputFor(w)) {
+            const StripDiagSample sample{false, {}, {}, false};
+            const auto lastIt = m_stripDiagLast.constFind(windowId);
+            if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+                m_stripDiagLast.insert(windowId, sample);
+                qCDebug(lcStripDiag) << "park resolve:" << windowId
+                                     << "placement=MISS (strip-managed, no visual delta) verdict= painted-at-commit";
+            }
+        }
         return false;
     }
     KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
