@@ -250,6 +250,22 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingEqualizeColumnWidthsShortcut(), QStringLiteral("Meta+Ctrl+Shift+T"));
         QCOMPARE(ConfigDefaults::scrollingMinimizeColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+E"));
 
+        // The remaining bound scrolling chords. These were reachable only
+        // through the generic duplicate/valid sweep above, which catches a
+        // COLLISION but not a silent retune, so a chord could move without
+        // anything failing. The jump pair and its move twin page on
+        // Home/End, consume-or-expel takes the U/O pair beside I, and the
+        // three column verbs take their own initials.
+        QCOMPARE(ConfigDefaults::scrollingFocusColumnFirstShortcut(), QStringLiteral("Meta+Alt+Home"));
+        QCOMPARE(ConfigDefaults::scrollingFocusColumnLastShortcut(), QStringLiteral("Meta+Alt+End"));
+        QCOMPARE(ConfigDefaults::scrollingMoveColumnToFirstShortcut(), QStringLiteral("Meta+Alt+Shift+Home"));
+        QCOMPARE(ConfigDefaults::scrollingMoveColumnToLastShortcut(), QStringLiteral("Meta+Alt+Shift+End"));
+        QCOMPARE(ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(), QStringLiteral("Meta+Alt+U"));
+        QCOMPARE(ConfigDefaults::scrollingConsumeOrExpelRightShortcut(), QStringLiteral("Meta+Alt+O"));
+        QCOMPARE(ConfigDefaults::scrollingCenterColumnShortcut(), QStringLiteral("Meta+Alt+C"));
+        QCOMPARE(ConfigDefaults::scrollingToggleColumnTabbedShortcut(), QStringLiteral("Meta+Alt+T"));
+        QCOMPARE(ConfigDefaults::scrollingExpandColumnShortcut(), QStringLiteral("Meta+Alt+E"));
+
         // Ships unbound, per the same docs: the edge-stop/wrap focus
         // variants and the one-way float verbs.
         QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
@@ -667,6 +683,20 @@ private Q_SLOTS:
         QCOMPARE(heightValue->validator(1.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMin());
         QCOMPARE(heightValue->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMax());
         QCOMPARE(heightValue->defaultValue.toDouble(), ConfigDefaults::scrollingDefaultWindowHeightValue());
+
+        // The strip axis, pinned against its own closed set rather than only
+        // through the per-screen override path that exercised it before. An
+        // out-of-set value has to fall back to the configured default, which
+        // is what stops a stored garbage axis flipping the whole layout.
+        const auto* stripAxis = findKey(schema, group, ConfigDefaults::stripAxisKey());
+        QVERIFY(stripAxis && stripAxis->validator);
+        QCOMPARE(stripAxis->defaultValue.toInt(), ConfigDefaults::scrollingStripAxis());
+        QCOMPARE(stripAxis->validator(99).toInt(), ConfigDefaults::scrollingStripAxis());
+        QCOMPARE(stripAxis->validator(-1).toInt(), ConfigDefaults::scrollingStripAxis());
+
+        const auto* defaultTemplate = findKey(schema, group, ConfigDefaults::defaultTemplateKey());
+        QVERIFY(defaultTemplate);
+        QCOMPARE(defaultTemplate->defaultValue.toString(), ConfigDefaults::scrollingDefaultTemplate());
 
         const auto* wheelEnabled = findKey(schema, group, ConfigDefaults::wheelFocusEnabledKey());
         QVERIFY(wheelEnabled);
