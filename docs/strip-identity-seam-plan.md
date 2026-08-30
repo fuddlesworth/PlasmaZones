@@ -8,11 +8,24 @@ started on. It has broken there three or four times, in different clothes, and
 each fix has landed in the daemon. This document argues the recurrence is one
 structural defect at the D-Bus seam, and proposes a staged repair.
 
-**Status: the mechanism of the current failure is NOT yet confirmed.** Three
-candidates survive source reading and they are not distinguishable without
-instrumentation. Stage 1 is deliberately designed to repair all three, and the
-instrumentation in [Gate](#gate-before-any-code) must run before any of it
-lands. See [Candidates](#what-actually-breaks-three-live-candidates).
+**Status, 2026-08-30.**
+
+The originally REPORTED symptom ("the whole strip doesn't scroll, only the
+active window moves" on desktop 2) turned out not to be this seam at all. It
+was a maximized-to-edges column running a second per-window spring beside the
+view slide, fixed by PR #1012. The tell was a full-screen-width rect inside a
+strip (`maximizeMode= full`, `QRect(0,46 3840x2068)`); when a strip window's
+rect is screen-sized, suspect that path before the parked-column paint state.
+
+Of the three candidates below, **A is confirmed and now FIXED** — see
+[Candidate A](#candidate-a-fixed). B and C were never reproduced: the harness
+was pushed through three configurations (fresh, decorations seeded, strips
+restored from disk) and the end columns animated correctly in all of them.
+They are not disproven, only unobserved.
+
+**The structural argument stands and stage 1 is still unbuilt.** Candidate A
+was repaired at the emit gate, which is narrower than giving strips an
+identity, so the class this document is about is not closed.
 
 ## Premise
 
@@ -94,7 +107,8 @@ express. That is why they fail first and fail alone.
 Source reading cannot separate these. All three produce "ends teleport, middles
 animate, only off the startup desktop".
 
-**A. No batch is emitted, so nothing repairs the stale view.**
+<a name="candidate-a-fixed"></a>
+**A. No batch is emitted, so nothing repairs the stale view. — FIXED.**
 `engine_apply.cpp:746` is emit-on-change:
 
 ```cpp
@@ -110,6 +124,28 @@ only if some rect changed. Returning to a desktop whose strip is unchanged
 emits nothing at all. Any repair carried *on a batch* is therefore inert in
 exactly the failing case. This is the finding that killed the previous draft of
 this plan, which put strip identity in `TileRequestEntry`.
+
+**Fix as shipped:** `ScrollEngine::m_forceEmitScreens`, armed in
+`setActiveScreens`' identical-set branch where a REAL switch is already
+distinguished from a no-op re-push, and consumed at the emit gate. The gate's
+premise is that an unchanged rect means the compositor already shows this
+answer; across a context switch the baseline describes a DIFFERENT strip, so
+that inference does not hold. Deliberately a forced emit rather than dropping
+`m_lastAppliedRect`, which is also the park/unpark discriminator — clearing it
+would make every parked column read as arriving and hand it an edge origin it
+never departed from.
+
+Covered by `desktopSwitchBackEmitsEvenWhenNoRectMoved` plus the negative
+control `identicalSetRePushWithoutASwitchStaysSuppressed`, which exists because
+a fix that emitted unconditionally would pass the first test while disabling
+emit-on-change for every redundant re-push. Both mutation-checked: the positive
+test fails with the force neutered, and the fixture uses `makeProviderEngine`
+because a bare `makeEngine` has no work area and `applyLayout` bails before the
+emit gate — a fixture that asserts nothing.
+
+Note this does NOT give strips an identity. The compositor is now TOLD on
+every switch, which is enough for A, but it still cannot tell which strip a
+batch belongs to. Stage 1 remains the structural answer.
 
 **B. The animator's view offset belongs to the other strip.**
 `m_motions` is keyed by `LogicalOutput*`. Its header explains the choice:

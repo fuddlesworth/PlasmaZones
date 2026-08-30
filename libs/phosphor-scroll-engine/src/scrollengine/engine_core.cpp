@@ -110,6 +110,16 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 QStringList sortedSame(screens.cbegin(), screens.cend());
                 sortedSame.sort();
                 Q_EMIT scrollingScreensChanged(sortedSame, true);
+                // The retile below resolves the strip that is current AFTER the
+                // switch, and its emit-on-change gate would compare that answer
+                // against a baseline belonging to the strip from BEFORE it. On a
+                // switch to a desktop whose strip has not been touched, every
+                // rect matches and the batch is suppressed — so the compositor
+                // is never told the strip it is showing has been replaced, and
+                // keeps the previous one's per-window state. Arm the force-emit
+                // here, where a REAL switch is already distinguished from a
+                // no-op re-push.
+                m_forceEmitScreens.unite(screens);
             }
             for (const QString& screenId : screens) {
                 scheduleRetileForScreen(screenId);

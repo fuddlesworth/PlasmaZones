@@ -1251,6 +1251,34 @@ private:
     /// isDesktopSwitch=true for a REAL switch — same contract as
     /// AutotileEngine::m_isDesktopContextSwitch.
     bool m_isDesktopContextSwitch = false;
+    /// Screens whose next applyLayout must emit even when every resolved rect
+    /// equals the one already applied.
+    ///
+    /// applyLayout's emit-on-change gate rests on an assumption that a context
+    /// switch breaks: that an unchanged rect means the compositor is already
+    /// showing this batch's answer. The baseline it compares against
+    /// (m_lastAppliedRect, and the state's lastAppliedViewOffset) describes
+    /// what the compositor was told about a DIFFERENT strip — the one that was
+    /// current before the switch — so "nothing moved" says nothing about what
+    /// is on screen now. Returning to a desktop whose strip is untouched
+    /// therefore emitted no batch at all, and the compositor's per-window strip
+    /// state (its visual-delta entries and the per-output view spring) kept
+    /// describing the strip it had been showing.
+    ///
+    /// Armed for the screens of a REAL switch only, in setActiveScreens'
+    /// identical-set branch, which is where the arming flag is already
+    /// consumed. A screen ADDED to the set is not armed: it gets fresh state
+    /// and no baseline, so it emits on its own.
+    ///
+    /// Deliberately a forced EMIT rather than dropping m_lastAppliedRect for
+    /// the screen's windows, which is the tempting spelling because the header
+    /// above notes that dropping the rect memory forces an emit. That memory
+    /// is also the park/unpark discriminator (wasParkedLastBatch reads it), so
+    /// clearing it would make every parked column read as ARRIVING and hand
+    /// each one an edge-anchored origin it never departed from. The rect
+    /// memory is still true; it is the inference drawn from it that does not
+    /// survive the switch.
+    QSet<QString> m_forceEmitScreens;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};

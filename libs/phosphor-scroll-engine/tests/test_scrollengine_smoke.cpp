@@ -91,6 +91,8 @@ private Q_SLOTS:
     void minPinnedFullWidthColumnDoesNotPublishMaximized();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
+    void desktopSwitchBackEmitsEvenWhenNoRectMoved();
+    void identicalSetRePushWithoutASwitchStaysSuppressed();
     void seedAdoptionClampsViewToStripEnd();
     void parkingAvoidsNeighbourOutputs();
     void parkingReportsDepartureEdge();
@@ -1014,6 +1016,83 @@ void TestScrollEngineSmoke::desktopSwitchAwayPreservesSiblingContextStrips()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b")}));
+}
+
+void TestScrollEngineSmoke::desktopSwitchBackEmitsEvenWhenNoRectMoved()
+{
+    // Returning to a desktop whose strip nobody touched emitted NOTHING: every
+    // resolved rect equalled the applied baseline, so applyLayout's
+    // emit-on-change gate suppressed the batch. But that baseline belongs to
+    // the strip that was current BEFORE the switch, so "nothing moved" was
+    // never evidence about what is on screen now — and the compositor, whose
+    // per-window strip state is not keyed by desktop, went on describing the
+    // strip it had been showing. The first scroll verb after the return then
+    // appeared to do nothing.
+    QObject owner;
+    // A provider engine, not makeEngine: applyLayout bails at its work-area
+    // guard long before the emit gate without one, so a bare fixture asserts
+    // nothing about emitting and passes or fails for the wrong reason.
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Away and back with the strip untouched in between. Nothing here moves a
+    // rect on desktop 1, which is the whole point: the pre-fix engine had
+    // nothing to say and said nothing.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    QVERIFY2(tiledSpy.count() > 0, "switching back to an untouched strip must still emit a batch");
+    // The batch has to carry the strip, not merely be non-empty: an emission
+    // naming no window would satisfy a count check while telling the
+    // compositor nothing about which columns it is now showing.
+    bool sawWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QString id = v.toObject().value(QLatin1String("windowId")).toString();
+            if (id == QStringLiteral("app|a") || id == QStringLiteral("app|b")) {
+                sawWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawWindow, "the switch-back batch must name the strip's windows");
+}
+
+void TestScrollEngineSmoke::identicalSetRePushWithoutASwitchStaysSuppressed()
+{
+    // The negative control for the test above, and the reason the force is
+    // armed from the desktop-switch flag rather than from setActiveScreens
+    // itself. updateEngineScreens re-derives and re-pushes the same set
+    // routinely; if THAT forced an emit, the emit-on-change gate would be
+    // effectively disabled and every redundant re-push would re-feed the
+    // compositor a full batch. A fix for the switch case that also passed this
+    // by emitting unconditionally would be a performance regression wearing a
+    // green test.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setActiveScreens({QStringLiteral("S1")}); // same set, no context change
+    QCoreApplication::processEvents();
+    QCOMPARE(tiledSpy.count(), 0);
 }
 
 void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
