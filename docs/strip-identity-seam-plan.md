@@ -292,9 +292,29 @@ is what every previous fix slipped past.
 
 ## Stage 2: directory, generation, subscription
 
-Needed the moment the effect renders more than one strip. Independently useful
-before that: generation numbers make staleness detectable rather than merely
-survivable.
+Needed the moment the effect renders more than one strip, and **not before**.
+An earlier draft of this section claimed generation numbers were independently
+useful for a single strip. They are not, and neither is the rest of it:
+
+- **Directory** exists so the effect can CHOOSE among strips and order them.
+  With one strip it never chooses.
+- **Subscription** was meant to stop batches for strips nobody is watching, but
+  `applyLayout` resolves `currentKeyForScreen` and bails when there is no state,
+  so the daemon already emits for the current context only. There is no traffic
+  to save, and the handshake would add the switch race noted below for nothing.
+- **Generation** catches a strip drifting while its epoch is unchanged. With one
+  strip, every return to a strip crosses an epoch change (you were on another
+  context's epoch), so stage 1's retirement already fires. The only gap left is
+  a mutation that moves no rect WHILE the strip is current.
+
+That last gap is real but it is not a strip-identity problem, and it should not
+be built as part of this. It is emit-gate completeness: `m_lastAppliedRect` only
+notices geometry, so every piece of non-geometric strip state needs its own leg
+on the gate or it silently never reaches the compositor.
+`m_lastAppliedWindowedFs` and `m_lastAppliedMaximizedToEdges` are two such legs,
+each added because "a toggle never moves a rect". A generation counter is the
+general form of that pattern and deserves to be argued on its own terms, not
+smuggled in under a stage that is otherwise gated on multi-strip rendering.
 
 **Directory.** With one strip the effect only compares tokens. With several it
 must choose among them, and an overview must order them. An opaque token cannot
@@ -345,14 +365,16 @@ document does not have one. Do not treat stage 3 as costed.
 
 | Stage | Buys | Wire change | Do it |
 | --- | --- | --- | --- |
-| 0 Instrumentation | Identifies which candidate is real | none | First, always |
-| 1 Identity announcement | Fixes the bug for all three candidates | one added signal | After stage 0 |
-| 2 Directory + generation + subscription | Coherence; N-strip capable | more signals | Next |
+| 0 Instrumentation | Identifies which candidate is real | none | DONE |
+| 1 Identity announcement | Strip identity crosses the seam | one added signal | DONE |
+| 2 Directory + generation + subscription | N-strip capable | more signals | Only with multi-strip rendering |
 | 3 Coordinate split | Removes the park special case | reshapes the batch | Only with overview, and only once the clip problem is solved |
 
-Stages 1 and 2 are worth doing whether or not an overview lands. Stage 3 is
-gated on both overview and an answer to the clip problem; the v3.5
-dynamic-workspaces work currently has overview descoped.
+Stage 1 stood on its own. Stage 2 does not: every part of it is gated on the
+effect rendering more than one strip at a time, as its own section now spells
+out. Stage 3 is gated on that AND on an answer to the clip problem, which this
+document does not have. The v3.5 dynamic-workspaces work currently has overview
+descoped, so both remaining stages are parked rather than pending.
 
 ## Non-goals
 
