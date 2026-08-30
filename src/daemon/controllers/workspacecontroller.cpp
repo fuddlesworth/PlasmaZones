@@ -142,14 +142,14 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
                     Q_EMIT screenDesktopSwitchRequested(screenId, desktop);
                     return;
                 }
-                // The id has no live number right now (a settled-list echo
-                // still in flight). The reconciler has ALREADY ledgered this
-                // SetCurrent, so the entry can only retire on its own timeout,
-                // which expires into a resync — and until then this screen's
-                // foreign evaluation is short-circuited. switchScreenToDesktop
-                // refuses ahead of the ledger for every VERB path; what can
-                // still reach here is the reconciler's own snap-back, which
-                // ledgers internally. Say so rather than dropping it silently.
+                // The id has no live number right now. This is now a narrow
+                // window rather than a standing hazard: issueSetCurrent
+                // refuses an unsettled target ahead of its own ledger, which
+                // covers the reconciler's internal snap-back as well as every
+                // verb path, so nothing reaches here with an entry already
+                // open. What can still land is a settled list that moved
+                // between that refusal check and this emit. Say so rather
+                // than dropping it silently.
                 qCWarning(lcWorkspaceCtl) << "refusing a per-screen switch for" << screenId << "to" << desktopId
                                           << "- that desktop has no live number; its ledger entry will expire";
             });
@@ -345,6 +345,11 @@ void WorkspaceController::wireScreens()
             return;
         }
         qCInfo(lcWorkspaceCtl) << "screen id changed from" << from << "to" << to << "- re-keying its slice";
+        // Re-key the per-output desktop row BEFORE the reconciler's remove and
+        // add. onScreenAdded can consult the arriving screen's current desktop,
+        // and a rename applied afterwards would have it read the global
+        // fallback instead of the value the effect actually reported.
+        m_vdm->renameScreen(from, to);
         m_reconciler.onScreenRemoved(from);
         m_lastSnapBackMs.remove(from);
         m_reconciler.onScreenAdded(to);

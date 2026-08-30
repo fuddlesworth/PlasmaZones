@@ -350,8 +350,13 @@ public:
     /// one — see its definition in settingscontroller_pagekeys.cpp.
     Q_PROPERTY(int workspacesDesktopCap READ workspacesDesktopCap CONSTANT)
     Q_PROPERTY(int workspaceSlotCount READ workspaceSlotCount CONSTANT)
+    /// ConfigDefaults::WorkspaceNameMaxLength. The Add form and the rename
+    /// handler bound a name against it so the user is refused at the field
+    /// instead of having canonicalNamedEntries drop the entry in silence.
+    Q_PROPERTY(int workspaceNameMaxLength READ workspaceNameMaxLength CONSTANT)
     int workspacesDesktopCap() const;
     int workspaceSlotCount() const;
+    int workspaceNameMaxLength() const;
 
     /// Carry a named-workspace rename through the quick-slot targets — see
     /// settingscontroller_pagekeys.cpp for the ownership seam and the record.

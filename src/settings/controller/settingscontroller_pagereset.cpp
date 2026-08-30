@@ -239,6 +239,21 @@ void SettingsController::resetPage(const QString& page)
                 const ScopedFlag loadingScope(m_loading);
                 m_settings.resetKeys(keys);
             }
+            // Resetting the Quick Shortcuts page writes defaults straight over
+            // the slot Target keys, which is the same surface
+            // renameWorkspaceSlotTargets rewrote. The record exists so the
+            // Named Workspaces page's Discard can revert ITS cascade; once
+            // this page has authoritatively rewritten those keys the record no
+            // longer describes anything the Named page may undo, and leaving
+            // it would let a later Discard there quietly undo this Reset.
+            //
+            // resetPage("workspaces-named") deliberately does NOT clear it:
+            // that branch touches only the Named page's own keys, so the
+            // cascade stays an uncommitted divergence in the slot targets and
+            // this page's Discard is still its only revert path.
+            if (page == QLatin1String("workspaces-shortcuts")) {
+                m_renamedWorkspaceSlots.clear();
+            }
             reconcilePageDirty(page);
             return;
         }
@@ -512,6 +527,14 @@ void SettingsController::discardPage(const QString& page)
                 m_renamedWorkspaceSlots.clear();
             } else {
                 m_settings.discardKeys(*it);
+                // Discarding the Quick Shortcuts page puts the slot Target
+                // keys back at the committed baseline, which is exactly what
+                // the recorded cascade would have reverted. Kept, the record
+                // would let a later Discard on the Named page clobber a slot
+                // the user has since set by hand on this one.
+                if (page == QLatin1String("workspaces-shortcuts")) {
+                    m_renamedWorkspaceSlots.clear();
+                }
             }
         }
         // Every owned key is back at the committed baseline, so the page is

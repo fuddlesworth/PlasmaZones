@@ -89,6 +89,11 @@ int SettingsController::workspaceSlotCount() const
     return ConfigDefaults::WorkspaceSlotCount;
 }
 
+int SettingsController::workspaceNameMaxLength() const
+{
+    return ConfigDefaults::WorkspaceNameMaxLength;
+}
+
 // Carry a rename of a named workspace through the quick-slot targets.
 //
 // The workspace NAME is the wire value downstream: a quick slot stores the name

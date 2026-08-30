@@ -369,19 +369,53 @@ SettingsController::SettingsController(QObject* parent)
     // service the KCM doesn't already publish.
     // Live KWin desktop count for the workspaces cap badge — this app's own
     // read-only VirtualDesktopManager (the daemon owns the one that writes).
-    m_workspaceVdm = std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>();
-    m_workspaceVdm->init();
-    m_workspaceVdm->start();
-    m_workspacesAtCapLast = workspacesAtCap();
-    // Only on the transition: desktopCountChanged fires on every add and
-    // remove, and the property is a boolean that moves at one count.
-    connect(m_workspaceVdm.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this, [this](int) {
-        const bool atCap = workspacesAtCap();
-        if (atCap == m_workspacesAtCapLast) {
+    //
+    // Built only while dynamic workspaces are ON. It is a live KWin D-Bus
+    // listener, and the single thing it feeds is a warning banner on the
+    // Workspaces Behavior page that is itself hidden while the feature is off
+    // (`appSettings.workspacesEnabled && settingsController.workspacesAtCap`),
+    // so running one for every settings launch buys nothing. Lazily rather
+    // than never: the feature can be switched on without leaving the app, and
+    // the enable signal below picks that up. Nothing ever tears it back down —
+    // turning the feature off again leaves the listener in place, which costs
+    // one idle D-Bus connection and keeps the badge correct if it is turned
+    // straight back on.
+    auto startWorkspaceVdm = [this] {
+        if (m_workspaceVdm) {
             return;
         }
-        m_workspacesAtCapLast = atCap;
-        Q_EMIT workspacesAtCapChanged();
+        m_workspaceVdm = std::make_unique<PhosphorWorkspaces::VirtualDesktopManager>();
+        m_workspaceVdm->init();
+        m_workspaceVdm->start();
+        // Only on the transition: desktopCountChanged fires on every add and
+        // remove, and the property is a boolean that moves at one count.
+        connect(m_workspaceVdm.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
+                [this](int) {
+                    const bool atCap = workspacesAtCap();
+                    if (atCap == m_workspacesAtCapLast) {
+                        return;
+                    }
+                    m_workspacesAtCapLast = atCap;
+                    Q_EMIT workspacesAtCapChanged();
+                });
+        // The first count arrives with the manager, not through
+        // desktopCountChanged, so publish it here or a page opened at cap
+        // shows no banner until KWin's count next moves.
+        const bool atCap = workspacesAtCap();
+        if (atCap != m_workspacesAtCapLast) {
+            m_workspacesAtCapLast = atCap;
+            Q_EMIT workspacesAtCapChanged();
+        }
+    };
+    if (m_settings.workspacesEnabled()) {
+        startWorkspaceVdm();
+    }
+    // Settings load()s after this constructor as well as inside it, so the
+    // enable can arrive either way; the guard above makes a second call free.
+    connect(&m_settings, &Settings::workspacesEnabledChanged, this, [this, startWorkspaceVdm] {
+        if (m_settings.workspacesEnabled()) {
+            startWorkspaceVdm();
+        }
     });
 
     m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();

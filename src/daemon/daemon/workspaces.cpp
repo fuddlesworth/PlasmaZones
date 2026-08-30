@@ -17,6 +17,7 @@
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include "daemon/controllers/shortcutmanager.h"
+#include "daemon/controllers/shortcutmanager_ids.h"
 #include "daemon/controllers/workspacecontroller.h"
 #include "daemon/daemon/helpers.h"
 #include "daemon/overlayservice.h"
@@ -727,7 +728,7 @@ void Daemon::initializeWorkspaces()
             if (!focusChord.isEmpty()) {
                 const QKeySequence sequence = parseNamedChord(focusChord, name);
                 if (!sequence.isEmpty()) {
-                    const QString id = QStringLiteral("workspace_named_focus:") + name;
+                    const QString id = ShortcutIds::workspaceNamedFocusId(name);
                     bindings.append({id, sequence,
                                      PhosphorI18n::tr("Focus Workspace \"%1\"", "named workspace shortcut").arg(name),
                                      [this, name]() {
@@ -740,7 +741,7 @@ void Daemon::initializeWorkspaces()
             if (!moveChord.isEmpty()) {
                 const QKeySequence sequence = parseNamedChord(moveChord, name);
                 if (!sequence.isEmpty()) {
-                    const QString id = QStringLiteral("workspace_named_move:") + name;
+                    const QString id = ShortcutIds::workspaceNamedMoveId(name);
                     bindings.append(
                         {id, sequence,
                          PhosphorI18n::tr("Move Window to Workspace \"%1\"", "named workspace shortcut").arg(name),

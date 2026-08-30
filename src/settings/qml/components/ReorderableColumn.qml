@@ -273,8 +273,14 @@ Item {
             // on whichever row holds focus, so without a visual there is no
             // way to tell which row the next chord will move. Same recipe as
             // SettingsCard's focusable header.
+            // Declared BEFORE the row content but stacked above it: every
+            // consumer's row is an ItemDelegate whose styled background fills
+            // the row on hover and press, which is exactly when the user is
+            // interacting, so a ring painting underneath would be dimmed or
+            // hidden at the only moment it matters.
             Rectangle {
                 anchors.fill: parent
+                z: 1
                 visible: delegateRoot.activeFocus
                 color: "transparent"
                 radius: Kirigami.Units.smallSpacing
@@ -284,6 +290,17 @@ Item {
 
             Accessible.role: Accessible.ListItem
             Accessible.name: root.accessibleNameOf ? root.accessibleNameOf(modelData) : (root.idOf(modelData) || "")
+            // The row is keyboard-reachable and the chord that acts on it is
+            // not discoverable any other way, so it is announced with the row.
+            // A row that cannot be moved says so instead, rather than offering
+            // a chord that does nothing.
+            Accessible.description: {
+                if (!root.reorderingEnabled)
+                    return "";
+                if (!delegateRoot.reorderable)
+                    return i18n("This row cannot be reordered.");
+                return i18n("Position %1 of %2. Press Alt+Up or Alt+Down to move this row.", delegateRoot.index + 1, root.items.length);
+            }
 
             Keys.onPressed: event => {
                 if (!(event.modifiers & Qt.AltModifier))
@@ -353,6 +370,11 @@ Item {
                         source: "handle-sort"
                         visible: delegateRoot.reorderable
                         opacity: dragArea.containsMouse || dragArea.drag.active ? 0.7 : 0.3
+
+                        // The grip is the only affordance for reordering and
+                        // nothing else names the keyboard alternative.
+                        ToolTip.visible: dragArea.containsMouse && !dragArea.drag.active
+                        ToolTip.text: i18n("Drag to reorder, or press Alt+Up or Alt+Down.")
                     }
 
                     // Pinned indicator for non-reorderable rows.

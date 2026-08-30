@@ -162,15 +162,46 @@ private Q_SLOTS:
     }
 
     // The create/remove/rename wrappers are safe no-ops without a KWin D-Bus
-    // interface (headless test environment) — no crash, no signal.
+    // interface (headless test environment). "No-op" is asserted as a whole,
+    // not just as silence: an implementation that optimistically updated its
+    // own caches before the round trip (appending the created desktop to the
+    // id list, bumping the count, renaming in place) would leave the manager
+    // claiming desktops KWin never made, and the WorkspaceController's
+    // adoption gate reads exactly these accessors. So the signals AND every
+    // observable value are pinned, before and after.
     void kwinWrappers_noOpWithoutKWin()
     {
         VirtualDesktopManager vdm;
+        // Also seed a per-screen entry: a rename or removal that walked the
+        // per-output map without a live KWin would show up here.
+        vdm.updateScreenDesktop(QStringLiteral("DP-1"), 2);
+
+        const QStringList idsBefore = vdm.desktopIds();
+        const QStringList namesBefore = vdm.desktopNames();
+        const int countBefore = vdm.desktopCount();
+        const int currentBefore = vdm.currentDesktop();
+
         QSignalSpy listSpy(&vdm, &VirtualDesktopManager::desktopListChanged);
+        QSignalSpy createdSpy(&vdm, &VirtualDesktopManager::kwinDesktopCreated);
+        QSignalSpy removedSpy(&vdm, &VirtualDesktopManager::kwinDesktopRemoved);
+        QSignalSpy countSpy(&vdm, &VirtualDesktopManager::desktopCountChanged);
+        QSignalSpy screenSpy(&vdm, &VirtualDesktopManager::screenDesktopChanged);
+
         vdm.createDesktop(0, QStringLiteral("x"));
         vdm.removeDesktop(QStringLiteral("{id}"));
         vdm.setDesktopName(QStringLiteral("{id}"), QStringLiteral("y"));
+
         QCOMPARE(listSpy.count(), 0);
+        QCOMPARE(createdSpy.count(), 0);
+        QCOMPARE(removedSpy.count(), 0);
+        QCOMPARE(countSpy.count(), 0);
+        QCOMPARE(screenSpy.count(), 0);
+
+        QCOMPARE(vdm.desktopIds(), idsBefore);
+        QCOMPARE(vdm.desktopNames(), namesBefore);
+        QCOMPARE(vdm.desktopCount(), countBefore);
+        QCOMPARE(vdm.currentDesktop(), currentBefore);
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), 2);
     }
 };
 

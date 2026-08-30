@@ -506,6 +506,27 @@ void VirtualDesktopManager::removeScreenDesktop(const QString& screenId)
     m_screenDesktops.remove(screenId);
 }
 
+void VirtualDesktopManager::renameScreen(const QString& oldId, const QString& newId)
+{
+    if (oldId.isEmpty() || newId.isEmpty() || oldId == newId) {
+        return;
+    }
+    const auto from = m_screenDesktops.constFind(oldId);
+    if (from == m_screenDesktops.constEnd()) {
+        return; // nothing recorded under the dead id
+    }
+    const int desktop = from.value();
+    m_screenDesktops.remove(oldId);
+    // A live-id row already exists: it is a fresher report than the one we
+    // would carry over, so it stands and the carried value is discarded. The
+    // value under newId did not change, so nothing is emitted.
+    if (m_screenDesktops.contains(newId)) {
+        return;
+    }
+    m_screenDesktops.insert(newId, desktop);
+    Q_EMIT screenDesktopChanged(newId, desktop);
+}
+
 void VirtualDesktopManager::clampScreenDesktopsToCount()
 {
     // Clamp only entries above the live count: KWin renumbers on desktop

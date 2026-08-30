@@ -512,6 +512,20 @@ bool WorkspaceReconciler::issueSetCurrent(const QString& screenId, const QString
     if (screenId.isEmpty() || desktopId.isEmpty()) {
         return false;
     }
+    // Refuse an UNTRANSLATABLE target before it reaches the ledger. The map
+    // can hold an id KWin has echoed but not yet settled (onKwinDesktopCreated
+    // realizes it early), and the desktop int the controller must resolve to
+    // drive the effect comes from the settled list — the same list m_lastIds
+    // mirrors. Ledgering such a switch is the worst of both: the request is
+    // dropped downstream anyway, while the open entry short-circuits this
+    // screen's foreign evaluation for the full LedgerTimeoutMs and then
+    // expires into a spurious resync. The next settle makes the id live and
+    // the caller (a verb, or snapBack off the next foreign report) asks again.
+    if (!m_lastIds.contains(desktopId)) {
+        qCWarning(lcWorkspaceRec) << "not switching" << screenId << "to" << desktopId
+                                  << "- that desktop is not in the settled list yet";
+        return false;
+    }
     for (const auto& op : m_ledger) {
         if (op.kind == PendingOp::Kind::SetCurrent && op.screenId == screenId) {
             return false; // one correction per screen in flight

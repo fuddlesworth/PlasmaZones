@@ -15,9 +15,9 @@ import org.kde.kirigami as Kirigami
  *
  * Edits emit whole-field commit signals; the page mutates its staged array
  * IN PLACE and writes the composite, so this row (and its expansion state)
- * survives every field edit. Because the entry object mutates in place, the
- * header mirrors the two fields it shows through local properties updated at
- * commit time instead of bindings that would never re-evaluate.
+ * survives every field edit. Because the entry object mutates in place, EVERY
+ * displayed field is mirrored on a local property updated at commit time
+ * instead of bound straight to the map, which would never re-evaluate.
  */
 ExpandableRowDelegate {
     id: row
@@ -27,14 +27,34 @@ ExpandableRowDelegate {
     required property int entryIndex
     /// settingsController.screens rows for the monitor combo.
     required property var screenOptions
-    /// Called with (entryIndex) → array of the OTHER rows' names, read fresh
-    /// at commit time (a plain array prop would go stale across in-place
-    /// renames of siblings).
-    required property var siblingNamesOf
+    /// Called with (trimmedName, entryIndex) → why that name is refused, or an
+    /// empty string. Owned by the page so the Add form and every row apply one
+    /// rule, read fresh at commit time (a snapshot would go stale across
+    /// in-place renames of siblings).
+    required property var nameRefusalFor
 
-    // Header mirrors (see the class comment).
-    property string headerName: entry.name
-    property string headerOutput: entry.output
+    /// Every read of `entry` goes through here. The page null-guards its own
+    /// resolvers for the same reason (see its `idOf` comment): during a model
+    /// reset the delegate's modelData detaches before its destruction handler
+    /// runs, and the bindings below re-evaluate in that window.
+    function _field(name, fallback) {
+        return (row.entry && row.entry[name] !== undefined) ? row.entry[name] : fallback;
+    }
+
+    // Mirrors of every field the row displays.
+    //
+    // The page commits a field edit IN PLACE on the same map object, which
+    // changes no property and re-evaluates no binding, so a control bound
+    // straight to `entry.*` would freeze on whatever the row was built with.
+    // That is masked for a control that only ever shows what it itself wrote,
+    // and it stops being masked the moment the value moves from anywhere else,
+    // so all five carry a mirror rather than the two that happen to be visible
+    // while collapsed.
+    property string headerName: row._field("name", "")
+    property string headerOutput: row._field("output", "")
+    property int entryPosition: row._field("position", -1)
+    property string entryFocusShortcut: row._field("focusShortcut", "")
+    property string entryMoveShortcut: row._field("moveShortcut", "")
 
     /// Why the last rename attempt was refused, or empty. Shown under the name
     /// field and cleared as soon as the user types again — a refusal that only
@@ -50,11 +70,11 @@ ExpandableRowDelegate {
     /// field always shows what the store actually holds — including the
     /// trimmed form after a rename that only changed surrounding whitespace.
     /// Reassigned as a Qt.binding rather than a plain string so the
-    /// declarative `text: row.entry.name` binding survives; a bare assignment
-    /// would sever it and leave a later `entry` replacement unreflected.
+    /// declarative `text: row.headerName` binding survives; a bare assignment
+    /// would sever it and leave a later rename unreflected.
     function _restoreNameField() {
         nameField.text = Qt.binding(function () {
-            return row.entry.name;
+            return row.headerName;
         });
     }
 
@@ -64,7 +84,22 @@ ExpandableRowDelegate {
         for (var i = 0; i < screenOptions.length; ++i)
             if (screenOptions[i].value === outputId)
                 return screenOptions[i].label;
-        return outputId;
+        return i18nc("%1 is a monitor id the system does not currently report", "%1 (not connected)", outputId);
+    }
+
+    /// Whether the pinned monitor is one the system currently reports. A pin
+    /// naming something absent is not a pin the daemon can act on right now:
+    /// it either drops the id or defers the claim. The row cannot tell those
+    /// two apart, so it does not guess — it drops the badge to its neutral
+    /// flavour and says "not connected" in the subtitle, rather than showing
+    /// the confident state pill for a pin nothing has realized.
+    readonly property bool outputResolved: {
+        if (row.headerOutput === "")
+            return false;
+        for (var i = 0; i < row.screenOptions.length; ++i)
+            if (row.screenOptions[i].value === row.headerOutput)
+                return true;
+        return false;
     }
 
     expandable: true
@@ -104,8 +139,9 @@ ExpandableRowDelegate {
     MetadataChip {
         visible: row.headerOutput !== ""
         Layout.alignment: Qt.AlignVCenter
-        highlighted: true
+        highlighted: row.outputResolved
         text: i18nc("Badge on a named workspace pinned to a monitor", "Pinned")
+        Accessible.description: row.outputResolved ? "" : i18n("The pinned monitor is not connected.")
     }
 
     ExpandChevron {
@@ -138,7 +174,7 @@ ExpandableRowDelegate {
                 id: nameField
 
                 Layout.fillWidth: true
-                text: row.entry.name
+                text: row.headerName
                 Accessible.name: i18n("Workspace name")
                 Accessible.description: row.nameError
                 onTextEdited: row.nameError = ""
@@ -149,7 +185,7 @@ ExpandableRowDelegate {
                     // reconciler matches declarations with plain QString
                     // equality, so "Work" and "work" are two workspaces.
                     var trimmed = text.trim();
-                    var stored = ("" + row.entry.name).trim();
+                    var stored = ("" + row.headerName).trim();
                     if (trimmed === stored) {
                         // Unchanged: tabbing through must not dirty the page.
                         // Still write the trimmed form back, so a rename that
@@ -159,23 +195,17 @@ ExpandableRowDelegate {
                         row._restoreNameField();
                         return;
                     }
-                    // An empty name is not a name. The schema drops an entry
-                    // whose name is empty (canonicalNamedEntries skips it), so
-                    // committing one would delete the declaration on the next
-                    // round-trip and take its shortcuts with it. The Add form
-                    // refuses the same input.
-                    if (trimmed === "") {
-                        row.nameError = i18n("A workspace needs a name.");
+                    // The page owns the rule so the Add form and every row
+                    // refuse the same input. It is the schema's own rule:
+                    // canonicalNamedEntries drops an entry whose name is
+                    // empty, over-long or control-bearing, and committing one
+                    // would delete the declaration on the next round-trip and
+                    // take its shortcuts with it.
+                    var refusal = row.nameRefusalFor(trimmed, row.entryIndex);
+                    if (refusal !== "") {
+                        row.nameError = refusal;
                         row._restoreNameField();
                         return;
-                    }
-                    var siblings = row.siblingNamesOf(row.entryIndex);
-                    for (var i = 0; i < siblings.length; ++i) {
-                        if (siblings[i] === trimmed) {
-                            row.nameError = i18n("Another workspace already uses that name.");
-                            row._restoreNameField();
-                            return;
-                        }
                     }
                     row.nameError = "";
                     row.headerName = trimmed;
@@ -203,11 +233,7 @@ ExpandableRowDelegate {
             valueRole: "value"
             Accessible.name: i18n("Pinned monitor")
             model: row.screenOptions
-            // The two halves read different sources on purpose. `storedValue`
-            // wants the value the row was built with, which is what selects the
-            // matching combo entry, while the fallback below has to follow a
-            // live edit and so reads the mirror.
-            storedValue: row.entry.output
+            storedValue: row.headerOutput
             // A monitor that is currently unplugged is not in `screenOptions`,
             // and WideComboBox clamps an unresolved storedValue to index 0 —
             // which is "Any monitor", so the pin would read as if it had been
@@ -221,6 +247,8 @@ ExpandableRowDelegate {
             // whatever the row was built with.
             displayText: (row.headerOutput !== "" && indexOfValue(row.headerOutput) < 0) ? row.headerOutput : currentText
             onActivated: {
+                // The mirror first: `storedValue` follows it, so this is also
+                // what keeps the combo showing the pick.
                 row.headerOutput = currentValue;
                 row.fieldEdited(row.entryIndex, "output", currentValue);
             }
@@ -234,19 +262,25 @@ ExpandableRowDelegate {
             id: positionSpin
 
             from: -1
-            // The reconciler's desktop cap, minus one for the zero-based
-            // slice index. Read off the controller rather than spelled here:
-            // WorkspaceReconciler::DefaultDesktopCap is the one place the
-            // limit is decided.
+            // The reconciler's DEFAULT desktop cap, minus one for the
+            // zero-based slice index. It is an authoring ceiling and nothing
+            // more: what the daemon actually honours is the target monitor's
+            // own workspace count at the moment it places the workspace,
+            // which is typically far lower and which the settings app is
+            // never told (see SettingsController::workspacesDesktopCap). The
+            // control is therefore worded as a PREFERENCE — the tooltip says
+            // the number is clamped to the monitor's list — rather than
+            // pretending the offered range is all reachable.
             to: settingsController.workspacesDesktopCap - 1
-            value: row.entry.position
+            value: row.entryPosition
             unitText: ""
             accessibleName: i18n("Preferred position in the monitor's list")
-            tooltipText: i18n("Where in the monitor's workspace list this workspace prefers to sit. Automatic places it before the trailing empty workspace.")
+            tooltipText: i18n("Where in the monitor's workspace list this workspace prefers to sit. A number past the end of that list lands at the end. Automatic places it before the trailing empty workspace.")
             textFromValue: function (value, locale) {
                 return value < 0 ? i18n("Automatic") : String(value + 1);
             }
             onValueModified: value => {
+                row.entryPosition = value;
                 row.fieldEdited(row.entryIndex, "position", value);
             }
         }
@@ -258,8 +292,9 @@ ExpandableRowDelegate {
         ShortcutCaptureField {
             Layout.fillWidth: true
             accessibleName: i18n("Focus named workspace shortcut")
-            keySequence: row.entry.focusShortcut
+            keySequence: row.entryFocusShortcut
             onKeySequenceModified: seq => {
+                row.entryFocusShortcut = seq;
                 row.fieldEdited(row.entryIndex, "focusShortcut", seq);
             }
         }
@@ -271,8 +306,9 @@ ExpandableRowDelegate {
         ShortcutCaptureField {
             Layout.fillWidth: true
             accessibleName: i18n("Move window to named workspace shortcut")
-            keySequence: row.entry.moveShortcut
+            keySequence: row.entryMoveShortcut
             onKeySequenceModified: seq => {
+                row.entryMoveShortcut = seq;
                 row.fieldEdited(row.entryIndex, "moveShortcut", seq);
             }
         }

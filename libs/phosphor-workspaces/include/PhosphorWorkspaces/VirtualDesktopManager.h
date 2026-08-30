@@ -63,6 +63,21 @@ public:
     /// daemon's screenRemoved handler.
     void removeScreenDesktop(const QString& screenId);
 
+    /// Re-key a screen's recorded per-output desktop when the SCREEN ID
+    /// changes without an unplug/replug pair. A same-model hotplug flips an
+    /// output's id between its bare and "/CONNECTOR"-qualified spellings and
+    /// ScreenManager reports that as screenIdentifierChanged, with no
+    /// screenRemoved/screenAdded; without this the row stays under the dead id
+    /// and every hasScreenDesktopReport / currentDesktopForScreen ask under the
+    /// live id falls back to the GLOBAL desktop.
+    ///
+    /// A row already present under @p newId wins and @p oldId is merely
+    /// dropped: that row is a report the effect already made under the live id,
+    /// so it is newer than the one carried over. Nothing is emitted in that
+    /// case, and nothing is emitted when @p oldId is unknown or the two ids are
+    /// equal — screenDesktopChanged rides an actual value change only.
+    void renameScreen(const QString& oldId, const QString& newId);
+
     void setCurrentDesktop(int desktop);
 
     /// Ask KWin to create a desktop at the given 0-based global position (KWin's

@@ -144,8 +144,14 @@ QtObject {
             // events, so the tooltip that says where to declare one would
             // never appear. The display text carries the same guidance for
             // anyone who does not hover.
-            ToolTip.visible: workspaceCombo._names.length === 0 && hovered
-            ToolTip.text: i18n("Add a named workspace under Settings → Workspaces → Named Workspaces first.")
+            // Whether workspaces are on at all comes first. With the feature
+            // off the daemon never installs the route resolver, so the rule is
+            // inert whatever it names, and pointing the user at the Named
+            // Workspaces page would send them somewhere that cannot help.
+            readonly property bool _workspacesOff: row.appSettings && row.appSettings.workspacesEnabled === false
+
+            ToolTip.visible: hovered && (workspaceCombo._workspacesOff || workspaceCombo._names.length === 0)
+            ToolTip.text: workspaceCombo._workspacesOff ? i18n("Dynamic workspaces are turned off, so this action does nothing. Turn them on under Settings → Workspaces.") : i18n("Add a named workspace under Settings → Workspaces → Named Workspaces first.")
             currentIndex: {
                 var target = row.action[_param.key];
                 for (var i = 0; i < workspaceCombo.model.length; ++i) {
@@ -159,6 +165,8 @@ QtObject {
                     return currentText;
                 if (row.action[_param.key])
                     return "" + row.action[_param.key];
+                if (workspaceCombo._workspacesOff)
+                    return i18n("Workspaces are turned off");
                 if (workspaceCombo._names.length === 0)
                     return i18n("Add a named workspace first");
                 return i18n("Choose a workspace…");

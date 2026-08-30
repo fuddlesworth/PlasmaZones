@@ -196,13 +196,22 @@ private Q_SLOTS:
         // only ones of the four outside this sweep, so deleting any of their
         // ownership entries would have dropped the key out of per-page dirty
         // tracking, Reset and Discard with nothing failing.
+        // The three Workspaces schema groups joined with dynamic per-monitor
+        // workspaces. Workspaces.Behavior holds the four gate scalars,
+        // Workspaces.Named the named-entry list and Workspaces.Slots one
+        // target key per quick slot; all of them are owned by the workspaces
+        // pages today. Sweeping the groups is what keeps a tenth slot, or a
+        // fifth behaviour scalar, from shipping ownerless the way Rendering.Gpu
+        // did. The slots' own chords are Shortcuts.Global keys, not
+        // Workspaces.Slots ones, so they are outside this sweep by design.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
               ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
               ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup(),
               ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
-              ConfigDefaults::tilingBehaviorGroup()}) {
+              ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::workspacesBehaviorGroup(),
+              ConfigDefaults::workspacesNamedGroup(), ConfigDefaults::workspacesSlotsGroup()}) {
             const auto it = schema.groups.constFind(group);
             if (it == schema.groups.constEnd()) {
                 // Collect-then-assert, like the rest of this file: an abort

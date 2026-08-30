@@ -33,6 +33,7 @@ private Q_SLOTS:
     void removalRace_signalledForPopulationOnDoomedDesktop();
     void foreign_pausedDuringRemovalThenReevaluatedAtSettle();
     void adoption_keepsKnownPopulations();
+    void setCurrent_untranslatableTargetNeverReachesTheLedger();
 };
 
 void TestWorkspaceLedger::destroyOnEmpty_debouncedAndRechecked()
@@ -305,6 +306,32 @@ void TestWorkspaceLedger::adoption_keepsKnownPopulations()
     rec.onPopulationChanged(id(9), 0);
     QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
     QCOMPARE(removeSpy.first().first().toString(), id(9));
+}
+
+void TestWorkspaceLedger::setCurrent_untranslatableTargetNeverReachesTheLedger()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec);
+    // The settled list is {d1,d3,d2,d4}; {d9} is a desktop KWin has not
+    // settled, so the controller could not resolve it to a live desktop number
+    // and would drop the request downstream.
+    QSignalSpy switchSpy(&rec, &WorkspaceReconciler::requestSetCurrent);
+    QSignalSpy resyncSpy(&rec, &WorkspaceReconciler::resyncRequested);
+
+    QVERIFY(!rec.issueSetCurrent(QStringLiteral("A"), id(9)));
+    QCOMPARE(switchSpy.count(), 0);
+
+    // The point of refusing BEFORE the ledger: nothing is open, so the very
+    // next legitimate switch for the same screen goes through. Revert the
+    // refusal and the hopeless entry is ledgered instead, the one-correction-
+    // per-screen rule refuses this call, and the screen stays short-circuited
+    // until the entry expires into a resync.
+    QVERIFY(rec.issueSetCurrent(QStringLiteral("A"), id(3)));
+    QCOMPARE(switchSpy.count(), 1);
+    QCOMPARE(switchSpy.first().at(1).toString(), id(3));
+
+    // And the refusal left no entry behind to expire.
+    QCOMPARE(resyncSpy.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceLedger)

@@ -407,7 +407,9 @@ bool collidesWithSettingsDrivenId(const QString& id)
     }();
     return kStaticIdSet.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
         || id.startsWith(QLatin1String(kSnapToZonePrefix)) || id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix))
-        || id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix));
+        || id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix))
+        || id.startsWith(QLatin1String(kWorkspaceNamedFocusPrefix))
+        || id.startsWith(QLatin1String(kWorkspaceNamedMovePrefix));
 }
 } // namespace
 
@@ -697,7 +699,7 @@ void ShortcutManager::buildEntries()
         // Shortcuts KCM, and the chord does NOT move the window to the Nth
         // workspace. It moves it to whichever named workspace the settings
         // app assigned to slot N, the quick-layout model.
-        e.description = PhosphorI18n::tr("Move Window to Workspace Slot %1").arg(i + 1);
+        e.description = PhosphorI18n::tr("Move Window to Workspace Slot %1", "single workspace slot number").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->workspaceMoveSlotShortcut(i), idCopy);
@@ -720,7 +722,7 @@ void ShortcutManager::buildEntries()
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = workspaceFocusSlotId(i);
-        e.description = PhosphorI18n::tr("Focus Workspace %1").arg(i + 1);
+        e.description = PhosphorI18n::tr("Focus Workspace %1", "single workspace slot number").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->workspaceFocusSlotShortcut(i), idCopy);

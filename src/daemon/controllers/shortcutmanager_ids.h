@@ -62,6 +62,23 @@ inline QString workspaceFocusSlotId(int slotZeroBased)
 {
     return QLatin1String(kWorkspaceFocusSlotPrefix) + QString::number(slotZeroBased + 1);
 }
+// Named-workspace adhoc chords. Unlike the slot families these are keyed by
+// the workspace NAME, so the id is the prefix plus the trimmed declared name
+// and the set is rebuilt on every declaration change. The prefixes live here
+// with the rest of the vocabulary for the same reason: they are on-disk record
+// keys under the "plasmazonesd" component and must never be renamed, and the
+// adhoc collision guard in shortcutmanager.cpp can only keep the families
+// apart if it reads the same definition the builder does.
+inline constexpr auto kWorkspaceNamedFocusPrefix = "workspace_named_focus:";
+inline constexpr auto kWorkspaceNamedMovePrefix = "workspace_named_move:";
+inline QString workspaceNamedFocusId(const QString& trimmedName)
+{
+    return QLatin1String(kWorkspaceNamedFocusPrefix) + trimmedName;
+}
+inline QString workspaceNamedMoveId(const QString& trimmedName)
+{
+    return QLatin1String(kWorkspaceNamedMovePrefix) + trimmedName;
+}
 inline constexpr auto kIdSwapWindowLeft = "swap_window_left";
 inline constexpr auto kIdSwapWindowRight = "swap_window_right";
 inline constexpr auto kIdSwapWindowUp = "swap_window_up";

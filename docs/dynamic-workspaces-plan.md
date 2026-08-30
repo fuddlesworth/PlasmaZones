@@ -3,21 +3,43 @@
 
 # Implementation plan — Dynamic per-monitor workspaces (v3.5)
 
-Planned 2026-08-26 against the current tree. Every seam in the planning prompt (§5) was
-re-read; drift found is recorded inline and in the risk register. This plan is the
-deliverable of `docs/dynamic-workspaces-plan-prompt.md`; the invariants, scope fences, and
-pre-resolved forks in that prompt are treated as settled and are not restated except where
-the plan refines them.
+> **This is a historical design record, not current documentation. Superseded by the
+> shipped implementation (PR #990, v3.5.0), banner dated 2026-08-29.** It is written in
+> the imperative because it was a plan. Read it as "what we intended to build", never as
+> a description of the tree, and check the code before relying on any name, key or
+> default below. The drift list that follows is what was found when the plan was
+> re-checked against the shipped code; it is not guaranteed exhaustive. For what the
+> feature actually does, see `docs/dynamic-workspaces.md` and the code.
 
-> **Implementation drift (post-ship note).** Some file names below differ from what
-> shipped. The shortcut key defaults planned as a separate
-> `src/config/configdefaults_workspace_shortcuts.h` landed inside
-> `src/config/configdefaults_workspaces.h`. The single settings page planned as
-> `src/settings/qml/pages/workspaces/WorkspacesPage.qml` with `NamedWorkspacesCard.qml`
-> and `WorkspaceShortcutsCard.qml` shipped instead as three pages plus a row delegate in
-> the same directory: `WorkspacesBehaviorPage.qml`, `NamedWorkspacesPage.qml` (with
-> `NamedWorkspaceRow.qml`), and `WorkspacesShortcutsPage.qml`. Read the planned names
-> below through that mapping.
+Planned 2026-08-26 against the tree as it then stood. Every seam in the planning prompt
+(§5) was re-read; drift found is recorded inline and in the risk register. The planning
+prompt this plan was the deliverable of has since been deleted, along with the
+implementation prompt, both being agent-driving scaffolding rather than documentation.
+References to them below are historical.
+
+> **Implementation drift (post-ship note).** Some names, keys and defaults below differ
+> from what shipped.
+>
+> - The shortcut key defaults planned as a separate
+>   `src/config/configdefaults_workspace_shortcuts.h` landed inside
+>   `src/config/configdefaults_workspaces.h`. No file of the planned name exists.
+> - The single settings page planned as
+>   `src/settings/qml/pages/workspaces/WorkspacesPage.qml` with `NamedWorkspacesCard.qml`
+>   and `WorkspaceShortcutsCard.qml` shipped instead as three pages plus a row delegate in
+>   the same directory: `WorkspacesBehaviorPage.qml`, `NamedWorkspacesPage.qml` (with
+>   `NamedWorkspaceRow.qml`), and `WorkspacesShortcutsPage.qml`. None of the three planned
+>   names exists.
+> - The config key table below writes leaf key names in lowerCamelCase. The shipped keys
+>   are PascalCase, and two of them were renamed: `Enabled`, `ManageKWinPerOutput`,
+>   `SnapBackOsdHint`, `RebindKWinDesktopShortcuts` and `Entries`. The accessors are in
+>   `src/config/configkeys_workspaces.h`, which is authoritative.
+> - A third group shipped that the plan never names: `Workspaces.Slots`, holding one
+>   `Target%1` key per quick slot (the named workspace that slot points at). The slots'
+>   own chords are `Shortcuts.Global` keys, `WorkspaceFocusSlot%1` and
+>   `WorkspaceMoveSlot%1`, so each slot carries two chords rather than one.
+> - The shortcut defaults below no longer match. Both the focus-slot and the move-slot
+>   chords ship unbound, and the per-slot move defaults the plan assigned were removed in
+>   favour of a single shared default.
 
 ## 0. Seam re-verification results (drift vs the prompt)
 

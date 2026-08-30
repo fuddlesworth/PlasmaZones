@@ -45,11 +45,31 @@ SettingsFlickable {
             root._kwinPerOutput = settingsController.kwinPerOutputDesktopsEnabled();
         }
 
+        // Not dead, though it is a no-op at the moment the user clicks "Turn
+        // On KWin Setting": the file is unchanged at that instant. It earns
+        // its place on the way BACK, when a Discard, a page Reset or a profile
+        // switch puts the latch at false again. Without a re-read the page
+        // would then show the consent warning from a stale snapshot even
+        // though the daemon had long since written the kwinrc key.
         function onWorkspacesManageKWinPerOutputChanged() {
             root._kwinPerOutput = settingsController.kwinPerOutputDesktopsEnabled();
         }
 
         target: appSettings
+    }
+
+    // Save is when the setting actually reaches the daemon, and the daemon is
+    // what writes kwinrc, so this is the only moment the snapshot can go stale
+    // on its own. The daemon's write is asynchronous, so a re-read here can
+    // still land a beat early; it is not the exact moment, it is the only one
+    // this app is told about, and every later save (and every fresh visit to
+    // the page) corrects it.
+    Connections {
+        function onSavingFinished() {
+            root._kwinPerOutput = settingsController.kwinPerOutputDesktopsEnabled();
+        }
+
+        target: settingsController
     }
 
     contentHeight: content.implicitHeight

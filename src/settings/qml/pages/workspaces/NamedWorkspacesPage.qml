@@ -146,6 +146,36 @@ SettingsFlickable {
         return names;
     }
 
+    /// Why `trimmed` cannot be the name of the entry at `index`, or empty when
+    /// it can. `index` is -1 for the Add form, which has no row of its own to
+    /// exclude from the duplicate check.
+    ///
+    /// One rule in one place for both the Add form and a row's rename, and the
+    /// same rule the schema applies: canonicalNamedEntries drops an entry whose
+    /// name is empty, longer than WorkspaceNameMaxLength, or carries a
+    /// non-printable character, and a dropped entry looks to the user like an
+    /// edit that was simply lost. The printable test is `\p{C}` because that is
+    /// the set QChar::isPrint() rejects (control, format, surrogate,
+    /// private-use, unassigned).
+    function _nameRefusalFor(trimmed, index) {
+        if (trimmed === "")
+            return i18n("A workspace needs a name.");
+        if (trimmed.length > root._nameMaxLength)
+            return i18n("A workspace name can be at most %1 characters long.", root._nameMaxLength);
+        if (/\p{C}/u.test(trimmed))
+            return i18n("A workspace name cannot contain control characters.");
+        var names = root._names;
+        for (var i = 0; i < names.length; ++i) {
+            if (i !== index && names[i] === trimmed)
+                return i18n("Another workspace already uses that name.");
+        }
+        return "";
+    }
+
+    /// The schema's own bound, read off the controller rather than spelled
+    /// here (ConfigDefaults::WorkspaceNameMaxLength).
+    readonly property int _nameMaxLength: settingsController.workspaceNameMaxLength
+
     Component.onCompleted: _loadEntries()
 
     Connections {
@@ -201,6 +231,13 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         placeholderText: i18n("Workspace name")
                         Accessible.name: i18n("New workspace name")
+                        Accessible.description: addButton.enabled ? "" : root._nameRefusalFor(text.trim(), -1)
+                        // Enter adds, so a keyboard-only user does not have to
+                        // tab past the monitor combo to reach the button.
+                        onAccepted: {
+                            if (addButton.enabled)
+                                addButton.clicked();
+                        }
                     }
 
                     WideComboBox {
@@ -210,21 +247,31 @@ SettingsFlickable {
                         valueRole: "value"
                         Accessible.name: i18n("Pinned monitor")
                         model: root._screenOptions
-                        storedValue: ""
+                        // No storedValue: there is no stored value to follow,
+                        // and WideComboBox re-runs its sync on every model
+                        // change, so a constant "" would snap an in-progress
+                        // pick back to "Any monitor" on a monitor hotplug.
+                        // This is the component's documented "left undefined"
+                        // mode; the site owns currentIndex, which the Add
+                        // handler resets to 0.
+                        currentIndex: 0
                     }
                 }
 
                 Button {
+                    id: addButton
+
                     Layout.alignment: Qt.AlignRight
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     text: i18n("Add")
                     icon.name: "list-add"
                     Accessible.name: i18n("Add named workspace")
-                    enabled: {
-                        var trimmed = addNameField.text.trim();
-                        return trimmed.length > 0 && root._names.indexOf(trimmed) === -1;
-                    }
+                    // The schema's whole rule, not just non-empty and unique:
+                    // an over-long or control-bearing name is dropped by
+                    // canonicalNamedEntries on the round-trip, which would look
+                    // like the Add had simply failed.
+                    enabled: root._nameRefusalFor(addNameField.text.trim(), -1) === ""
                     onClicked: {
                         var arr = root._entries.slice();
                         arr.push({
@@ -310,10 +357,11 @@ SettingsFlickable {
                         entry: parent.rowModelData
                         entryIndex: parent.rowIndex
                         screenOptions: root._screenOptions
-                        siblingNamesOf: function (index) {
-                            var names = root._names.slice();
-                            names.splice(index, 1);
-                            return names;
+                        // Read fresh at commit time rather than handed a plain
+                        // array: sibling names change in place across renames,
+                        // so a snapshot property would go stale.
+                        nameRefusalFor: function (trimmed, index) {
+                            return root._nameRefusalFor(trimmed, index);
                         }
                         onFieldEdited: function (index, field, value) {
                             // In place, deliberately: reassigning _entries
