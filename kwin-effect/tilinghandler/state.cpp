@@ -401,16 +401,15 @@ void TilingHandler::slotStripContextChanged(const QString& screenId, const QStri
         return;
     }
     qCDebug(lcStripDiag) << "strip context: retiring strip state for" << screenId << "->" << debugLabel;
+    retireStripScopedState(screenId);
+}
 
-    // Retire the STRIP-SCOPED PAINT state only.
-    //
-    // The distinction that governs this list: state describing a position on a
-    // strip dies with that strip, while state describing a NEGOTIATION with a
-    // client (m_scrollCommandedRects' counter-assert, m_scrollOfferedColumn's
-    // size-continuity record) belongs to the window and outlives any strip it
-    // sits on. Retiring the latter here would disarm a defence against a client
-    // that refuses its geometry, and would re-offer a settled window a size it
-    // has already answered — a new bug in exchange for a tidier-looking sweep.
+void TilingHandler::retireStripScopedState(const QString& screenId)
+{
+    // THE RETIRE-SET RULE IS ON THIS FUNCTION'S DECLARATION. Read it before
+    // adding or removing anything here. The short form: retire an entry when
+    // what invalidates it is the STRIP changing; keep it when what invalidates
+    // it is the CLIENT responding or the window dying.
     bool droppedAny = false;
     for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
         if (m_notifiedWindowScreens.value(wit.key()) == screenId) {
