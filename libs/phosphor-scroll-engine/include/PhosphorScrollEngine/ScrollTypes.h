@@ -90,14 +90,18 @@ inline QString insertPosition()
     return QStringLiteral("InsertPosition");
 }
 /// RULE channel for the scrolling BEHAVIOUR toggles (SetScrollAlwaysCenter-
-/// SingleColumn / …RespectMinimumSize / …CropStraddlers / …FocusNewWindows /
-/// …SmartGaps / …StickyWindowHandling). Like insertPosition these are
+/// SingleColumn / …CenterShortColumns / …RespectMinimumSize / …CropStraddlers /
+/// …FocusNewWindows / …SmartGaps / …StickyWindowHandling). Like insertPosition these are
 /// rules-only: the per-screen settings store does not write them, so an
 /// absent key means "use the global config value" and the engine's
 /// `effective*` readers supply exactly that fallback.
 inline QString alwaysCenterSingleColumn()
 {
     return QStringLiteral("AlwaysCenterSingleColumn");
+}
+inline QString centerShortColumns()
+{
+    return QStringLiteral("CenterShortColumns");
 }
 inline QString respectMinimumSize()
 {
@@ -930,6 +934,13 @@ struct ScrollLayoutParams
     /// overhangs. The open-time work-area-oversized float escape ignores
     /// this flag.
     bool respectMinimumSize = true;
+    /// Whether a column whose visible tiles resolve to less than the column's
+    /// own CROSS extent is centred on that axis instead of hugging the start
+    /// edge. Off (the niri behaviour) a solo window with an explicit
+    /// Fixed/Preset height sits at the top of its column and the slack is
+    /// left below it. A column that already fills the cross axis, the
+    /// all-Auto case included, resolves identically either way.
+    bool centerShortColumns = false;
     /// Whether main-axis straddlers keep their TRUE rect for the effect to
     /// crop (`true`) instead of being clamped at the screen edge. Resolved
     /// once in layoutParamsForScreen like every other per-screen bool, so
@@ -974,6 +985,13 @@ struct ResolvedColumn
     /// The column's bounding rect. This is the column's FULL extent, before
     /// any within-column indicator reservation — the tiles carry the reduced
     /// rects, and @c tabIndicatorRect carries what was reserved.
+    ///
+    /// On the CROSS axis this rect always spans the whole work area, even when
+    /// centerShortColumns has centred the tiles WITHIN it, so a stack's tiles
+    /// may not start where this rect starts. A tabbed column is the exception:
+    /// its tiles ride this rect, so centring moves the rect itself. Read the
+    /// tile rects, never this one, to ask where a column's windows sit on the
+    /// cross axis.
     QRect rect;
     bool tabbed = false;
     /// Where the tab indicator is drawn, in the same absolute screen

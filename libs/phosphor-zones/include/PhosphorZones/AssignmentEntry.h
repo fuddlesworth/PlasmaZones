@@ -467,7 +467,7 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
+ * SetScrollDefaultWindowHeight / SetScrollStripAxis, the eight scrolling
  * behaviour toggles and the focus-follows-mouse scroll cap beside them,
  * the eighteen SetTabIndicator* slots and the six
  * SetDropIndicator* slots, each documented in its own block below); an unset
@@ -503,6 +503,7 @@ struct ContextScrollingParams
     /// effect, whose paint clip and direct-scanout gate need it, and
     /// `focusFollowsMouse` is effect-only (see its own note below).
     std::optional<bool> alwaysCenterSingleColumn;
+    std::optional<bool> centerShortColumns;
     std::optional<bool> respectMinimumSize;
     std::optional<bool> cropStraddlers;
     std::optional<bool> focusNewWindows;
@@ -597,13 +598,13 @@ struct ContextScrollingParams
             || tabIndicatorFontItalic || tabIndicatorFontUnderline || tabIndicatorFontStrikeout;
     }
 
-    /// True when at least one of the seven behaviour toggles resolved, or the
+    /// True when at least one of the eight behaviour toggles resolved, or the
     /// scroll cap did. The cap is a percent rather than a toggle, but it is a
     /// behaviour override like the rest and isEmpty() has to see it.
     bool hasBehaviourOverrides() const
     {
-        return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
-            || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
+        return alwaysCenterSingleColumn || centerShortColumns || respectMinimumSize || cropStraddlers || focusNewWindows
+            || smartGaps || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
     }
 
     bool isEmpty() const

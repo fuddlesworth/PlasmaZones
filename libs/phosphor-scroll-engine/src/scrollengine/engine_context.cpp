@@ -535,6 +535,13 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
     // one context's state by design). Its purgers are clearPerScreenConfig
     // for a screen leaving scrolling, the context prunes for a destroyed
     // desktop or activity, and pruneStatesForRemovedScreen for a dead output.
+    // This reference is held across the synchronous clearTabStripsForScreen
+    // emit below, which is safe only because no tabStripsChanged consumer
+    // re-enters the engine: the sole production slot is TilingAdaptor's relay,
+    // which touches its own cache and re-emits onto D-Bus (the effect reads it
+    // out of process). A future IN-PROCESS consumer that inserted or removed a
+    // state would change what the remaining passes see, so re-hoist this read
+    // inside the loop if one is ever added.
     const auto& states = m_states.states();
     for (const QString& screenId : screenIds) {
         bool hasState = false;

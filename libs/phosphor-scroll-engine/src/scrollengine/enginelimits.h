@@ -90,4 +90,31 @@ inline constexpr int kMaxCloseReflowDelayMs = 2000;
 /// rejects the malformed, it is not a layout constraint.
 inline constexpr double kMaxFixedExtentPx = 65535.0;
 
+/// Sanity bounds for tab-indicator geometry. Deliberately NOT the rules
+/// layer's constants — this library does not depend on phosphor-rules — but
+/// the same numbers, because both ultimately mirror the config schema's
+/// clamps. They exist to reject a grossly malformed value, not to
+/// re-implement the cascade's validation, so they are wide.
+///
+/// Shared between the per-screen override resolver (engine_overrides.cpp) and
+/// the settings read (engine_core.cpp), which is why they live here rather
+/// than in either TU's anonymous namespace. BOTH channels are untrusted for
+/// the same reason: the override map is stored verbatim from exported LGPL
+/// surface, and IScrollSettings is an injected interface an embedder
+/// implements, so neither is guaranteed to have passed the config schema.
+/// Sharing them is what keeps the two sites from drifting apart.
+inline constexpr int kMinTabIndicatorGap = -64;
+inline constexpr int kMaxTabIndicatorGap = 64;
+inline constexpr int kMinTabIndicatorWidth = 1;
+inline constexpr int kMaxTabIndicatorWidth = 64;
+/// The length proportion's pair, named for the same reason its four siblings
+/// above are rather than living as bare literals at the read: the floor is a
+/// real decision (a proportion small enough to resolve to a sliver reads as a
+/// broken indicator while every setting still reports it on), and hiding it in
+/// a `> 0.0` test made it look like a null check. Mirrors the rules layer's
+/// Min/MaxTabIndicatorLengthRatio by value, hand-copied on the same terms as
+/// the bounds above.
+inline constexpr qreal kMinTabIndicatorLengthProportion = 0.05;
+inline constexpr qreal kMaxTabIndicatorLengthProportion = 1.0;
+
 } // namespace PhosphorScrollEngine

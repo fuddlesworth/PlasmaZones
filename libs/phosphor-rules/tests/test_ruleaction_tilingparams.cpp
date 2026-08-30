@@ -475,13 +475,14 @@ private Q_SLOTS:
             QCOMPARE(*roundTripped, *loaded);
         };
 
-        // ── the six context bools, plus the per-window unfloat-fallback bool
+        // ── the seven context bools, plus the per-window unfloat-fallback bool
         // that shipped in the same batch. Both polarities matter for every
         // row: each is a live veto of its global setting in one direction and
         // a force-on in the other, so an explicit false must survive load as a
         // value rather than being read back as absent. ──
         for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
                  {ActionType::SetScrollAlwaysCenterSingleColumn, ActionSlot::ScrollAlwaysCenterSingleColumn},
+                 {ActionType::SetScrollCenterShortColumns, ActionSlot::ScrollCenterShortColumns},
                  {ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize},
                  {ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers},
                  {ActionType::SetScrollFocusNewWindows, ActionSlot::ScrollFocusNewWindows},
