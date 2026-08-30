@@ -2526,7 +2526,7 @@ private:
     /// category was enabled rather than by the live strip population: the
     /// relocation map it shadows is torn down on unfloat, screen change, engine
     /// flip and daemon loss, and none of those reach this gate. Entries are two
-    /// points and two bools, and a stale key is only ever compared, never
+    /// points and three bools, and a stale key is only ever compared, never
     /// dereferenced, so the cost of the looser bound is bytes in a debugging
     /// session.
     struct StripDiagSample

@@ -182,7 +182,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 }
             }
             if (wasDesktopSwitch) {
-                QStringList sortedSame(screens.cbegin(), screens.cend());
+                QStringList sortedSame = snapshot;
                 sortedSame.sort();
                 Q_EMIT scrollingScreensChanged(sortedSame, true);
             }
@@ -196,6 +196,14 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     const bool wasEnabled = isEnabled();
     const QSet<QString> removed = m_scrollingScreens - screens;
     const QSet<QString> added = screens - m_scrollingScreens;
+    // Snapshot the caller's set HERE, before anything in this branch emits.
+    // Several emits below are synchronous (windowsReleased, and the
+    // announcements in the loops after it), so a slot that re-entered the
+    // engine could outlive the container `screens` refers to. Taking the copy
+    // after those emits would be too late to be the protection it looks like,
+    // which is why it is built at the top and every later walk of the final
+    // set reads it rather than `screens`.
+    const QStringList finalScreens(screens.cbegin(), screens.cend());
     // A live drag-insert preview whose target or restore-source screen is
     // leaving the set must be unwound BEFORE the state teardown below, while
     // both states still exist (autotile's setAutotileScreens cancels for the
@@ -328,12 +336,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     // The announce is emit-on-change, so a stayer whose context did not
     // actually move is silent.
     //
-    // Iterating a snapshot for the same reason the identical-set branch does:
-    // the announcement below emits synchronously, and a slot that re-entered
-    // the engine could outlive the caller's container while this loop still
-    // holds an iterator into it. `added` is a local and needs no such care.
-    const QStringList staying(screens.cbegin(), screens.cend());
-    for (const QString& screenId : staying) {
+    // Walks the snapshot taken at the top of this branch, not `screens`:
+    // the announcement below emits synchronously. `added` is a local and
+    // needs no such care.
+    for (const QString& screenId : finalScreens) {
         if (added.contains(screenId)) {
             continue;
         }
@@ -365,7 +371,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire
     // consumer comparing successive payloads must not see phantom changes.
-    QStringList sorted(screens.cbegin(), screens.cend());
+    QStringList sorted = finalScreens;
     sorted.sort();
     // Propagate the consumed context-switch flag (autotile parity): a
     // desktop switch whose per-desktop assignments ALSO change the set must

@@ -1315,9 +1315,11 @@ private:
     /// state (its visual-delta entries and the per-output view spring) kept
     /// describing the strip it had been showing.
     ///
-    /// Armed for the screens of a REAL switch only, in setActiveScreens'
-    /// identical-set branch, which is where the arming flag is already
-    /// consumed.
+    /// Armed wherever announceStripContextIfChanged actually fires, which is
+    /// what pairs the two: a screen is forced when, and only when, its
+    /// consumer was just told to retire. Four sites do it — the identical-set
+    /// branch of setActiveScreens, its added and stayer loops, and the
+    /// sticky-pin release in updateStickyScreenPins.
     ///
     /// A screen ADDED to the set is armed too, and the reason is worth stating
     /// because the obvious argument for leaving it unarmed is wrong. That
