@@ -134,13 +134,20 @@ public:
     /// window to be on that workspace and it is). Values <= 0 are
     /// WorkspaceRouteVerdict.
     ///
-    /// The OUTPUT leg is deliberately not issued: a workspace route names a
-    /// desktop, not a monitor, and on the open path the placement pipeline
-    /// resolves the window's screen from its spawn output or from an explicit
-    /// RouteToScreen. Issuing an owner-screen move here snapped the window
-    /// into a zone of the screen it had just left, and contradicted a
-    /// RouteToScreen in the same cascade.
-    int routeWindowToNamedWorkspace(const QString& name, const QString& windowId);
+    /// @p moveOutput decides the OUTPUT leg. Under per-output virtual desktops
+    /// the target workspace belongs to its OWNER monitor's slice, so a window
+    /// that only changes desktop never appears on the screen that shows that
+    /// workspace. The caller passes true when nothing else in the rule cascade
+    /// owns the window's monitor, and false when an explicit RouteToScreen
+    /// does (two contradictory output moves otherwise). The window's placement
+    /// is kept honest independently: @p ownerScreenOut reports the workspace's
+    /// owner screen so the caller can resolve the snap / tiling placement
+    /// against the DESTINATION monitor rather than the spawn one.
+    ///
+    /// @p ownerScreenOut is written on every > 0 return (empty when ownership
+    /// has not settled) and left untouched otherwise.
+    int routeWindowToNamedWorkspace(const QString& name, const QString& windowId, bool moveOutput,
+                                    QString* ownerScreenOut = nullptr);
 
 Q_SIGNALS:
     /// → adaptor setScreenDesktopRequested (effect per-output switch).
@@ -238,8 +245,15 @@ private:
     /// (windowId → declared name). desktopIdForName refuses while !m_adopted,
     /// which is exactly the login / session-restore population such rules are
     /// written for, and nothing re-drove them afterwards. Re-issued once
-    /// adoption completes, for windows that still exist.
-    QHash<QString, QString> m_parkedNamedRoutes;
+    /// adoption completes, for windows that still exist. The output-leg
+    /// decision is parked with the name: it came from the rule cascade that is
+    /// no longer in hand when the drain re-issues the route.
+    struct ParkedNamedRoute
+    {
+        QString name;
+        bool moveOutput = false;
+    };
+    QHash<QString, ParkedNamedRoute> m_parkedNamedRoutes;
     void drainParkedNamedRoutes();
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;

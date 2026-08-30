@@ -42,6 +42,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QKeySequence>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
@@ -283,14 +284,21 @@ void Daemon::initializeWorkspaces()
                 }
                 // The whole removal batch runs under one latch: a reap is a
                 // CONTEXT prune, and handleEngineWindowsReleased must not read
-                // it as a mode exit (see m_reapingDesktopState).
-                m_reapingDesktopState = true;
-                for (int desktop : desktops) {
-                    forEachEngine([desktop](PhosphorEngine::PlacementEngineBase* engine) {
-                        engine->reapDesktopState(desktop);
+                // it as a mode exit (see m_reapingDesktopStateDepth). Raised
+                // as a depth through a scope guard so a nested reap cannot
+                // lower it out from under this batch, and so no future early
+                // return can leave it raised.
+                {
+                    ++m_reapingDesktopStateDepth;
+                    const auto reapGuard = qScopeGuard([this] {
+                        --m_reapingDesktopStateDepth;
                     });
+                    for (int desktop : desktops) {
+                        forEachEngine([desktop](PhosphorEngine::PlacementEngineBase* engine) {
+                            engine->reapDesktopState(desktop);
+                        });
+                    }
                 }
-                m_reapingDesktopState = false;
 
                 // The unified placement store's per-record desktop tag: a
                 // record on a dead desktop degrades to 0 (unknown) and the
@@ -323,6 +331,15 @@ void Daemon::initializeWorkspaces()
                         // a save would write for them too. Their sole
                         // producer is the engine's placementChanged, which the
                         // desktop prune does not raise.
+                        //
+                        // Marked unconditionally, unlike the placement bit
+                        // above. reapDesktopState returns void, so there is no
+                        // "the batch touched nothing" answer to gate on, and
+                        // the alternative — walking every strip snapshot key
+                        // for a dead desktop — costs more than the save it
+                        // would occasionally skip. A reap batch is rare (it
+                        // needs an actual desktop removal) and the worst case
+                        // is one redundant debounced write.
                         service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyScrollStrips);
                     }
                 }
@@ -876,18 +893,19 @@ void Daemon::initializeWorkspaces()
     // open path (rules_placement.cpp). True = routed (positional
     // RouteToDesktop is skipped); false = name unrealized, fall through.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setWorkspaceRouteResolver([this](const QString& name, const QString& windowId) {
-            // > 0 is the REALIZED desktop the move was issued to (the caller
-            // resolves its placement context on that number, outranking any
-            // positional RouteToDesktop in the same cascade). 0 means the name
-            // is not realized and the positional route applies; < 0 means the
-            // name IS declared but is momentarily unresolvable, and the
-            // positional route must NOT stand in for it.
-            if (!m_workspaceController) {
-                return static_cast<int>(WorkspaceController::WorkspaceRouteVerdict::Unrealized);
-            }
-            return m_workspaceController->routeWindowToNamedWorkspace(name, windowId);
-        });
+        m_windowTrackingAdaptor->setWorkspaceRouteResolver(
+            [this](const QString& name, const QString& windowId, bool moveOutput, QString* ownerScreenOut) {
+                // > 0 is the REALIZED desktop the move was issued to (the caller
+                // resolves its placement context on that number, outranking any
+                // positional RouteToDesktop in the same cascade). 0 means the name
+                // is not realized and the positional route applies; < 0 means the
+                // name IS declared but is momentarily unresolvable, and the
+                // positional route must NOT stand in for it.
+                if (!m_workspaceController) {
+                    return static_cast<int>(WorkspaceController::WorkspaceRouteVerdict::Unrealized);
+                }
+                return m_workspaceController->routeWindowToNamedWorkspace(name, windowId, moveOutput, ownerScreenOut);
+            });
     }
 
     // Window → screen resolver for the owner-wins reunion arm: an engine's

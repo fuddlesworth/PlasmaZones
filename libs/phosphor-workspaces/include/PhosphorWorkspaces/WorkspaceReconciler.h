@@ -52,6 +52,17 @@ public:
     /// The budget is restored the moment the desktop's population changes or
     /// the desktop actually goes away.
     static constexpr int MaxRemovalRefusals = 3;
+    /// How many times a create KWin never answered is re-driven for one screen
+    /// before that screen stops asking. The mirror of MaxRemovalRefusals, and
+    /// for the same reason: expireLedger re-runs maintenance after a Create
+    /// expiry so a transient stall retries, and without a budget a create KWin
+    /// permanently refuses becomes one D-Bus call per LedgerTimeoutMs for the
+    /// life of the session. Deliberately NOT tied to cap-learning — the probe
+    /// only concludes when the id list is byte-identical across two expiries,
+    /// which a machine with any other desktop churn never reaches. The budget
+    /// is restored when a create lands for that screen, when the desktop count
+    /// drops (headroom came back), and when the screen goes away.
+    static constexpr int MaxCreateRefusals = 3;
     /// KWin's desktop ceiling (VirtualDesktopManager::maximum() in current
     /// KWin). Shared by the daemon's gate and the settings app's cap badge. It
     /// is the STARTING value only: the real ceiling is learned from the
@@ -218,6 +229,8 @@ private:
     /// KWin answered one of our creates: forget the cap-probe evidence and
     /// restore the default ceiling if a previous episode had lowered it.
     void noteCreateSucceeded();
+    /// A create landed for this screen: hand back its retry budget.
+    void noteCreateLandedFor(const QString& screenId);
     /// True while a Remove for this desktop is open in the ledger.
     bool hasPendingRemove(const QString& desktopId) const;
     /// True while a Create owned by this screen is open in the ledger.
@@ -300,6 +313,11 @@ private:
     /// the re-arm below MaxRemovalRefusals; cleared on the desktop's removal,
     /// on any population change, and when the id leaves KWin's list.
     QHash<QString, int> m_removalRefusals;
+    /// screenId → how many of our Creates for it expired unanswered. Bounds
+    /// the post-expiry re-drive below MaxCreateRefusals; cleared when a create
+    /// for the screen lands, when the desktop count drops, and when the screen
+    /// is removed.
+    QHash<QString, int> m_createRefusals;
     /// The id list the current cap-probe episode is being counted against, and
     /// how many Create expiries it has seen. An episode ends the moment the
     /// list changes or a create succeeds; see expireLedger and CapProbeExpiries.

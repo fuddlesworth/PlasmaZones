@@ -30,6 +30,7 @@ private Q_SLOTS:
     void capProbe_learnsFromRepeatedExpiryAndSelfHeals();
     void capProbe_successClearsTheEvidence();
     void removalRefusals_stopAtTheBudgetAndResumeOnPopulation();
+    void createRefusals_stopAtTheBudgetWithoutCapLearning();
     void removalRace_signalledForPopulationOnDoomedDesktop();
     void foreign_pausedDuringRemovalThenReevaluatedAtSettle();
     void adoption_keepsKnownPopulations();
@@ -209,6 +210,41 @@ void TestWorkspaceLedger::capProbe_successClearsTheEvidence()
     QTRY_COMPARE_WITH_TIMEOUT(createSpy.count(), 4, WorkspaceReconciler::LedgerTimeoutMs + 2000);
     // One expiry since the success, so no ceiling is concluded.
     QCOMPARE(capSpy.count(), 0);
+}
+
+void TestWorkspaceLedger::createRefusals_stopAtTheBudgetWithoutCapLearning()
+{
+    // The post-expiry re-drive needs a terminator that does NOT depend on the
+    // cap probe. Here the probe is gated off entirely (it requires a non-empty
+    // settled id list, and this world has never had one), which is exactly the
+    // shape the live failure took: on any machine whose desktops come and go
+    // while one screen's creates are refused, m_capProbeIds is reset before it
+    // can reach CapProbeExpiries and capLearned never becomes true. With only
+    // capLearned to stop it, the re-drive issues one createDesktop per
+    // LedgerTimeoutMs for the life of the session.
+    //
+    // Reverting the per-screen budget makes this case fail on the second
+    // QCOMPARE: the request count keeps climbing through the quiet window
+    // instead of standing at MaxCreateRefusals.
+    WorkspaceReconciler rec;
+    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+
+    // A screen with an empty slice and no settled list yet: maintainScreen asks
+    // for its first desktop, and KWin never answers.
+    rec.onScreenAdded(QStringLiteral("A"));
+    QCOMPARE(createSpy.count(), 1);
+
+    // Expiry 1 spends one of the budget and re-asks (request 2); expiry 2 does
+    // the same (request 3); expiry 3 spends the last and requestCreateAt
+    // refuses, so no request 4 is made, the ledger drains and the timer stops —
+    // there is no fourth expiry.
+    const int rounds = WorkspaceReconciler::MaxCreateRefusals;
+    QTRY_COMPARE_WITH_TIMEOUT(createSpy.count(), rounds, (rounds + 1) * WorkspaceReconciler::LedgerTimeoutMs + 4000);
+
+    // Quiet for two more timeout windows: a spinning re-drive would add
+    // several more requests in that time.
+    QTest::qWait(WorkspaceReconciler::LedgerTimeoutMs * 2);
+    QCOMPARE(createSpy.count(), rounds);
 }
 
 void TestWorkspaceLedger::removalRefusals_stopAtTheBudgetAndResumeOnPopulation()

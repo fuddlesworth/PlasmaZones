@@ -422,9 +422,6 @@ void SnapEngine::reapDesktopState(int desktop)
             m_windowTracker->unassignWindow(windowId);
         }
     }
-    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
-        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
-    }
     // Re-read the map: the unassign above routes back through the tracking
     // service into this engine, which may add or drop stores, so the reference
     // taken before the announcements cannot be reused here.
@@ -433,6 +430,18 @@ void SnapEngine::reapDesktopState(int desktop)
         if (it.value()) {
             it.value()->reapDesktopValues(desktop);
         }
+    }
+    // Announced AFTER the reap, unlike the unassign above. The unassign needs
+    // the store to still resolve the window; the float correction needs the
+    // opposite — it says "this window is no longer floating", and a subscriber
+    // that re-queries the engine during the emit must not still find the float
+    // bit set. Nothing in the chain needs the pre-clear value: the sole
+    // consumer is WindowTrackingAdaptor::relayWindowFloatingChanged (wired in
+    // src/dbus/snapadaptor/snapadaptor.cpp), which compares against its own
+    // last-broadcast map and emits the D-Bus signal, reading nothing back out
+    // of this engine.
+    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
+        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
     }
     // The released windows hold no placement in any store any more, so their
     // reverse-map entries would dangle. Drop them the same way the store prune

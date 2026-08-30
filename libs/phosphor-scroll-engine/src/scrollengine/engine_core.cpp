@@ -848,7 +848,15 @@ QString ScrollEngine::scrollingScreenForPhysical(const QString& screenId) const
     }
     // A virtual sub-screen of the named monitor. samePhysical strips the
     // "/vs:N" suffix, so "DP-1" matches "DP-1/vs:0" while "DP-10" does not.
-    QString fallback;
+    //
+    // Exactly one match is the answer. SEVERAL matches (a monitor split into
+    // two scrolling sub-screens) are decidable only when the active screen is
+    // one of them; with the user on another monitor every tie-break is a coin
+    // toss, and the caller RELOCATES the column of whatever this names. A
+    // wrong guess silently moves a column the user never addressed, so refuse
+    // instead and leave the verb on its "needs a scrolling screen" hint.
+    QString match;
+    int matches = 0;
     for (const QString& candidate : m_scrollingScreens) {
         if (!PhosphorIdentity::VirtualScreenId::samePhysical(candidate, screenId)) {
             continue;
@@ -856,11 +864,15 @@ QString ScrollEngine::scrollingScreenForPhysical(const QString& screenId) const
         if (candidate == m_activeScreen) {
             return candidate;
         }
-        if (fallback.isEmpty() || candidate < fallback) {
-            fallback = candidate;
-        }
+        ++matches;
+        match = candidate;
     }
-    return fallback;
+    if (matches > 1) {
+        qCWarning(lcScrollEngine) << "scrollingScreenForPhysical: output" << screenId << "carries" << matches
+                                  << "scrolling sub-screens and none of them is the active screen — refusing to guess";
+        return {};
+    }
+    return match;
 }
 
 // ── Tracking predicates ─────────────────────────────────────────────────────

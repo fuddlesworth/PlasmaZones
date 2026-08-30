@@ -389,7 +389,8 @@ void WorkspaceController::focusNamedWorkspace(const QString& name)
     });
 }
 
-int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const QString& windowId)
+int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const QString& windowId, bool moveOutput,
+                                                     QString* ownerScreenOut)
 {
     // Rules-pipeline arm: no runWhenQuiet — the caller needs the truth NOW.
     if (windowId.isEmpty()) {
@@ -402,7 +403,8 @@ int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const 
     // report Unresolvable so the positional route does not move the window in
     // the meantime (it would then be moved twice, to two different desktops).
     if (!m_adopted) {
-        m_parkedNamedRoutes.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId), name);
+        m_parkedNamedRoutes.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId),
+                                   ParkedNamedRoute{name, moveOutput});
         return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
     // During structural churn the slice index a deferred move would resolve
@@ -425,18 +427,20 @@ int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const 
         // structural-churn arm above.
         return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
+    const QString owner = m_reconciler.map().ownerOf(target);
+    if (ownerScreenOut) {
+        *ownerScreenOut = owner;
+    }
     // A sticky refusal (watchWindowMove answering false) still reports the
-    // REALIZED desktop: the rule asked for the window to be on that workspace
-    // and it already is, so the positional RouteToDesktop fallback would be
-    // refused for the very same reason.
+    // REALIZED desktop, and its owner screen with it: the window is already on
+    // every workspace, so there is nothing to move and nothing to fight.
     if (!watchWindowMove(windowId, target)) {
         return desktop;
     }
-    // Desktop leg only (see the header): the owner screen is carried so the
-    // handoff re-homes engine state on the right output when the window is
-    // already tracked there, but no output move is issued.
-    Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"),
-                                        /*moveOutput=*/false);
+    // The owner screen is always carried so the handoff re-homes engine state
+    // on the right output; @p moveOutput decides whether the OUTPUT leg is
+    // issued as well (see the header).
+    Q_EMIT windowWorkspaceMoveRequested(windowId, owner, desktop, QStringLiteral("down"), moveOutput);
     return desktop;
 }
 
@@ -467,7 +471,7 @@ void WorkspaceController::drainParkedNamedRoutes()
     if (m_parkedNamedRoutes.isEmpty()) {
         return;
     }
-    const QHash<QString, QString> parked = std::exchange(m_parkedNamedRoutes, {});
+    const QHash<QString, ParkedNamedRoute> parked = std::exchange(m_parkedNamedRoutes, {});
     for (auto it = parked.constBegin(); it != parked.constEnd(); ++it) {
         // Windows that went away while adoption was pending have nothing to
         // route. The registry is keyed by instance id, which is how the park
@@ -475,8 +479,8 @@ void WorkspaceController::drainParkedNamedRoutes()
         if (!m_registry || !m_registry->metadata(it.key())) {
             continue;
         }
-        qCInfo(lcWorkspaceCtl) << "re-issuing the parked workspace route for" << it.key() << "to" << it.value();
-        routeWindowToNamedWorkspace(it.value(), it.key());
+        qCInfo(lcWorkspaceCtl) << "re-issuing the parked workspace route for" << it.key() << "to" << it.value().name;
+        routeWindowToNamedWorkspace(it.value().name, it.key(), it.value().moveOutput);
     }
 }
 

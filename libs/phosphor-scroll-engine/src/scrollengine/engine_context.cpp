@@ -493,6 +493,24 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
         desktops.insert(it.key().desktop);
     }
+    // The aux maps count too, and not only the state map. This set is the
+    // ENTRY GATE for the count-based reap in Daemon::start's
+    // desktopCountChanged handler, which reaps only the desktops named here.
+    // A desktop can legitimately hold no ScrollState while still holding a
+    // stashed strip (a screen that left scrolling mode stashes its structure)
+    // or per-screen overrides pushed before any window arrived. Leaving those
+    // unnamed means they survive the desktop's death, and pruneStatesForDesktop
+    // spells out the harm: KWin hands the index out again, so the next desktop
+    // to take it resolves the deleted desktop's template. Dormant while
+    // dynamic workspaces are on, because that path reaps by identity for every
+    // removed desktop regardless of state, but the legacy path is still live
+    // whenever the feature is off.
+    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
+        desktops.insert(it.key().desktop);
+    }
+    for (auto it = m_perScreenOverrides.cbegin(); it != m_perScreenOverrides.cend(); ++it) {
+        desktops.insert(it.key().desktop);
+    }
     return desktops;
 }
 
@@ -647,6 +665,16 @@ void ScrollEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
     // Which screens actually have a key on the move. Collected BEFORE the
     // rewrite, because afterwards there is no way to tell a shifted key from
     // one that was always at that number.
+    //
+    // Only m_states and m_stripStash are walked, and that is the complete set
+    // ON PURPOSE: the dirty mark exists to force a re-save, and those two are
+    // the only maps serializeStripState writes (it reads the state map and the
+    // stash and nothing else). The other three maps the renumber rewrites are
+    // session-only — m_stripStashConsumed is a per-key latch, m_perScreenOverrides
+    // is re-applied from config/rules on re-entry, and m_burstPendingApplies is
+    // an in-flight marker — so a screen whose only renumbered key lives in one
+    // of them owes no persist. Add a map here if and only if it joins the
+    // serialized blob.
     QSet<QString> touchedScreens;
     const auto note = [&oldToNew, &touchedScreens](const PhosphorEngine::PlacementStateKey& key) {
         const auto mapped = oldToNew.constFind(key.desktop);

@@ -1128,6 +1128,13 @@ public:
     /// tried first through the late-bound workspace resolver (named workspaces
     /// outrank a positional number, and an undeclared name falls through); a
     /// RouteToDesktop action then emits windowDesktopMoveRequested.
+    ///
+    /// A realized workspace route also asks for the OUTPUT leg, unless the same
+    /// cascade carries a RouteToScreen — that action owns the window's monitor
+    /// and two output moves would fight. Without the leg the window lands on
+    /// the target desktop but stays on its spawn monitor, and under per-output
+    /// virtual desktops that desktop belongs to the owner monitor's slice, so
+    /// the spawn monitor never shows it.
     void emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
@@ -1179,7 +1186,13 @@ public:
     /// positional RouteToDesktop applies instead), or < 0 when the name is
     /// declared but momentarily unresolvable (no route, and no positional
     /// stand-in either — see WorkspaceController::WorkspaceRouteVerdict).
-    void setWorkspaceRouteResolver(std::function<int(const QString&, const QString&)> resolver)
+    ///
+    /// Called with (workspaceName, windowId, moveOutput, ownerScreenOut). The
+    /// third argument asks for the OUTPUT leg as well as the desktop one —
+    /// true unless the same rule cascade carries a RouteToScreen that owns the
+    /// window's monitor. The fourth receives the workspace's owner screen so
+    /// the placement builders resolve against the destination monitor.
+    void setWorkspaceRouteResolver(std::function<int(const QString&, const QString&, bool, QString*)> resolver)
     {
         m_workspaceRouteResolver = std::move(resolver);
     }
@@ -1868,15 +1881,26 @@ private:
     /// Effect-probed per-output-desktops mode (unset until the first report).
     std::optional<bool> m_perOutputDesktopsMode;
     /// Named-workspace open-routing hook (see setWorkspaceRouteResolver).
-    std::function<int(const QString&, const QString&)> m_workspaceRouteResolver;
-    /// The desktop a RouteToWorkspace realized for a window, written by
-    /// emitOpenRoutingIfMatched and read back in the SAME open round trip by
-    /// the two placement-context builders (calculateSnapToPlacementRule's
+    std::function<int(const QString&, const QString&, bool, QString*)> m_workspaceRouteResolver;
+    /// The desktop, and the destination monitor, a RouteToWorkspace realized
+    /// for a window. Written by emitOpenRoutingIfMatched and read back by the
+    /// two placement-context builders (calculateSnapToPlacementRule's
     /// directive and applyOpenRoutingForTiling's destination desktop), which
     /// would otherwise resolve zones and modes in the desktop the window is
-    /// leaving. Set or cleared on every routing pass, so it cannot go stale
-    /// across opens; also dropped when the window closes.
+    /// leaving.
+    ///
+    /// SINGLE USE. Both entries are TAKEN by the reader, not merely read: the
+    /// snap-side consumer (placementZonesByRule) is not open-path-only —
+    /// SnapEngine::unfloatToZone drives the same resolver on a Meta+F unfloat,
+    /// arbitrarily long after the open, and a value left standing there would
+    /// force the directive onto a desktop the window may have left hours ago.
+    /// A routing pass writes them, the one reader on that pass takes them, and
+    /// what a later non-open reader sees is nothing. Also dropped when the
+    /// window closes.
     QHash<QString, int> m_workspaceRoutedDesktop;
+    /// The routed workspace's owner screen (see m_workspaceRoutedDesktop for
+    /// the lifetime; empty when ownership had not settled).
+    QHash<QString, QString> m_workspaceRoutedScreen;
 };
 
 } // namespace PlasmaZones

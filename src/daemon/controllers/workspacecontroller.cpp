@@ -3,6 +3,8 @@
 
 #include "workspacecontroller.h"
 
+#include "common/kwinperoutputdesktops.h"
+
 #include <PhosphorEngine/PerScreenStates.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -81,27 +83,35 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::renumberComputed, this,
             [this](const QHash<int, int>& oldToNew, const QList<int>& removed) {
                 // The engine-side stores refuse a poisoned mapping WHOLE
-                // (PhosphorEngine::desktopRenumberMappingIsValid), but the
+                // (PhosphorEngine::desktopRenumberMappingIsValid), and the
                 // fan-out below this signal walks three more stores entry by
-                // entry, one of them persisted. Ask the same question BEFORE
-                // the reap, not between the two halves: the reap destroys
-                // state in all three engines, degrades placement records and
-                // drops persisted disabled-desktop entries, and if the shift
-                // is then refused the survivors are left permanently one
-                // renumber behind with nothing to repair them (the count-based
-                // sweep stands down whenever this controller exists). Refuse
-                // the whole pass instead, and ask for a resync so the next
-                // settled list re-derives a clean mapping.
-                if (!oldToNew.isEmpty() && !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
-                    qCWarning(lcWorkspaceCtl)
-                        << "refusing a poisoned desktop renumber mapping; no reap and no shift ran:" << oldToNew;
-                    QMetaObject::invokeMethod(m_vdm, "refreshFromKWin");
-                    return;
-                }
-                // Reap by identity first, then shift the survivors — the
-                // contract every engine arm implements.
+                // entry, one of them persisted. Only the SHIFT is refused
+                // though. The two halves answer to different inputs: the
+                // reconciler derives `removed` from the desktop-ID delta (the
+                // old position of an id that is gone from the settled list),
+                // never from `oldToNew`, so a bad NUMBER mapping cannot poison
+                // it. Refusing the reap as well left the removed desktops'
+                // engine state, order keys and persisted disabled-desktop
+                // entries behind with nothing to clean them: the count-based
+                // sweeps stand down whenever this controller is adopted, and
+                // desktopListChanged only fires when the ordered id list
+                // actually changes, so a resync that re-derives the same
+                // settled list raises no second renumberComputed to retry on.
+                //
+                // Reap by identity first (always), then shift the survivors —
+                // the contract every engine arm implements. On a refusal the
+                // survivors are left one renumber behind, which the resync
+                // below is asked to repair with a clean mapping.
+                const bool shiftPoisoned =
+                    !oldToNew.isEmpty() && !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew);
                 if (!removed.isEmpty()) {
                     Q_EMIT desktopsReapRequested(removed);
+                }
+                if (shiftPoisoned) {
+                    qCWarning(lcWorkspaceCtl)
+                        << "refusing a poisoned desktop renumber mapping; the reap ran, the shift did not:" << oldToNew;
+                    QMetaObject::invokeMethod(m_vdm, "refreshFromKWin");
+                    return;
                 }
                 if (!oldToNew.isEmpty()) {
                     Q_EMIT desktopRenumberRequested(oldToNew);
@@ -186,15 +196,12 @@ WorkspaceController::~WorkspaceController()
 
 bool WorkspaceController::kwinPerOutputEnabled()
 {
-    // Read as plain INI: the key is a flat bool in [Windows], none of the
-    // KConfig dialect (cascading, $e expansion) applies to it, and reading it
-    // this way spares the Qt-only build a KConfig dependency. The value
-    // applies live on KWin reconfigure() (verified against KWin 6.7 source),
-    // so this read at controller-gate time reflects the effective mode.
-    const QString path =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    const QSettings kwinrc(path, QSettings::IniFormat);
-    return kwinrc.value(QStringLiteral("Windows/PerOutputVirtualDesktops"), false).toBool();
+    // One shared reader with the settings app, deliberately: the two used to
+    // carry separate implementations and this one was the weaker, so a kwinrc
+    // written by KConfig (marker suffix, or the words "on"/"yes") read as off
+    // here while the settings page read it as on. The value applies live on
+    // KWin reconfigure(), so reading at gate time reflects the effective mode.
+    return kwinPerOutputVirtualDesktopsEnabled();
 }
 
 void WorkspaceController::wireVirtualDesktops()

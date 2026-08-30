@@ -98,8 +98,8 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Records that the user consented to PlasmaZones writing KWin's PerOutputVirtualDesktops key. "
                         "The key is never written without this, and never reverted when the feature is disabled.")},
         {CD::snapBackOsdHintKey(), CD::workspacesSnapBackOsdHint(), QMetaType::Bool,
-         QStringLiteral("Shows an OSD hint when switching to another monitor's workspace through the Pager or the "
-                        "Overview snaps back to the owning monitor.")},
+         QStringLiteral("Shows an OSD hint when a switch to another monitor's workspace, made through the Pager or "
+                        "the Overview, snaps back to the owning monitor.")},
         {CD::rebindKWinShortcutsKey(), CD::workspacesRebindKWinShortcuts(), QMetaType::Bool,
          QStringLiteral("Takes over KWin's stock Switch One Desktop shortcuts while the feature is on, since they "
                         "walk the whole shared desktop pool rather than one monitor's list. Restored on disable.")},

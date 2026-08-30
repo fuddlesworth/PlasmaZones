@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcWorkspaceRec, "plasmazones.workspaces.reconciler", QtWarningMsg)
 
@@ -72,12 +73,14 @@ void WorkspaceReconciler::expireLedger()
     bool expired = false;
     bool createExpired = false;
     QStringList refusedRemovals;
+    QStringList refusedCreateScreens;
     for (int i = m_ledger.size() - 1; i >= 0; --i) {
         if (m_ledger.at(i).deadline <= now) {
             qCWarning(lcWorkspaceRec) << "pending workspace op expired, kind =" << static_cast<int>(m_ledger.at(i).kind)
                                       << "desktop =" << m_ledger.at(i).desktopId;
             if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
                 createExpired = true;
+                refusedCreateScreens.append(m_ledger.at(i).screenId);
             }
             if (m_ledger.at(i).kind == PendingOp::Kind::Remove) {
                 refusedRemovals.append(m_ledger.at(i).desktopId);
@@ -168,8 +171,26 @@ void WorkspaceReconciler::expireLedger()
     // resync below re-pulls a list that is by definition UNCHANGED, so
     // onDesktopListSettled returns early. Re-run maintenance so the request is
     // made again. That second attempt is also what gives the probe above its
-    // corroborating expiry, and once the cap IS learned requestCreateAt
-    // suppresses the retry, so this cannot spin.
+    // corroborating expiry.
+    //
+    // Bounded by its OWN budget, not by cap-learning. Cap-learning is not a
+    // terminator: the probe only concludes when the id list is byte-identical
+    // across two expiries, and it is reset by any list change and by ANY
+    // create landing, including one for a different screen — so on a machine
+    // where this screen's creates are refused while other desktops come and
+    // go, the probe never concludes and this re-drive would issue one
+    // createDesktop per LedgerTimeoutMs forever. Each expiry spends one of the
+    // requesting screen's MaxCreateRefusals instead; requestCreateAt refuses
+    // once the budget is gone, so the re-drive below becomes a no-op for that
+    // screen while a transient stall still gets its retries.
+    for (const QString& screenId : std::as_const(refusedCreateScreens)) {
+        const int refusals = m_createRefusals.value(screenId, 0) + 1;
+        m_createRefusals.insert(screenId, refusals);
+        if (refusals >= MaxCreateRefusals) {
+            qCWarning(lcWorkspaceRec) << "createDesktop for" << screenId << "went unanswered" << refusals
+                                      << "times — no longer re-driving it for that screen";
+        }
+    }
     if (createExpired && !capLearned) {
         maintainInvariants();
     }
@@ -195,6 +216,13 @@ void WorkspaceReconciler::noteCreateSucceeded()
         m_desktopCap = DefaultDesktopCap;
         m_capHintShown = false;
     }
+}
+
+void WorkspaceReconciler::noteCreateLandedFor(const QString& screenId)
+{
+    // Proof this screen's creates are being answered, so the refusal run that
+    // spent its budget was a stall and not a standing refusal.
+    m_createRefusals.remove(screenId);
 }
 
 bool WorkspaceReconciler::hasPendingStructuralOps() const
@@ -288,7 +316,10 @@ QHash<QString, WorkspaceReconciler::PendingOp> WorkspaceReconciler::takeSettledC
     });
     const int pairs = qMin(creates.size(), newIds.size());
     for (int rank = 0; rank < pairs; ++rank) {
-        matched.insert(newIds.at(rank), m_ledger.at(creates.at(rank)));
+        const PendingOp& op = m_ledger.at(creates.at(rank));
+        matched.insert(newIds.at(rank), op);
+        // The settle is this screen's answer, exactly as an id-only echo is.
+        noteCreateLandedFor(op.screenId);
     }
     if (pairs > 0) {
         noteCreateSucceeded();
@@ -332,6 +363,7 @@ void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
             // KWin answered, so the cap probe's evidence is stale whichever
             // branch below realizes the desktop.
             noteCreateSucceeded();
+            noteCreateLandedFor(op.screenId);
             if (m_ledger.isEmpty()) {
                 m_ledgerTimer.stop();
             }
@@ -649,7 +681,18 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
             removed.append(oldIdx + 1);
         }
     }
+    const int previousCount = m_lastIds.size();
     m_lastIds = ids;
+
+    // Headroom came back: a shorter desktop list is the one event that can
+    // turn a standing create refusal (KWin at its ceiling) back into a create
+    // it will answer, and nothing else would ever hand the budget back — a
+    // screen whose budget is spent issues no create, so it can never earn the
+    // landing that clears it. The mirror of the population-change restore on
+    // the removal side.
+    if (m_lastIds.size() < previousCount) {
+        m_createRefusals.clear();
+    }
 
     // Cap self-heal: a learned (probed) ceiling below the default that the
     // live count now EXCEEDS was a mislearn (transient stall, or the
@@ -909,6 +952,15 @@ void WorkspaceReconciler::scheduleDestroyCheck(const QString& desktopId)
 
 void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceIndex, const QString& name)
 {
+    // Refusal budget spent (see MaxCreateRefusals). Checked HERE rather than
+    // only at the post-expiry re-drive, because maintainScreen also runs off
+    // every settle and every population edge, and each of those would put the
+    // unanswered request straight back. The screen keeps whatever slice it
+    // has — a missing trailing empty is visible and harmless — until a create
+    // for it lands, the desktop count drops, or the screen is re-added.
+    if (m_createRefusals.value(screenId, 0) >= MaxCreateRefusals) {
+        return;
+    }
     // Count the creates KWin still owes us: the id list only grows once each
     // lands, so gating on it alone lets a burst (several screens repairing
     // their trailing empty in one maintenance pass) request past the ceiling

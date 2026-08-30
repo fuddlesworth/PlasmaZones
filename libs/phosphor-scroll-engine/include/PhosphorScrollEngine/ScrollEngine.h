@@ -971,9 +971,10 @@ private:
     /// The live scrolling screen belonging to the same PHYSICAL output as
     /// @p screenId, or empty when none does. Unlike resolveOperationScreen
     /// there is NO active-screen fallback: this answers for the output named
-    /// or not at all. Ties between virtual sub-screens of one monitor prefer
-    /// the active screen, then the lexicographic minimum, so the answer is
-    /// deterministic.
+    /// or not at all. When that output carries SEVERAL scrolling virtual
+    /// sub-screens, the active screen wins if it is one of them; otherwise the
+    /// call is REFUSED (empty), because any tie-break would be a guess and the
+    /// verbs built on this act on whatever it names.
     QString scrollingScreenForPhysical(const QString& screenId) const;
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the

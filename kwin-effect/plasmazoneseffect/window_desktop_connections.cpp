@@ -79,7 +79,18 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-
         // switch flow will pick it up when the user switches to the target desktop.
-        if (window && !window->isOnCurrentDesktop() && !window->isOnAllDesktops()) {
+        // Judged against the window's OWN output, not the active one.
+        // EffectWindow::isOnCurrentDesktop() has no output overload and
+        // resolves through the active output (VirtualDesktopManager stores
+        // only QHash<LogicalOutput*, VirtualDesktop*>, with no global current
+        // member), so under per-output virtual desktops it answers for the
+        // wrong monitor whenever the window lives on a non-active one. That
+        // would release tracking and drop the decoration for a window still
+        // fully visible on another screen. Dynamic workspaces makes per-output
+        // mode mandatory, so this went from a hand-configured edge to routine.
+        KWin::VirtualDesktop* ownDesktop =
+            (window && KWin::effects) ? KWin::effects->currentDesktop(windowOutput(window)) : nullptr;
+        if (window && ownDesktop && !window->isOnDesktop(ownDesktop) && !window->isOnAllDesktops()) {
             const QString windowId = getWindowId(window);
             const QString screenId = getWindowScreenId(window);
             if (m_tilingHandler->isManagedScreen(screenId)) {
@@ -136,7 +147,13 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // wired window, so this is unreachable in practice, and declining to
         // place is the conservative answer to a first observation. A null
         // current desktop is unclassifiable and takes the same answer.
-        const KWin::VirtualDesktop* desktopInView = KWin::effects ? KWin::effects->currentDesktop() : nullptr;
+        // Resolved for the window's own output. The no-argument overload
+        // answers for the ACTIVE output, so measuring an arrival against it
+        // compares the window's desktop set to a different monitor's current
+        // desktop under per-output virtual desktops, which this feature makes
+        // mandatory.
+        const KWin::VirtualDesktop* desktopInView =
+            KWin::effects ? KWin::effects->currentDesktop(windowOutput(window)) : nullptr;
         if (!desktopInView || !hadPreviousDesktops || previousDesktops.isEmpty()
             || previousDesktops.contains(desktopInView->id())) {
             return;

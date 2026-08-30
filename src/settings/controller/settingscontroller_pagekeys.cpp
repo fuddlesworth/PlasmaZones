@@ -16,6 +16,7 @@
 
 #include "settingscontroller.h"
 
+#include "common/kwinperoutputdesktops.h"
 #include "config/configdefaults.h"
 
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -144,39 +145,9 @@ void SettingsController::renameWorkspaceSlotTargets(const QString& previousName,
 
 bool SettingsController::kwinPerOutputDesktopsEnabled() const
 {
-    // Flat-INI read of KWin's per-output-desktops flag; the daemon's gate
-    // (WorkspaceController::kwinPerOutputEnabled) is the documented twin.
-    //
-    // Two KConfig spellings QSettings does not decode on its own, both of
-    // which would otherwise read as "off" and put the consent warning back in
-    // front of a user who already has the setting on:
-    //   - an immutability / locale marker on the key ("PerOutputVirtualDesktops[$i]"),
-    //     which QSettings keeps as part of the key name;
-    //   - KConfig's boolean words, which include "true"/"on"/"yes"/"1";
-    //     QVariant::toBool only understands the first and last of those.
-    const QString path =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrc");
-    const QSettings kwinrc(path, QSettings::IniFormat);
-    const QString group = QStringLiteral("Windows/");
-    const QString base = QStringLiteral("PerOutputVirtualDesktops");
-    QVariant raw = kwinrc.value(group + base);
-    if (!raw.isValid()) {
-        // Scan for the same key carrying any KConfig marker suffix.
-        const QStringList keys = kwinrc.allKeys();
-        for (const QString& key : keys) {
-            if (key.startsWith(group + base + QLatin1Char('['))) {
-                raw = kwinrc.value(key);
-                break;
-            }
-        }
-    }
-    if (!raw.isValid()) {
-        return false;
-    }
-    const QString text = raw.toString().trimmed();
-    return text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
-        || text.compare(QLatin1String("on"), Qt::CaseInsensitive) == 0
-        || text.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0 || text == QLatin1String("1");
+    // One shared reader with the daemon's gate. The decoding rationale, and
+    // why the two must not drift apart again, lives on the helper.
+    return kwinPerOutputVirtualDesktopsEnabled();
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain

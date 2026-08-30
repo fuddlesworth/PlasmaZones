@@ -173,6 +173,13 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // the runtime both use; the snap engine declines the route if the target is not
     // currently a snapping-mode screen, so an absent / autotile / disabled target is
     // safe here.
+    //
+    // TAKEN, not read: this builder also serves SnapEngine::unfloatToZone, an
+    // arbitrarily-later non-open path, so the routed answer must not outlive
+    // the pass that produced it (see m_workspaceRoutedDesktop).
+    const int routedWorkspaceDesktop = m_workspaceRoutedDesktop.take(windowId);
+    const QString routedWorkspaceScreen = m_workspaceRoutedScreen.take(windowId);
+
     if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen))) {
         // Trimmed at the read site: the loader validates the TRIMMED string but
         // stores the param verbatim, and ScreenIdentity::screensMatch does no
@@ -180,6 +187,16 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
         // matches no monitor at all.
         directive.targetScreenId =
             route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString().trimmed();
+    } else if (!routedWorkspaceScreen.isEmpty()) {
+        // No explicit RouteToScreen, but the realized workspace lives on a
+        // monitor of its own and the window is being moved there. Resolve the
+        // zones on THAT screen: the daemon's registry still reports the spawn
+        // output (the output move is in flight over D-Bus), so an unpinned
+        // directive would snap the window into a zone of the screen it is
+        // leaving. This is the routed screen the placement is pinned to, not a
+        // second move — the snap apply path and the output leg name the same
+        // monitor.
+        directive.targetScreenId = routedWorkspaceScreen;
     }
 
     // RouteToDesktop target (optional): when set, the zones resolve on this
@@ -194,8 +211,7 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // to is the one the window is actually landing on. The routing pass runs
     // first on this path (SnapAdaptor::resolveWindowRestore calls
     // applyOpenDesktopRouting before the engine's restore), so the answer is
-    // already stashed by the time we read it.
-    const int routedWorkspaceDesktop = m_workspaceRoutedDesktop.value(windowId, 0);
+    // already stashed by the time we read it (taken above, with the screen).
     if (routedWorkspaceDesktop >= 1) {
         directive.targetDesktop = routedWorkspaceDesktop;
     } else if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
@@ -238,6 +254,14 @@ void WindowTrackingAdaptor::emitOpenRoutingIfMatched(const PhosphorRules::Resolv
     // open round trip, and a pass that routes nothing must not leave the
     // previous open's answer standing for a reused window id.
     m_workspaceRoutedDesktop.remove(windowId);
+    m_workspaceRoutedScreen.remove(windowId);
+    // A RouteToScreen in the same cascade OWNS the window's monitor: the snap
+    // twin (applyOpenScreenRouting) and the tiling twin
+    // (applyOpenRoutingForTiling) both act on it, so asking the workspace route
+    // for an output move as well would be two contradictory moves. Without one
+    // in the cascade the workspace route is the only thing that can put the
+    // window on the monitor whose slice owns the destination desktop.
+    const bool cascadeOwnsScreen = resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen)).has_value();
     if (workspaceRoute && m_workspaceRouteResolver) {
         // Trimmed at the read site: the daemon's declaration list stores each
         // name trimmed (workspaces.cpp trims before binding), so an untrimmed
@@ -250,11 +274,18 @@ void WindowTrackingAdaptor::emitOpenRoutingIfMatched(const PhosphorRules::Resolv
             // it back so a combined SnapToZone (or tiling) + RouteToWorkspace
             // rule resolves in the DESTINATION desktop rather than the one the
             // window is leaving.
-            const int routedDesktop = m_workspaceRouteResolver(name, windowId);
+            QString ownerScreen;
+            const int routedDesktop = m_workspaceRouteResolver(name, windowId, !cascadeOwnsScreen, &ownerScreen);
             if (routedDesktop > 0) {
                 m_workspaceRoutedDesktop.insert(windowId, routedDesktop);
+                // Stashed even when a RouteToScreen owns the monitor: the
+                // placement builders prefer that action's explicit target, so
+                // the owner screen simply goes unread on that path.
+                if (!ownerScreen.isEmpty()) {
+                    m_workspaceRoutedScreen.insert(windowId, ownerScreen);
+                }
                 qCInfo(lcDbusWindow) << "open-routing: routed" << windowId << "to named workspace" << name << "(desktop"
-                                     << routedDesktop << ")";
+                                     << routedDesktop << "on" << ownerScreen << ")";
                 return;
             }
             if (routedDesktop < 0) {
@@ -460,6 +491,12 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitOpenRoutingIfMatched(resolved, windowId);
+    // Taken right after the write that produced it, for the same single-use
+    // reason placementZonesByRule takes it: nothing further down this function
+    // may leave a routed answer standing for a later non-open reader. Read
+    // below, where the destination desktop is resolved.
+    const int routedWorkspaceDesktop = m_workspaceRoutedDesktop.take(windowId);
+    m_workspaceRoutedScreen.remove(windowId);
 
     const auto markMatched = [&] {
         if (directiveMatched) {
@@ -519,7 +556,6 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // emitOpenRoutingIfMatched call at the top of this function stashed it),
     // for the same reason the snap directive prefers it.
     int destDesktop = currentDesktopForScreen(target);
-    const int routedWorkspaceDesktop = m_workspaceRoutedDesktop.value(windowId, 0);
     if (routedWorkspaceDesktop >= 1) {
         destDesktop = routedWorkspaceDesktop;
     } else if (const auto desktopRoute = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {

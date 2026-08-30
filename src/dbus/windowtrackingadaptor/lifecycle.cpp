@@ -669,8 +669,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // trip. Drop both spellings so a window that opened with a workspace route
     // and closed before anything read it back cannot leak an entry.
     m_workspaceRoutedDesktop.remove(shadowId);
+    m_workspaceRoutedScreen.remove(shadowId);
     if (windowId != shadowId) {
         m_workspaceRoutedDesktop.remove(windowId);
+        m_workspaceRoutedScreen.remove(windowId);
     }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may

@@ -79,7 +79,7 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // genuine mode exit has already dropped the screen from the
             // derived set, and a removed output answers false to
             // isActiveOnScreen, so both of those keep their existing path.
-            if (m_reapingDesktopState) {
+            if (m_reapingDesktopStateDepth > 0) {
                 // A desktop reap: this window's (screen, desktop, activity)
                 // state was destroyed, the screen's MODE did not change, and
                 // the releasing engine still runs there on every other

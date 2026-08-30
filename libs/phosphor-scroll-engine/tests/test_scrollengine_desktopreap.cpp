@@ -65,6 +65,8 @@ private Q_SLOTS:
     void activityPruneClearsATrackedDeadActivity();
     void renumberDesktopStateMovesTheBurstMarker();
     void renumberDesktopStateRefusesAPoisonedMapping();
+    void focusedColumnWindowsRefusesAnAmbiguousPhysicalOutput();
+    void focusedColumnWindowsResolvesASingleSubScreen();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -515,6 +517,64 @@ void TestScrollEngineDesktopReap::renumberDesktopStateRefusesAPoisonedMapping()
     QCOMPARE(engine->dragInsertPreviewWindowId(), QStringLiteral("app|b"));
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
     QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+}
+
+void TestScrollEngineDesktopReap::focusedColumnWindowsRefusesAnAmbiguousPhysicalOutput()
+{
+    // focusedColumnWindows is addressed with a PHYSICAL output id (the daemon's
+    // per-output desktop map keys physical ids) and resolves it through
+    // scrollingScreenForPhysical. When that output is split into two scrolling
+    // virtual sub-screens and the user is looking at a THIRD monitor, no
+    // tie-break can name the right one, and the caller does not merely report
+    // the answer, it relocates that sub-screen's focused column. So the
+    // resolution refuses.
+    //
+    // Reverting the refusal (falling back to the lexicographic minimum) makes
+    // the first QVERIFY fail: the getter answers with vs:0's column, and the
+    // move-column-to-workspace verb then silently relocates a column the user
+    // never addressed.
+    const QString vs0 = QStringLiteral("DP-1/vs:0");
+    const QString vs1 = QStringLiteral("DP-1/vs:1");
+    const QString other = QStringLiteral("DP-2");
+
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeProviderEngine(&owner, {vs0, vs1, other});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+
+    engine->windowOpened(QStringLiteral("app|split"), vs0, 0, 0);
+    engine->windowOpened(QStringLiteral("app|elsewhere"), other, 0, 0);
+
+    // Active screen on the OTHER monitor: "DP-1" is ambiguous.
+    engine->setActiveScreenHint(other);
+    QVERIFY(engine->focusedColumnWindows(QStringLiteral("DP-1")).isEmpty());
+
+    // The same address is answerable once the active screen IS one of the
+    // sub-screens: the refusal is about ambiguity, not about sub-screens.
+    engine->setActiveScreenHint(vs0);
+    QCOMPARE(engine->focusedColumnWindows(QStringLiteral("DP-1")), QStringList{QStringLiteral("app|split")});
+}
+
+void TestScrollEngineDesktopReap::focusedColumnWindowsResolvesASingleSubScreen()
+{
+    // The unambiguous half of the same resolution: one scrolling sub-screen on
+    // the named output is answered even with the active screen elsewhere, so
+    // the refusal above cannot be satisfied by simply never resolving.
+    const QString vs0 = QStringLiteral("DP-1/vs:0");
+    const QString other = QStringLiteral("DP-2");
+
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeProviderEngine(&owner, {vs0, other});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+
+    engine->windowOpened(QStringLiteral("app|only"), vs0, 0, 0);
+    engine->windowOpened(QStringLiteral("app|elsewhere"), other, 0, 0);
+    engine->setActiveScreenHint(other);
+
+    QCOMPARE(engine->focusedColumnWindows(QStringLiteral("DP-1")), QStringList{QStringLiteral("app|only")});
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDesktopReap)

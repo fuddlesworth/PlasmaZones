@@ -75,6 +75,10 @@ void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
     // it would aim a later correction (after a replug re-adds the screen) at
     // whatever that desktop became in the meantime.
     m_lastOwnedByScreen.remove(screenId);
+    // Per-screen create budget goes with the screen: keeping it would grow the
+    // hash across a session of hotplugs, and a re-added output deserves a
+    // fresh set of attempts rather than the spent budget of its predecessor.
+    m_createRefusals.remove(screenId);
     // Screen-scoped ledger entries die with the screen: an open SetCurrent for
     // a gone output can never be echoed, and until it expired it would block
     // the corrections of a re-added screen with the same id and then fire a

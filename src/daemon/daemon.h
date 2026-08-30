@@ -1245,7 +1245,13 @@ private:
     /// windows that never left the releasing mode. The reaped context is the
     /// authority here, not the screen's live one, so the fan-out states it
     /// outright. Read by handleEngineWindowsReleased.
-    bool m_reapingDesktopState = false;
+    ///
+    /// A DEPTH, not a flag: the fan-out that raises it re-enters the engines,
+    /// so a nested reap that cleared a flag on its way out would switch the
+    /// latch off while the outer batch was still walking, and silently send
+    /// the rest of that batch's windows down the mode-exit path. Raised and
+    /// lowered through a scope guard so an early return cannot strand it.
+    int m_reapingDesktopStateDepth = 0;
     /// PhosphorContext::ContextResolver wiring.
     ///
     /// DECLARATION ORDER INVARIANT: the three adapter members must be

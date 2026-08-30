@@ -47,9 +47,9 @@ inline bool desktopRenumberMappingIsValid(const QHash<int, int>& oldToNew)
 /// auxiliary per-context maps (stash, overrides, burst flags).
 /// `oldToNew` must be INJECTIVE over the desktops actually present, and no
 /// mapped-to desktop may already be held by an unmapped key — the same
-/// precondition PerScreenStates::renumberDesktops carries, checked the same way
-/// (assert in debug, warning in release) because the same violation silently
-/// drops an entry.
+/// precondition PerScreenStates::renumberDesktops carries, surfaced the same
+/// way (a warning on the collision, in every build) because the same violation
+/// silently drops an entry.
 /// Take-then-reinsert so shifted keys never collide. No `skip` predicate,
 /// unlike PerScreenStates::renumberDesktops: the aux maps engines pass here
 /// never hold sentinel keys (the snap engine's empty-screenId globals live in
@@ -76,8 +76,15 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
     for (auto& [key, value] : moved) {
         // Same injectivity precondition, and the same failure, as
         // PerScreenStates::renumberDesktops: a target already held by an
-        // unmapped key makes the insert drop the value that was there. Assert
-        // in debug, warn in release rather than losing an aux entry silently.
+        // unmapped key makes the insert drop the value that was there. WARN
+        // ONLY, deliberately — no assert. desktopRenumberMappingIsValid is the
+        // gate every caller runs, and it sees only the mapping, so it cannot
+        // rule this out: whether an UNMAPPED key already holds a target is a
+        // property of the hash, not of oldToNew. Asserting on a condition the
+        // gate structurally cannot cover would abort a debug daemon on a
+        // mapping the gate accepted, while release merely overwrites. The
+        // warning names the collision either way, and the caller contract
+        // above is the real defence.
         if (hash.contains(key)) {
             qWarning(
                 "PhosphorEngine::renumberDesktopKeyedHash: target key (desktop %d) is already occupied — "
@@ -85,8 +92,6 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
                 "being replaced",
                 key.desktop);
         }
-        Q_ASSERT_X(!hash.contains(key), "PhosphorEngine::renumberDesktopKeyedHash",
-                   "target key already occupied — mapping is not injective, or an unmapped key holds the target");
         hash.insert(key, std::move(value));
     }
 }
@@ -343,9 +348,13 @@ public:
             }
         }
         for (const auto& [key, state] : moved) {
-            // The assert catches this in debug; release builds would silently
-            // overwrite, leaking the displaced state and stranding its windows'
-            // reverse entries. Surface it either way, matching migrate() above.
+            // Warn only, for the reason spelled out in
+            // renumberDesktopKeyedHash: the shared validity gate sees the
+            // mapping alone and cannot know whether an unmapped key already
+            // holds a target, so an assert here would abort a debug daemon on
+            // a mapping the gate passed. A silent overwrite would leak the
+            // displaced state and strand its windows' reverse entries, so the
+            // collision is still surfaced, matching migrate() above.
             if (m_states.contains(key)) {
                 qWarning(
                     "PhosphorEngine::PerScreenStates::renumberDesktops: target key (desktop %d) is already "
@@ -353,8 +362,6 @@ public:
                     "already there is being replaced",
                     key.desktop);
             }
-            Q_ASSERT_X(!m_states.contains(key), "PerScreenStates::renumberDesktops",
-                       "target key already occupied — mapping is not injective, or an unmapped key holds the target");
             m_states.insert(key, state);
         }
         for (auto it = m_windowToKey.begin(); it != m_windowToKey.end(); ++it) {
