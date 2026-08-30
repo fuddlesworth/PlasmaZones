@@ -774,17 +774,27 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         // Maximize-to-edges: the column resolves against the RAW work area on
         // both axes with the inner gap suppressed inside it. Its strip-space
         // position stays cursor-derived like every other column (the strip
-        // still scrolls it), but once its span fully covers the viewport the
-        // emitted rect snaps to the raw area exactly — cursor math is
+        // still scrolls it), shifted low by the outer gap so that a column
+        // sitting at the anchor lands on the raw area exactly — cursor math is
         // workArea-based, and any anchor policy (pin, center, overflow) then
         // differs from the raw rect only by outer-gap slivers that would
         // otherwise peek through at the screen edges.
+        //
+        // The shift is UNCONDITIONAL, not gated on the column covering the
+        // viewport. A gate makes the emitted position jump by the outer gap at
+        // the moment the column stops covering, and that jump is invisible to
+        // the view coordinate the batch's viewDelta is differenced from. The
+        // effect then sees a window whose committed move is a gap MORE than
+        // the view slide it was told about, and runs a second per-window
+        // spring for the remainder — a full-screen-sized window scrolling with
+        // two overlapping animations on it, which is what the gate actually
+        // looked like in practice. Shifting every frame by the same constant
+        // keeps the column's motion equal to the view's, so the residual leg
+        // stays degenerate and one spring carries the strip.
         const bool toEdges = col.maximizedToEdges;
         const QRect colArea = toEdges ? rawAreaFor(params) : area;
         const int colGap = toEdges ? 0 : gap;
-        const bool coversViewport =
-            toEdges && mainCursor <= axis.mainLow(area) && mainCursor + colW >= axis.mainLow(area) + mainExtent(params);
-        const int mainStart = coversViewport ? axis.mainLow(colArea) : mainCursor;
+        const int mainStart = mainCursor - (axis.mainLow(area) - axis.mainLow(colArea));
         // Published so a consumer can tell "the user asked for this extent"
         // from "this column cannot be any narrower" — columnExtentPx takes the
         // max of the two and the answer is indistinguishable afterwards. A
