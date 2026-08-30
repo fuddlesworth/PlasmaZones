@@ -1185,9 +1185,18 @@ private:
     /// (echo round trips are milliseconds), so the drain treats a match on
     /// one as genuine focus. Entries are unstamped/removed at every sweep
     /// that removes them from the list.
+    ///
+    /// The expiry sits at echo scale, NOT human scale. Multi-desktop use
+    /// strands entries systematically — an activation fired just as the user
+    /// switches desktops never echoes (the compositor refuses or redirects
+    /// the focus) — and every stranded entry eats the FIRST real click on
+    /// its window for the whole expiry window (the 3.4.2→3.4.3 regression:
+    /// clicking a parked window in the taskbar appeared to do nothing, and
+    /// only the second click worked). One second still dwarfs a D-Bus round
+    /// trip under load while sitting below any deliberate re-click.
     QHash<QString, qint64> m_pendingSelfActivationQueuedAt;
     QElapsedTimer m_selfActivationClock;
-    static constexpr qint64 kSelfActivationEchoExpiryMs = 10000;
+    static constexpr qint64 kSelfActivationEchoExpiryMs = 1000;
     /// The one arrival whose focus an `openFocused = false` rule declined, held
     /// until its compositor focus report arrives and is consumed exactly once.
     ///
