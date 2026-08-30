@@ -421,29 +421,40 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
     // it is the CLIENT responding or the window dying.
     bool droppedAny = false;
     for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
-        // Two screen sources, ORed, because neither alone sees every window
-        // holding a relocation. m_notifiedWindowScreens is written under a
-        // NARROWER condition than the relocation itself: the apply loop
-        // inserts a visual delta for any entry carrying a visual position, but
-        // only records the window's screen when the window is in
-        // m_notifiedWindows, so a window demoted or rolled back between the
-        // two ends up holding a relocation this map has no entry for.
-        // Selecting on the raw map alone leaves that window wearing the
-        // OUTGOING strip's position for good. screenForTiledWindow answers
-        // from tiled membership instead, where the screen and the membership
-        // come from the same entry and cannot disagree.
+        // The recorded screen answers first, and tiled membership answers ONLY
+        // for a window it has nothing to say about. m_notifiedWindowScreens is
+        // written under a narrower condition than the relocation itself: the
+        // apply loop inserts a visual delta for any entry carrying a visual
+        // position, but records the window's screen only when the window is in
+        // m_notifiedWindows, so a window demoted or rolled back between the two
+        // ends up holding a relocation with no recorded screen at all. That
+        // window is the whole reason for the second term, and selecting on the
+        // recorded map alone left it wearing the OUTGOING strip's position for
+        // good.
         //
-        // Deliberately NOT scrollTrackedScreenFor, which looks like the right
-        // helper and is not: it is impure (it reports clip loss as a side
-        // effect) and both of its answer arms are gated on the screen being in
+        // The fallback is deliberately NOT ORed in for windows that DO have a
+        // recorded screen, which is the tempting spelling and is wrong in a way
+        // that does not heal. screenForTiledWindow returns the first matching
+        // bucket in hash order, and those buckets go stale — outputchange.cpp
+        // says so at its own recorded-screen fallback, which exists for exactly
+        // that case. A window that has moved to another screen but still sits
+        // in this one's bucket would lose its relocation here, and nothing
+        // would put it back: the only writer of that map is the tile-batch
+        // apply, the other screen's strip did not change so no batch is coming,
+        // and the damage this function issues is scoped to THIS output, so the
+        // window would not even be repainted where it actually is.
+        //
+        // Also not scrollTrackedScreenFor, which looks like the right helper
+        // and is not: it is impure (it reports clip loss as a side effect) and
+        // both of its answer arms are gated on the screen being in
         // m_scrollingScreens, so for a screen that has already left the
         // scrolling set it answers empty for every window and this loop would
-        // drop nothing at all. Over-dropping here is self-correcting — the
-        // damage below repaints and the next batch re-inserts the entry —
-        // while under-dropping is the bug being fixed.
+        // drop nothing at all.
         const QString& windowId = wit.key();
-        const bool onThisScreen = m_notifiedWindowScreens.value(windowId) == screenId
-            || TilingStateHelpers::screenForTiledWindow(m_border, windowId) == screenId;
+        const auto recordedIt = m_notifiedWindowScreens.constFind(windowId);
+        const bool onThisScreen = recordedIt != m_notifiedWindowScreens.constEnd()
+            ? *recordedIt == screenId
+            : TilingStateHelpers::screenForTiledWindow(m_border, windowId) == screenId;
         if (onThisScreen) {
             wit = m_effect->m_scrollVisualDelta.erase(wit);
             droppedAny = true;

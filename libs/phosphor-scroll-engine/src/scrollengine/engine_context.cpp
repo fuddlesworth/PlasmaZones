@@ -498,8 +498,18 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
     // screen out of the set since the loop collected it, and the announce is
     // emit-on-change anyway, so a key that ended up where it started is free.
     for (const QString& screenId : std::as_const(contextChangedScreens)) {
-        if (m_scrollingScreens.contains(screenId)) {
-            announceStripContextIfChanged(screenId);
+        if (!m_scrollingScreens.contains(screenId)) {
+            continue;
+        }
+        // Arm and retile with the announcement, the same pairing
+        // setActiveScreens makes: the consumer has just been told to retire
+        // this screen's strip-scoped state, so something has to carry the
+        // batch that repopulates it. The migration moved the strip to a
+        // context whose rects may already match what was last applied, which
+        // is precisely the case the emit-on-change gate would suppress.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+            scheduleRetileForScreen(screenId);
         }
     }
 }

@@ -2535,6 +2535,14 @@ private:
         QPoint stripPos;
         QPoint viewOffset;
         bool parked = false;
+        /// Whether the window resolved a managed output. Its own field rather
+        /// than an implied zero offset, because without it the no-output
+        /// sample is byte-identical to an ordinary hit on a window sitting at
+        /// offset (0,0) and unparked — so the two report sites would mask each
+        /// other through the shared change gate, and an excursion into and out
+        /// of the no-output state would be invisible for exactly those
+        /// windows.
+        bool hadOutput = true;
 
         bool operator==(const StripDiagSample& o) const = default;
     };

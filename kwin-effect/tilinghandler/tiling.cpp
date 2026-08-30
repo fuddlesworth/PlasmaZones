@@ -921,15 +921,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // batch would land afterwards and re-insert the very entry the retire just
     // dropped, putting a parked column back at the previous strip's position.
     //
-    // Deliberately NOT a generation bump inside the retire, which is the
-    // obvious spelling and is wrong: a batch that RACED AHEAD of the
-    // announcement belongs to the INCOMING strip and is exactly what must
-    // survive, and a bump cancels it along with the stale one. The epoch
-    // discriminates correctly because slotStripContextChanged records the new
-    // value BEFORE it retires — so a batch built before the announcement
-    // carries the old epoch and is dropped, while one built after carries the
-    // new one and runs. A screen with no epoch yet reads empty on both sides
-    // and is unaffected.
+    // The batch carries no epoch of its own. The value is READ OUT of
+    // m_stripEpochByScreen here, while this batch is being processed, and what
+    // makes that read mean "the strip this batch is for" is signal ordering:
+    // the daemon announces BEFORE it schedules the forced retile, and both
+    // travel one D-Bus connection, so a batch whose processing precedes the
+    // announcement necessarily predates the switch and belongs to the OUTGOING
+    // strip. slotStripContextChanged then records the new epoch before it
+    // retires, so those pending applies fail this compare and are dropped,
+    // while a batch processed after it captures the new value and runs.
+    //
+    // The genuinely raced-ahead case — a batch that established strip state
+    // before the effect had ever heard an epoch for the screen — is not
+    // handled here at all. slotStripContextChanged's first-epoch branch
+    // handles it by declining to retire, so no apply is ever cancelled on its
+    // behalf. A screen with no epoch yet reads empty on both sides and is
+    // unaffected.
     QHash<QString, QString> stripEpochByScreen;
     for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
         stripEpochByScreen.insert(it.key(), m_stripEpochByScreen.value(it.key()));

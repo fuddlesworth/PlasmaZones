@@ -170,7 +170,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         // rather than by reordering the probes above, so the hot path keeps its
         // cheapest-first order and pays nothing while the category is off.
         if (lcStripDiag().isDebugEnabled() && scrollManagedOutputFor(w)) {
-            const StripDiagSample sample{false, {}, {}, false};
+            const StripDiagSample sample{false, {}, {}, false, true};
             const auto lastIt = m_stripDiagLast.constFind(windowId);
             if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
                 m_stripDiagLast.insert(windowId, sample);
@@ -189,7 +189,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         // was suppressed as unchanged and the whole excursion was invisible in
         // the log.
         if (lcStripDiag().isDebugEnabled()) {
-            const StripDiagSample sample{true, vit->stripPos, {}, false};
+            const StripDiagSample sample{true, vit->stripPos, {}, false, false};
             const auto lastIt = m_stripDiagLast.constFind(windowId);
             if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
                 m_stripDiagLast.insert(windowId, sample);
@@ -281,7 +281,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // outside a pass on purpose and therefore pays it uncached — though there
     // it iterates the relocation map, so the empty case never reaches it.
     if (lcStripDiag().isDebugEnabled()) {
-        const StripDiagSample sample{true, vit->stripPos, viewOffset.toPoint(), parked};
+        const StripDiagSample sample{true, vit->stripPos, viewOffset.toPoint(), parked, true};
         const auto lastIt = m_stripDiagLast.constFind(windowId);
         if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
             m_stripDiagLast.insert(windowId, sample);

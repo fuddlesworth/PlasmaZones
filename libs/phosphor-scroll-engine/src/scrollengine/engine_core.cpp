@@ -301,7 +301,16 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 it->fuzzyClaimWindow.start();
             }
         }
-        announceStripContextIfChanged(screenId);
+        // Armed off the announce verdict like the other two sites. An added
+        // screen is NOT the clean slate it looks like: releaseScreenState
+        // deliberately keeps m_lastAppliedRect, and the removal loop prunes
+        // only the leaving screen's CURRENT context, so a screen re-entering
+        // on a context whose state survived resolves against a live baseline
+        // and every rect can match. Without the arm that batch is suppressed
+        // and the announcement above is a retire with nothing behind it.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+        }
         scheduleRetileForScreen(screenId);
     }
     // The screens that STAYED get the same treatment the identical-set branch
@@ -317,10 +326,14 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     // reached through the door nobody was watching.
     //
     // The announce is emit-on-change, so a stayer whose context did not
-    // actually move is silent. The force-emit is armed only for a REAL switch,
-    // matching the identical-set branch, and only for the screens that were
-    // already members: `added` screens are handled above.
-    for (const QString& screenId : screens) {
+    // actually move is silent.
+    //
+    // Iterating a snapshot for the same reason the identical-set branch does:
+    // the announcement below emits synchronously, and a slot that re-entered
+    // the engine could outlive the caller's container while this loop still
+    // holds an iterator into it. `added` is a local and needs no such care.
+    const QStringList staying(screens.cbegin(), screens.cend());
+    for (const QString& screenId : staying) {
         if (added.contains(screenId)) {
             continue;
         }
