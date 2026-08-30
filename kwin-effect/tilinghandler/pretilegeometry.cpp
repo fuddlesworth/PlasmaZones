@@ -193,9 +193,9 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // pre-tile restores in screenschanged.cpp use, and for the reason
                 // stated there: a bare clear strips a column-maximize member's bit
                 // while leaving the effect recorded as still holding it, which is
-                // the exact split m_columnMaximizedWindows' contract forbids.
-                if (m_columnMaximizedWindows.contains(windowId)) {
-                    releaseColumnMaximized(windowId, safeW);
+                // the exact split m_maximizedToEdgesWindows' contract forbids.
+                if (m_maximizedToEdgesWindows.contains(windowId)) {
+                    releaseMaximizedToEdges(windowId, safeW);
                 } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }

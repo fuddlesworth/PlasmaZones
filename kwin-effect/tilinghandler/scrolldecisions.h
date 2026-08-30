@@ -105,8 +105,8 @@ enum class MaximizeAction {
 /// maximize and restore edges each converged to the requested state, in both
 /// directions, with no echo re-dispatching a second toggle.
 ///
-/// @p flagOnWire     the batch entry's columnMaximized
-/// @p inSet          effect-side membership (m_columnMaximizedWindows)
+/// @p flagOnWire     the batch entry's maximizedToEdges
+/// @p inSet          effect-side membership (m_maximizedToEdgesWindows)
 /// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm passes
 ///                   requestedMaximizeMode(), not the committed maximizeMode():
 ///                   the committed bit trails a client round trip on Wayland,
@@ -114,7 +114,7 @@ enum class MaximizeAction {
 ///                   lands inside that window. The interception passes the
 ///                   COMMITTED mode instead, because there it is comparing
 ///                   against what actually landed.
-inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized)
+inline MaximizeAction resolveMaximizeToEdgesAction(bool flagOnWire, bool inSet, bool kwinMaximized)
 {
     if (!flagOnWire) {
         return inSet ? MaximizeAction::Release : MaximizeAction::None;
@@ -168,7 +168,7 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
 enum class Claim {
     MonocleMaximize, ///< KWin maximize held for a monocle tile
     WindowedFullscreen, ///< KWin fullscreen + a keep-flag layer demotion
-    ColumnMaximize, ///< KWin maximize held for a maximized scroll column
+    MaximizedToEdges, ///< KWin maximize held for a maximized-to-edges scroll column
 };
 
 /// Why the effect's authority over a window is ending. Each exit path names
@@ -286,7 +286,7 @@ inline constexpr int claimReleaseOrder(Claim claim)
         return 0;
     case Claim::MonocleMaximize:
         return 1;
-    case Claim::ColumnMaximize:
+    case Claim::MaximizedToEdges:
         return 2;
     }
     return 3;

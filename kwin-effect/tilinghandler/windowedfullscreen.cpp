@@ -11,7 +11,7 @@
 // can hand that state back. Membership is therefore shed only on an arm that
 // actually restores, never merely because the window's situation changed. See
 // unmaximizeMonocleWindow for why the fullscreen guard sits above the removal
-// rather than below it — releaseColumnMaximized follows the same shape, and its
+// rather than below it — releaseMaximizedToEdges follows the same shape, and its
 // body records what went wrong when it did not.
 
 #include "tilinghandler.h"
@@ -160,7 +160,7 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
         return;
     }
-    const bool owesColumn = m_columnMaximizedWindows.contains(windowId);
+    const bool owesColumn = m_maximizedToEdgesWindows.contains(windowId);
     const bool owesMonocle = m_monocleMaximizedWindows.contains(windowId);
     if (!owesColumn && !owesMonocle) {
         return;
@@ -209,7 +209,7 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
         return;
     }
     const KWin::MaximizeMode restored =
-        m_columnMaximizedWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == restored) {
         return;
     }
@@ -275,15 +275,15 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // said (membership), never to what the click asked for: the engine owns
     // this state and is about to answer for itself, so writing the user's
     // request here would make the effect a second authority and open the
-    // race resolveColumnMaximizeAction's contract note says does not exist.
+    // race resolveMaximizeToEdgesAction's contract note says does not exist.
     //
-    // The cancel is also what makes a REFUSED verb safe. toggleMaximizeColumn
+    // The cancel is also what makes a REFUSED verb safe. toggleMaximizeToEdges
     // is a silent no-op for a screen the engine does not own or a context
     // gate that is closed, and in that case no batch follows at all — without
     // the cancel the window would simply stay KWin-maximized, fighting the
     // strip's next rect with nothing left to correct it.
     const KWin::MaximizeMode restored =
-        m_columnMaximizedWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     // ALREADY AGREES — nothing was requested, so nothing is redirected. This
     // is the arm that makes the interception idempotent against the echo of
     // its OWN cancel below: m_suppressMaximizeChanged covers the synchronous
@@ -313,11 +313,11 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
         // exactly as unmaximizeMonocleWindow does.
         m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
     }
-    dispatchMaximizeColumnToggle(screenId, windowId);
+    dispatchMaximizeToEdgesToggle(screenId, windowId);
     return true;
 }
 
-void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId)
+void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId)
 {
     // The reply IS consumed, unlike every other dispatch in this file.
     //
@@ -333,7 +333,7 @@ void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const 
     }
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
-                                                   QStringLiteral("toggleMaximizeColumn"), {screenId, windowId}),
+                                                   QStringLiteral("toggleMaximizeToEdges"), {screenId, windowId}),
         this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* pw) {
         pw->deleteLater();
@@ -360,15 +360,15 @@ void TilingHandler::dispatchMaximizeColumnToggle(const QString& screenId, const 
     });
 }
 
-void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::EffectWindow* w)
+void TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::EffectWindow* w)
 {
-    if (!m_columnMaximizedWindows.contains(windowId)) {
+    if (!m_maximizedToEdgesWindows.contains(windowId)) {
         return;
     }
     KWin::Window* kw = w ? w->window() : nullptr;
     if (!w || !kw) {
         // Nothing left to hand the bit back to, so the entry is dead weight.
-        m_columnMaximizedWindows.remove(windowId);
+        m_maximizedToEdgesWindows.remove(windowId);
         return;
     }
     // Fullscreen guard, for the reason unmaximizeMonocleWindow spells out:
@@ -385,7 +385,7 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
     // this only when the engine has already dropped the maximize (the batch
     // Release arm by definition, cleanupAutotileTracking on untrack), so
     // Apply can never re-fire on a path that gets here. Retaining instead
-    // leaves resolveColumnMaximizeAction answering Release on each following
+    // leaves resolveMaximizeToEdgesAction answering Release on each following
     // batch until the client leaves fullscreen, which is the self-heal the
     // Apply arm's own fullscreen skip relies on in the other direction.
     //
@@ -404,7 +404,7 @@ void TilingHandler::releaseColumnMaximized(const QString& windowId, KWin::Effect
     if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
         return;
     }
-    m_columnMaximizedWindows.remove(windowId);
+    m_maximizedToEdgesWindows.remove(windowId);
     if (kw->requestedMaximizeMode() == KWin::MaximizeRestore) {
         return;
     }
@@ -444,7 +444,7 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
     static_assert(ScrollDecisions::claimReleaseOrder(Claim::WindowedFullscreen)
                           < ScrollDecisions::claimReleaseOrder(Claim::MonocleMaximize)
                       && ScrollDecisions::claimReleaseOrder(Claim::WindowedFullscreen)
-                          < ScrollDecisions::claimReleaseOrder(Claim::ColumnMaximize),
+                          < ScrollDecisions::claimReleaseOrder(Claim::MaximizedToEdges),
                   "windowed fullscreen must be released before either maximize claim");
 
     if (claimReleasesOn(Claim::WindowedFullscreen, scope)) {
@@ -484,24 +484,24 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         unmaximizeMonocleWindow(windowId);
         result.monocle = hadMonocle && !m_monocleMaximizedWindows.contains(windowId);
     }
-    if (claimReleasesOn(Claim::ColumnMaximize, scope)) {
-        const bool hadColumn = m_columnMaximizedWindows.contains(windowId);
-        releaseColumnMaximized(windowId, w);
-        result.column = hadColumn && !m_columnMaximizedWindows.contains(windowId);
+    if (claimReleasesOn(Claim::MaximizedToEdges, scope)) {
+        const bool hadColumn = m_maximizedToEdgesWindows.contains(windowId);
+        releaseMaximizedToEdges(windowId, w);
+        result.column = hadColumn && !m_maximizedToEdgesWindows.contains(windowId);
     }
     return result;
 }
 
-void TilingHandler::restoreAllColumnMaximized()
+void TilingHandler::restoreAllMaximizedToEdges()
 {
-    if (m_columnMaximizedWindows.isEmpty()) {
+    if (m_maximizedToEdgesWindows.isEmpty()) {
         return;
     }
     // Snapshot and clear FIRST — same iterator-invalidation hazard as
     // restoreAllMonocleMaximized: maximize() can synchronously re-enter
     // cleanupClosedWindowState through the output-changed path.
-    const QStringList ids = m_columnMaximizedWindows.values();
-    m_columnMaximizedWindows.clear();
+    const QStringList ids = m_maximizedToEdgesWindows.values();
+    m_maximizedToEdgesWindows.clear();
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
     const auto geomGuard = qScopeGuard([this, prevInApply] {
@@ -521,7 +521,7 @@ void TilingHandler::restoreAllColumnMaximized()
         // read either way.
         KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
         if (!w) {
-            m_columnMaximizedWindows.insert(wid);
+            m_maximizedToEdgesWindows.insert(wid);
             continue;
         }
         KWin::Window* kw = w->window();
@@ -533,18 +533,18 @@ void TilingHandler::restoreAllColumnMaximized()
             // still holding. That is exactly the "record depends on WHY we
             // could not pay" asymmetry the comment below rules out, and it
             // was the one case that had it.
-            m_columnMaximizedWindows.insert(wid);
+            m_maximizedToEdgesWindows.insert(wid);
             continue;
         }
         // A window still holding fullscreen is SKIPPED, and its entry goes
         // BACK rather than being discarded by the snapshot-clear above. This
-        // is the same retention releaseColumnMaximized takes, and for the same
+        // is the same retention releaseMaximizedToEdges takes, and for the same
         // reason: dropping an entry whose bit was never handed back strands
         // that bit with nothing owning it. It matters on the daemon-loss
         // caller, where the effect keeps running and a later arm can still do
         // the real restore; at unload nothing survives to care either way.
         if (kw->isRequestedFullScreen()) {
-            m_columnMaximizedWindows.insert(wid);
+            m_maximizedToEdgesWindows.insert(wid);
             continue;
         }
         if (kw->requestedMaximizeMode() != KWin::MaximizeRestore) {
@@ -580,7 +580,7 @@ void TilingHandler::restoreAllMonocleMaximized()
     for (const QString& wid : ids) {
         // EXACT resolve — same sibling hazard as unmaximizeMonocleWindow.
         //
-        // RETENTION ON EVERY UNPAID ARM, matching restoreAllColumnMaximized.
+        // RETENTION ON EVERY UNPAID ARM, matching restoreAllMaximizedToEdges.
         // The two functions are twins and used to argue opposite positions
         // about the same situation: this one dropped a skipped member on the
         // grounds that the skip "IS the effect giving up ownership", while its

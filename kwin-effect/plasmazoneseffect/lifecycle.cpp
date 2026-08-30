@@ -463,7 +463,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // skipped on either platform. On Wayland the committed bit trails a
         // client round-trip, so the skip applies there too — which is why it
         // retains its ledger entry instead of dropping it.
-        m_tilingHandler->restoreAllColumnMaximized();
+        m_tilingHandler->restoreAllMaximizedToEdges();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

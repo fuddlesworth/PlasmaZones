@@ -185,7 +185,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // The column mirror goes with them for the windowed-fullscreen arm's
         // reason: this window's strip is ending, so no batch remains to carry
         // a cleared flag back, and the bit would otherwise outlive the mode.
-        releaseColumnMaximized(windowId, w);
+        releaseMaximizedToEdges(windowId, w);
         // Drop stale zone-centering tracking so a later
         // frameGeometryChanged does not re-snap the window into an
         // old autotile zone.
@@ -245,10 +245,10 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // membership and the bit move TOGETHER. A bare clear here
             // would strip a column-maximize member's bit while leaving
             // the effect recorded as still holding it, which is the
-            // exact split m_columnMaximizedWindows' contract forbids.
+            // exact split m_maximizedToEdgesWindows' contract forbids.
             //
             // The GUARD is what earns its place here, not the call behind
-            // it. releaseColumnMaximized already ran unconditionally earlier
+            // it. releaseMaximizedToEdges already ran unconditionally earlier
             // in this same iteration, so membership survives to here in
             // exactly one case: that call SKIPPED a still-fullscreen window
             // and retained the entry on purpose. Re-calling it now skips
@@ -259,8 +259,8 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // member the bare clear, which is precisely the ledger split the
             // paragraph above forbids. Keep the test; do not "simplify" it
             // away on the grounds that the call inside it does nothing.
-            if (m_columnMaximizedWindows.contains(windowId)) {
-                releaseColumnMaximized(windowId, w);
+            if (m_maximizedToEdgesWindows.contains(windowId)) {
+                releaseMaximizedToEdges(windowId, w);
             } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
                 applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
             }
@@ -407,7 +407,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
         unmaximizeMonocleWindow(m_effect->getWindowId(w));
         // Same pairing as the demote arm above: the removed screen's strip is
         // gone, so the column mirror has no later batch to un-flag it.
-        releaseColumnMaximized(m_effect->getWindowId(w), w);
+        releaseMaximizedToEdges(m_effect->getWindowId(w), w);
     }
 
     // Clear autotile zone state for entries on REMOVED screens only.
@@ -740,7 +740,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // strip no longer manages, with the ledger still recording the debt.
         // Both are no-ops for a non-member.
         unmaximizeMonocleWindow(wid);
-        releaseColumnMaximized(wid, m_effect->findWindowByIdExact(wid));
+        releaseMaximizedToEdges(wid, m_effect->findWindowByIdExact(wid));
     }
     // Now that the fullscreen state is dropped, land the pre-tile restores the
     // demote pass queued. Same bracket as the inline restore path: the
@@ -759,8 +759,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // Same maximize-clear the inline restore branch carries, and the same
         // ledger routing: membership and the bit move together, never one
         // without the other.
-        if (m_columnMaximizedWindows.contains(it.key())) {
-            releaseColumnMaximized(it.key(), w);
+        if (m_maximizedToEdgesWindows.contains(it.key())) {
+            releaseMaximizedToEdges(it.key(), w);
         } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }

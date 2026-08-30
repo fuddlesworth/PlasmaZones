@@ -194,7 +194,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // scroll arm above: there the destination strip owns the bit
                 // and its next batch answers for it, so releasing here would
                 // only produce an unmaximize/remaximize flicker.
-                releaseColumnMaximized(windowId, m_effect->findWindowByIdExact(windowId));
+                releaseMaximizedToEdges(windowId, m_effect->findWindowByIdExact(windowId));
                 // The per-session scroll companions go with the hold — the
                 // cross-mode branch clears the same set via
                 // cleanupAutotileTracking, and this branch is the same "no

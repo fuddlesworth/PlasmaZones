@@ -741,7 +741,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // the effect (re)loads has no entry, so its first RESTORE compared
     // false==false, read as a no-edge, and played no morph.
     //
-    // No equivalent seed for m_columnMaximizedWindows, and that asymmetry is
+    // No equivalent seed for m_maximizedToEdgesWindows, and that asymmetry is
     // intended. This map is an EDGE FILTER whose whole job is answering
     // "did the state change", so a missing entry is a wrong answer with no
     // way back — nothing else ever writes it. The claim ledger is an
@@ -793,7 +793,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // even when the shader is skipped).
                 invalidateRuleCacheForStateChange(getWindowId(window));
                 // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
-                // belongs to the scrolling engine's maximize-column verb, not
+                // belongs to the scrolling engine's maximize-to-edges verb, not
                 // to KWin: the strip owns the column's width, so letting both
                 // answer would give one window two maximize authorities.
                 // Placed AFTER the edge filter and the tracking write so it

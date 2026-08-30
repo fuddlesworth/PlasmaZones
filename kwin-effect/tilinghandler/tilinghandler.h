@@ -283,7 +283,7 @@ public:
     /// Paired invariant, and the reason this is one function rather than an
     /// inline list: anything added to a per-session map must be dropped here.
     ///
-    /// m_columnMaximizedWindows is the deliberate exception. drainDeadSessionState restores it through the ledger
+    /// m_maximizedToEdgesWindows is the deliberate exception. drainDeadSessionState restores it through the ledger
     /// instead, and that restore RETAINS entries it could not pay, so a retained one survives the restart on purpose:
     /// the window is still holding a KWin maximize bit, and clearing the ledger here would lose the only record that
     /// the bit is owed back. The new session heals it, because the first batch resolves an absent wire flag against
@@ -462,11 +462,11 @@ public:
     ///
     /// Public because the strip-exit funnels in the sibling TUs call it; the
     /// bracketed write and the dispatch it uses are private mechanics.
-    void releaseColumnMaximized(const QString& windowId, KWin::EffectWindow* w);
+    void releaseMaximizedToEdges(const QString& windowId, KWin::EffectWindow* w);
 
     /// Bulk restore for daemon loss, effect unload, engine disable and daemon
     /// bring-up — the restoreAllWindowedFullscreen shape.
-    void restoreAllColumnMaximized();
+    void restoreAllMaximizedToEdges();
 
     /// True while this handler is inside its own bracketed maximize write.
     /// The effect's windowMaximizedStateChanged lambda consults it so the
@@ -1052,15 +1052,15 @@ private:
     /// apply's, which spans the geometry apply as well as the maximize.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
-    /// Fire-and-forget Scrolling.toggleMaximizeColumn for @p windowId's column
+    /// Fire-and-forget Scrolling.toggleMaximizeToEdges for @p windowId's column
     /// on @p screenId. The window is named rather than left implicit because
     /// the request can arrive for a window that is not the strip's active one
     /// (a client's own maximize, a click under focus-follows-mouse), and the
     /// engine must act on the column holding it.
     /// Unlike dispatchWindowedFullscreenClear this needs no reply gate and no
-    /// in-flight marker — see resolveColumnMaximizeAction's contract note for
+    /// in-flight marker — see resolveMaximizeToEdgesAction's contract note for
     /// why the round trip cannot be raced.
-    void dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId);
+    void dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId);
 
     /// Announce, once per window per episode, that a window on a tracked
     /// scrolling screen lost its clip because the screen's physical output is
@@ -1657,7 +1657,7 @@ private:
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
     /// on the same terms as m_monocleMaximizedWindows: membership is shed
     /// only by an arm that actually hands the bit back, never merely because
-    /// the window's situation changed. releaseColumnMaximized therefore
+    /// the window's situation changed. releaseMaximizedToEdges therefore
     /// RETAINS membership when it skips a still-fullscreen window, so a later
     /// batch can do the real restore.
     ///
@@ -1678,7 +1678,7 @@ private:
     /// effect has no column identity — every tile of a maximized column is a
     /// member, and they enter and leave together on the batch that carries
     /// the flag.
-    QSet<QString> m_columnMaximizedWindows;
+    QSet<QString> m_maximizedToEdgesWindows;
     /// Windows whose last maximize request the daemon REFUSED at its
     /// boundary, and whose maximize we therefore replayed on the user's
     /// behalf. One-shot: interceptMaximizeRequest consumes the entry and

@@ -310,6 +310,10 @@ private Q_SLOTS:
             // user-reachable in a way the four setters' is not.
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
             QCOMPARE(activeColumn().width, widthBeforeGate);
+            // And its maximize-to-edges twin, which the interception now
+            // dispatches: same gate, pinned on the flag it toggles.
+            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString());
+            QVERIFY(!activeColumn().maximizedToEdges);
 
             // The NO-PROVIDER arm, which this block's own "per-method code"
             // reasoning demands and which only focusColumn and scrollView had.
@@ -331,7 +335,9 @@ private Q_SLOTS:
             m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.43);
             m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 301);
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString());
             QCOMPARE(activeColumn().width, widthBeforeNoGate);
+            QVERIFY(!activeColumn().maximizedToEdges);
             QCOMPARE(activeHeight(), heightBeforeNoGate);
 
             m_adaptor->setContextGateProvider([](const QString&) {
@@ -359,6 +365,23 @@ private Q_SLOTS:
             // The round trip lands back where it started, which is the whole
             // promise of a toggle and was previously unasserted here.
             QCOMPARE(activeColumn().width, beforeToggle);
+        }
+
+        // toggleMaximizeToEdges: the same ownership and boundary gates,
+        // pinned on the FLAG it toggles. The width intent must never move —
+        // that separation (flag verb vs width verb) is the whole design.
+        {
+            const ColumnWidth widthBeforeEdges = activeColumn().width;
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("HDMI-2"), QString()));
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QString(), QString()));
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
+            QVERIFY(activeColumn().maximizedToEdges);
+            QCOMPARE(activeColumn().width, widthBeforeEdges);
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QCOMPARE(activeColumn().width, widthBeforeEdges);
         }
 
         // The windowId is FORWARDED, not swallowed.
@@ -393,6 +416,20 @@ private Q_SLOTS:
             QVERIFY2(widthOfWindow(QStringLiteral("app|b")) != bBefore,
                      "the NAMED window's column must be the one that changed");
             QCOMPARE(widthOfWindow(QStringLiteral("app|a")), aBefore);
+
+            // The maximize-to-edges twin forwards the windowId on the same
+            // terms — it is the verb the interception actually dispatches, so
+            // a swallowed id here is user-reachable through every titlebar
+            // click on an unfocused window.
+            const auto edgesOfWindow = [st](const QString& id) {
+                const int idx = st->strip().columnOfWindow(id);
+                return idx >= 0 && st->strip().columns().at(idx).maximizedToEdges;
+            };
+            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|b"));
+            QVERIFY2(edgesOfWindow(QStringLiteral("app|b")), "the NAMED window's column must take the flag");
+            QVERIFY2(!edgesOfWindow(QStringLiteral("app|a")), "the ACTIVE column must be left alone");
+            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|b"));
+            QVERIFY(!edgesOfWindow(QStringLiteral("app|b")));
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a

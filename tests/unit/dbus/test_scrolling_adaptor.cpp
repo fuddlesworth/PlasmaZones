@@ -540,6 +540,7 @@ private Q_SLOTS:
         // the shutdown path: the KWin effect dispatches it from a user's
         // maximize click, which can land while the daemon is going down.
         m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
+        m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's

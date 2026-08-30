@@ -108,6 +108,11 @@ private Q_SLOTS:
     }
 
     // The full 8-row truth table over (flagOnWire, inSet, kwinMaximized).
+    //
+    // RETARGETED, semantics identical: the mirrored engine state is now the
+    // declared maximize-to-edges flag (raw area, both axes) rather than the
+    // measured column maximize; only which flag feeds flagOnWire changed,
+    // so every row and its reasoning carried over verbatim.
     void columnMaximizeTruthTable_data()
     {
         QTest::addColumn<bool>("flagOnWire");
@@ -127,7 +132,7 @@ private Q_SLOTS:
         // Flag off while held: the engine dropped the maximize, so hand the
         // bit back. Release fires even when KWin's bit is already clear —
         // something else cleared it and the membership must still be shed,
-        // which is exactly what releaseColumnMaximized's own no-op guard
+        // which is exactly what releaseMaximizedToEdges's own no-op guard
         // makes cheap.
         QTest::newRow("off/held/kwin0") << false << true << false << a(MaximizeAction::Release);
         QTest::newRow("off/held/kwin1") << false << true << true << a(MaximizeAction::Release);
@@ -152,12 +157,12 @@ private Q_SLOTS:
         QFETCH(bool, kwinMaximized);
         QFETCH(int, expectedAction);
 
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(flagOnWire, inSet, kwinMaximized)), expectedAction);
+        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(flagOnWire, inSet, kwinMaximized)), expectedAction);
     }
 
     // The interception's round trip cannot be raced, which is why this
     // decision carries no in-flight marker (see the contract note on
-    // resolveColumnMaximizeAction). Both directions of a toggle are walked
+    // resolveMaximizeToEdgesAction). Both directions of a toggle are walked
     // here with a STALE batch landing mid-flight, asserting it is inert.
     void staleBatchDuringToggleIsInert()
     {
@@ -172,7 +177,7 @@ private Q_SLOTS:
         bool inSet = false;
         bool kwinMax = false;
         const auto step = [&inSet, &kwinMax](bool flagOnWire) {
-            const MaximizeAction action = resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax);
+            const MaximizeAction action = resolveMaximizeToEdgesAction(flagOnWire, inSet, kwinMax);
             // MODELS what the batch arm does with the answer — it does not
             // call it. kwin-effect has no linkable test target, so the arm's
             // own bookkeeping cannot be driven from here; only a wrong
@@ -180,7 +185,7 @@ private Q_SLOTS:
             // step with tiling.cpp's Apply/Release block by hand. It models
             // the UNCONDITIONAL path only, and knowingly diverges twice: the
             // real arm skips the compositor call for a fullscreen window or
-            // one mid user move/resize, and releaseColumnMaximized RETAINS
+            // one mid user move/resize, and releaseMaximizedToEdges RETAINS
             // membership on its fullscreen skip. Neither divergence affects
             // the resolver contract this test pins.
             if (action == MaximizeAction::Apply) {
@@ -289,22 +294,22 @@ private Q_SLOTS:
         // batch will carry it, so every claim must pay up.
         QTest::newRow("stripExit/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::StripExit) << true;
         QTest::newRow("stripExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::StripExit) << true;
-        QTest::newRow("stripExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::StripExit) << true;
+        QTest::newRow("stripExit/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::StripExit) << true;
 
         // PassiveFloat — monocle is the ONE deliberate blank in the table.
         // UntrackFunnel matches StripExit except for monocle, whose blank is
         // recorded as unresolved rather than decided (see the enum comment).
         QTest::newRow("untrack/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::UntrackFunnel) << false;
         QTest::newRow("untrack/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::UntrackFunnel) << true;
-        QTest::newRow("untrack/column") << c(Claim::ColumnMaximize) << s(ClaimScope::UntrackFunnel) << true;
+        QTest::newRow("untrack/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::UntrackFunnel) << true;
 
         QTest::newRow("passiveFloat/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::PassiveFloat) << false;
         QTest::newRow("passiveFloat/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::PassiveFloat) << true;
-        QTest::newRow("passiveFloat/column") << c(Claim::ColumnMaximize) << s(ClaimScope::PassiveFloat) << true;
+        QTest::newRow("passiveFloat/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::PassiveFloat) << true;
 
         QTest::newRow("modeFlip/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::ModeFlip) << true;
         QTest::newRow("modeFlip/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::ModeFlip) << true;
-        QTest::newRow("modeFlip/column") << c(Claim::ColumnMaximize) << s(ClaimScope::ModeFlip) << true;
+        QTest::newRow("modeFlip/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::ModeFlip) << true;
 
         // FullscreenExitWhileFloating — windowed fullscreen cannot be held
         // here by construction; the arm runs BECAUSE the window left it.
@@ -312,12 +317,12 @@ private Q_SLOTS:
                                         << true;
         QTest::newRow("fsExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::FullscreenExitWhileFloating)
                                     << false;
-        QTest::newRow("fsExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::FullscreenExitWhileFloating)
+        QTest::newRow("fsExit/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::FullscreenExitWhileFloating)
                                        << true;
 
         QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
-        QTest::newRow("teardown/column") << c(Claim::ColumnMaximize) << s(ClaimScope::Teardown) << true;
+        QTest::newRow("teardown/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Teardown) << true;
     }
 
     void claimReleaseTable()
@@ -338,7 +343,7 @@ private Q_SLOTS:
         // remediation, which is why this is pinned rather than left to the
         // enum's declaration order.
         QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::MonocleMaximize));
-        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::ColumnMaximize));
+        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::MaximizedToEdges));
     }
 
     void onlyTheMaximizeClaimsRetainOnAFullscreenSkip()
@@ -348,7 +353,7 @@ private Q_SLOTS:
         // exception because its caller sheds membership before the
         // compositor half runs at all.
         QVERIFY(claimRetainsOnFullscreenSkip(Claim::MonocleMaximize));
-        QVERIFY(claimRetainsOnFullscreenSkip(Claim::ColumnMaximize));
+        QVERIFY(claimRetainsOnFullscreenSkip(Claim::MaximizedToEdges));
         QVERIFY(!claimRetainsOnFullscreenSkip(Claim::WindowedFullscreen));
     }
 };

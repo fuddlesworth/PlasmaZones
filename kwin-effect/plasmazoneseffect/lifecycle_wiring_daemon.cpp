@@ -367,7 +367,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // release for the ordering reason the unload path documents: on X11
         // the flip above has already landed, so a window holding both states
         // gets a real restore rather than the fullscreen skip.
-        m_tilingHandler->restoreAllColumnMaximized();
+        m_tilingHandler->restoreAllMaximizedToEdges();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, the
