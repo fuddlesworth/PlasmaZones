@@ -955,10 +955,18 @@ void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceInde
     // Refusal budget spent (see MaxCreateRefusals). Checked HERE rather than
     // only at the post-expiry re-drive, because maintainScreen also runs off
     // every settle and every population edge, and each of those would put the
-    // unanswered request straight back. The screen keeps whatever slice it
-    // has — a missing trailing empty is visible and harmless — until a create
-    // for it lands, the desktop count drops, or the screen is re-added.
-    if (m_createRefusals.value(screenId, 0) >= MaxCreateRefusals) {
+    // unanswered request straight back.
+    //
+    // A NAMED create is exempt. The budget accrues from unrelated maintenance
+    // (a trailing empty this screen could not repair), and spending it must
+    // not silently swallow a workspace the user just declared in settings —
+    // that is a create with a visible cause and a visible absence. The
+    // must-hold-one-workspace arm in maintainScreen is exempt for the same
+    // class of reason and refuses itself before calling here, so what is left
+    // bounded is exactly the trailing-empty repair, whose absence is
+    // cosmetic and self-heals when a create lands, the count drops, or the
+    // screen is re-added.
+    if (name.isEmpty() && m_createRefusals.value(screenId, 0) >= MaxCreateRefusals) {
         return;
     }
     // Count the creates KWin still owes us: the id list only grows once each
@@ -998,7 +1006,15 @@ void WorkspaceReconciler::maintainScreen(const QString& screenId)
         if (hasPendingCreate(screenId)) {
             return;
         }
-        if (m_lastIds.size() + pendingCreateCount() >= m_desktopCap) {
+        // Donor transfer covers TWO refusals, not just the cap. A spent
+        // create budget means KWin is not answering this screen's requests,
+        // so asking again is pointless — but leaving the screen with zero
+        // workspaces breaks the invariant this whole arm exists to hold, and
+        // a transfer needs no answer from KWin at all. So fall through to the
+        // donor search on either refusal, and only give up when neither a
+        // create nor a donor is available.
+        const bool createRefused = m_createRefusals.value(screenId, 0) >= MaxCreateRefusals;
+        if (m_lastIds.size() + pendingCreateCount() >= m_desktopCap || createRefused) {
             const QStringList order = m_map.screenOrder();
             for (const QString& donor : order) {
                 if (donor == screenId || m_map.sliceSize(donor) <= 1) {

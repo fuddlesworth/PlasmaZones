@@ -428,14 +428,18 @@ int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const 
         return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
     const QString owner = m_reconciler.map().ownerOf(target);
-    if (ownerScreenOut) {
-        *ownerScreenOut = owner;
-    }
-    // A sticky refusal (watchWindowMove answering false) still reports the
-    // REALIZED desktop, and its owner screen with it: the window is already on
-    // every workspace, so there is nothing to move and nothing to fight.
+    // A sticky refusal (watchWindowMove answering false) reports the REALIZED
+    // desktop so the caller does not fall back to an unrelated positional
+    // route, but deliberately does NOT report an owner screen. The window is
+    // on every workspace and no move of any kind is issued, so it stays on the
+    // output it opened on — and the caller pins the placement directive to
+    // whatever owner screen it is handed. Reporting one here resolved a sticky
+    // window's zones on a monitor it never reaches.
     if (!watchWindowMove(windowId, target)) {
         return desktop;
+    }
+    if (ownerScreenOut) {
+        *ownerScreenOut = owner;
     }
     // The owner screen is always carried so the handoff re-homes engine state
     // on the right output; @p moveOutput decides whether the OUTPUT leg is
