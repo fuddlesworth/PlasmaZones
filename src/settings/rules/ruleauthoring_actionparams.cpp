@@ -405,8 +405,8 @@ QString paramHint(const QString& type, const QString& key)
     }
     if (type == ActionType::RouteToWorkspace && key == ActionParam::TargetWorkspaceName) {
         return PhosphorI18n::tr(
-            "A name that is not declared yet is still valid. "
-            "The rule stays dormant until a workspace with that name exists.");
+            "If you later remove this workspace, the rule goes dormant instead of failing. "
+            "It works again as soon as a workspace with that name comes back.");
     }
     return {};
 }
@@ -610,8 +610,9 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else {
             // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
             // animationEvent, shaderEffect, overlayShader, curveEditor,
-            // screenId, workspaceName) and plain strings all start empty. The tab-indicator
-            // font family is a plain string rather than a picker, and empty is
+            // screenId, workspaceName) and plain strings all start empty. The
+            // tab-indicator font family is a plain string rather than a
+            // picker, and empty is
             // a meaningful value for it (it means the system font), so unlike
             // the pickers its seeded rule is already savable. Four kinds are
             // seeded above instead:

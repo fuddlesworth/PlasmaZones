@@ -5,7 +5,7 @@
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Ten siblings carry the rest of the suite (enumerated below),
+// been done. Twelve siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -13,7 +13,7 @@
 // engine regression would then have to know which half to open.
 //
 // Reviewed at the same time as the file's other exception-worthy neighbours;
-// if a ninth concern emerges, it takes a sibling rather than growing this.
+// a new concern takes a sibling rather than growing this.
 
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
@@ -24,8 +24,8 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Ten siblings carry the rest of the suite, split off at this file's size
-// ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
+// Twelve siblings carry the rest of the suite:
+// test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
 // owns the per-screen override resolution, test_scrollengine_draginsert owns
@@ -37,10 +37,12 @@
 // test_scrollengine_behaviour.cpp owns the per-screen BEHAVIOUR overrides,
 // test_scrollengine_snapshot.cpp owns stripSnapshot and its index contract,
 // test_scrollengine_template.cpp owns the strip-template seed and its
-// blueprint progress, and test_scrollengine_maximize.cpp owns the
-// maximize-column claim (the flag riding tiles the user cannot see, two
-// columns maximized at once, the named verb's second press, and survival
-// across a mode round trip).
+// blueprint progress, test_scrollengine_closehold.cpp owns the close-settle
+// reflow hold, test_scrollengine_desktopreap.cpp owns the dynamic-workspaces
+// desktop axis (identity reap and renumber), and
+// test_scrollengine_maximize.cpp owns the maximize-column claim (the flag
+// riding tiles the user cannot see, two columns maximized at once, the named
+// verb's second press, and survival across a mode round trip).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -81,7 +83,7 @@ private Q_SLOTS:
     void pruneStaleWindowsReclaimsRectsAndSeeds();
     void contextKeysSeparateDesktops();
     void floatRestoresDisplayIntent();
-    void pruneDropsWindowBookkeeping();
+    void pruneStatesForDesktopDropsWindowBookkeeping();
     void pruneRemovedScreenAndActivitiesSweep();
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
@@ -473,7 +475,7 @@ void TestScrollEngineSmoke::floatRestoresDisplayIntent()
     QCOMPARE(columnDisplayOf(QStringLiteral("app|b")), ColumnDisplay::Tabbed);
 }
 
-void TestScrollEngineSmoke::pruneDropsWindowBookkeeping()
+void TestScrollEngineSmoke::pruneStatesForDesktopDropsWindowBookkeeping()
 {
     // Side-map regression: pruning a desktop's state must
     // sweep the per-window side maps — the float marker is the observable

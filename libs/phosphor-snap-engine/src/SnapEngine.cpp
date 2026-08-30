@@ -372,21 +372,88 @@ void SnapEngine::pruneStatesForDesktop(int removedDesktop)
 void SnapEngine::reapDesktopState(int desktop)
 {
     pruneStatesForDesktop(desktop);
+    if (desktop <= 0) {
+        return; // 0 is the all-desktops sentinel; there is no desktop to reap
+    }
     // The key-level prune cannot reach the desktop VALUES snap keeps per
     // window inside every surviving state (assignments are desktop-tagged,
-    // and the global holder is deliberately excluded from the prune).
+    // and the global holder is deliberately excluded from the prune). A
+    // surviving store holds windows tagged with the dead desktop whenever a
+    // cross-desktop directional move re-stamped a window's desktop without
+    // moving it out of its source store.
+    //
+    // Those windows are ALIVE — only their desktop went away — so their
+    // placement is released, and announced first, exactly as
+    // releaseWindowsForDyingStates does for the stores the prune above
+    // destroys: the tracking service's unassign for the snapped ones (so the
+    // per-window notification and the dirty mark both happen) and a float
+    // correction by emission for the floating ones. Unassign runs BEFORE
+    // reapDesktopValues so it can still resolve the owning store.
+    //
+    // The screen carried with each float correction is the STATE's own key
+    // screenId, matching releaseWindowsForDyingStates so a virtual sub-screen
+    // ("conn/vs:N") is reported as itself. The global holder's key screenId is
+    // empty and names no monitor, so its windows fall back to the screen the
+    // record itself carries.
+    QStringList assignedWindows;
+    QList<QPair<QString, QString>> floatedWindows;
+    QSet<QString> taggedWindows;
     const auto& states = m_states.states();
     for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
         // Null-guarded like every other whole-store walk in this file.
+        SnapState* state = it.value();
+        if (!state) {
+            continue;
+        }
+        for (const QString& windowId : state->windowsTaggedWithDesktop(desktop)) {
+            taggedWindows.insert(windowId);
+            if (state->isWindowSnapped(windowId)) {
+                assignedWindows.append(windowId);
+            }
+            if (state->isFloating(windowId)) {
+                const QString screenId =
+                    it.key().screenId.isEmpty() ? state->screenForWindow(windowId) : it.key().screenId;
+                floatedWindows.append({windowId, screenId});
+            }
+        }
+    }
+    if (m_windowTracker) {
+        for (const QString& windowId : std::as_const(assignedWindows)) {
+            m_windowTracker->unassignWindow(windowId);
+        }
+    }
+    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
+        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
+    }
+    // Re-read the map: the unassign above routes back through the tracking
+    // service into this engine, which may add or drop stores, so the reference
+    // taken before the announcements cannot be reused here.
+    const auto& statesAfterRelease = m_states.states();
+    for (auto it = statesAfterRelease.constBegin(); it != statesAfterRelease.constEnd(); ++it) {
         if (it.value()) {
             it.value()->reapDesktopValues(desktop);
         }
+    }
+    // The released windows hold no placement in any store any more, so their
+    // reverse-map entries would dangle. Drop them the same way the store prune
+    // drops the entries of the stores it destroys; a later snap re-adopts the
+    // window through the normal placement path. Residence-only windows (a
+    // screen and a tag, no zone and no float bit) are in this set too: nothing
+    // was announced for them, because no consumer held a placement for them,
+    // but their reverse entry goes with the rest of their record.
+    if (!taggedWindows.isEmpty()) {
+        m_states.removeWindowsIf([&taggedWindows](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
+            return taggedWindows.contains(windowId);
+        });
     }
 }
 
 void SnapEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
 {
-    if (oldToNew.isEmpty()) {
+    // Gate the whole pass, not just the arms that gate themselves: the three
+    // rewrites below must agree on a poisoned mapping or the per-window tags
+    // shift while the keys and pins they belong to stay on their old numbers.
+    if (oldToNew.isEmpty() || !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
         return;
     }
     // The global holder's key (empty screenId) is a sentinel, not a desktop
@@ -424,6 +491,15 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
     m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key);
     });
+    // The tracked current activity can name one of the activities that just
+    // died, and it keeps naming it until the compositor's currentActivityChanged
+    // arrives. Until then currentKeyForScreen would hand out keys under a dead
+    // activity and PerScreenStates::forKey would lazily rebuild state there,
+    // undoing the prune one placement at a time.
+    const QString current = m_context.currentActivity();
+    if (!current.isEmpty() && !valid.contains(current)) {
+        m_context.pruneActivity(current);
+    }
 }
 
 void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)

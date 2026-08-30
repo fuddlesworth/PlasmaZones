@@ -53,17 +53,35 @@ public:
     /// the desktop actually goes away.
     static constexpr int MaxRemovalRefusals = 3;
     /// KWin's desktop ceiling (VirtualDesktopManager::maximum() in current
-    /// KWin). Shared by the daemon's gate and the settings app's cap badge;
-    /// setDesktopCap adjusts after live probing.
+    /// KWin). Shared by the daemon's gate and the settings app's cap badge. It
+    /// is the STARTING value only: the real ceiling is learned from the
+    /// compositor at runtime, in expireLedger, and forgotten again as soon as a
+    /// create succeeds or the live count exceeds it.
     static constexpr int DefaultDesktopCap = 20;
+    /// How many Create expiries in one episode (the id list unchanged
+    /// throughout) it takes before the ceiling is believed. KWin refuses a
+    /// create past its maximum with no reply at all, and so does a stalled bus,
+    /// so a single unanswered create is not evidence of a cap — see
+    /// expireLedger.
+    static constexpr int CapProbeExpiries = 2;
+    /// How many times a KWin rename that never took effect is re-pushed before
+    /// the desktop is left with the name it has. The mirror of
+    /// MaxRemovalRefusals, for the same reason: applyNamedWorkspaces runs on
+    /// every settle, so a permanently declined rename would re-fire forever.
+    /// The budget is restored when KWin's names agree, when the name reverts to
+    /// dynamic, and when the desktop goes away.
+    static constexpr int MaxNamePushRefusals = 3;
 
     WorkspaceMap& map();
     const WorkspaceMap& map() const;
     quint64 generation() const;
 
     /// KWin's desktop-count ceiling. Trailing-empty appends are suspended at
-    /// the cap (capReached() hints once per episode). Default 20; the
-    /// controller may adjust after live probing.
+    /// the cap (capReached() hints once per episode). Test-only seam: nothing
+    /// in the daemon calls this, because the production path starts at
+    /// DefaultDesktopCap and learns the compositor's real ceiling itself from
+    /// repeated create expiry. Tests use it to build a small-cap world without
+    /// having to stall twenty creates.
     void setDesktopCap(int cap);
     /// The screen adoption falls back to for externally created desktops and
     /// for slices orphaned before Phase-4 hotplug memory exists.
@@ -197,6 +215,9 @@ private:
 
     void ledgerAdd(PendingOp op);
     void expireLedger();
+    /// KWin answered one of our creates: forget the cap-probe evidence and
+    /// restore the default ceiling if a previous episode had lowered it.
+    void noteCreateSucceeded();
     /// True while a Remove for this desktop is open in the ledger.
     bool hasPendingRemove(const QString& desktopId) const;
     /// True while a Create owned by this screen is open in the ledger.
@@ -266,6 +287,7 @@ private:
     {
         QString name;
         qint64 deadline = 0;
+        int refusals = 0; ///< pushes of this name KWin never acknowledged
     };
     /// desktopId → the KWin name we last pushed for it and when that push
     /// stops being assumed in flight. applyNamedWorkspaces runs on every
@@ -278,6 +300,11 @@ private:
     /// the re-arm below MaxRemovalRefusals; cleared on the desktop's removal,
     /// on any population change, and when the id leaves KWin's list.
     QHash<QString, int> m_removalRefusals;
+    /// The id list the current cap-probe episode is being counted against, and
+    /// how many Create expiries it has seen. An episode ends the moment the
+    /// list changes or a create succeeds; see expireLedger and CapProbeExpiries.
+    QStringList m_capProbeIds;
+    int m_capProbeExpiries = 0;
 };
 
 } // namespace PhosphorWorkspaces

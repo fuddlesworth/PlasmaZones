@@ -5,12 +5,14 @@
 // desktop destroys and what it must leave alone, and what a renumber has to
 // carry across with the shifted keys.
 //
-// Split out of test_scrollengine_perscreen.cpp, which had grown past the hard
-// size ceiling. The split is by CONCERN, not to hit a number: the per-screen
-// suite's every case is a precedence claim inside one resolution cascade
-// (rule > per-screen trio > cached global), and none of these is — they are
-// lifecycle claims about state destruction, and they share only that suite's
-// stub settings and its three-screen fixture.
+// A NEW sibling for a new concern, not a split off test_scrollengine_perscreen:
+// nothing moved out of that file, which is at the very top of its size grace
+// with no headroom left and so could not have taken these cases anyway. The two
+// suites share only the stub settings and the three-screen fixture. The
+// per-screen suite's every case is a precedence claim inside one resolution
+// cascade (rule > per-screen trio > cached global); none of these is — they are
+// lifecycle claims about what a dying or renumbered context destroys, keeps and
+// announces.
 
 #include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -21,6 +23,7 @@
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
 
+#include <QCoreApplication>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QVariantMap>
@@ -53,6 +56,15 @@ private Q_SLOTS:
     void renumberDesktopStateShiftsKeysAndKeepsWindows();
     void renumberDesktopStateMovesTheStripStash();
     void renumberDesktopStateMovesPerScreenOverrides();
+    void reapDesktopStateASecondTimeIsASilentNoOp();
+    void reapDesktopStateLeavesAReusedDesktopIndexEmpty();
+    void reapDesktopStateSweepsTheStripStash();
+    void reapDesktopStateSweepsTheBurstMarker();
+    void reapDesktopStateCancelsALiveDragInsertPreview();
+    void activityPruneReleasesItsWindowsAndSweepsTheBurstMarker();
+    void activityPruneClearsATrackedDeadActivity();
+    void renumberDesktopStateMovesTheBurstMarker();
+    void renumberDesktopStateRefusesAPoisonedMapping();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -145,13 +157,24 @@ void TestScrollEngineDesktopReap::reapDesktopStateKeepsTheSurvivingSiblingsScree
     ScrollEngine* engine = makeEngine(&owner, settings);
 
     // Desktop 2 is the survivor: give it a tabbed column, which latches the
-    // screen's tab-strip state.
+    // screen's tab-strip state. The latch is asserted POSITIVELY below before
+    // the reap: without that control the negative assertion further down passes
+    // just as happily when toggleColumnTabbed never latched anything at all.
+    QSignalSpy latched(engine, &ScrollEngine::tabStripsChanged);
     engine->setCurrentDesktopForScreen(kS1, 2);
     engine->windowOpened(QStringLiteral("app|tab1"), kS1, 0, 0);
     engine->windowOpened(QStringLiteral("app|tab2"), kS1, 0, 0);
     engine->focusColumnFirst(kS1);
     engine->consumeWindowIntoColumn(kS1);
     engine->toggleColumnTabbed(kS1);
+    QCoreApplication::processEvents();
+    bool sawLatch = false;
+    for (const QList<QVariant>& emission : latched) {
+        if (emission.at(0).toString() == kS1 && emission.at(1).toString() != QStringLiteral("[]")) {
+            sawLatch = true;
+        }
+    }
+    QVERIFY2(sawLatch, "setup must actually latch a tab strip, or the negative below is vacuous");
 
     // A mode-transition seed for the same screen, naming windows that have
     // not arrived yet (B before A).
@@ -257,10 +280,241 @@ void TestScrollEngineDesktopReap::renumberDesktopStateMovesPerScreenOverrides()
     mapping.insert(3, 2);
     engine->renumberDesktopState(mapping);
 
-    // The tracker now says desktop 2 for kS1; the overrides must have moved
-    // with it (a dropped aux-map renumber leaves them stranded at key 3).
+    // Read through an ABSOLUTE desktop number, not the current one: the tracker
+    // shifts with the states, so asking through the current key both before and
+    // after would pass with BOTH renumber arms deleted.
+    engine->setCurrentDesktopForScreen(kS1, 2);
     QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
     QCOMPARE(engine->perScreenOverrides(kS1).value(ScrollPerScreenKeys::centerFocusedColumn()).toBool(), true);
+    // And nothing is left behind at the old number.
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    QVERIFY(engine->perScreenOverrides(kS1).isEmpty());
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateASecondTimeIsASilentNoOp()
+{
+    // KWin can settle a desktop removal in more than one report, and the
+    // reconciler drives the reap off each. The second pass has nothing left to
+    // release, and must not re-announce the windows the first one handed back:
+    // the daemon's restore consumers would re-home an already re-homed window.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|d1"), kS1, 0, 0);
+    QSignalSpy releasedSpy(engine, &PhosphorEngine::PlacementEngineBase::windowsReleased);
+    engine->reapDesktopState(1);
+    QCOMPARE(releasedSpy.count(), 1);
+
+    releasedSpy.clear();
+    engine->reapDesktopState(1);
+    QCOMPARE(releasedSpy.count(), 0);
+    QVERIFY(engine->desktopsWithActiveState().isEmpty());
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateLeavesAReusedDesktopIndexEmpty()
+{
+    // KWin hands the index of a destroyed desktop straight back out, so the
+    // reap has to leave the NUMBER clean, not just the state object: anything
+    // surviving at the old key resurfaces as the next desktop's opening state.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|old"), kS1, 0, 0);
+    QVariantMap overrides;
+    overrides.insert(ScrollPerScreenKeys::centerFocusedColumn(), true);
+    engine->applyPerScreenConfig(kS1, overrides);
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+
+    engine->reapDesktopState(1);
+
+    // Desktop 1 handed back out. Nothing from its predecessor may answer here.
+    QVERIFY(engine->perScreenOverrides(kS1).isEmpty());
+    engine->windowOpened(QStringLiteral("app|new"), kS1, 0, 0);
+    QCOMPARE(engine->managedWindowOrder(kS1), (QStringList{QStringLiteral("app|new")}));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|old")));
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateSweepsTheStripStash()
+{
+    // The reap's sweepStripStash arm, which nothing else in the suite reaches:
+    // a stash left at the dead key restores into whatever desktop takes the
+    // number next. Falsifies deleting that call.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    // The screen leaves scrolling, which stashes the strip under S1|1|.
+    engine->setActiveScreens({});
+    QVERIFY(engine->serializeStripState().contains(QStringLiteral("S1|1|")));
+
+    engine->reapDesktopState(1);
+    QVERIFY(!engine->serializeStripState().contains(QStringLiteral("S1|1|")));
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateSweepsTheBurstMarker()
+{
+    // The context-keyed burst marker outlives its desktop unless the reap
+    // sweeps it, and a marker at a key the screen no longer resolves to takes
+    // endArrivalBurst's SKIP arm — which, with no live key for that screen in
+    // the same burst, also drops the screen's mode-transition focus seed. So a
+    // stale marker eats a seed captured for an unrelated later transition.
+    // Falsifies deleting the m_burstPendingApplies loop in pruneStatesForDesktop.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|burst"), kS1, 0, 0); // marker at S1|2|
+    // The screen moves off desktop 2, then desktop 2 is destroyed.
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->reapDesktopState(2);
+    // Seeded AFTER the reap: the reap's stateless-screen sweep clears seeds for
+    // a screen it left with no state, which is not the arm under test.
+    engine->setInitialFocusedWindow(kS1, QStringLiteral("app|x"));
+    engine->endArrivalBurst();
+
+    // A later, unrelated burst. app|y arrives last and would own focus on its
+    // own; a surviving seed names app|x, so the two outcomes differ.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|x"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|y"), kS1, 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(kS1), QStringLiteral("app|x"));
+}
+
+void TestScrollEngineDesktopReap::reapDesktopStateCancelsALiveDragInsertPreview()
+{
+    // A preview captures its keys by VALUE, so a reap that destroyed the state
+    // under it would leave the preview pointing at a dead key and its commit
+    // would materialise a fresh empty state there.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|b"), kS1));
+    QCOMPARE(engine->dragInsertPreviewWindowId(), QStringLiteral("app|b"));
+
+    engine->reapDesktopState(2);
+    QVERIFY(engine->dragInsertPreviewWindowId().isEmpty());
+}
+
+void TestScrollEngineDesktopReap::activityPruneReleasesItsWindowsAndSweepsTheBurstMarker()
+{
+    // The activity axis moved to a FULL release in the same pass as the desktop
+    // one, and it is the bigger behaviour change of the two: this path used to
+    // emit nothing at all. Its burst-marker sweep is the desktop arm's twin and
+    // is deletable with the rest of the suite green.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentActivity(QStringLiteral("act-old"));
+    QSignalSpy releasedSpy(engine, &PhosphorEngine::PlacementEngineBase::windowsReleased);
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|gone"), kS1, 0, 0); // marker at S1|1|act-old
+    engine->setCurrentActivity(QStringLiteral("act-new"));
+    engine->pruneStatesForActivities({QStringLiteral("act-new")});
+
+    QCOMPARE(releasedSpy.count(), 1);
+    QVERIFY(releasedSpy.first().first().toStringList().contains(QStringLiteral("app|gone")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|gone")));
+
+    // Same seed-eating discriminator as the desktop arm above.
+    engine->setInitialFocusedWindow(kS1, QStringLiteral("app|x"));
+    engine->endArrivalBurst();
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|x"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|y"), kS1, 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(kS1), QStringLiteral("app|x"));
+}
+
+void TestScrollEngineDesktopReap::activityPruneClearsATrackedDeadActivity()
+{
+    // The tracker keeps naming a deleted activity until the compositor's
+    // currentActivityChanged arrives. Until then currentKeyForScreen answers
+    // under the dead name and stateForKey(create) rebuilds state there, undoing
+    // the prune one placement at a time. The prune therefore clears the tracked
+    // activity back to the empty "no activity context" state.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentActivity(QStringLiteral("act-old"));
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+
+    // act-old is both stale AND the tracked current activity.
+    engine->pruneStatesForActivities({QStringLiteral("act-other")});
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+
+    // The rebuilt strip keys under the EMPTY activity dimension, not the dead
+    // name. Key spelling is "screen|desktop|activity".
+    const QJsonObject blob = engine->serializeStripState();
+    QVERIFY(blob.contains(QStringLiteral("S1|1|")));
+    QVERIFY(!blob.contains(QStringLiteral("S1|1|act-old")));
+}
+
+void TestScrollEngineDesktopReap::renumberDesktopStateMovesTheBurstMarker()
+{
+    // The burst marker has to shift WITH the states: left at the old number it
+    // no longer matches the screen's (also shifted) current key, so the drain
+    // skips it and the deferred apply plus its focus restore are lost.
+    // Falsifies dropping renumberDesktopKeyedHash(m_burstPendingApplies, ...).
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    // The seed names the FIRST arrival, so a consumed seed and a dropped one
+    // give different answers (app|b arrives last and owns focus on its own).
+    engine->setInitialFocusedWindow(kS1, QStringLiteral("app|a"));
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    engine->renumberDesktopState(mapping);
+    engine->endArrivalBurst();
+
+    QCOMPARE(engine->managedFocusedWindow(kS1), QStringLiteral("app|a"));
+}
+
+void TestScrollEngineDesktopReap::renumberDesktopStateRefusesAPoisonedMapping()
+{
+    // A target below 1 is refused WHOLE, by every map: KWin desktops are
+    // 1-based, and a partial shift would strand one key on a number its
+    // siblings just moved onto. The refusal is gated before any side effect, so
+    // a live drag-insert preview survives it too — an operation that does
+    // nothing must undo nothing.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->setCurrentDesktopForScreen(kS1, 3);
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QVariantMap overrides;
+    overrides.insert(ScrollPerScreenKeys::centerFocusedColumn(), true);
+    engine->applyPerScreenConfig(kS1, overrides);
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|b"), kS1));
+
+    QHash<int, int> poisoned;
+    poisoned.insert(3, 0);
+    engine->renumberDesktopState(poisoned);
+
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{3}));
+    QCOMPARE(engine->dragInsertPreviewWindowId(), QStringLiteral("app|b"));
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDesktopReap)

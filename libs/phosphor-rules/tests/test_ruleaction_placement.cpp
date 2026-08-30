@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The open-placement half of the RuleAction wire tests: the RouteToScreen /
-// RouteToDesktop / RouteToWorkspace slot mapping and the SnapToZone target payload (ordinals and
-// zone names). Split from test_ruleaction.cpp for file-size, the way
+// RouteToDesktop / RouteToWorkspace slot mapping and the SnapToZone target
+// payload (ordinals and zone names). Split from test_ruleaction.cpp for
+// file-size, the way
 // test_ruleaction_contextbools.cpp and test_ruleaction_tilingparams.cpp were.
 
+#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QTest>
+#include <QUuid>
 
 using namespace PhosphorRules;
 
@@ -48,7 +51,21 @@ private Q_SLOTS:
         o.insert(QString(ActionParam::TargetScreenId),
                  QString(QStringLiteral("  ") + QString(MaxScreenIdLength, QLatin1Char('a')) + QStringLiteral("  ")));
         QVERIFY(RuleAction::fromJson(o).has_value());
+        // A padded ordinary id is accepted and stored VERBATIM: trimming is a
+        // read-side concern, the same contract the RouteToWorkspace name and
+        // the SnapToZone zone names pin. The readers that honour it are the
+        // daemon's placement-path screen resolution and the settings rule
+        // model's "Open on monitor" summary (rulemodel_labels.cpp), both of
+        // which trim before resolving the id against live monitors.
+        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("  LG Electronics:38GN950:688325  "));
+        const auto padded = RuleAction::fromJson(o);
+        QVERIFY(padded.has_value());
+        QCOMPARE(padded->toJson().value(QString(ActionParam::TargetScreenId)).toString(),
+                 QStringLiteral("  LG Electronics:38GN950:688325  "));
+        // The realistic colon-bearing id loads on its own before the negative
+        // case below reuses the object.
         o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("LG Electronics:38GN950:688325"));
+        QVERIFY(RuleAction::fromJson(o).has_value());
         // Unknown param key is rejected by the strict loader.
         o.insert(QStringLiteral("bogus"), 1);
         QVERIFY(!RuleAction::fromJson(o).has_value());
@@ -264,6 +281,39 @@ private Q_SLOTS:
             QStringLiteral("  ") + QString(MaxZoneNameLength, QLatin1Char('a')) + QStringLiteral("  ");
         paddedMax.insert(QString(ActionParam::ZoneNames), QJsonArray{paddedMaxName});
         QVERIFY(RuleAction::fromJson(paddedMax).has_value());
+    }
+
+    void testRule_workspaceAndDesktopRoutesCoexist()
+    {
+        // ActionSlots.h states that a cascade may legitimately carry BOTH a
+        // workspace route and a desktop route, and that the daemon prefers the
+        // workspace one. The preference itself is daemon-side behaviour, but
+        // its precondition is a phosphor-rules contract: the two must survive
+        // one rule's load and occupy DISTINCT slots. If they ever shared a
+        // slot, the same-slot collision handling would make the pairing
+        // unrepresentable and the daemon's priority unreachable.
+        QJsonObject workspace;
+        workspace.insert(QStringLiteral("type"), QString(ActionType::RouteToWorkspace));
+        workspace.insert(QString(ActionParam::TargetWorkspaceName), QStringLiteral("chat"));
+        QJsonObject desktop;
+        desktop.insert(QStringLiteral("type"), QString(ActionType::RouteToDesktop));
+        desktop.insert(QString(ActionParam::TargetDesktop), 3);
+
+        QJsonObject rule;
+        rule.insert(QStringLiteral("id"), QUuid::createUuid().toString());
+        rule.insert(QStringLiteral("name"), QStringLiteral("route both"));
+        rule.insert(QStringLiteral("match"), QJsonObject{{QStringLiteral("all"), QJsonArray{}}});
+        rule.insert(QStringLiteral("actions"), QJsonArray{workspace, desktop});
+
+        const auto loaded = Rule::fromJson(rule);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(loaded->actions.size(), 2);
+        const ActionRegistry& reg = ActionRegistry::instance();
+        const QString firstSlot = reg.slotFor(loaded->actions.at(0));
+        const QString secondSlot = reg.slotFor(loaded->actions.at(1));
+        QCOMPARE(firstSlot, QString(ActionSlot::RouteWorkspace));
+        QCOMPARE(secondSlot, QString(ActionSlot::RouteDesktop));
+        QVERIFY(firstSlot != secondSlot);
     }
 };
 

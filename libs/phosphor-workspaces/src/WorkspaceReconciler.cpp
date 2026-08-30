@@ -70,34 +70,14 @@ void WorkspaceReconciler::expireLedger()
 {
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     bool expired = false;
+    bool createExpired = false;
     QStringList refusedRemovals;
     for (int i = m_ledger.size() - 1; i >= 0; --i) {
         if (m_ledger.at(i).deadline <= now) {
             qCWarning(lcWorkspaceRec) << "pending workspace op expired, kind =" << static_cast<int>(m_ledger.at(i).kind)
                                       << "desktop =" << m_ledger.at(i).desktopId;
-            // Live cap probe: KWin refuses createDesktop past its maximum
-            // SILENTLY (void method, no desktopCreated echo), so a Create
-            // expiry with the list unchanged is the only observable form of
-            // the refusal. Learn the ceiling from it — this replaces the
-            // DefaultDesktopCap guess with the compositor's real answer.
-            // Self-healing against a mislearn from a transient D-Bus stall:
-            // onDesktopListSettled raises the cap back to the default the
-            // moment the count ever exceeds the learned value.
-            //
-            // "List unchanged" is the precondition, and it is checked here
-            // rather than at request time: a create that DID land grew the
-            // list past the size this op was issued against, and
-            // onDesktopListSettled has already retired it, so an entry that
-            // survives to expiry is one KWin never answered.
-            if (m_ledger.at(i).kind == PendingOp::Kind::Create && !m_lastIds.isEmpty()
-                && m_lastIds.size() < m_desktopCap) {
-                m_desktopCap = m_lastIds.size();
-                qCWarning(lcWorkspaceRec)
-                    << "createDesktop refused at" << m_desktopCap << "desktops — learned as the compositor's cap";
-                if (!m_capHintShown) {
-                    m_capHintShown = true;
-                    Q_EMIT capReached();
-                }
+            if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
+                createExpired = true;
             }
             if (m_ledger.at(i).kind == PendingOp::Kind::Remove) {
                 refusedRemovals.append(m_ledger.at(i).desktopId);
@@ -108,6 +88,46 @@ void WorkspaceReconciler::expireLedger()
     }
     if (m_ledger.isEmpty()) {
         m_ledgerTimer.stop();
+    }
+
+    // Live cap probe: KWin refuses createDesktop past its maximum SILENTLY (a
+    // void method, no desktopCreated echo), so a Create expiry with the id list
+    // unchanged is the only observable form of the refusal.
+    //
+    // One expiry is NOT that evidence, and treating it as such was the defect:
+    // a D-Bus stall, a KWin restart or a lost reply also expires a Create with
+    // the list unchanged, and lowering the ceiling to the live count then
+    // suspends every later create (requestCreateAt gates at equality), leaving
+    // the daemon unable to produce the successful create that would disprove
+    // it. A genuine refusal answers EVERY attempt the same way, so the probe
+    // asks twice: the first expiry only records the episode and re-drives
+    // maintenance, and only a second expiry in the same episode (the id list
+    // byte-identical, so nothing landed in between) is read as the real
+    // ceiling. noteCreateSucceeded() clears the evidence the moment KWin
+    // answers a create at all.
+    //
+    // "List unchanged" is checked here rather than at request time: a create
+    // that DID land grew the list past the size its op was issued against, and
+    // onDesktopListSettled has already retired that op, so an entry surviving
+    // to expiry is one KWin never answered.
+    bool capLearned = false;
+    if (createExpired && !m_lastIds.isEmpty() && m_lastIds.size() < m_desktopCap) {
+        if (m_capProbeIds != m_lastIds) {
+            m_capProbeIds = m_lastIds;
+            m_capProbeExpiries = 1;
+        } else {
+            ++m_capProbeExpiries;
+        }
+        if (m_capProbeExpiries >= CapProbeExpiries) {
+            m_desktopCap = m_lastIds.size();
+            capLearned = true;
+            qCWarning(lcWorkspaceRec) << "createDesktop went unanswered" << m_capProbeExpiries << "times at"
+                                      << m_desktopCap << "desktops — learned as the compositor's cap";
+            if (!m_capHintShown) {
+                m_capHintShown = true;
+                Q_EMIT capReached();
+            }
+        }
     }
 
     // A removal KWin refused (or lost) leaves a surplus empty desktop that
@@ -142,8 +162,38 @@ void WorkspaceReconciler::expireLedger()
         }
     }
 
+    // A Create nobody answered leaves the invariant it was repairing (a missing
+    // trailing empty, a screen with no desktop) still broken, and nothing else
+    // re-drives it: maintenance runs off settles and population edges, and the
+    // resync below re-pulls a list that is by definition UNCHANGED, so
+    // onDesktopListSettled returns early. Re-run maintenance so the request is
+    // made again. That second attempt is also what gives the probe above its
+    // corroborating expiry, and once the cap IS learned requestCreateAt
+    // suppresses the retry, so this cannot spin.
+    if (createExpired && !capLearned) {
+        maintainInvariants();
+    }
+
     if (expired) {
         Q_EMIT resyncRequested();
+    }
+}
+
+void WorkspaceReconciler::noteCreateSucceeded()
+{
+    // KWin answered a create, which is proof the ceiling is not where a run of
+    // expiries suggested. Drop the accumulated probe evidence and hand back the
+    // default headroom: a learned cap suspends our own creates, so without this
+    // the only way out is an EXTERNAL create pushing the count past the learned
+    // value (onDesktopListSettled), which a daemon whose creates are suspended
+    // can never bring about itself.
+    m_capProbeIds.clear();
+    m_capProbeExpiries = 0;
+    if (m_desktopCap < DefaultDesktopCap) {
+        qCWarning(lcWorkspaceRec) << "a createDesktop landed at" << m_lastIds.size()
+                                  << "desktops — dropping the learned cap of" << m_desktopCap;
+        m_desktopCap = DefaultDesktopCap;
+        m_capHintShown = false;
     }
 }
 
@@ -190,8 +240,11 @@ int WorkspaceReconciler::pendingCreateCount() const
 
 void WorkspaceReconciler::retireLedgerFor(const QString& desktopId)
 {
+    // The id comparison is the whole test: a Create carries no desktopId (KWin
+    // has not told us one yet), so it can never match a non-empty id, and this
+    // is only ever called with one.
     for (int i = m_ledger.size() - 1; i >= 0; --i) {
-        if (m_ledger.at(i).kind != PendingOp::Kind::Create && m_ledger.at(i).desktopId == desktopId) {
+        if (m_ledger.at(i).desktopId == desktopId) {
             m_ledger.removeAt(i);
         }
     }
@@ -237,6 +290,9 @@ QHash<QString, WorkspaceReconciler::PendingOp> WorkspaceReconciler::takeSettledC
     for (int rank = 0; rank < pairs; ++rank) {
         matched.insert(newIds.at(rank), m_ledger.at(creates.at(rank)));
     }
+    if (pairs > 0) {
+        noteCreateSucceeded();
+    }
     QList<int> consumed = creates.mid(0, pairs);
     std::sort(consumed.begin(), consumed.end());
     for (int i = consumed.size() - 1; i >= 0; --i) {
@@ -273,6 +329,9 @@ void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
         if (m_ledger.at(i).kind == PendingOp::Kind::Create) {
             // FIFO match: our create landed; realize the planned slice entry.
             const PendingOp op = m_ledger.takeAt(i);
+            // KWin answered, so the cap probe's evidence is stale whichever
+            // branch below realizes the desktop.
+            noteCreateSucceeded();
             if (m_ledger.isEmpty()) {
                 m_ledgerTimer.stop();
             }
@@ -558,8 +617,16 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
     // Renumber mapping from the id delta: ids are the fixed points.
     QHash<int, int> oldToNew;
     QList<int> removed;
+    // Position index built once: the renumber below and the prunes further down
+    // both ask about membership per entry, and a linear indexOf/contains each
+    // time is quadratic in the desktop count.
+    QHash<QString, int> indexOfId;
+    indexOfId.reserve(ids.size());
+    for (int i = 0; i < ids.size(); ++i) {
+        indexOfId.insert(ids.at(i), i);
+    }
     for (int oldIdx = 0; oldIdx < m_lastIds.size(); ++oldIdx) {
-        const int newIdx = ids.indexOf(m_lastIds.at(oldIdx));
+        const int newIdx = indexOfId.value(m_lastIds.at(oldIdx), -1);
         if (newIdx >= 0) {
             if (newIdx != oldIdx) {
                 oldToNew.insert(oldIdx + 1, newIdx + 1);
@@ -613,10 +680,20 @@ void WorkspaceReconciler::onDesktopListSettled(const QStringList& ids)
     // removed through kwinDesktopRemoved is already cleared there; this catches
     // the ones that only ever show up as a list delta.)
     for (auto it = m_removalRefusals.begin(); it != m_removalRefusals.end();) {
-        it = ids.contains(it.key()) ? std::next(it) : m_removalRefusals.erase(it);
+        it = indexOfId.contains(it.key()) ? std::next(it) : m_removalRefusals.erase(it);
     }
     for (auto it = m_namePushes.begin(); it != m_namePushes.end();) {
-        it = ids.contains(it.key()) ? std::next(it) : m_namePushes.erase(it);
+        it = indexOfId.contains(it.key()) ? std::next(it) : m_namePushes.erase(it);
+    }
+    // The census row and the removal-race latch are per-desktop bookkeeping
+    // too, and neither is cleared anywhere else when a desktop disappears
+    // WITHOUT a removal echo (an external destroy the daemon only ever sees as
+    // a list delta), so both grew for the life of the session.
+    for (auto it = m_population.begin(); it != m_population.end();) {
+        it = indexOfId.contains(it.key()) ? std::next(it) : m_population.erase(it);
+    }
+    for (auto it = m_racedDesktops.begin(); it != m_racedDesktops.end();) {
+        it = indexOfId.contains(*it) ? std::next(it) : m_racedDesktops.erase(it);
     }
 
     const QStringList unowned = m_map.repairAgainst(ids);
@@ -835,7 +912,7 @@ void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceInde
     op.kind = PendingOp::Kind::Create;
     op.screenId = screenId;
     op.sliceIndex = sliceIndex;
-    // Recorded so realizeSettledCreate can match by position rather than by
+    // Recorded so takeSettledCreates can match by position rather than by
     // ledger order; the two rankings disagree with concurrent Creates.
     op.globalPosition = static_cast<int>(globalPosition);
     op.name = name;
@@ -905,182 +982,6 @@ void WorkspaceReconciler::maintainInvariants()
     for (const QString& screenId : order) {
         maintainScreen(screenId);
     }
-}
-
-// ── Screens ─────────────────────────────────────────────────────────────────
-
-void WorkspaceReconciler::onScreenAdded(const QString& screenId)
-{
-    if (screenId.isEmpty() || m_map.knowsScreen(screenId)) {
-        return;
-    }
-    m_map.setScreenOrder(m_map.screenOrder() << screenId);
-
-    // Migrate displaced workspaces home (hotplug memory): every entry whose
-    // homeScreenId names the returning output moves back, in its current
-    // relative order, ahead of whatever trailing empty maintenance adds.
-    QStringList returning;
-    const QStringList owned = m_map.allDesktopIds();
-    for (const QString& id : owned) {
-        if (m_map.entryFor(id).homeScreenId == screenId) {
-            returning.append(id);
-        }
-    }
-    QSet<QString> touchedScreens;
-    int index = 0;
-    for (const QString& id : returning) {
-        touchedScreens.insert(m_map.ownerOf(id));
-        m_map.transfer(id, screenId, index++);
-        m_map.setHomeScreen(id, QString());
-    }
-
-    maintainScreen(screenId);
-    for (const QString& touched : touchedScreens) {
-        maintainScreen(touched); // the foster screen's invariants re-settle
-        // The foster screen may have been SHOWING one of the migrated
-        // desktops; it now sits on a foreign one and needs the owner-wins
-        // correction, exactly as the verb-side transfer path does.
-        evaluateForeign(touched);
-    }
-    bumpGeneration();
-}
-
-void WorkspaceReconciler::onScreenRemoved(const QString& screenId)
-{
-    if (!m_map.knowsScreen(screenId)) {
-        return;
-    }
-    const QList<WorkspaceEntry> orphaned = m_map.takeSlice(screenId);
-    m_currentByScreen.remove(screenId);
-    // The snap-back memo names a desktop this screen no longer owns; keeping
-    // it would aim a later correction (after a replug re-adds the screen) at
-    // whatever that desktop became in the meantime.
-    m_lastOwnedByScreen.remove(screenId);
-    // Screen-scoped ledger entries die with the screen: an open SetCurrent for
-    // a gone output can never be echoed, and until it expired it would block
-    // the corrections of a re-added screen with the same id and then fire a
-    // spurious resync.
-    for (int i = m_ledger.size() - 1; i >= 0; --i) {
-        if (m_ledger.at(i).screenId == screenId) {
-            m_ledger.removeAt(i);
-        }
-    }
-    if (m_ledger.isEmpty()) {
-        m_ledgerTimer.stop();
-    }
-    if (m_focusedScreen == screenId) {
-        m_focusedScreen.clear();
-    }
-
-    QString fallback;
-    const QStringList order = m_map.screenOrder();
-    if (!order.isEmpty()) {
-        fallback = order.first();
-    }
-    if (fallback.isEmpty()) {
-        // Last screen went away; keep nothing (KWin keeps the desktops; the
-        // next screenAdded re-adopts via list repair).
-        bumpGeneration();
-        return;
-    }
-    // Append before the fallback's trailing empty, preserving order, each
-    // entry stamped with its home output for migrate-back on replug. A
-    // second displacement keeps the ORIGINAL home (the entry already carries
-    // one), so daisy-chained unplugs still return the workspace to where the
-    // user put it.
-    int index = insertIndexBeforeTrailingEmpty(fallback);
-    for (auto entry : orphaned) {
-        if (entry.homeScreenId.isEmpty()) {
-            entry.homeScreenId = screenId;
-        }
-        m_map.insert(fallback, index++, entry);
-    }
-    maintainScreen(fallback);
-    bumpGeneration();
-}
-
-void WorkspaceReconciler::onScreenOrderChanged(const QStringList& order)
-{
-    const QStringList before = m_map.screenOrder();
-    if (order == before) {
-        return;
-    }
-    m_map.setScreenOrder(order);
-    // setScreenOrder REPAIRS the order it is handed (slice-holding screens
-    // missing from it are appended), so a caller-order that differs can still
-    // repair back to what we already had. Compare the result, not the request.
-    if (m_map.screenOrder() == before) {
-        return;
-    }
-    bumpGeneration();
-}
-
-// ── Adoption ────────────────────────────────────────────────────────────────
-
-void WorkspaceReconciler::adoptAll(const QStringList& ids, const QHash<QString, QString>& currentDesktopIdByScreen)
-{
-    m_lastIds = ids;
-
-    // Keep consistent restored content; repair drops vanished ids and returns
-    // what still needs an owner.
-    QStringList unowned = m_map.repairAgainst(ids);
-
-    // Pass 1: each desktop currently shown by a screen goes to that screen;
-    // ties resolve to the first screen in order (the map insert repairs
-    // double-ownership by removal, so process in screen order and skip ids
-    // already owned).
-    const QStringList order = m_map.screenOrder();
-    for (const QString& screenId : order) {
-        const QString shownId = currentDesktopIdByScreen.value(screenId);
-        if (shownId.isEmpty()) {
-            continue;
-        }
-        // Seed the per-screen current from what the caller observed. Without
-        // it every verb resolves empty until the effect's first per-output
-        // report happens along, which can be a long time after adoption on a
-        // session that starts on its restored desktops.
-        const int globalIndex = ids.indexOf(shownId);
-        if (globalIndex >= 0) {
-            m_currentByScreen.insert(screenId, globalIndex + 1);
-            if (m_map.ownerOf(shownId) == screenId) {
-                m_lastOwnedByScreen.insert(screenId, shownId);
-            }
-        }
-        if (unowned.contains(shownId)) {
-            WorkspaceEntry entry;
-            entry.desktopId = shownId;
-            m_map.insert(screenId, insertIndexBeforeTrailingEmpty(screenId), entry);
-            unowned.removeAll(shownId);
-            m_lastOwnedByScreen.insert(screenId, shownId);
-        }
-    }
-
-    // Pass 2: remaining desktops keep KWin order contiguous — each unowned id
-    // joins the owner of the nearest preceding owned desktop in global order;
-    // a leading run goes to the first screen.
-    for (const QString& id : unowned) {
-        const int globalIdx = ids.indexOf(id);
-        QString target;
-        for (int i = globalIdx - 1; i >= 0; --i) {
-            target = m_map.ownerOf(ids.at(i));
-            if (!target.isEmpty()) {
-                break;
-            }
-        }
-        if (target.isEmpty()) {
-            target = order.isEmpty() ? QString() : order.first();
-        }
-        if (target.isEmpty()) {
-            qCWarning(lcWorkspaceRec) << "adoption with no screens; desktop left unowned:" << id;
-            continue;
-        }
-        WorkspaceEntry entry;
-        entry.desktopId = id;
-        m_map.insert(target, insertIndexBeforeTrailingEmpty(target), entry);
-    }
-
-    maintainInvariants();
-    bumpGeneration();
 }
 
 } // namespace PhosphorWorkspaces

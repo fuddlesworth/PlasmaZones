@@ -344,8 +344,9 @@ private Q_SLOTS:
     void testDisplayOrderUniqueWithinCategory()
     {
         // No consumer reads displayOrder today (the shipped picker sorts by
-        // label), but the field exists for one, and two of the twelve overlay
-        // orders come from loop tables — a collision would be silent until a
+        // label), but the field exists for one, and five of the twelve overlay
+        // orders come from loop tables (the three colours at 2/3/4 and the two
+        // opacities at 5/6) — a collision would be silent until a
         // consumer appears and the rule editor reordered under it. Pin
         // (category, displayOrder) uniqueness across every registered type.
         const ActionRegistry& reg = ActionRegistry::instance();

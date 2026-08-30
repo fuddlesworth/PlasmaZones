@@ -6,6 +6,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
@@ -831,6 +832,31 @@ QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
     QString fallback = *m_scrollingScreens.cbegin();
     for (const QString& candidate : m_scrollingScreens) {
         if (candidate < fallback) {
+            fallback = candidate;
+        }
+    }
+    return fallback;
+}
+
+QString ScrollEngine::scrollingScreenForPhysical(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    if (m_scrollingScreens.contains(screenId)) {
+        return screenId;
+    }
+    // A virtual sub-screen of the named monitor. samePhysical strips the
+    // "/vs:N" suffix, so "DP-1" matches "DP-1/vs:0" while "DP-10" does not.
+    QString fallback;
+    for (const QString& candidate : m_scrollingScreens) {
+        if (!PhosphorIdentity::VirtualScreenId::samePhysical(candidate, screenId)) {
+            continue;
+        }
+        if (candidate == m_activeScreen) {
+            return candidate;
+        }
+        if (fallback.isEmpty() || candidate < fallback) {
             fallback = candidate;
         }
     }

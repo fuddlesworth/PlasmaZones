@@ -26,3 +26,4 @@ endfunction()
 
 pw_add_test(test_workspace_map test_workspace_map.cpp)
 pw_add_test(test_workspace_reconciler test_workspace_reconciler.cpp)
+pw_add_test(test_workspace_ledger test_workspace_ledger.cpp)

@@ -1094,7 +1094,12 @@ public:
     /// Dynamic-workspaces arm (all three engines): a virtual desktop was
     /// destroyed — reap every piece of per-desktop state keyed to @p desktop
     /// (1-based, the OLD number, before any renumbering of survivors).
-    /// Identity-based, unlike pruneStatesForDesktop's count-based sweep: the
+    /// Identity-based, unlike the count-derived CALLER of pruneStatesForDesktop.
+    /// The distinction is in the caller, not the sweep: all three
+    /// pruneStatesForDesktop implementations match on key.desktop ==
+    /// removedDesktop, which is identity matching, and it is the
+    /// desktopCountChanged handler driving them that knows only that a number
+    /// went out of range. Here the
     /// caller knows exactly which desktop died. Engines compose their existing
     /// desktop prune with the sweeps that prune misses (value-side desktop
     /// ints, burst flags).

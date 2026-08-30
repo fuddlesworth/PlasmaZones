@@ -37,21 +37,26 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
     // Pass 1: realize every declaration.
     QSet<QString> declaredNames;
     for (const NamedWorkspace& decl : declarations) {
-        if (decl.name.isEmpty() || declaredNames.contains(decl.name)) {
+        // Trimmed, because the declaration comes from config: a name that is
+        // all whitespace renders as nothing in every UI yet would still make
+        // its desktop destroy-exempt, so the user would see a workspace that
+        // never goes away and no name to explain why.
+        const QString declaredName = decl.name.trimmed();
+        if (declaredName.isEmpty() || declaredNames.contains(declaredName)) {
             // Config-fed and normally rejected by the settings UI, so reaching
             // here means the config was hand-edited or a UI guard regressed —
             // worth saying out loud rather than dropping in silence.
-            qCWarning(lcWorkspaceRec) << "skipping" << (decl.name.isEmpty() ? "an empty" : "a duplicate")
+            qCWarning(lcWorkspaceRec) << "skipping" << (declaredName.isEmpty() ? "an empty" : "a duplicate")
                                       << "named-workspace declaration:" << decl.name;
             continue;
         }
-        declaredNames.insert(decl.name);
+        declaredNames.insert(declaredName);
 
         // Already realized?
         QString realizedId;
         const QStringList owned = m_map.allDesktopIds();
         for (const QString& id : owned) {
-            if (m_map.entryFor(id).name == decl.name) {
+            if (m_map.entryFor(id).name == declaredName) {
                 realizedId = id;
                 break;
             }
@@ -66,9 +71,10 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
                 // unowned id is a silent no-op, so claiming one would leave
                 // realizedId pointing at nothing and re-run the same futile
                 // claim on every apply.
-                if (kwinNames.at(i) == decl.name && !m_map.ownerOf(id).isEmpty() && m_map.entryFor(id).name.isEmpty()) {
+                if (kwinNames.at(i) == declaredName && !m_map.ownerOf(id).isEmpty()
+                    && m_map.entryFor(id).name.isEmpty()) {
                     realizedId = id;
-                    m_map.setName(id, decl.name);
+                    m_map.setName(id, declaredName);
                     changed = true;
                     break;
                 }
@@ -84,7 +90,7 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
         // the name — move it there.
         if (!realizedId.isEmpty()) {
             const int pos = m_lastIds.indexOf(realizedId);
-            const bool kwinAgrees = pos >= 0 && pos < kwinNames.size() && kwinNames.at(pos) == decl.name;
+            const bool kwinAgrees = pos >= 0 && pos < kwinNames.size() && kwinNames.at(pos) == declaredName;
             if (kwinAgrees) {
                 // KWin's list now carries the name; whatever we pushed landed.
                 m_namePushes.remove(realizedId);
@@ -92,10 +98,10 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
                 bool moved = false;
                 for (int i = 0; i < m_lastIds.size() && i < kwinNames.size(); ++i) {
                     const QString& other = m_lastIds.at(i);
-                    if (other != realizedId && kwinNames.at(i) == decl.name && !m_map.ownerOf(other).isEmpty()
+                    if (other != realizedId && kwinNames.at(i) == declaredName && !m_map.ownerOf(other).isEmpty()
                         && m_map.entryFor(other).name.isEmpty()) {
                         m_map.setName(realizedId, QString());
-                        m_map.setName(other, decl.name);
+                        m_map.setName(other, declaredName);
                         m_namePushes.remove(realizedId);
                         realizedId = other;
                         changed = true;
@@ -117,13 +123,30 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
                     // simply lags the reply) leaves kwinAgrees false, so an
                     // unguarded emit re-fires the identical rename forever. The
                     // deadline is what lets a genuinely lost push be retried.
+                    //
+                    // And bounded, exactly as MaxRemovalRefusals bounds the
+                    // removal re-arm: the deadline alone only spaces the
+                    // repeats out, so a rename KWin will never accept still
+                    // re-fires for the life of the session. Each expired push
+                    // of the SAME name counts as a refusal, and after
+                    // MaxNamePushRefusals the desktop keeps the name it has.
+                    // The count is dropped when KWin's names agree (above),
+                    // when the workspace reverts to dynamic (pass 2), and when
+                    // the desktop leaves KWin's list.
                     const qint64 now = QDateTime::currentMSecsSinceEpoch();
                     const auto push = m_namePushes.constFind(realizedId);
-                    const bool inFlight =
-                        push != m_namePushes.constEnd() && push->name == decl.name && push->deadline > now;
+                    const bool sameName = push != m_namePushes.constEnd() && push->name == declaredName;
+                    const bool inFlight = sameName && push->deadline > now;
                     if (!inFlight) {
-                        m_namePushes.insert(realizedId, NamePush{decl.name, now + LedgerTimeoutMs});
-                        Q_EMIT requestSetDesktopName(realizedId, decl.name);
+                        const int refusals = sameName ? push->refusals + 1 : 0;
+                        if (refusals >= MaxNamePushRefusals) {
+                            qCWarning(lcWorkspaceRec)
+                                << "renaming" << realizedId << "to" << declaredName << "went unanswered" << refusals
+                                << "times — leaving KWin's name alone";
+                        } else {
+                            m_namePushes.insert(realizedId, NamePush{declaredName, now + LedgerTimeoutMs, refusals});
+                            Q_EMIT requestSetDesktopName(realizedId, declaredName);
+                        }
                     }
                 }
             }
@@ -136,7 +159,7 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
             // for this name means the previous request has not settled yet.
             bool pending = false;
             for (const auto& op : m_ledger) {
-                if (op.kind == PendingOp::Kind::Create && op.name == decl.name) {
+                if (op.kind == PendingOp::Kind::Create && op.name == declaredName) {
                     pending = true;
                     break;
                 }
@@ -155,7 +178,7 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
             if (target.isEmpty()) {
                 continue;
             }
-            requestCreateAt(target, namedSliceIndex(target, decl.position), decl.name); // cap-guarded inside
+            requestCreateAt(target, namedSliceIndex(target, decl.position), declaredName); // cap-guarded inside
             continue;
         }
 
@@ -167,15 +190,42 @@ void WorkspaceReconciler::applyNamedWorkspaces(const QList<NamedWorkspace>& decl
                 // and at the cap maintainScreen cannot refill it. Leave the
                 // workspace where it is; the next apply retries once that
                 // screen has a second desktop.
-                qCWarning(lcWorkspaceRec) << "not pinning" << decl.name << "to" << pin << "yet:" << previousOwner
+                qCWarning(lcWorkspaceRec) << "not pinning" << declaredName << "to" << pin << "yet:" << previousOwner
                                           << "would be left with no workspace";
             } else {
                 m_map.transfer(realizedId, pin, namedSliceIndex(pin, decl.position));
+                // A pin is a deliberate placement and outranks hotplug memory,
+                // the same way the user-driven transfer verb does: leaving the
+                // home stamp on would yank the workspace off its pinned output
+                // the next time the stamped one is replugged.
+                m_map.setHomeScreen(realizedId, QString());
                 // A pin can move the desktop the previous owner was SHOWING.
                 // That screen now sits on a foreign desktop and nothing else
                 // would notice — the verbs' own transfer path snaps back for
                 // exactly this reason.
                 evaluateForeign(previousOwner);
+                changed = true;
+            }
+        }
+
+        // Position enforcement. The transfer above already placed a pinned
+        // move; this is the case the settings Position control was inert for —
+        // a workspace already realized on the screen it belongs to, whose slot
+        // simply is not the declared one.
+        const QString owner = m_map.ownerOf(realizedId);
+        if (!owner.isEmpty() && (pin.isEmpty() || owner == pin)) {
+            // The slot arithmetic is NOT namedSliceIndex(): that answers where
+            // a NEW entry goes, and this entry is already counted in the slice
+            // size, while reorderWithinSlice takes it out before re-inserting.
+            // Using the insert slot would place the workspace one past the end,
+            // which is behind the trailing empty — the exact position the
+            // trailing-empty invariant forbids.
+            const int sliceSize = m_map.sliceSize(owner);
+            const bool trailingEmpty = !trailingEmptyOf(owner).isEmpty();
+            const int lastSlot = qMax(0, trailingEmpty ? sliceSize - 2 : sliceSize - 1);
+            const int wanted = decl.position < 0 ? lastSlot : qBound(0, decl.position, lastSlot);
+            const int actual = m_map.sliceIndexOf(realizedId);
+            if (actual >= 0 && actual != wanted && m_map.reorderWithinSlice(realizedId, wanted)) {
                 changed = true;
             }
         }

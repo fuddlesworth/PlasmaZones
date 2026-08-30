@@ -270,9 +270,9 @@ void TestPerScreenStates::reapDesktop_sweepsBothMaps()
 void TestPerScreenStates::renumberDesktops_shiftsKeysCollisionFree()
 {
     PerScreenStates<FakeState> states;
-    // Remove-desktop-2 shape: 3→2, 4→3 — the classic shift where a naive
-    // in-place rewrite would collide (3 lands on the not-yet-moved 2 slot if
-    // 2 had survived; here 3 and 4 swap through each other's numbers).
+    // Remove-desktop-2 shape: 3→2, 4→3. The collision a naive in-place rewrite
+    // would hit is 4 landing on 3, which is still PRESENT and not yet shifted
+    // out of the way. Take-then-reinsert is what makes the order irrelevant.
     FakeState* s3 = makeState(QStringLiteral("S1"));
     FakeState* s4 = makeState(QStringLiteral("S1"));
     states.insertState(key(QStringLiteral("S1"), 3), s3);
@@ -294,6 +294,27 @@ void TestPerScreenStates::renumberDesktops_shiftsKeysCollisionFree()
     for (auto it = states.states().constBegin(); it != states.states().constEnd(); ++it) {
         QVERIFY(it.key().desktop == 2 || it.key().desktop == 3);
     }
+
+    // SWAP mapping (1→2, 2→1): both targets are occupied at the start, so this
+    // fails for any rewrite that is not take-then-reinsert.
+    PerScreenStates<FakeState> swapped;
+    FakeState* s1 = makeState(QStringLiteral("S1"));
+    FakeState* s2 = makeState(QStringLiteral("S1"));
+    swapped.insertState(key(QStringLiteral("S1"), 1), s1);
+    swapped.insertState(key(QStringLiteral("S1"), 2), s2);
+    swapped.setKeyForWindow(QStringLiteral("w1"), key(QStringLiteral("S1"), 1));
+    swapped.setKeyForWindow(QStringLiteral("w2"), key(QStringLiteral("S1"), 2));
+
+    QHash<int, int> swapMapping;
+    swapMapping.insert(1, 2);
+    swapMapping.insert(2, 1);
+    swapped.renumberDesktops(swapMapping);
+
+    QCOMPARE(swapped.stateForKey(key(QStringLiteral("S1"), 2)), s1);
+    QCOMPARE(swapped.stateForKey(key(QStringLiteral("S1"), 1)), s2);
+    QCOMPARE(swapped.stateCount(), 2);
+    QCOMPARE(swapped.keyForWindow(QStringLiteral("w1")).desktop, 2);
+    QCOMPARE(swapped.keyForWindow(QStringLiteral("w2")).desktop, 1);
 }
 
 void TestPerScreenStates::renumberDesktops_skipPredicateExemptsSentinels()

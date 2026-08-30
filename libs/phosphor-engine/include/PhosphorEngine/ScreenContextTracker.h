@@ -215,9 +215,20 @@ public:
     /// Drop entries from both per-screen maps whose SCREEN key matches `pred`
     /// (e.g. an orphaned virtual-screen id that no longer exists).
     void removeScreensIf(const std::function<bool(const QString&)>& pred);
-    /// Drop entries from both per-screen maps whose DESKTOP value equals
-    /// `removedDesktop` (a virtual desktop was destroyed / renumbered).
+    /// Drop the sticky PINS naming `removedDesktop` (a virtual desktop was
+    /// destroyed). The per-output desktop entries are deliberately left alone,
+    /// even when they name it — see the implementation for why dropping them
+    /// is the failure currentKeyForScreen's tier-3 contract warns about.
     void pruneDesktop(int removedDesktop);
+    /// Forget the current activity when it is the one that was removed, so
+    /// currentKeyForScreen stops handing out keys under a dead activity (which
+    /// PerScreenStates::forKey would lazily create fresh state under) in the
+    /// window between the engines' activity prune and the compositor's
+    /// currentActivityChanged. Clearing it also clears the established flag, so
+    /// the next activity push reads as establishing rather than as a switch —
+    /// there is no activity to switch away from once it is gone. No-op when
+    /// `removedActivity` is not the current one.
+    void pruneActivity(const QString& removedActivity);
     /// Rewrite every tracked desktop int per `oldToNew` (1-based; absent =
     /// unchanged): the global current, per-screen currents, and sticky pins.
     /// A mapping carrying any target below 1 is refused WHOLE and nothing

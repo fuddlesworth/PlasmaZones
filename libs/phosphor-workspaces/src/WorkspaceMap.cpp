@@ -3,10 +3,13 @@
 
 #include <PhosphorWorkspaces/WorkspaceMap.h>
 
+#include <iterator>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QUuid>
 
 Q_LOGGING_CATEGORY(lcWorkspaceMap, "plasmazones.workspaces.map", QtWarningMsg)
 
@@ -79,7 +82,14 @@ int WorkspaceMap::sliceIndexOf(const QString& desktopId) const
     if (owner.isEmpty()) {
         return -1;
     }
-    const auto& entries = m_slices[owner];
+    // constFind, not operator[]: QHash::operator[] on a const hash returns by
+    // VALUE, so binding it to a reference here deep-copied the whole slice on
+    // every lookup, and this runs on the verb hot path.
+    const auto slot = m_slices.constFind(owner);
+    if (slot == m_slices.constEnd()) {
+        return -1;
+    }
+    const QList<WorkspaceEntry>& entries = slot.value();
     for (int i = 0; i < entries.size(); ++i) {
         if (entries.at(i).desktopId == desktopId) {
             return i;
@@ -103,8 +113,11 @@ QStringList WorkspaceMap::allDesktopIds() const
 WorkspaceEntry WorkspaceMap::entryFor(const QString& desktopId) const
 {
     const QString owner = m_ownerOf.value(desktopId);
-    const auto entries = m_slices.value(owner);
-    for (const auto& entry : entries) {
+    const auto slot = m_slices.constFind(owner);
+    if (slot == m_slices.constEnd()) {
+        return {};
+    }
+    for (const WorkspaceEntry& entry : slot.value()) {
         if (entry.desktopId == desktopId) {
             return entry;
         }
@@ -141,11 +154,29 @@ bool WorkspaceMap::remove(const QString& desktopId)
     if (owner.isEmpty()) {
         return false;
     }
-    auto& entries = m_slices[owner];
+    // find(), not operator[]: a stale owner row naming a screen with no slice
+    // would otherwise MATERIALIZE an empty one on the way to the repair below,
+    // which is exactly the empty-slice state this class does not keep.
+    const auto slot = m_slices.find(owner);
+    if (slot == m_slices.end()) {
+        qCWarning(lcWorkspaceMap) << "owner index named" << owner << "for desktop" << desktopId
+                                  << "which holds no slice at all — dropping the stale row";
+        m_ownerOf.remove(desktopId);
+        return false;
+    }
+    QList<WorkspaceEntry>& entries = slot.value();
     for (int i = 0; i < entries.size(); ++i) {
         if (entries.at(i).desktopId == desktopId) {
             entries.removeAt(i);
             m_ownerOf.remove(desktopId);
+            // An emptied slice leaves the hash entirely. hasScreen() answers
+            // "holds a slice", and a screen emptied by a removal or a transfer
+            // holds none — keeping a zero-length QList made that answer wrong
+            // and also made a map compare unequal to its own JSON round trip,
+            // since fromJson never materializes an empty slice.
+            if (entries.isEmpty()) {
+                m_slices.erase(slot);
+            }
             return true;
         }
     }
@@ -172,7 +203,11 @@ bool WorkspaceMap::reorderWithinSlice(const QString& desktopId, int newSliceInde
     if (owner.isEmpty()) {
         return false;
     }
-    auto& entries = m_slices[owner];
+    const auto slot = m_slices.find(owner);
+    if (slot == m_slices.end()) {
+        return false;
+    }
+    QList<WorkspaceEntry>& entries = slot.value();
     for (int i = 0; i < entries.size(); ++i) {
         if (entries.at(i).desktopId == desktopId) {
             const WorkspaceEntry entry = entries.takeAt(i);
@@ -203,8 +238,11 @@ void WorkspaceMap::setName(const QString& desktopId, const QString& name)
     if (owner.isEmpty()) {
         return;
     }
-    auto& entries = m_slices[owner];
-    for (auto& entry : entries) {
+    const auto slot = m_slices.find(owner);
+    if (slot == m_slices.end()) {
+        return;
+    }
+    for (WorkspaceEntry& entry : slot.value()) {
         if (entry.desktopId == desktopId) {
             entry.name = name;
             return;
@@ -218,8 +256,11 @@ void WorkspaceMap::setHomeScreen(const QString& desktopId, const QString& homeSc
     if (owner.isEmpty()) {
         return;
     }
-    auto& entries = m_slices[owner];
-    for (auto& entry : entries) {
+    const auto slot = m_slices.find(owner);
+    if (slot == m_slices.end()) {
+        return;
+    }
+    for (WorkspaceEntry& entry : slot.value()) {
         if (entry.desktopId == desktopId) {
             entry.homeScreenId = homeScreenId;
             return;
@@ -283,8 +324,10 @@ bool WorkspaceMap::consistentWith(const QStringList& kwinIds) const
 
 QStringList WorkspaceMap::repairAgainst(const QStringList& kwinIds)
 {
-    // Drop entries whose desktop vanished.
-    for (auto it = m_slices.begin(); it != m_slices.end(); ++it) {
+    // Drop entries whose desktop vanished. A slice left with nothing is erased
+    // rather than kept as an empty list, the same no-empty-slices invariant
+    // remove() and takeSlice() hold.
+    for (auto it = m_slices.begin(); it != m_slices.end();) {
         auto& entries = it.value();
         for (int i = entries.size() - 1; i >= 0; --i) {
             if (!kwinIds.contains(entries.at(i).desktopId)) {
@@ -292,6 +335,7 @@ QStringList WorkspaceMap::repairAgainst(const QStringList& kwinIds)
                 entries.removeAt(i);
             }
         }
+        it = entries.isEmpty() ? m_slices.erase(it) : std::next(it);
     }
     // Report ids no slice owns, in KWin order, for adoption by the caller.
     QStringList unowned;
@@ -382,12 +426,23 @@ bool WorkspaceMap::fromJson(const QString& json)
             const QJsonObject obj = entryValue.toObject();
             WorkspaceEntry entry;
             entry.desktopId = obj.value(QLatin1String("id")).toString();
-            entry.name = obj.value(QLatin1String("name")).toString();
+            // A name is user text from the config, so a stored one can be all
+            // whitespace. Trimmed to empty here, because a name that renders as
+            // nothing would still make the desktop destroy-exempt and the user
+            // would have no way to see why the workspace never goes away.
+            entry.name = obj.value(QLatin1String("name")).toString().trimmed();
             entry.homeScreenId = obj.value(QLatin1String("homeScreen")).toString();
-            // Shape only — whether these ids still EXIST is decided later by
-            // repairAgainst against KWin's live list, which is the only
-            // authority on that.
-            if (entry.desktopId.isEmpty() || m_ownerOf.contains(entry.desktopId)) {
+            // The state file is a boundary: a desktop id is a KWin UUID, so
+            // anything that is not one cannot name a real desktop and would
+            // only sit in the map until the first settle dropped it. Whether a
+            // WELL-FORMED id still EXISTS is decided later by repairAgainst
+            // against KWin's live list, which is the only authority on that.
+            if (entry.desktopId.isEmpty() || QUuid::fromString(entry.desktopId).isNull()) {
+                qCWarning(lcWorkspaceMap)
+                    << "ignoring a stored workspace entry whose desktop id is not a UUID:" << entry.desktopId;
+                continue;
+            }
+            if (m_ownerOf.contains(entry.desktopId)) {
                 continue;
             }
             entries.append(entry);

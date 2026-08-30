@@ -147,14 +147,26 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // shifted heals on the next setCurrentDesktopForScreen push, which KWin
     // triggers when it relocates the screen off the removed desktop.
     //
-    // Dropping a per-output entry here is safe, and NOT in tension with
-    // releaseScreenOwnership's argument that the same entry must survive a mode
-    // leave. The difference is what re-establishes it. On this path the daemon
-    // clamps every screen's desktop and pushes the new values BEFORE the count
-    // change propagates, so a dropped entry is rewritten immediately. On a mode
-    // leave nothing pushes at all, and the global desktop the lookup would fall
-    // back to is written once at startup — so there the drop is permanent and
-    // merges every output onto one desktop.
+    // Only the sticky PIN is dropped. The per-output desktop entry is left
+    // alone even when it names the removed desktop, and that asymmetry is the
+    // point. The pin is this tracker's own bookkeeping, it outranks both other
+    // tiers, and a pin naming a destroyed desktop resolves keys onto state the
+    // engines just reaped — dropping it falls the screen back to a live value.
+    // The per-output entry is compositor truth the tracker cannot reconstruct,
+    // and the tier below it is the global desktop the daemon writes once at
+    // login. Erasing it is exactly the drop releaseScreenOwnership spends its
+    // doc warning about: every output that falls through lands on one shared
+    // desktop.
+    //
+    // Nothing re-establishes it either. The daemon's clamp only rewrites
+    // entries ABOVE the new count, so the screen sitting ON the dying desktop
+    // — the one whose entry matches here — is precisely the one the clamp
+    // never touches (Daemon::start's desktopCountChanged handler documents the
+    // same gap for a mid-list removal). Leaving the stale number is the better
+    // failure: it still names a real output's desktop position, the next
+    // setCurrentDesktopForScreen push corrects it when KWin relocates the
+    // screen, and the identity-based renumberDesktops pass below corrects it
+    // outright.
     //
     // m_currentDesktop is deliberately NOT touched, even when it names the
     // removed desktop. There is no correct replacement to write: this path is
@@ -172,13 +184,24 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
             ++it;
         }
     }
-    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end();) {
-        if (it.value() == removedDesktop) {
-            it = m_screenCurrentDesktop.erase(it);
-        } else {
-            ++it;
-        }
+}
+
+void ScreenContextTracker::pruneActivity(const QString& removedActivity)
+{
+    // The activity counterpart to pruneDesktop, and the mirror of the reason
+    // that one leaves the per-output desktop alone: here there IS a correct
+    // thing to write, namely nothing. An empty current activity is the tracker's
+    // own "no activity context" state (it is what the tracker starts in), and
+    // every consumer already handles a key with an empty activity dimension.
+    // Keeping the dead name instead would have currentKeyForScreen answer with
+    // an activity the engines just pruned, and PerScreenStates::forKey creates
+    // state lazily for whatever key it is handed — so the very next placement
+    // would rebuild a store under the removed activity.
+    if (removedActivity.isEmpty() || m_currentActivity != removedActivity) {
+        return;
     }
+    m_currentActivity.clear();
+    m_activityContextEverSet = false;
 }
 
 void ScreenContextTracker::renumberDesktops(const QHash<int, int>& oldToNew)

@@ -3,6 +3,8 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
+#include <PhosphorEngine/PerScreenStates.h>
+
 namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
@@ -256,19 +258,41 @@ bool SnapState::reassignDesktop(const QString& rawWindowId, int virtualDesktop)
     return true;
 }
 
+QStringList SnapState::windowsTaggedWithDesktop(int desktop) const
+{
+    QStringList result;
+    if (desktop <= 0) {
+        return result;
+    }
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        if (it.value() == desktop) {
+            result.append(it.key());
+        }
+    }
+    result.sort();
+    return result;
+}
+
 void SnapState::reapDesktopValues(int desktop)
 {
     if (desktop <= 0) {
         return; // 0 is the all-desktops sentinel; there is no desktop to reap
     }
     bool changed = false;
-    for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end();) {
-        if (it.value() == desktop) {
-            it = m_windowDesktopAssignments.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
+    // Drop the window's WHOLE placement record, not just its desktop tag. The
+    // tag alone cannot be erased and left at that: the zone and screen entries
+    // outlive it, and a zone-assigned window with no tag reads as occupying its
+    // zone on EVERY desktop (buildOccupiedZoneSet passes an absent tag through
+    // its value(key, 0) sentinel branch) while dropping out of
+    // windowsOnScreenAndDesktop entirely, so cross-desktop directional focus
+    // can no longer reach it. Nothing re-stamps the tag either: the registry's
+    // virtualDesktop is positional and is documented as NOT re-pushed across a
+    // renumber, and the only production recordResidence caller is the
+    // cross-screen unfloat. The window is alive but its desktop is gone, so the
+    // honest state is the one the dying stores land in — no placement at all.
+    // SnapEngine::reapDesktopState announces the drops before calling this.
+    for (const QString& windowId : windowsTaggedWithDesktop(desktop)) {
+        changed |= removeWindowData(windowId);
     }
     if (m_lastUsedDesktop == desktop) {
         m_lastUsedDesktop = 0;
@@ -283,11 +307,16 @@ void SnapState::renumberDesktopValues(const QHash<int, int>& oldToNew)
 {
     // A mapping to a non-positive target is malformed (see the declaration):
     // applying it would stamp the all-desktops sentinel onto real windows.
-    // Treat such an entry as absent rather than dropping the whole renumber,
-    // so a single bad pair cannot strand every surviving desktop tag.
+    // Refused WHOLE, through the shared gate, because the two arms that run
+    // beside this one in SnapEngine::renumberDesktopState — the state-map
+    // rewrite and the context tracker's — refuse the same mapping whole. A
+    // per-entry refusal here would shift the per-window tags while the keys
+    // and the pins they belong to stayed on their old numbers.
+    if (oldToNew.isEmpty() || !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
+        return;
+    }
     const auto mapDesktop = [&oldToNew](int desktop) {
-        const int mapped = oldToNew.value(desktop, desktop);
-        return mapped > 0 ? mapped : desktop;
+        return oldToNew.value(desktop, desktop);
     };
     bool changed = false;
     for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {

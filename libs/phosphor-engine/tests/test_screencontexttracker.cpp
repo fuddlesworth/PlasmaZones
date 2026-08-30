@@ -200,13 +200,27 @@ void TestScreenContextTracker::releaseScreenOwnership_keepsPerOutputDesktop()
 void TestScreenContextTracker::pruneDesktop_byValue()
 {
     ScreenContextTracker t;
+    // The global names the desktop about to be pruned, so the deliberate
+    // NON-action below is actually exercised rather than trivially true.
+    t.setCurrentDesktop(5);
     t.setStickyPin(QStringLiteral("S1"), 5);
     t.setStickyPin(QStringLiteral("S2"), 6);
     t.setCurrentDesktopForScreen(QStringLiteral("S3"), 5);
     t.pruneDesktop(5);
     QVERIFY(!t.hasStickyPin(QStringLiteral("S1"))); // pinned to removed desktop 5
     QVERIFY(t.hasStickyPin(QStringLiteral("S2"))); // desktop 6 survives
-    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1); // per-output 5 gone
+    // The per-output entry SURVIVES even though it names the removed desktop.
+    // Dropping it would fall the screen back to the global desktop, which the
+    // daemon writes once at login — the merge-every-output failure
+    // currentKeyForScreen's tier-3 contract warns about. The daemon's clamp
+    // never rewrites this entry (it only touches numbers above the new count),
+    // so nothing would re-establish it.
+    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 5);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("S3")).desktop, 5);
+    // And the global current desktop is deliberately left alone too, even
+    // though it names the removed desktop: this path is count-derived and has
+    // no correct replacement to write. Stub that restraint away and this fails.
+    QCOMPARE(t.currentDesktop(), 5);
 }
 
 void TestScreenContextTracker::renumberDesktops_identityShift()
@@ -231,6 +245,27 @@ void TestScreenContextTracker::renumberDesktops_identityShift()
     // Empty mapping is a no-op.
     t.renumberDesktops({});
     QCOMPARE(t.currentDesktop(), 3);
+
+    // SWAP mapping (1→2, 2→1): every value must be read from the ORIGINAL
+    // numbers. An in-place rewrite that consulted already-rewritten values
+    // would carry both onto the same desktop.
+    ScreenContextTracker swap;
+    swap.setCurrentDesktop(1);
+    swap.setCurrentDesktopForScreen(QStringLiteral("A"), 1);
+    swap.setCurrentDesktopForScreen(QStringLiteral("B"), 2);
+    swap.setStickyPin(QStringLiteral("A"), 2);
+    swap.setStickyPin(QStringLiteral("B"), 1);
+
+    QHash<int, int> swapMapping;
+    swapMapping.insert(1, 2);
+    swapMapping.insert(2, 1);
+    swap.renumberDesktops(swapMapping);
+
+    QCOMPARE(swap.currentDesktop(), 2);
+    QCOMPARE(swap.screenDesktop(QStringLiteral("A")), 2);
+    QCOMPARE(swap.screenDesktop(QStringLiteral("B")), 1);
+    QCOMPARE(swap.stickyPinnedDesktop(QStringLiteral("A")), 1);
+    QCOMPARE(swap.stickyPinnedDesktop(QStringLiteral("B")), 2);
 }
 
 void TestScreenContextTracker::guards_rejectDesktopsBelowOne()

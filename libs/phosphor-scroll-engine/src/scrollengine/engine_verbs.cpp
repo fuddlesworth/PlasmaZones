@@ -75,7 +75,20 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 
 QStringList ScrollEngine::focusedColumnWindows(const QString& screenId) const
 {
-    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    // Resolve on the PHYSICAL axis. The daemon's move-column-to-workspace verb
+    // addresses this getter with a physical output id (its per-output desktop
+    // map keys physical ids), while the engine keys its states by VIRTUAL
+    // screen id — so a bare currentKeyForScreen lookup misses on every
+    // split-monitor setup and the verb dead-ends into its OSD hint.
+    // Deliberately NOT resolveOperationScreen: its active-screen fallback
+    // would answer for a different monitor entirely when the named output is
+    // not scrolling, and this getter is half of an address/action pair whose
+    // two halves must name the same output.
+    const QString resolved = scrollingScreenForPhysical(screenId);
+    if (resolved.isEmpty()) {
+        return {};
+    }
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(resolved));
     if (!state) {
         return {};
     }

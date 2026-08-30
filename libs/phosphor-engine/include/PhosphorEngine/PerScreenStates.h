@@ -23,6 +23,11 @@ namespace PhosphorEngine {
 /// manufacturing exactly the collision the callers' injectivity precondition
 /// exists to rule out. So the verdict is all-or-nothing, for every consumer of
 /// the mapping, and a refusal leaves every map untouched.
+///
+/// The warnings in this header are plain qWarning, not qCWarning: phosphor-engine
+/// declares no logging category, and this is a header-only template consumed by
+/// three engines that each have their own — a category defined here would either
+/// leak into all of them or force a new library-level one for four call sites.
 inline bool desktopRenumberMappingIsValid(const QHash<int, int>& oldToNew)
 {
     for (auto it = oldToNew.constBegin(); it != oldToNew.constEnd(); ++it) {
@@ -40,6 +45,11 @@ inline bool desktopRenumberMappingIsValid(const QHash<int, int>& oldToNew)
 /// refused WHOLE (desktopRenumberMappingIsValid), never per entry.
 /// Companion to PerScreenStates::renumberDesktops for the engines'
 /// auxiliary per-context maps (stash, overrides, burst flags).
+/// `oldToNew` must be INJECTIVE over the desktops actually present, and no
+/// mapped-to desktop may already be held by an unmapped key — the same
+/// precondition PerScreenStates::renumberDesktops carries, checked the same way
+/// (assert in debug, warning in release) because the same violation silently
+/// drops an entry.
 /// Take-then-reinsert so shifted keys never collide. No `skip` predicate,
 /// unlike PerScreenStates::renumberDesktops: the aux maps engines pass here
 /// never hold sentinel keys (the snap engine's empty-screenId globals live in
@@ -64,6 +74,19 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
         }
     }
     for (auto& [key, value] : moved) {
+        // Same injectivity precondition, and the same failure, as
+        // PerScreenStates::renumberDesktops: a target already held by an
+        // unmapped key makes the insert drop the value that was there. Assert
+        // in debug, warn in release rather than losing an aux entry silently.
+        if (hash.contains(key)) {
+            qWarning(
+                "PhosphorEngine::renumberDesktopKeyedHash: target key (desktop %d) is already occupied — "
+                "mapping is not injective, or an unmapped key holds the target; the entry already there is "
+                "being replaced",
+                key.desktop);
+        }
+        Q_ASSERT_X(!hash.contains(key), "PhosphorEngine::renumberDesktopKeyedHash",
+                   "target key already occupied — mapping is not injective, or an unmapped key holds the target");
         hash.insert(key, std::move(value));
     }
 }
@@ -320,6 +343,16 @@ public:
             }
         }
         for (const auto& [key, state] : moved) {
+            // The assert catches this in debug; release builds would silently
+            // overwrite, leaking the displaced state and stranding its windows'
+            // reverse entries. Surface it either way, matching migrate() above.
+            if (m_states.contains(key)) {
+                qWarning(
+                    "PhosphorEngine::PerScreenStates::renumberDesktops: target key (desktop %d) is already "
+                    "occupied — mapping is not injective, or an unmapped key holds the target; the state "
+                    "already there is being replaced",
+                    key.desktop);
+            }
             Q_ASSERT_X(!m_states.contains(key), "PerScreenStates::renumberDesktops",
                        "target key already occupied — mapping is not injective, or an unmapped key holds the target");
             m_states.insert(key, state);

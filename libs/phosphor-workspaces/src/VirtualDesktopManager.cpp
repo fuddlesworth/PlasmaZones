@@ -5,18 +5,19 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <algorithm>
+#include <utility>
+
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
-#include <QDBusReply>
-#include <QDBusArgument>
 #include <QDBusMessage>
-#include <QDBusServiceWatcher>
-#include <QDBusVariant>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
+#include <QDBusVariant>
 #include <QLoggingCategory>
-
-#include <utility>
 
 Q_LOGGING_CATEGORY(lcVirtualDesktops, "plasmazones.workspaces.vdm", QtWarningMsg)
 
@@ -93,7 +94,9 @@ void VirtualDesktopManager::initKWinDBus()
     // proxy is stale, so drop it (with its subscriptions) before probing again.
     if (m_kwinVDInterface) {
         subscribeKWinSignals(false);
-        delete m_kwinVDInterface;
+        // deleteLater, never delete: the proxy is a QObject parented to this,
+        // and this can be reached from a slot the proxy itself is delivering.
+        m_kwinVDInterface->deleteLater();
         m_kwinVDInterface = nullptr;
         m_useKWinDBus = false;
     }
@@ -102,7 +105,7 @@ void VirtualDesktopManager::initKWinDBus()
         new QDBusInterface(kwinService(), kwinPath(), kwinInterface(), QDBusConnection::sessionBus(), this);
 
     if (!m_kwinVDInterface->isValid()) {
-        delete m_kwinVDInterface;
+        m_kwinVDInterface->deleteLater();
         m_kwinVDInterface = nullptr;
         return;
     }
@@ -194,11 +197,16 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
     // desktops, so an empty list while we already knew of some is a FAILED
     // refresh — publishing it would make the reconciler drop every slice and
     // the engines reap all per-desktop state. Keep what we have and re-ask.
-    if (ids.isEmpty() && !m_desktopIds.isEmpty()) {
+    //
+    // An empty list while we know of NONE is the same failure, not a quieter
+    // one: init()'s blocking seed can land while KWin is still coming up, and
+    // with no previous list to protect this path used to arm nothing, emit
+    // nothing and simply leave the cache permanently empty. Both cases retry.
+    if (ids.isEmpty()) {
         if (m_refreshRetries < MaxRefreshRetries) {
             ++m_refreshRetries;
-            qCWarning(lcVirtualDesktops) << "desktop list refresh returned nothing while" << m_desktopIds.size()
-                                         << "desktops are known — keeping the list, retry" << m_refreshRetries << "of"
+            qCWarning(lcVirtualDesktops) << "desktop list refresh returned nothing;" << m_desktopIds.size()
+                                         << "desktops are known and are being kept, retry" << m_refreshRetries << "of"
                                          << MaxRefreshRetries;
             m_refreshRetryTimer.start();
         } else {
@@ -232,6 +240,19 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
     m_desktopIds = ids;
     m_desktopNames = names;
 
+    // The settled list is announced FIRST, before the count and the per-screen
+    // clamp it drives. setDesktopCount -> clampScreenDesktopsToCount emits
+    // screenDesktopChanged, and the reconciler resolves those 1-based numbers
+    // against the id list it last settled: announcing the count first left it
+    // resolving every clamp report against the PREVIOUS list, so an externally
+    // removed desktop made each report name the wrong id, which reads as a
+    // foreign switch and drives a real snap-back onto a desktop the screen was
+    // never on. The daemon's own ordering requirement is clamp-before-count,
+    // and both of those still happen inside setDesktopCount, in that order.
+    if (m_desktopIds != previousIds) {
+        Q_EMIT desktopListChanged(m_desktopIds);
+    }
+
     // The parsed list is the authority on the count — no separate blocking
     // `count` property read, and no phantom padded names from a count that
     // came from a different instant than the list.
@@ -240,10 +261,6 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
     }
 
     resolveCurrentFromId();
-
-    if (m_desktopIds != previousIds) {
-        Q_EMIT desktopListChanged(m_desktopIds);
-    }
 }
 
 void VirtualDesktopManager::resolveCurrentFromId()

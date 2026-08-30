@@ -91,9 +91,18 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Dynamic per-monitor workspaces (the three leaves under the "workspaces"
     // drill parent). Multi-word phrases included whole — the ranker matches
     // the query as one un-split needle. "niri" stays untranslated.
+    //
+    // The master toggle (workspacesEnabled) and the KWin per-output latch
+    // (workspacesManageKWinPerOutput) get keywords here rather than their own
+    // addSetting entries. Neither has a searchAnchor: the master toggle lives
+    // in the sidebar header, like the snapping / tiling / scrolling ones which
+    // are also uncatalogued, and the latch is reached through a consent
+    // warning rather than a settings row. An addSetting for either would
+    // publish an anchor that resolves to nothing on the page.
     search->setPageKeywords(QStringLiteral("workspaces-behavior"),
                             {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("virtual desktop"),
                              PhosphorI18n::tr("dynamic workspaces"), PhosphorI18n::tr("per monitor"),
+                             PhosphorI18n::tr("enable workspaces"), PhosphorI18n::tr("per output"),
                              QStringLiteral("niri")});
     addSection(search, QStringLiteral("workspaces-behavior"), QStringLiteral("workspacesBehavior"),
                PhosphorI18n::tr("Behavior"));
@@ -117,7 +126,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("keybind"), PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"),
                              PhosphorI18n::tr("quick shortcut"), PhosphorI18n::tr("move window")});
     addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspaceQuickShortcuts"),
-               PhosphorI18n::tr("Workspace Quick Shortcuts"));
+               PhosphorI18n::tr("Workspace quick shortcuts"));
     // The three per-mode library pages (the old tabbed Layouts page, split).
     // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
     // (import / open folder) carries the manageLayouts anchor on every view.

@@ -1,23 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "workspacereconcilerharness.h"
+
 #include <PhosphorWorkspaces/WorkspaceReconciler.h>
 
 #include <QSignalSpy>
 #include <QTest>
 
 using PhosphorWorkspaces::WorkspaceReconciler;
+using WorkspaceTest::adoptTwoScreens;
+using WorkspaceTest::id;
+using WorkspaceTest::openTwoConcurrentCreates;
 
-namespace {
-QString id(int n)
-{
-    return QStringLiteral("{d%1}").arg(n);
-}
-}
-
-/// Drives the reconciler with scripted notification sequences (no D-Bus).
-/// The harness plays KWin: every requestCreateDesktop is answered by invoking
-/// the created/settled callbacks the way VirtualDesktopManager would.
+/// The structural behaviour of the reconciler: adoption, ownership, the verbs,
+/// named workspaces and hotplug. Driven with scripted notification sequences
+/// (no D-Bus); the harness plays KWin, answering every requestCreateDesktop by
+/// invoking the created/settled callbacks the way VirtualDesktopManager would.
+/// The timing-driven paths (the destroy debounce, ledger expiry, the cap probe
+/// and the removal-refusal budget) live in test_workspace_ledger.
 class TestWorkspaceReconciler : public QObject
 {
     Q_OBJECT
@@ -30,18 +31,13 @@ private Q_SLOTS:
         qRegisterMetaType<QList<int>>("QList<int>");
     }
     void adoption_currentFirstThenContiguous();
-    void adoption_appendsTrailingEmpty();
+    void adoption_trailingEmptyIsUnnamedAndSettles();
     void createOnOccupy_appendsNextEmpty();
-    void destroyOnEmpty_debouncedAndRechecked();
-    void destroyOnEmpty_namedExempt();
-    void destroyOnEmpty_neverTrailingOrLast();
     void externalCreation_adoptedByFocusedScreen();
     void externalRemoval_followedAndRepaired();
     void renumber_computedFromIdDelta();
     void echo_ledgerSuppressesReactivePolicy();
-    void snapBack_singleCorrectionNoLoop();
-    void cap_suspendsTrailingEmpty();
-    void capProbe_learnsFromCreateExpiryAndSelfHeals();
+    void foreign_everyUnmatchedReportSurfaces();
     void screenRemoved_sliceReassigned();
     void verbQueries_sliceScopedNoWrap();
     void issueSetCurrent_singleInFlightPerScreen();
@@ -51,80 +47,21 @@ private Q_SLOTS:
     void hotplug_homeStampAndMigrateBack();
     void restore_candidateReconciledAgainstReality();
     void named_createdPinnedAndExempt();
+    void named_pinTransfersRealizedWorkspaceAndClearsHome();
+    void named_pinDeclinedWhenSourceHoldsItsLastDesktop();
+    void named_declaredPositionMovesARealizedWorkspace();
     void named_claimByKWinName();
     void named_unnamedRevertsToDynamic();
-    void removalRace_signalledForPopulationOnDoomedDesktop();
-    void foreign_pausedDuringRemovalThenReevaluatedAtSettle();
-    void adoption_keepsKnownPopulations();
     void named_createEchoFifoMismatchHealedByKWinNames();
     void named_placeholderNameNeverClaims();
     void named_explicitPositionStaysBeforeTrailingEmpty();
     void settled_emptyListIsIgnored();
     void screenAdded_freshScreenGetsItsOwnDesktop();
+    void screenAdded_bothHotplugSignalOrdersGetADesktop();
     void create_secondPendingSurvivesTheFirstsSettle();
     void create_settledBeforeEchoLandsOnRequestingScreen();
     void create_settledMatchesByPositionNotRequestOrder();
     void create_threeConcurrentSettleLandOnTheirOwnScreens();
-
-private:
-    /// Two screens, each occupied and each therefore owing a trailing-empty
-    /// create, with BOTH Creates open in the ledger at once. A owns {d1}
-    /// (occupied), B owns {d2} (occupied); nothing has landed yet.
-    /// `populateBFirst` flips which screen's population change fires first, and
-    /// so which Create heads the ledger. The screen ORDER is [A,B] either way,
-    /// so B-first is the case where oldest-request order and KWin-position
-    /// order disagree.
-    void openTwoConcurrentCreates(WorkspaceReconciler& rec, QSignalSpy& createSpy, bool populateBFirst = false)
-    {
-        rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
-        rec.setFocusedScreen(QStringLiteral("A"));
-
-        QHash<QString, QString> current;
-        current.insert(QStringLiteral("A"), id(1));
-        current.insert(QStringLiteral("B"), id(2));
-        rec.adoptAll({id(1), id(2)}, current);
-        QCOMPARE(createSpy.count(), 0);
-
-        if (populateBFirst) {
-            rec.onPopulationChanged(id(2), 1);
-            rec.onPopulationChanged(id(1), 1);
-        } else {
-            rec.onPopulationChanged(id(1), 1);
-            rec.onPopulationChanged(id(2), 1);
-        }
-        QCOMPARE(createSpy.count(), 2);
-    }
-
-    /// Adopt a two-screen world: A owns {d1} (current), B owns {d2} (current).
-    /// With an empty census both slices already end in an empty dynamic
-    /// desktop, so adoption alone requests nothing; occupying each current
-    /// desktop then drives the trailing-empty creates, answered so A has
-    /// {d1(occupied), d3(empty)} and B has {d2(occupied), d4(empty)}.
-    void adoptTwoScreens(WorkspaceReconciler& rec)
-    {
-        rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
-        rec.setFocusedScreen(QStringLiteral("A"));
-
-        QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
-        QHash<QString, QString> current;
-        current.insert(QStringLiteral("A"), id(1));
-        current.insert(QStringLiteral("B"), id(2));
-        rec.adoptAll({id(1), id(2)}, current);
-        QCOMPARE(createSpy.count(), 0); // both slices end in an empty desktop
-
-        rec.onPopulationChanged(id(1), 1);
-        rec.onPopulationChanged(id(2), 1);
-        QCOMPARE(createSpy.count(), 2);
-        // Answer them: A's lands as {d3} at global position 1, B's as {d4}.
-        rec.onKwinDesktopCreated(id(3));
-        rec.onKwinDesktopCreated(id(4));
-        rec.onDesktopListSettled({id(1), id(3), id(2), id(4)});
-
-        QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 2);
-        QCOMPARE(rec.map().slice(QStringLiteral("B")).size(), 2);
-        QCOMPARE(rec.map().ownerOf(id(3)), QStringLiteral("A"));
-        QCOMPARE(rec.map().ownerOf(id(4)), QStringLiteral("B"));
-    }
 };
 
 void TestWorkspaceReconciler::adoption_currentFirstThenContiguous()
@@ -145,13 +82,26 @@ void TestWorkspaceReconciler::adoption_currentFirstThenContiguous()
     QCOMPARE(rec.map().ownerOf(id(3)), QStringLiteral("A"));
 }
 
-void TestWorkspaceReconciler::adoption_appendsTrailingEmpty()
+void TestWorkspaceReconciler::adoption_trailingEmptyIsUnnamedAndSettles()
 {
     WorkspaceReconciler rec;
     QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
     adoptTwoScreens(rec);
-    // adoptTwoScreens already verified both creates were requested + realized;
-    // maintenance is now quiet (both screens hold a trailing empty).
+
+    // What the trailing-empty invariant actually claims: each slice ends in a
+    // desktop that is empty AND dynamic, since a named one is destroy-exempt
+    // and could never play the role.
+    for (const QString& screenId : {QStringLiteral("A"), QStringLiteral("B")}) {
+        const auto slice = rec.map().slice(screenId);
+        QVERIFY(!slice.isEmpty());
+        QVERIFY(slice.last().name.isEmpty());
+        QCOMPARE(rec.map().sliceIndexOf(slice.last().desktopId), slice.size() - 1);
+    }
+
+    // And that it SETTLES: a repeat of the same settled list asks for nothing
+    // more, so maintenance is not quietly re-requesting on every reply.
+    QCOMPARE(createSpy.count(), 2);
+    rec.onDesktopListSettled({id(1), id(3), id(2), id(4)});
     QCOMPARE(createSpy.count(), 2);
 }
 
@@ -171,64 +121,6 @@ void TestWorkspaceReconciler::createOnOccupy_appendsNextEmpty()
     rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
     QCOMPARE(rec.map().slice(QStringLiteral("A")).size(), 3);
     QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("A"));
-}
-
-void TestWorkspaceReconciler::destroyOnEmpty_debouncedAndRechecked()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-    // Occupy A's trailing empty, realize the new one.
-    rec.onPopulationChanged(id(3), 1);
-    rec.onKwinDesktopCreated(id(5));
-    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
-
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-
-    // {d3} (now mid-slice, occupied) empties → debounce, then remove.
-    rec.onPopulationChanged(id(3), 0);
-    QCOMPARE(removeSpy.count(), 0); // not before the debounce
-    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
-    QCOMPARE(removeSpy.first().first().toString(), id(3));
-
-    // The destroy-debounce re-check: a desktop that re-fills inside the
-    // debounce window is NOT removed when the timer fires.
-    rec.onKwinDesktopRemoved(id(3));
-    rec.onDesktopListSettled({id(1), id(5), id(2), id(4)});
-    rec.onPopulationChanged(id(1), 1);
-    rec.onPopulationChanged(id(1), 0);
-    rec.onPopulationChanged(id(1), 2); // re-filled before the debounce fires
-    QTest::qWait(WorkspaceReconciler::DestroyDebounceMs + 150);
-    QCOMPARE(removeSpy.count(), 1); // no second remove
-}
-
-void TestWorkspaceReconciler::destroyOnEmpty_namedExempt()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-    rec.map().setName(id(1), QStringLiteral("chat"));
-
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-    rec.onPopulationChanged(id(1), 1);
-    rec.onPopulationChanged(id(1), 0);
-    QTest::qWait(WorkspaceReconciler::DestroyDebounceMs + 150);
-    QCOMPARE(removeSpy.count(), 0);
-}
-
-void TestWorkspaceReconciler::destroyOnEmpty_neverTrailingOrLast()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-
-    // The trailing empty {d3} bouncing 1→0 is invariant repair, not surplus.
-    rec.onPopulationChanged(id(3), 1);
-    rec.onKwinDesktopCreated(id(5));
-    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
-    rec.onPopulationChanged(id(5), 0); // trailing empty stays
-    QTest::qWait(WorkspaceReconciler::DestroyDebounceMs + 150);
-    for (const auto& call : removeSpy) {
-        QVERIFY(call.first().toString() != id(5));
-    }
 }
 
 void TestWorkspaceReconciler::externalCreation_adoptedByFocusedScreen()
@@ -297,7 +189,7 @@ void TestWorkspaceReconciler::echo_ledgerSuppressesReactivePolicy()
     QCOMPARE(foreignSpy.count(), 0);
 }
 
-void TestWorkspaceReconciler::snapBack_singleCorrectionNoLoop()
+void TestWorkspaceReconciler::foreign_everyUnmatchedReportSurfaces()
 {
     WorkspaceReconciler rec;
     adoptTwoScreens(rec); // list: {d1} {d3} {d2} {d4}; {d2} owned by B
@@ -313,71 +205,14 @@ void TestWorkspaceReconciler::snapBack_singleCorrectionNoLoop()
     QCOMPARE(foreignSpy.first().at(1).toString(), id(2));
     QCOMPARE(foreignSpy.first().at(2).toString(), QStringLiteral("B"));
 
-    // Phase 2 wires foreignSwitchDetected → requestSetCurrent. Simulate that
-    // correction being issued and verify the loop-breaker: while the
-    // SetCurrent ledger entry is open, further foreign reports for A are
-    // queued (no second foreignSwitchDetected), and the correction's own echo
-    // retires the entry without re-triggering policy.
-    // (The reconciler exposes no direct issue API pre-Phase-2; the queueing
-    // guard is exercised through the ledger by the Phase 2 wiring. Here we
-    // pin the Phase 1 half: repeated identical foreign reports re-fire the
-    // signal only per report arrival, and a matched echo never does.)
+    // Detection is per report arrival: with no correction in flight, a repeat
+    // of the same external switch surfaces again rather than being swallowed
+    // as a duplicate. (The loop-breaker that suppresses the repeats WHILE a
+    // correction is open is pinned by snapBack_correctsAndBreaksLoop.)
     rec.onScreenDesktopReport(QStringLiteral("A"), 3);
-    QCOMPARE(foreignSpy.count(), 2); // unmatched external reports each surface
-    QCOMPARE(setCurrentSpy.count(), 0); // Phase 1 issues no corrections itself
-}
-
-void TestWorkspaceReconciler::cap_suspendsTrailingEmpty()
-{
-    WorkspaceReconciler rec;
-    rec.setDesktopCap(2);
-    rec.onScreenOrderChanged({QStringLiteral("A")});
-    QSignalSpy capSpy(&rec, &WorkspaceReconciler::capReached);
-    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
-
-    QHash<QString, QString> current;
-    current.insert(QStringLiteral("A"), id(1));
-    rec.adoptAll({id(1), id(2)}, current); // already at cap of 2
-
-    // Both desktops occupied → trailing-empty append wanted, but capped.
-    rec.onPopulationChanged(id(1), 1);
-    rec.onPopulationChanged(id(2), 1);
-    QCOMPARE(createSpy.count(), 0);
-    QCOMPARE(capSpy.count(), 1);
-    // The hint fires once per episode.
-    rec.onPopulationChanged(id(1), 2);
-    QCOMPARE(capSpy.count(), 1);
-}
-
-void TestWorkspaceReconciler::capProbe_learnsFromCreateExpiryAndSelfHeals()
-{
-    WorkspaceReconciler rec;
-    rec.onScreenOrderChanged({QStringLiteral("A")});
-    QHash<QString, QString> current;
-    current.insert(QStringLiteral("A"), id(1));
-    rec.adoptAll({id(1), id(2)}, current);
-
-    QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
-    QSignalSpy capSpy(&rec, &WorkspaceReconciler::capReached);
-
-    // Occupying the trailing empty requests a create; KWin refuses SILENTLY
-    // (no echo), so the ledger entry expires and the reconciler learns the
-    // ceiling is the current count (2).
-    rec.onPopulationChanged(id(1), 1);
-    rec.onPopulationChanged(id(2), 1);
-    QCOMPARE(createSpy.count(), 1);
-    QTRY_COMPARE_WITH_TIMEOUT(capSpy.count(), 1, WorkspaceReconciler::LedgerTimeoutMs + 2000);
-
-    // At the learned cap, further trailing-empty wants are suspended.
-    rec.onPopulationChanged(id(1), 2);
-    QCOMPARE(createSpy.count(), 1);
-
-    // Self-heal: an external create pushes the count past the learned cap —
-    // the mislearn is forgotten and appends resume.
-    rec.onKwinDesktopCreated(id(3));
-    rec.onDesktopListSettled({id(1), id(2), id(3)});
-    rec.onPopulationChanged(id(3), 1); // trailing occupied again
-    QCOMPARE(createSpy.count(), 2);
+    QCOMPARE(foreignSpy.count(), 2);
+    // Detection alone issues nothing: the correction is the caller's call.
+    QCOMPARE(setCurrentSpy.count(), 0);
 }
 
 void TestWorkspaceReconciler::screenRemoved_sliceReassigned()
@@ -423,9 +258,13 @@ void TestWorkspaceReconciler::issueSetCurrent_singleInFlightPerScreen()
     QCOMPARE(setCurrentSpy.count(), 2);
 
     // The echo (A now reports d3 = global index 2) retires the entry and
-    // frees the screen for the next switch.
+    // frees the screen for the next switch — which really is ISSUED, not just
+    // accepted by the return value.
     QVERIFY(rec.onScreenDesktopReport(QStringLiteral("A"), 2));
     QVERIFY(rec.issueSetCurrent(QStringLiteral("A"), id(1)));
+    QCOMPARE(setCurrentSpy.count(), 3);
+    QCOMPARE(setCurrentSpy.last().at(0).toString(), QStringLiteral("A"));
+    QCOMPARE(setCurrentSpy.last().at(1).toString(), id(1));
 }
 
 void TestWorkspaceReconciler::snapBack_correctsAndBreaksLoop()
@@ -531,6 +370,9 @@ void TestWorkspaceReconciler::restore_candidateReconciledAgainstReality()
 
     WorkspaceReconciler rec;
     QVERIFY(rec.map().fromJson(candidate.toJson(1, {}, nullptr, /*includeState=*/true)));
+    // The restore carries the screen order itself; asserted HERE, because the
+    // reorder below would hand it the same order and mask a parse that lost it.
+    QCOMPARE(rec.map().screenOrder(), QStringList({QStringLiteral("A"), QStringLiteral("B")}));
     rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
 
     // Reality: {d9} vanished while the daemon was down; {d5} is new.
@@ -573,9 +415,7 @@ void TestWorkspaceReconciler::named_createdPinnedAndExempt()
     rec.onPopulationChanged(id(5), 1);
     rec.onPopulationChanged(id(5), 0);
     QTest::qWait(WorkspaceReconciler::DestroyDebounceMs + 150);
-    for (const auto& call : removeSpy) {
-        QVERIFY(call.first().toString() != id(5));
-    }
+    QCOMPARE(removeSpy.count(), 0);
 }
 
 void TestWorkspaceReconciler::named_claimByKWinName()
@@ -703,72 +543,6 @@ void TestWorkspaceReconciler::named_unnamedRevertsToDynamic()
     QVERIFY(renameSpy.first().at(1).toString().isEmpty());
 }
 
-void TestWorkspaceReconciler::removalRace_signalledForPopulationOnDoomedDesktop()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-    // Occupy A's trailing empty {d3}, realize the next one, then empty {d3}
-    // so the destroy debounce issues its Remove.
-    rec.onPopulationChanged(id(3), 1);
-    rec.onKwinDesktopCreated(id(5));
-    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-    QSignalSpy raceSpy(&rec, &WorkspaceReconciler::removalRaceDetected);
-    rec.onPopulationChanged(id(3), 0);
-    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
-
-    // A window maps onto {d3} while the Remove is in flight: the race is
-    // surfaced with the owner so the controller can re-route afterwards.
-    rec.onPopulationChanged(id(3), 1);
-    QCOMPARE(raceSpy.count(), 1);
-    QCOMPARE(raceSpy.first().at(0).toString(), id(3));
-    QCOMPARE(raceSpy.first().at(1).toString(), QStringLiteral("A"));
-}
-
-void TestWorkspaceReconciler::foreign_pausedDuringRemovalThenReevaluatedAtSettle()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-    rec.onPopulationChanged(id(3), 1);
-    rec.onKwinDesktopCreated(id(5));
-    rec.onDesktopListSettled({id(1), id(3), id(5), id(2), id(4)});
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-    rec.onPopulationChanged(id(3), 0);
-    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
-
-    // While the Remove is open, KWin's renumber/clamp interim reports must
-    // not trigger owner-wins policy (they read as foreign against the
-    // pre-removal map)...
-    QSignalSpy foreignSpy(&rec, &WorkspaceReconciler::foreignSwitchDetected);
-    rec.onScreenDesktopReport(QStringLiteral("B"), 1); // d1 — A's desktop
-    QCOMPARE(foreignSpy.count(), 0);
-
-    // ...and the settled list re-evaluates every screen: B genuinely sits on
-    // A's desktop, so the policy fires now.
-    rec.onKwinDesktopRemoved(id(3));
-    rec.onDesktopListSettled({id(1), id(5), id(2), id(4)});
-    QCOMPARE(foreignSpy.count(), 1);
-    QCOMPARE(foreignSpy.first().at(0).toString(), QStringLiteral("B"));
-    QCOMPARE(foreignSpy.first().at(2).toString(), QStringLiteral("A"));
-}
-
-void TestWorkspaceReconciler::adoption_keepsKnownPopulations()
-{
-    WorkspaceReconciler rec;
-    adoptTwoScreens(rec);
-
-    // A population report can precede the desktop's adoption (the census is
-    // event-driven); clearing it at settle would make destroy-on-empty
-    // blind to the later 2→0 transition.
-    rec.onPopulationChanged(id(9), 2);
-    rec.onDesktopListSettled({id(1), id(3), id(9), id(2), id(4)});
-
-    QSignalSpy removeSpy(&rec, &WorkspaceReconciler::requestRemoveDesktop);
-    rec.onPopulationChanged(id(9), 0);
-    QTRY_COMPARE_WITH_TIMEOUT(removeSpy.count(), 1, 2000);
-    QCOMPARE(removeSpy.first().first().toString(), id(9));
-}
-
 void TestWorkspaceReconciler::named_createEchoFifoMismatchHealedByKWinNames()
 {
     using PhosphorWorkspaces::NamedWorkspace;
@@ -833,9 +607,12 @@ void TestWorkspaceReconciler::create_settledBeforeEchoLandsOnRequestingScreen()
 {
     // The other order: both creates land and the settled list arrives with no
     // id-only echo at all (KWin's desktopCreated lost, or the refresh simply
-    // won the race). Each new id consumes the oldest open Create — the same
-    // FIFO order the echo path uses — and lands on the requesting screen
-    // instead of being adopted onto the focused one.
+    // won the race). Each new id consumes the open Create of matching RANK
+    // among the requested global positions (the echo path is the FIFO one), so
+    // each desktop lands on the screen that asked for it instead of being
+    // adopted onto the focused one. Here the two rankings happen to agree;
+    // create_settledMatchesByPositionNotRequestOrder is the case where they do
+    // not.
     WorkspaceReconciler rec;
     QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
     openTwoConcurrentCreates(rec, createSpy);
@@ -910,6 +687,135 @@ void TestWorkspaceReconciler::create_threeConcurrentSettleLandOnTheirOwnScreens(
     QCOMPARE(rec.map().slice(QStringLiteral("C")).size(), 2);
     // Every op was consumed, so maintenance asks for nothing more.
     QCOMPARE(createSpy.count(), 3);
+}
+
+void TestWorkspaceReconciler::named_pinTransfersRealizedWorkspaceAndClearsHome()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3}, B: {d2(occ), d4}
+    rec.setFocusedScreen(QStringLiteral("A"));
+
+    // Realize "chat" unpinned, so it lands on the focused screen.
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    rec.applyNamedWorkspaces({chat}, {});
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(5), id(3), id(2), id(4)});
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("A"));
+
+    // A past hotplug left a home stamp on it, and A is currently SHOWING it
+    // (global index 2).
+    rec.map().setHomeScreen(id(5), QStringLiteral("A"));
+    rec.onScreenDesktopReport(QStringLiteral("A"), 2);
+
+    QSignalSpy foreignSpy(&rec, &WorkspaceReconciler::foreignSwitchDetected);
+    chat.outputId = QStringLiteral("B");
+    rec.applyNamedWorkspaces({chat}, {});
+
+    QCOMPARE(rec.map().ownerOf(id(5)), QStringLiteral("B"));
+    // A pin is a deliberate placement, so it outranks hotplug memory: leaving
+    // the stamp would yank the workspace back off B on the next replug of A.
+    QVERIFY(rec.map().entryFor(id(5)).homeScreenId.isEmpty());
+    // A was left sitting on a desktop it no longer owns, which is exactly the
+    // owner-wins case the verb-side transfer path also raises.
+    QCOMPARE(foreignSpy.count(), 1);
+    QCOMPARE(foreignSpy.first().at(0).toString(), QStringLiteral("A"));
+    QCOMPARE(foreignSpy.first().at(1).toString(), id(5));
+    QCOMPARE(foreignSpy.first().at(2).toString(), QStringLiteral("B"));
+}
+
+void TestWorkspaceReconciler::named_pinDeclinedWhenSourceHoldsItsLastDesktop()
+{
+    WorkspaceReconciler rec;
+    rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B")});
+    QHash<QString, QString> current;
+    current.insert(QStringLiteral("A"), id(1));
+    current.insert(QStringLiteral("B"), id(2));
+    rec.adoptAll({id(1), id(2)}, current); // one desktop each
+
+    // Claim {d1} by the name KWin still carries for it.
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    rec.applyNamedWorkspaces({chat}, {QStringLiteral("chat"), QString()});
+    QCOMPARE(rec.map().entryFor(id(1)).name, QStringLiteral("chat"));
+
+    // Pinning it to B would empty A's slice, which no repair can refill at the
+    // cap, so the transfer is declined and the workspace stays put.
+    chat.outputId = QStringLiteral("B");
+    rec.applyNamedWorkspaces({chat}, {QStringLiteral("chat"), QString()});
+    QCOMPARE(rec.map().ownerOf(id(1)), QStringLiteral("A"));
+    QCOMPARE(rec.map().sliceSize(QStringLiteral("A")), 1);
+}
+
+void TestWorkspaceReconciler::named_declaredPositionMovesARealizedWorkspace()
+{
+    WorkspaceReconciler rec;
+    adoptTwoScreens(rec); // A: {d1(occ), d3}
+
+    PhosphorWorkspaces::NamedWorkspace chat;
+    chat.name = QStringLiteral("chat");
+    chat.outputId = QStringLiteral("A");
+    rec.applyNamedWorkspaces({chat}, {});
+    rec.onKwinDesktopCreated(id(5));
+    rec.onDesktopListSettled({id(1), id(5), id(3), id(2), id(4)});
+    QCOMPARE(rec.map().sliceIndexOf(id(5)), 1);
+
+    // The declared position applies to a workspace that is ALREADY realized on
+    // the screen it belongs to, not only at creation and pin time — that gap
+    // is what made the settings Position control do nothing.
+    chat.position = 0;
+    rec.applyNamedWorkspaces({chat}, {});
+    QCOMPARE(rec.map().sliceIndexOf(id(5)), 0);
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).last().desktopId, id(3));
+
+    // Idempotent: re-applying the same declaration moves nothing and announces
+    // nothing, so this cannot become a per-settle reorder loop.
+    QSignalSpy mapSpy(&rec, &WorkspaceReconciler::mapChanged);
+    rec.applyNamedWorkspaces({chat}, {});
+    QCOMPARE(rec.map().sliceIndexOf(id(5)), 0);
+    QCOMPARE(mapSpy.count(), 0);
+
+    // An out-of-range position clamps to the last slot BEFORE the trailing
+    // empty; landing behind it would hand the trailing role to a destroy-exempt
+    // workspace and the invariant would never recover.
+    chat.position = 9;
+    rec.applyNamedWorkspaces({chat}, {});
+    QCOMPARE(rec.map().sliceIndexOf(id(5)), 1);
+    QCOMPARE(rec.map().slice(QStringLiteral("A")).last().desktopId, id(3));
+}
+
+void TestWorkspaceReconciler::screenAdded_bothHotplugSignalOrdersGetADesktop()
+{
+    // A hotplug reaches the reconciler as two calls, and which one arrives
+    // first depends on how the controller recomputes its screen order. Both
+    // orders must end with the new output holding a workspace of its own.
+    {
+        // Order 1: the recomputed order already names the new screen.
+        WorkspaceReconciler rec;
+        adoptTwoScreens(rec);
+        QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+        rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+        rec.onScreenAdded(QStringLiteral("C"));
+        QCOMPARE(createSpy.count(), 1);
+        QVERIFY(rec.map().screenOrder().contains(QStringLiteral("C")));
+
+        rec.onKwinDesktopCreated(id(6));
+        rec.onDesktopListSettled({id(1), id(3), id(2), id(4), id(6)});
+        QCOMPARE(rec.map().ownerOf(id(6)), QStringLiteral("C"));
+    }
+    {
+        // Order 2: screenAdded first, the order recomputed afterwards.
+        WorkspaceReconciler rec;
+        adoptTwoScreens(rec);
+        QSignalSpy createSpy(&rec, &WorkspaceReconciler::requestCreateDesktop);
+        rec.onScreenAdded(QStringLiteral("C"));
+        rec.onScreenOrderChanged({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+        QCOMPARE(createSpy.count(), 1);
+
+        rec.onKwinDesktopCreated(id(6));
+        rec.onDesktopListSettled({id(1), id(3), id(2), id(4), id(6)});
+        QCOMPARE(rec.map().ownerOf(id(6)), QStringLiteral("C"));
+    }
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceReconciler)

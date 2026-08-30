@@ -49,6 +49,7 @@ add_library(PhosphorWorkspaces SHARED
     src/WorkspaceMap.cpp
     src/WorkspaceReconciler.cpp
     src/WorkspaceReconcilerNamed.cpp
+    src/WorkspaceReconcilerScreens.cpp
 )
 add_library(PhosphorWorkspaces::PhosphorWorkspaces ALIAS PhosphorWorkspaces)
 

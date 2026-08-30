@@ -39,11 +39,18 @@ inline bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
 /// Validates that @p params has a string at @p key that is non-blank and at
 /// most @p maxLength characters, both measured on the TRIMMED string. The
 /// bounded twin of hasNonEmptyString, for the free-form identity strings
-/// (workspace names, screen ids) whose downstream resolvers trim before
-/// comparing — measuring the trimmed form here keeps the loader and those
-/// resolvers judging the same string, so a padded value cannot pass one and
-/// fail the other. The loader still stores the value VERBATIM; trimming is a
-/// read-side concern, mirroring the SnapToZone zone-name contract.
+/// (workspace names, screen ids). Measuring the trimmed form here keeps the
+/// loader and the read-side resolvers judging the same string, so a padded
+/// value cannot pass one and fail the other. The loader still stores the value
+/// VERBATIM; trimming is a read-side concern, mirroring the SnapToZone
+/// zone-name contract.
+///
+/// That makes trimming a REQUIREMENT of every consumer, not an observation
+/// about them. The readers that honour it today are the workspace resolver on
+/// the daemon's placement path and both routing summaries in the settings
+/// rule model (RouteToScreen and RouteToWorkspace). Any new reader of a value
+/// validated through this helper must trim before comparing, or a padded
+/// payload passes the loader and then matches nothing.
 inline bool hasNonBlankStringWithin(const QJsonObject& params, QLatin1StringView key, int maxLength)
 {
     const QJsonValue v = params.value(key);
