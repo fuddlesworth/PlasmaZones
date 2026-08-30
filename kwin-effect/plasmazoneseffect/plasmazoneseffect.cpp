@@ -40,12 +40,21 @@ Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
 // (docs/strip-identity-seam-plan.md). Defaults to QtWarningMsg; enable with
 // QT_LOGGING_RULES="plasmazones.effect.strip.debug=true".
 //
-// Three sites report under it, and they are meant to be read together on one
-// timeline: the desktop switch, the arrival (or non-arrival) of a tile batch,
-// and the per-window inputs scrollParkedOffscreen actually resolved. That
-// triple is what separates the plan's candidate A (no batch is emitted at all,
-// so nothing repairs the view) from B (the animator's offset belongs to the
-// previous strip) and C (the m_scrollVisualDelta entry is missing).
+// Four KINDS of site report under it, and they are meant to be read together
+// on one timeline: the desktop switch, the arrival (or non-arrival) of a tile
+// batch, the strip-context announcement (whether an epoch changed and whether
+// it retired anything), and the per-window inputs scrollParkedOffscreen
+// actually resolved. Counted as emit statements rather than kinds there are
+// more, because the per-window site reports a hit and a miss separately and
+// the context site reports a first epoch and a retire separately; stated as
+// kinds so that adding an emit to an existing kind does not falsify this.
+//
+// Those kinds are what separate the plan's candidate A (no batch is emitted at
+// all, so nothing repairs the view) from B (the animator's offset belongs to
+// the previous strip) and C (the m_scrollVisualDelta entry is missing).
+// Candidate A is read as the batch line NOT appearing after a desktop-switch
+// line, which is why its absence carries meaning and the two must be read as a
+// pair.
 //
 // The per-window site runs inside the paint pass for every strip window on
 // every frame, so it is change-gated as well as category-gated — see

@@ -1293,13 +1293,23 @@ private:
     ///
     /// Armed for the screens of a REAL switch only, in setActiveScreens'
     /// identical-set branch, which is where the arming flag is already
-    /// consumed. A screen ADDED to the set is not armed: it gets fresh state
-    /// and no baseline, so it emits on its own.
+    /// consumed.
+    ///
+    /// A screen ADDED to the set is armed too, and the reason is worth stating
+    /// because the obvious argument for leaving it unarmed is wrong. That
+    /// argument runs: an added screen gets fresh state and no baseline, so it
+    /// emits on its own. But releaseScreenState deliberately does NOT drop
+    /// m_lastAppliedRect (see its own contract above), and the removal loop
+    /// prunes only the leaving screen's CURRENT context, so a screen
+    /// re-entering on a context whose state survived resolves against a full
+    /// live baseline. Every rect can then match and the batch is suppressed —
+    /// the same hole this flag exists to close, reached by a different door.
     ///
     /// Deliberately a forced EMIT rather than dropping m_lastAppliedRect for
     /// the screen's windows, which is the tempting spelling because the header
     /// above notes that dropping the rect memory forces an emit. That memory
-    /// is also the park/unpark discriminator (wasParkedLastBatch reads it), so
+    /// is also the park/unpark discriminator (applyLayout's wasParked and
+    /// wasOnScreen read it), so
     /// clearing it would make every parked column read as ARRIVING and hand
     /// each one an edge-anchored origin it never departed from. The rect
     /// memory is still true; it is the inference drawn from it that does not

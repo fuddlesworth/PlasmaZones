@@ -748,6 +748,17 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (auto it = m_lastTabStripPayload.begin(); it != m_lastTabStripPayload.end();) {
         it = matches(it.key()) ? m_lastTabStripPayload.erase(it) : std::next(it);
     }
+    // Strip identity goes with the output. setActiveScreens drops both of
+    // these for a screen leaving the scrolling SET; an output being removed
+    // outright bypasses that path entirely, so without this sweep a monitor
+    // unplugged and plugged back in returns with its epoch still recorded as
+    // announced, and the re-entry announcement is suppressed as unchanged.
+    for (auto it = m_announcedStripEpoch.begin(); it != m_announcedStripEpoch.end();) {
+        it = matches(it.key()) ? m_announcedStripEpoch.erase(it) : std::next(it);
+    }
+    for (auto it = m_forceEmitScreens.begin(); it != m_forceEmitScreens.end();) {
+        it = matches(*it) ? m_forceEmitScreens.erase(it) : std::next(it);
+    }
     m_context.removeScreensIf(matches);
     // Drop the dead output from the active set and the deferred-apply queue
     // too: until the daemon's next setActiveScreens, isActiveOnScreen would

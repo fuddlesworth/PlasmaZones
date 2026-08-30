@@ -89,11 +89,21 @@ bool ScrollEngine::isEnabled() const noexcept
 void ScrollEngine::announceStripContextIfChanged(const QString& screenId)
 {
     const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
-    // Opaque by construction. A hex digest of the key rather than the key's
-    // own text, so a consumer that wanted to read a desktop number out of it
-    // would have to work at it — the point is not secrecy, it is that the only
-    // affordance the value offers is equality. See stripContextChanged for why
-    // deriving identity compositor-side is wrong on pinned screens.
+    // An equality token, not a digest and not secret: a hex qHash of the key
+    // rather than the key's own text, so the only affordance the value offers
+    // a consumer is comparison. Nothing here hides the context — the label
+    // built just below carries the screen, desktop and activity in plain text
+    // on this same signal, deliberately, for the logs. What the hashing buys
+    // is that a consumer cannot casually PARSE a desktop number out of the
+    // epoch and start branching on it, which is the mistake stripContextChanged
+    // exists to prevent: see its declaration for why deriving strip identity
+    // compositor-side is wrong on pinned screens.
+    //
+    // Deterministic across processes, which the bring-up story depends on: the
+    // one-argument qHash defaults its seed to 0 and qHashMulti therefore never
+    // consults Qt's per-process QHashSeed (that randomisation is injected by
+    // QHash itself, not by a direct call). The same context yields the same
+    // epoch in a restarted daemon.
     const QString epoch = QString::number(qHash(key), 16);
     const auto it = m_announcedStripEpoch.constFind(screenId);
     if (it != m_announcedStripEpoch.constEnd() && *it == epoch) {
@@ -267,12 +277,47 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         announceStripContextIfChanged(screenId);
         scheduleRetileForScreen(screenId);
     }
+    // The screens that STAYED get the same treatment the identical-set branch
+    // gives its whole set. This is not a symmetry nicety: with per-context
+    // modes, a desktop switch that flips ANY one screen to another mode takes
+    // this branch rather than the identical-set one, and every screen that
+    // remained scrolling across that switch has had its context replaced just
+    // as surely. Announcing only for `added` left exactly those screens
+    // unannounced and unarmed — the strip swapped under them, their emit-on-
+    // change gate compared against the outgoing strip's baseline, the batch
+    // was suppressed, and the compositor went on painting the previous strip's
+    // per-window state. That is the hole this whole mechanism exists to close,
+    // reached through the door nobody was watching.
+    //
+    // The announce is emit-on-change, so a stayer whose context did not
+    // actually move is silent. The force-emit is armed only for a REAL switch,
+    // matching the identical-set branch, and only for the screens that were
+    // already members: `added` screens are handled above.
+    if (wasDesktopSwitch) {
+        for (const QString& screenId : screens) {
+            if (!added.contains(screenId)) {
+                m_forceEmitScreens.insert(screenId);
+            }
+        }
+    }
+    for (const QString& screenId : screens) {
+        if (!added.contains(screenId)) {
+            announceStripContextIfChanged(screenId);
+        }
+    }
     // A screen LEAVING the set forgets its announced epoch, so re-entering
-    // announces again. The consumer retired the screen's strip state when the
-    // mode flipped away; without the drop it would be told nothing on the way
-    // back and would keep whatever it retired to.
+    // announces again rather than being suppressed by an epoch it was told
+    // about under a previous stint.
+    //
+    // The force-emit arm goes with it, and for a sharper reason: that flag is
+    // consumed at the emit gate, PAST several of applyLayout's early returns,
+    // so a screen armed by a switch and then dropped from the set before its
+    // retile drained would carry the arm indefinitely and spend it on some
+    // unrelated later batch. The epoch drop below has always been here; this
+    // one was the asymmetry.
     for (const QString& screenId : removed) {
         m_announcedStripEpoch.remove(screenId);
+        m_forceEmitScreens.remove(screenId);
     }
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire

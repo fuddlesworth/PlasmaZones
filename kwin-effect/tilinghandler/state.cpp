@@ -386,6 +386,15 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
 
 void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
 {
+    if (screenId.isEmpty()) {
+        // Boundary validation, like every sibling slot in this file. An empty
+        // id is not merely useless here, it is destructive: the retire selects
+        // windows by comparing a screen id against a QHash::value lookup that
+        // answers an empty QString for anything unrecorded, so "" would match
+        // every untracked window and drop its relocation.
+        qCWarning(lcEffect) << "stripContext: dropping announcement with an empty screen id";
+        return;
+    }
     const auto it = m_stripEpochByScreen.constFind(screenId);
     const bool known = it != m_stripEpochByScreen.constEnd();
     if (known && *it == epoch) {
@@ -412,7 +421,30 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
     // it is the CLIENT responding or the window dying.
     bool droppedAny = false;
     for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
-        if (m_notifiedWindowScreens.value(wit.key()) == screenId) {
+        // Two screen sources, ORed, because neither alone sees every window
+        // holding a relocation. m_notifiedWindowScreens is written under a
+        // NARROWER condition than the relocation itself: the apply loop
+        // inserts a visual delta for any entry carrying a visual position, but
+        // only records the window's screen when the window is in
+        // m_notifiedWindows, so a window demoted or rolled back between the
+        // two ends up holding a relocation this map has no entry for.
+        // Selecting on the raw map alone leaves that window wearing the
+        // OUTGOING strip's position for good. screenForTiledWindow answers
+        // from tiled membership instead, where the screen and the membership
+        // come from the same entry and cannot disagree.
+        //
+        // Deliberately NOT scrollTrackedScreenFor, which looks like the right
+        // helper and is not: it is impure (it reports clip loss as a side
+        // effect) and both of its answer arms are gated on the screen being in
+        // m_scrollingScreens, so for a screen that has already left the
+        // scrolling set it answers empty for every window and this loop would
+        // drop nothing at all. Over-dropping here is self-correcting — the
+        // damage below repaints and the next batch re-inserts the entry —
+        // while under-dropping is the bug being fixed.
+        const QString& windowId = wit.key();
+        const bool onThisScreen = m_notifiedWindowScreens.value(windowId) == screenId
+            || TilingStateHelpers::screenForTiledWindow(m_border, windowId) == screenId;
+        if (onThisScreen) {
             wit = m_effect->m_scrollVisualDelta.erase(wit);
             droppedAny = true;
         } else {
@@ -424,14 +456,23 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
     // from the OUTGOING strip's travel, and a parked column on the incoming one
     // would be painted at its own strip position plus a stranger's offset.
     if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
+        // Both halves, as at every other site that drops an output's strip
+        // motion. forgetOutput alone clears the spring but leaves any armed
+        // transition leg running, and that leg was armed with the OUTGOING
+        // strip's parameters, so the pass would keep capturing and decorating
+        // a strip that is no longer on screen.
+        m_effect->m_stripTransition.outputRemoved(out);
         m_effect->m_stripViewAnimator->forgetOutput(out);
         if (KWin::effects) {
             KWin::effects->addRepaint(KWin::Rect(out->geometry()));
         }
     } else if (droppedAny && KWin::effects) {
-        // No output to scope the damage to (a screen mid-removal): the
-        // relocations just dropped were paint inputs, so something has to
-        // repaint, and full is the honest fallback rather than skipping it.
+        // No output resolves for this id. Screen removal is not the case that
+        // lands here — the effect's own screenRemoved handler has already
+        // dropped this output's transition and spring by then — it is an id
+        // that never named a connected output at all. The relocations just
+        // dropped were paint inputs, so something has to repaint, and full is
+        // the honest fallback rather than skipping it.
         KWin::effects->addRepaintFull();
     }
 }

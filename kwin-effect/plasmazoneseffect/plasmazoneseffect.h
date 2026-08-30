@@ -2521,9 +2521,14 @@ private:
     /// Mutable because the predicate is const and is the only place the inputs
     /// it reports are assembled — same shape, and the same justification, as
     /// the mutable m_scrollClipLossReported once-reporting set in the tiling
-    /// handler. Keyed by window id and never swept: entries are two ints and a
-    /// bool, bounded by the strip population, and a stale key for a closed
-    /// window is only ever compared, never dereferenced.
+    /// handler. Keyed by window id and swept only on windowDeleted, so within a
+    /// session it is bounded by the number of distinct windows traced while the
+    /// category was enabled rather than by the live strip population: the
+    /// relocation map it shadows is torn down on unfloat, screen change, engine
+    /// flip and daemon loss, and none of those reach this gate. Entries are two
+    /// points and two bools, and a stale key is only ever compared, never
+    /// dereferenced, so the cost of the looser bound is bytes in a debugging
+    /// session.
     struct StripDiagSample
     {
         bool hadPlacement = false;
@@ -2531,11 +2536,7 @@ private:
         QPoint viewOffset;
         bool parked = false;
 
-        bool operator==(const StripDiagSample& o) const
-        {
-            return hadPlacement == o.hadPlacement && stripPos == o.stripPos && viewOffset == o.viewOffset
-                && parked == o.parked;
-        }
+        bool operator==(const StripDiagSample& o) const = default;
     };
     mutable QHash<QString, StripDiagSample> m_stripDiagLast;
 

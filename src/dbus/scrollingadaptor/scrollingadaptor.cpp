@@ -518,13 +518,16 @@ void ScrollingAdaptor::clearEngine()
 {
     if (m_engine) {
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
-        // The strip wake-up relay dies with it, for the same reason: a
-        // detached adaptor must not keep putting a dead engine's screen ids
-        // on the bus. Defence in depth rather than the load-bearing half —
-        // the relay's own `!m_engine` conjunct already makes a surviving
-        // connection inert rather than fatal, so no test can tell this
-        // disconnect from its absence. The sibling above is the one a spy
-        // discriminates, because its lambda has no such guard.
+        // Three relays are wired in the constructor and all three die here: a
+        // detached adaptor must not keep putting a dead engine's state on the
+        // bus. Two of them are load-bearing, because their lambdas are bare
+        // forwards with no engine test, so a surviving connection really does
+        // keep emitting and a spy discriminates the disconnect from its
+        // absence: the screen-set relay above, and the strip-identity relay
+        // below. The third, placementChanged, is defence in depth — its
+        // lambda's own `!m_engine` conjunct already makes a surviving
+        // connection inert rather than fatal.
+        disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::stripContextChanged, this, nullptr);
         disconnect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, nullptr);
         m_engine = nullptr;
     }
