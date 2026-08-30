@@ -93,6 +93,8 @@ private Q_SLOTS:
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void desktopSwitchBackEmitsEvenWhenNoRectMoved();
     void identicalSetRePushWithoutASwitchStaysSuppressed();
+    void stripContextIsAnnouncedOnDesktopSwitch();
+    void stripContextEpochIsStableAcrossARePush();
     void seedAdoptionClampsViewToStripEnd();
     void parkingAvoidsNeighbourOutputs();
     void parkingReportsDepartureEdge();
@@ -1093,6 +1095,63 @@ void TestScrollEngineSmoke::identicalSetRePushWithoutASwitchStaysSuppressed()
     engine->setActiveScreens({QStringLiteral("S1")}); // same set, no context change
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), 0);
+}
+
+void TestScrollEngineSmoke::stripContextIsAnnouncedOnDesktopSwitch()
+{
+    // Strip identity has to reach the compositor on a channel of its own.
+    // Carried as a field on the geometry batch it would be silent in exactly
+    // the case that matters, because applyLayout emits on change only and a
+    // switch onto an untouched strip moves no rect.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 1);
+    QCOMPARE(ctxSpy.at(0).at(0).toString(), QStringLiteral("S1"));
+    const QString epochD2 = ctxSpy.at(0).at(1).toString();
+    QVERIFY(!epochD2.isEmpty());
+
+    // Back to desktop 1: a DIFFERENT strip, so a different epoch. Comparing
+    // the two values is the only thing a consumer may do with them, so it is
+    // the only thing asserted here.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 2);
+    QVERIFY2(ctxSpy.at(1).at(1).toString() != epochD2, "each desktop's strip must carry its own epoch");
+}
+
+void TestScrollEngineSmoke::stripContextEpochIsStableAcrossARePush()
+{
+    // The negative control. An epoch that changed on every push would make the
+    // consumer retire its strip state constantly — throwing away exactly the
+    // parked-column relocations the identity exists to protect, and turning a
+    // correctness fix into a permanent visual regression. Identity must track
+    // the CONTEXT, not the number of times it was asked.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 0);
 }
 
 void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()

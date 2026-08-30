@@ -384,6 +384,59 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
     setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
 }
 
+void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
+{
+    const auto it = m_stripEpochByScreen.constFind(screenId);
+    const bool known = it != m_stripEpochByScreen.constEnd();
+    if (known && *it == epoch) {
+        return;
+    }
+    m_stripEpochByScreen.insert(screenId, epoch);
+    if (!known) {
+        // FIRST epoch for this screen. Nothing was retained under a previous
+        // strip, so there is nothing to retire — and retiring here would throw
+        // away the state a batch that raced ahead of this announcement just
+        // established. Record and return.
+        qCDebug(lcStripDiag) << "strip context: first epoch for" << screenId << debugLabel;
+        return;
+    }
+    qCDebug(lcStripDiag) << "strip context: retiring strip state for" << screenId << "->" << debugLabel;
+
+    // Retire the STRIP-SCOPED PAINT state only.
+    //
+    // The distinction that governs this list: state describing a position on a
+    // strip dies with that strip, while state describing a NEGOTIATION with a
+    // client (m_scrollCommandedRects' counter-assert, m_scrollOfferedColumn's
+    // size-continuity record) belongs to the window and outlives any strip it
+    // sits on. Retiring the latter here would disarm a defence against a client
+    // that refuses its geometry, and would re-offer a settled window a size it
+    // has already answered — a new bug in exchange for a tidier-looking sweep.
+    bool droppedAny = false;
+    for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
+        if (m_notifiedWindowScreens.value(wit.key()) == screenId) {
+            wit = m_effect->m_scrollVisualDelta.erase(wit);
+            droppedAny = true;
+        } else {
+            ++wit;
+        }
+    }
+    // The per-output view spring is strip-scoped for the same reason and is the
+    // other half of a parked column's drawn position: its offset accumulated
+    // from the OUTGOING strip's travel, and a parked column on the incoming one
+    // would be painted at its own strip position plus a stranger's offset.
+    if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
+        m_effect->m_stripViewAnimator->forgetOutput(out);
+        if (KWin::effects) {
+            KWin::effects->addRepaint(KWin::Rect(out->geometry()));
+        }
+    } else if (droppedAny && KWin::effects) {
+        // No output to scope the damage to (a screen mid-removal): the
+        // relocations just dropped were paint inputs, so something has to
+        // repaint, and full is the honest fallback rather than skipping it.
+        KWin::effects->addRepaintFull();
+    }
+}
+
 void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped)
 {
     // Any authoritative write voids in-flight property replies, identical

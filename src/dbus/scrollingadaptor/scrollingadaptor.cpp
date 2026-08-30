@@ -79,6 +79,14 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
                 m_lastBroadcastScreens = screenIds;
                 Q_EMIT scrollingScreensChanged(screenIds);
             });
+    // Strip identity. Relayed with NO extra change gate, unlike the screen-set
+    // relay above: the engine already announces this on change only, and a
+    // second gate here could only ever swallow a real switch. The whole value
+    // of the signal is that it fires when no geometry batch does.
+    connect(m_engine, &PhosphorScrollEngine::ScrollEngine::stripContextChanged, this,
+            [this](const QString& screenId, const QString& epoch, const QString& debugLabel) {
+                Q_EMIT stripContextChanged(screenId, epoch, debugLabel);
+            });
     // Strip wake-ups for anyone rendering the strip (the settings app's
     // Monitors thumbnail today). Relayed straight through: placementChanged
     // IS the engine's change gate, and the reasons this adaptor does not add

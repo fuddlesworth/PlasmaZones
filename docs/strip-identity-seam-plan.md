@@ -23,9 +23,17 @@ was pushed through three configurations (fresh, decorations seeded, strips
 restored from disk) and the end columns animated correctly in all of them.
 They are not disproven, only unobserved.
 
-**The structural argument stands and stage 1 is still unbuilt.** Candidate A
-was repaired at the emit gate, which is narrower than giving strips an
-identity, so the class this document is about is not closed.
+**Stage 1 is BUILT.** `Scrolling.stripContextChanged` carries an opaque
+per-screen strip epoch, announced independently of any geometry batch, and the
+effect retires its strip-scoped paint state when the epoch moves. Candidate A
+was separately repaired at the emit gate. Stage 2 (directory, generation,
+subscription) and stage 3 (coordinate split) remain unbuilt, and stage 3 still
+has no answer to its clip problem.
+
+Note what stage 1 does NOT do: it does not stop the effect from holding state
+across a switch, it makes the effect *told* so it can retire it. Retirement is
+a discipline every future strip-scoped map has to opt into. Making a
+cross-strip read unrepresentable needs the re-keying stage 2 brings.
 
 ## Premise
 
@@ -254,11 +262,19 @@ The distinction that got the first draft wrong: **strip-scoped paint state** is
 about a strip and dies with it; **client-negotiation state** is about a window
 and its lifetime is the window's. Only the former is retired.
 
-**Animator re-keying.** `m_motions` moves from `LogicalOutput*` to
-`(LogicalOutput*, epoch)`. This is the smallest change that makes candidate B
-unrepresentable rather than merely repaired, and it follows directly from the
-header's own admission that it declines to track context. A motion for a
-retired epoch is dropped, not carried.
+**Animator handling — decided against re-keying, for now.** This section
+originally specified moving `m_motions` from `LogicalOutput*` to
+`(LogicalOutput*, epoch)`. As built, stage 1 instead calls the existing
+`StripViewAnimator::forgetOutput` when an epoch changes.
+
+The behaviour is identical while only one strip renders per output, which is
+the case today: a second key dimension whose value is always the current epoch
+buys nothing except stale entries that then need reaping. Re-keying earns its
+complexity only once several strips are live at once, which is stage 2, so it
+belongs there. The property the doc wanted — that a cross-strip offset is
+unrepresentable rather than merely cleaned up — is genuinely weaker this way,
+and that is the trade: retirement is a discipline the code must keep applying,
+where re-keying would have been structural.
 
 **Multi-epoch batches.** A batch already spans screens, and a window migrating
 desktops may put two epochs for one screen in one batch. Entries are grouped by

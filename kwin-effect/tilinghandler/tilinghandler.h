@@ -1036,6 +1036,14 @@ public Q_SLOTS:
     /// the private section below with the other screenschanged.cpp helpers, so
     /// the slots block does not advertise as connectable something that is not.
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    /// The strip @p screenId is showing has been replaced (desktop or activity
+    /// switch, sticky-pin change). Retires the strip-scoped paint state this
+    /// process holds for that screen, which is not keyed by desktop and would
+    /// otherwise go on describing the strip that was current before.
+    ///
+    /// @p epoch is compared and nothing else — never parsed, never checked
+    /// against KWin's own current desktop. @p debugLabel is logged only.
+    void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
     /// The scroll cap's blocked-window list changed. Its own signal rather
@@ -1564,6 +1572,15 @@ private:
     /// stamp — which is why the teardown clear here needs no repaint bookend.
     /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;
+    /// Last strip epoch seen per screen, from Scrolling.stripContextChanged.
+    ///
+    /// The cache KEY this process never had. Every strip-scoped map here is
+    /// keyed by screen name or window id, so nothing distinguished one screen's
+    /// desktop-1 strip from its desktop-2 strip, and state simply carried
+    /// across. Compared for equality only: the value is opaque by contract, and
+    /// re-deriving identity from KWin's current desktop is wrong on any
+    /// sticky-pinned screen.
+    QHash<QString, QString> m_stripEpochByScreen;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a

@@ -907,6 +907,24 @@ Q_SIGNALS:
     /// Scrolling twin of autotileScreensChanged, with the same
     /// identical-set re-emit contract on desktop/activity switches.
     void scrollingScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// The identity of the strip @p screenId is now showing has changed.
+    ///
+    /// @p epoch is OPAQUE. It is derived from the same context key that keys
+    /// strip storage, and a consumer may only compare it for equality with the
+    /// last one it saw. It must never be parsed, ordered, or reconciled against
+    /// the compositor's own notion of the current desktop or activity: a screen
+    /// under a sticky pin resolves to the PINNED desktop, deliberately not the
+    /// live one, so anything derived from KWin's current desktop disagrees with
+    /// this engine forever on exactly those screens.
+    ///
+    /// @p debugLabel is for logging and nothing else. Branching on it is the
+    /// same mistake as parsing the epoch, wearing a different hat.
+    ///
+    /// Announced INDEPENDENTLY of any geometry batch, which is the whole point:
+    /// applyLayout emits on change only, so a switch onto a strip nobody
+    /// touched produces no batch, and identity carried as a batch field would
+    /// be silent in precisely the case a consumer most needs it.
+    void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
     void enabledChanged(bool enabled);
     /// Tab-indicator model for @p screenId, emitted when the resolved model
     /// changes (a relayout that produces an identical payload stays silent): a
@@ -946,6 +964,14 @@ private:
     {
         return m_perScreenOverrides.value(currentKeyForScreen(screenId));
     }
+    /// Emit stripContextChanged for @p screenId when its context key resolves
+    /// to a different strip than the one last announced.
+    ///
+    /// Derived from currentKeyForScreen — the SAME call that keys strip
+    /// storage — so identity can never drift from the storage it names. That
+    /// is what lets the epoch stay opaque: pins, activities and any future
+    /// context dimension come along without a consumer learning about them.
+    void announceStripContextIfChanged(const QString& screenId);
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
@@ -1279,6 +1305,13 @@ private:
     /// memory is still true; it is the inference drawn from it that does not
     /// survive the switch.
     QSet<QString> m_forceEmitScreens;
+    /// Last strip epoch announced per screen, so stripContextChanged is
+    /// emit-on-change rather than a re-announcement on every set push.
+    ///
+    /// A screen leaving the scrolling set drops its entry, so re-entering
+    /// re-announces: the consumer retired the screen's strip state when it
+    /// left, and would otherwise never be told to rebuild it.
+    QHash<QString, QString> m_announcedStripEpoch;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};

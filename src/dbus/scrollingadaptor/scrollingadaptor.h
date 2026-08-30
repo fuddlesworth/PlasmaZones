@@ -467,6 +467,16 @@ Q_SIGNALS:
      */
     void scrollingScreensChanged(const QStringList& screenIds);
 
+    /// The identity of the strip @p screenId shows changed (desktop switch,
+    /// activity switch, sticky-pin acquire or release).
+    ///
+    /// Relayed straight through with no second change gate: the engine's own
+    /// announcement is already emit-on-change, and damping it here would risk
+    /// swallowing a real switch. @p epoch is opaque and only ever compared;
+    /// @p debugLabel is for logs. Both contracts are on the engine signal and
+    /// in the interface XML.
+    void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
+
     /// The resolved per-screen effect-owned behaviour changed. Payload is the
     /// whole map (see @ref scrollEffectBehaviour), so a receiver never has to
     /// merge a delta against a copy it might have missed an update to.

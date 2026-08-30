@@ -86,6 +86,28 @@ bool ScrollEngine::isEnabled() const noexcept
     return !m_scrollingScreens.isEmpty();
 }
 
+void ScrollEngine::announceStripContextIfChanged(const QString& screenId)
+{
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    // Opaque by construction. A hex digest of the key rather than the key's
+    // own text, so a consumer that wanted to read a desktop number out of it
+    // would have to work at it — the point is not secrecy, it is that the only
+    // affordance the value offers is equality. See stripContextChanged for why
+    // deriving identity compositor-side is wrong on pinned screens.
+    const QString epoch = QString::number(qHash(key), 16);
+    const auto it = m_announcedStripEpoch.constFind(screenId);
+    if (it != m_announcedStripEpoch.constEnd() && *it == epoch) {
+        return;
+    }
+    m_announcedStripEpoch.insert(screenId, epoch);
+    // The label is diagnostic payload, never a branch input. Logs in this
+    // subsystem are read constantly and an opaque digest alone would make
+    // every future investigation harder for no correctness gain.
+    const QString label = QStringLiteral("%1|%2|%3").arg(screenId, QString::number(key.desktop), key.activity);
+    qCDebug(lcScrollEngine) << "strip context:" << label << "epoch" << epoch;
+    Q_EMIT stripContextChanged(screenId, epoch, label);
+}
+
 void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
 {
     // Consume the context-switch flag on EVERY entry (both branches), the
@@ -122,6 +144,12 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 m_forceEmitScreens.unite(screens);
             }
             for (const QString& screenId : screens) {
+                // Announced for EVERY screen in the set, not only on the
+                // switch branch: this is emit-on-change itself, so a push that
+                // moved no screen's context is silent anyway, and routing it
+                // through one place keeps identity from depending on which
+                // branch a caller happened to take.
+                announceStripContextIfChanged(screenId);
                 scheduleRetileForScreen(screenId);
             }
         }
@@ -236,7 +264,15 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 it->fuzzyClaimWindow.start();
             }
         }
+        announceStripContextIfChanged(screenId);
         scheduleRetileForScreen(screenId);
+    }
+    // A screen LEAVING the set forgets its announced epoch, so re-entering
+    // announces again. The consumer retired the screen's strip state when the
+    // mode flipped away; without the drop it would be told nothing on the way
+    // back and would keep whatever it retired to.
+    for (const QString& screenId : removed) {
+        m_announcedStripEpoch.remove(screenId);
     }
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire

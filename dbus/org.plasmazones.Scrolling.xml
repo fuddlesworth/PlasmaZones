@@ -157,6 +157,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
 
+        <signal name="stripContextChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the identity of the strip a screen is showing changes, which happens on a virtual-desktop switch, an activity switch, and a sticky-pin acquire or release. epoch is OPAQUE: it is derived from the same context key that keys strip storage in the engine, and a consumer may only compare it for equality with the last epoch it saw for that screen. It must never be parsed, ordered, or reconciled against the compositor&apos;s own current desktop or activity — a screen under a sticky pin resolves to the PINNED desktop rather than the live one, so anything re-derived compositor-side disagrees with the engine permanently on exactly those screens. debugLabel is for logging only and branching on it is the same mistake as parsing the epoch. This is announced independently of any geometry batch on purpose: windowsTileRequested is emitted only when some rect actually changed, so a switch onto a strip nobody touched produces no batch at all, and identity carried as a batch field would be silent in exactly the case a consumer most needs it. A consumer holding per-window strip state that is not keyed by desktop should retire that state for the named screen when the epoch changes."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip identity changed."/>
+            </arg>
+            <arg name="epoch" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Opaque strip identity. Compare for equality only."/>
+            </arg>
+            <arg name="debugLabel" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Human-readable context for logs. Never a branch input."/>
+            </arg>
+        </signal>
+
         <signal name="scrollEffectBehaviourChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the resolved per-screen behaviour the compositor owns changes. The payload is the WHOLE map, never a delta, so a receiver that missed an earlier emission never has to merge against a stale copy."/>
             <arg name="behaviour" type="a{sv}">
