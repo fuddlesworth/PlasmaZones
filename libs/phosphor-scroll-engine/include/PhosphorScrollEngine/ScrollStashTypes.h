@@ -97,6 +97,28 @@ struct StashedColumn
     /// Column presentation like width and display, so it rides the stash and
     /// is re-applied when the column is rebuilt on claim.
     bool maximizedToEdges = false;
+    /// Latched once activeWindowId above has actually been put in force on the
+    /// live column, and once heightOwnerId has. Per COLUMN, unlike the strip-
+    /// wide focus guard the restore derives from the consumed set: the two
+    /// questions are answered at different arrivals (the shown tab may be a
+    /// different tile from the extent owner, and either may still be absent
+    /// when the first sibling lands), and a strip-wide latch would stop the
+    /// re-assertion for every other column in the same burst.
+    ///
+    /// While a latch is clear the restore keeps re-asserting the stashed value
+    /// on each arrival, because every insert makes the arriving tile its
+    /// column's active one and a non-Auto height claims the extent. Once it is
+    /// set the restore hands back what the column held immediately BEFORE the
+    /// insert instead: within a burst that is the value just restored, and for
+    /// an arrival that lands long afterwards (a same-app window claiming a slot
+    /// hours later) it is the tab the user has since switched to, which the
+    /// stashed value must not rewind.
+    ///
+    /// In-memory only. Deliberately not serialized: a stash staged from the
+    /// persisted blob has restored nothing yet, so false is the right value on
+    /// the far side of a restart.
+    bool shownTabRestored = false;
+    bool heightOwnerRestored = false;
 };
 
 /// One stashed strip: the structural columns plus the focus/view pair

@@ -395,19 +395,38 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
 
     // Unmaximize monocle windows on removed screens so they return to
     // normal geometry when resnapped or restored.
+    //
+    // Through windowsOnRemovedScreens rather than re-deriving the screen and
+    // context terms, and that is not only deduplication: the collection set
+    // carries the STICKY skip too, and both releases here need it. KWin's
+    // maximize bit is a global per-window property, exactly like the
+    // setNoBorder the collection loop protects, so stripping it from a
+    // sticky or multi-desktop window while another context still runs a strip
+    // that maximized it un-maximizes that context's column. The windowed-
+    // fullscreen arm above already takes the skip on those grounds; this loop
+    // was the one arm in the pass that did not, and the inconsistency was
+    // unexplained rather than argued.
+    //
+    // slotEnabledChanged's opposite choice does not apply here. Its
+    // context-agnostic drain is justified by the engine being OFF, so no later
+    // pass can release a skipped window — and that case reaches this function
+    // with newScreens empty, where the collection loop's skip does not fire
+    // either. When other screens do still run the engine, a skipped window's
+    // claim is paid by its own context: the batch that re-activates it carries
+    // flagOnWire and the Apply arm re-asserts, and a later full disable drains
+    // through restoreAllMaximizedToEdges.
     for (KWin::EffectWindow* w : windows) {
-        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
-            || !w->isOnCurrentActivity()) {
+        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
             continue;
         }
-        const QString screenId = m_effect->getWindowScreenId(w);
-        if (!removed.contains(screenId)) {
+        const QString windowId = m_effect->getWindowId(w);
+        if (!windowsOnRemovedScreens.contains(windowId)) {
             continue;
         }
-        unmaximizeMonocleWindow(m_effect->getWindowId(w));
+        unmaximizeMonocleWindow(windowId);
         // Same pairing as the demote arm above: the removed screen's strip is
         // gone, so the column mirror has no later batch to un-flag it.
-        releaseMaximizedToEdges(m_effect->getWindowId(w), w);
+        releaseMaximizedToEdges(windowId, w);
     }
 
     // Clear autotile zone state for entries on REMOVED screens only.

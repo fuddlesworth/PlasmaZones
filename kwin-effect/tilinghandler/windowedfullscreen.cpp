@@ -184,7 +184,17 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // on a scrolling screen, and a DRAG-TO-FLOAT gesture ends with membership
     // held but the strip gone: applyFloatCleanup runs at the START of the drag,
     // when releaseMaximizedToEdges takes its mid-gesture retain and keeps the
-    // entry, while the tiled record is dropped in the same pass. Re-applying
+    // entry, while the tiled record is dropped in the same pass.
+    //
+    // Start, not drop, and it is worth naming where: the DragTracker::dragStarted
+    // handler's synchronous managed-screen fast path calls handleDragToFloat
+    // (lifecycle_wiring_drag.cpp), which is applyFloatCleanup's only caller on
+    // that path, and dragStarted is emitted straight out of
+    // windowStartUserMovedResized. Scrolling screens are excluded from the
+    // Reorder suppression there, so a strip tile always takes it. The drag END
+    // also floats (drag_end.cpp's ApplyFloat arm), but that runs off the async
+    // endDrag reply and so lands AFTER this function, which the compositor calls
+    // synchronously from windowFinishUserMovedResized. Re-applying
     // MaximizeFull here would maximize the window the user just floated, and
     // permanently — a floater gets no batch, so no Release arm can ever undo
     // it. Pay the release the mid-drag skip owed instead: the gesture flags are
@@ -260,6 +270,45 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
 bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {
+        return false;
+    }
+    // A held gesture is never a maximize REQUEST, so there is nothing here to
+    // redirect. The user cannot press a maximize button mid-drag; the only
+    // fully-maximized edge that arrives with these flags set is KWin's own
+    // restore-on-drag, fired when the user pulls a maximized window off its
+    // rect. Claiming it cancels back TO MaximizeFull (membership is what the
+    // cancel computes from), which moveResizes the window out from under the
+    // pointer, and then dispatches a toggle the user never asked for.
+    //
+    // BEFORE the pass-through consumption, deliberately. This edge is not the
+    // refusal replay's echo, so spending the marker on it would leave the real
+    // echo to be intercepted, cancelled and dispatched — the loop the marker
+    // exists to stop.
+    //
+    // Declining does not strand the ledger, and that is what makes it safe
+    // without knowing how the drag's own float cleanup orders against this
+    // edge. KWin clears the bit while membership stands, and every gesture ends
+    // in reconcileMaximizeAfterGesture (window_connections.cpp's
+    // windowFinishUserMovedResized, the one point that always runs): a window
+    // still tiled on its strip has the claim re-driven there, and one the drag
+    // took off the strip is routed to releaseMaximizedToEdges instead, which
+    // sheds the entry with the gesture flags now clear. Both arms are reached
+    // whichever way the ordering falls.
+    //
+    // Mid-gesture is the same skip every sibling compositor-touching maximize
+    // write in this file takes, and for the reason they all cite: maximize()
+    // moveResizes, and the geometry apply that would override it defers during
+    // a drag.
+    //
+    // The ordering costs one edge in a narrow case, accepted knowingly: a user
+    // who starts a drag between a toggle click and its async refusal reply gets
+    // the replay written under the gesture, and on Wayland that echo returns
+    // here with the counter already at 0, so this return skips the consumption
+    // and the one-shot survives to swallow the next genuine maximize. One lost
+    // click, self-correcting on the one after. Consuming before the decline
+    // would trade it for the dispatch loop the marker exists to stop, which is
+    // the worse half.
+    if (w->isUserMove() || w->isUserResize()) {
         return false;
     }
     const QString windowId = m_effect->getWindowId(w);

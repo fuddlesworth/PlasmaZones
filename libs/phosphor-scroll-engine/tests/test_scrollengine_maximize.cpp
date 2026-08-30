@@ -82,6 +82,49 @@ bool columnFlagged(ScrollEngine* engine, const QString& windowId)
     return idx >= 0 && st->strip().columns().at(idx).maximizedToEdges;
 }
 
+/// The tab currently SHOWN by the column holding @p windowId on S1, or an
+/// empty string when the strip does not hold it. Bounds-checked before the
+/// indexed read: activeTileIdx is model state, and a regression that leaves it
+/// out of range must fail the comparison rather than abort the binary.
+QString shownTabOf(ScrollEngine* engine, const QString& windowId)
+{
+    const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+    if (!st) {
+        return QString();
+    }
+    const int idx = st->strip().columnOfWindow(windowId);
+    if (idx < 0) {
+        return QString();
+    }
+    const Column& col = st->strip().columns().at(idx);
+    if (col.tiles.isEmpty() || col.activeTileIdx < 0 || col.activeTileIdx >= col.tiles.size()) {
+        return QString();
+    }
+    return col.tiles.at(col.activeTileIdx).windowId;
+}
+
+/// How many columns S1's strip holds, or -1 when the state is gone. The
+/// sentinel is unreachable for a live strip, so a dropped state fails rather
+/// than passing for the wrong reason.
+int columnCountOn(ScrollEngine* engine)
+{
+    const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+    return st ? st->strip().columnCount() : -1;
+}
+
+/// The extent owner of the column holding @p windowId on S1, or an empty
+/// string when the strip does not hold it. Empty is never the passing answer
+/// at any call site below.
+QString heightOwnerOf(ScrollEngine* engine, const QString& windowId)
+{
+    const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+    if (!st) {
+        return QString();
+    }
+    const int idx = st->strip().columnOfWindow(windowId);
+    return idx < 0 ? QString() : st->strip().columns().at(idx).heightOwnerId;
+}
+
 /// Every windowId carrying maximizedToEdges in the last emitted batch.
 QSet<QString> maximizedInBatch(const QSignalSpy& spy)
 {
@@ -136,6 +179,9 @@ private Q_SLOTS:
     void maximizedToEdgesTransfersOnAFuzzyAppIdClaim();
     void floatingASoleTileCarriesTheFlagBothWays();
     void floatingOneTileOfTwoLeavesTheFlagWithTheColumn();
+    void aLateArrivalDoesNotRewindAUserTabSwitch();
+    void aBurstStillLandsOnTheStashedTabWhenItArrivesLast();
+    void aLateArrivalDoesNotRewindAUserHeightOwnerChange();
 };
 
 // The maximize-to-edges flag lives on the COLUMN and must not travel with an
@@ -590,6 +636,180 @@ void TestScrollEngineMaximize::floatingOneTileOfTwoLeavesTheFlagWithTheColumn()
     QCOMPARE(bCol, aCol);
     QVERIFY2(!columnFlagged(engine, QStringLiteral("app|b")),
              "a tile that floated out of a SHARED column must not re-maximize it on the way back");
+}
+
+// A three-tab column, left tabbed and focused on @p shownTab so the stash
+// will record that tab as the column's shown one. Shared by the three
+// stash-latch slots below, which differ only in the arrival order and in what
+// the user changes between two arrivals.
+//
+// The round trip itself belongs to the CALLER: each slot drives its own
+// setActiveScreens({}) / setActiveScreens({S1}) pair and then re-announces
+// tiles with plain windowOpened calls, because the arrival order is the thing
+// under test.
+namespace {
+
+void stashAThreeTabColumn(ScrollEngine* engine, const QString& shownTab)
+{
+    const QString s1 = QStringLiteral("S1");
+    engine->setCurrentDesktopForScreen(s1, 1);
+    engine->windowOpened(QStringLiteral("app|t1"), s1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|t2"), s1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|t3"), s1, 0, 0);
+    // Consume folds the NEXT column into the focused one, so both folds have
+    // to run from the first column.
+    engine->windowFocused(QStringLiteral("app|t1"), s1);
+    engine->consumeWindowIntoColumn(s1);
+    engine->windowFocused(QStringLiteral("app|t1"), s1);
+    engine->consumeWindowIntoColumn(s1);
+    engine->windowFocused(QStringLiteral("app|t1"), s1);
+    engine->toggleColumnTabbed(s1);
+    engine->windowFocused(shownTab, s1);
+    QCoreApplication::processEvents();
+}
+
+} // namespace
+
+void TestScrollEngineMaximize::aLateArrivalDoesNotRewindAUserTabSwitch()
+{
+    // The stashed shown tab is re-asserted only until it has actually taken
+    // effect once. Before the latch, EVERY arrival of the stashed column
+    // replayed it, so a user who switched tab between two sibling arrivals had
+    // the switch silently undone by the later one.
+    //
+    // The tabbed column under test is deliberately NOT the focused one, and a
+    // second column holds the focus throughout. The restore's FOCUS block runs
+    // the same latch idea a few lines further down, and on a tabbed column
+    // focusWindow also sets the shown tab — so with the focus sitting on the
+    // column under test, the focus hand-back re-establishes the user's tab and
+    // the slot passes whether or not the shown-tab latch exists. Parking the
+    // focus elsewhere leaves the tab block as the only writer of this column's
+    // activeTileIdx across the arrival being tested.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    stashAThreeTabColumn(engine, QStringLiteral("app|t1"));
+    // The focus holder, in a column of its own.
+    engine->windowOpened(QStringLiteral("app|f1"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|f1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    ScrollState* before = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(before);
+    QCOMPARE(before->strip().columnCount(), 2);
+    QCOMPARE(before->strip().columns().at(0).tiles.size(), 3);
+    QCOMPARE(before->strip().columns().at(0).display, ColumnDisplay::Tabbed);
+    // The stash records THIS as the tabbed column's shown tab, and the focus
+    // as the OTHER column's window, so the two blocks really are aimed at
+    // different columns.
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t1"));
+    QCOMPARE(before->strip().activeWindowId(), QStringLiteral("app|f1"));
+    QVERIFY2(before->strip().columnOfWindow(QStringLiteral("app|f1"))
+                 != before->strip().columnOfWindow(QStringLiteral("app|t1")),
+             "the focus must sit outside the tabbed column, or the focus block masks the tab block");
+
+    // Mode reassignment of the same context: teardown stashes the strip.
+    engine->setActiveScreens({});
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|t1")));
+    engine->setActiveScreens({QStringLiteral("S1")});
+
+    // Two of the three tabs and the focus holder come back. The stashed tab is
+    // in force again.
+    engine->windowOpened(QStringLiteral("app|t1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|t2"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|f1"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    QVERIFY2(shownTabOf(engine, QStringLiteral("app|t1")) == QStringLiteral("app|t1"),
+             "the stashed tab must take effect during the burst, or the rewind below is unfalsifiable");
+
+    // The USER switches tab while the third sibling is still away, then goes
+    // back to the other column. The tab switch survives that (activeTileIdx is
+    // per column), and the focus is parked off the column again for the
+    // arrival below.
+    engine->windowFocused(QStringLiteral("app|t2"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
+    engine->windowFocused(QStringLiteral("app|f1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
+    ScrollState* mid = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(mid);
+    QCOMPARE(mid->strip().activeWindowId(), QStringLiteral("app|f1"));
+
+    // The late sibling arrives. It owes the column the tab it was showing
+    // immediately before this insert, not the stashed one.
+    engine->windowOpened(QStringLiteral("app|t3"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 2);
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
+}
+
+void TestScrollEngineMaximize::aBurstStillLandsOnTheStashedTabWhenItArrivesLast()
+{
+    // The property the latch must not break. A guard that simply stopped after
+    // the first arrival would leave the shown tab wherever the last insert put
+    // it, because an arrival cannot put a tab in force while that tab is still
+    // away. The latch closes on the value TAKING EFFECT, not on the first try.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    stashAThreeTabColumn(engine, QStringLiteral("app|t2"));
+
+    ScrollState* before = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(before);
+    QCOMPARE(before->strip().columns().at(0).display, ColumnDisplay::Tabbed);
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t2")), QStringLiteral("app|t2"));
+
+    engine->setActiveScreens({});
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|t2")));
+    engine->setActiveScreens({QStringLiteral("S1")});
+
+    // The stashed tab announces LAST, so the two arrivals before it cannot put
+    // it in force and must not spend the column's one restore.
+    engine->windowOpened(QStringLiteral("app|t1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|t3"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    engine->windowOpened(QStringLiteral("app|t2"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(columnCountOn(engine), 1);
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
+}
+
+void TestScrollEngineMaximize::aLateArrivalDoesNotRewindAUserHeightOwnerChange()
+{
+    // The extent owner carries its own latch on the same terms as the shown
+    // tab, and is a genuinely different question: which tab SIZES the column,
+    // not which one is on show. Driven through the strip rather than a resize
+    // verb, which is where the engine's own restore and float arms set it too.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    stashAThreeTabColumn(engine, QStringLiteral("app|t1"));
+
+    ScrollState* before = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(before);
+    QCOMPARE(before->strip().columns().at(0).display, ColumnDisplay::Tabbed);
+    // t1 owns the extent at stash time, so that is what the stash records.
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t1"));
+
+    engine->setActiveScreens({});
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|t1")));
+    engine->setActiveScreens({QStringLiteral("S1")});
+
+    engine->windowOpened(QStringLiteral("app|t1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|t2"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    QVERIFY2(heightOwnerOf(engine, QStringLiteral("app|t1")) == QStringLiteral("app|t1"),
+             "the stashed owner must be in force during the burst, or the rewind below is unfalsifiable");
+
+    // The user hands the extent to the other tab while the third is away.
+    ScrollState* mid = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(mid);
+    QVERIFY(mid->strip().setTabbedHeightOwner(QStringLiteral("app|t2")));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
+
+    engine->windowOpened(QStringLiteral("app|t3"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 1);
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("app|t1")), QStringLiteral("app|t2"));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineMaximize)
