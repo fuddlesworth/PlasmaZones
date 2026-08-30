@@ -924,6 +924,24 @@ Q_SIGNALS:
     /// applyLayout emits on change only, so a switch onto a strip nobody
     /// touched produces no batch, and identity carried as a batch field would
     /// be silent in precisely the case a consumer most needs it.
+    ///
+    /// Announced from setActiveScreens, for every screen in the resulting set,
+    /// and from the sticky-pin RELEASE path, which moves a screen's key without
+    /// going through that push. A pin ACQUIRE announces nothing because it
+    /// pins to the desktop the key already resolves to. Desktop and activity
+    /// switches therefore reach a consumer by way of the daemon's screen push
+    /// rather than by the setters themselves: a key change with no such push
+    /// behind it is not announced.
+    ///
+    /// There is no bring-up seed. The epoch is announce-only, with nothing to
+    /// read it from, so a consumer that attaches after a screen was announced
+    /// holds no epoch for it and must treat its first announcement as a record
+    /// rather than a comparison.
+    ///
+    /// The value is deterministic across processes — the one-argument qHash
+    /// seeds at 0 and never consults Qt's per-process hash seed — so a
+    /// restarted daemon announces the same epoch for the same context. A
+    /// consumer must not read a change out of a restart, nor assume one.
     void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
     void enabledChanged(bool enabled);
     /// Tab-indicator model for @p screenId, emitted when the resolved model

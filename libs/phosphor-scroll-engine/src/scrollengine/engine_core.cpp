@@ -293,16 +293,19 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     // actually move is silent. The force-emit is armed only for a REAL switch,
     // matching the identical-set branch, and only for the screens that were
     // already members: `added` screens are handled above.
-    if (wasDesktopSwitch) {
-        for (const QString& screenId : screens) {
-            if (!added.contains(screenId)) {
-                m_forceEmitScreens.insert(screenId);
-            }
-        }
-    }
     for (const QString& screenId : screens) {
-        if (!added.contains(screenId)) {
-            announceStripContextIfChanged(screenId);
+        if (added.contains(screenId)) {
+            continue;
+        }
+        announceStripContextIfChanged(screenId);
+        if (wasDesktopSwitch) {
+            // Arm AND retile, both, because the arm alone buys nothing: the
+            // flag is consumed at applyLayout's emit gate, and on this branch
+            // only `added` screens were being scheduled, so a stayer's forced
+            // batch had nothing to run it. The identical-set branch pairs the
+            // two for the same reason.
+            m_forceEmitScreens.insert(screenId);
+            scheduleRetileForScreen(screenId);
         }
     }
     // A screen LEAVING the set forgets its announced epoch, so re-entering

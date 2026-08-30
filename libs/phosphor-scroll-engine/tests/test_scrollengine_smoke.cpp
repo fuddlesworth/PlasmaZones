@@ -94,6 +94,7 @@ private Q_SLOTS:
     void desktopSwitchBackEmitsEvenWhenNoRectMoved();
     void identicalSetRePushWithoutASwitchStaysSuppressed();
     void stripContextIsAnnouncedOnDesktopSwitch();
+    void changedSetSwitchStillAnnouncesTheStayingScreen();
     void stripContextEpochIsStableAcrossARePush();
     void seedAdoptionClampsViewToStripEnd();
     void parkingAvoidsNeighbourOutputs();
@@ -1152,6 +1153,67 @@ void TestScrollEngineSmoke::stripContextEpochIsStableAcrossARePush()
     engine->setActiveScreens({QStringLiteral("S1")});
     QCoreApplication::processEvents();
     QCOMPARE(ctxSpy.count(), 0);
+}
+
+void TestScrollEngineSmoke::changedSetSwitchStillAnnouncesTheStayingScreen()
+{
+    // The shape per-context modes actually take. A desktop switch does not
+    // only move contexts, it can change WHICH screens are scrolling: one
+    // monitor's new desktop is tiling, so it leaves the set, and the push that
+    // carries the switch is a set CHANGE rather than an identical-set re-push.
+    //
+    // The screen that stayed scrolling has still had its strip replaced, and
+    // it is the one nothing was watching: the changed-set path announced only
+    // for screens being ADDED, so a stayer got no announcement, and it armed
+    // no force-emit either, so its batch was suppressed by the emit-on-change
+    // gate comparing against the outgoing strip's baseline. Both halves are
+    // asserted here, because either alone leaves the compositor painting the
+    // previous strip's state.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S2"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Away to desktop 2, which has a window of its OWN. That matters: an
+    // empty destination strip takes applyLayout's empty-resolve bail, which
+    // clears the view baseline as a side effect and would leave something
+    // changed on the way back, masking whether the force did any work. With
+    // desktop 2 populated the return leg is a genuine no-rect-moved case.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+
+    // The return, as a set CHANGE: S1 goes back to desktop 1 and stays
+    // scrolling while S2 drops out of the set in the same push. That
+    // combination routes through the changed-set branch rather than the
+    // identical-set one, and S1 is a stayer rather than an addition.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    bool announcedS1 = false;
+    for (int i = 0; i < ctxSpy.count(); ++i) {
+        if (ctxSpy.at(i).at(0).toString() == QStringLiteral("S1")) {
+            announcedS1 = true;
+        }
+    }
+    QVERIFY2(announcedS1, "a screen that stays scrolling across a set-changing switch must be announced");
+
+    // And the batch must actually be emitted. app|a is back on the strip it
+    // was last laid out on, so every rect the retile resolves equals the
+    // baseline and the emit-on-change gate suppresses the batch unless the
+    // switch armed the force. Without the arm the compositor is never told the
+    // strip came back, and goes on painting desktop 2's state.
+    QVERIFY2(tiledSpy.count() >= 1, "the staying screen's switch must force a batch even though no rect moved");
 }
 
 void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()

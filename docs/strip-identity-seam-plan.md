@@ -23,12 +23,36 @@ was pushed through three configurations (fresh, decorations seeded, strips
 restored from disk) and the end columns animated correctly in all of them.
 They are not disproven, only unobserved.
 
-**Stage 1 is BUILT.** `Scrolling.stripContextChanged` carries an opaque
-per-screen strip epoch, announced independently of any geometry batch, and the
-effect retires its strip-scoped paint state when the epoch moves. Candidate A
-was separately repaired at the emit gate. Stage 2 (directory, generation,
-subscription) and stage 3 (coordinate split) remain unbuilt, and stage 3 still
-has no answer to its clip problem.
+**Stage 1 is BUILT, with three of its own prescriptions descoped.**
+`Scrolling.stripContextChanged` carries an opaque per-screen strip epoch,
+announced independently of any geometry batch, and the effect retires its
+strip-scoped paint state when the epoch moves. Candidate A was separately
+repaired at the emit gate. Stage 2 (directory, generation, subscription) and
+stage 3 (coordinate split) remain unbuilt, and stage 3 still has no answer to
+its clip problem.
+
+What stage 1 specified and did not ship, recorded here so the section below is
+read as a design note rather than a description of the tree:
+
+- **No bring-up seed.** The epoch is announce-only, with no readable property
+  to fetch at connect time, so a consumer that attaches after the daemon has
+  already announced a screen holds no epoch for it. Its first announcement is
+  therefore its first epoch, which records and returns without retiring. The
+  first context switch of such a session does not retire.
+- **No multi-epoch batch grouping.** Entries are not grouped by
+  `(screenId, epoch)` and no group is retired-then-applied as a unit. What the
+  code has instead is a first-epoch guard against a batch that raced ahead of
+  the announcement, which covers the same race for the FIRST epoch only.
+  Ordering is otherwise whatever D-Bus delivery gives: the daemon announces
+  before it schedules the forced retile, and the retile is queued, so the
+  announcement leads on that path — but a retile already queued before the
+  switch is not covered.
+- **No kill switch.** The retirement is unconditional; there is no config gate.
+
+The retire-set itself is complete for the maps it names, and the rule that
+decides membership lives on `retireStripScopedState`'s declaration, including
+the two tab-indicator maps that fail the rule's test and are kept anyway
+because the daemon's tab emit is change-gated per screen with no context term.
 
 Note what stage 1 does NOT do: it does not stop the effect from holding state
 across a switch, it makes the effect *told* so it can retire it. Retirement is
@@ -237,8 +261,17 @@ candidate A, it cannot live in `TileRequestEntry`.
 ```
 
 Emitted whenever a screen's resolved context key changes, independent of
-whether any geometry changed. Fires on desktop switch, activity switch, pin
-acquire and release. Adding a signal does not break the existing
+whether any geometry changed. Desktop and activity switches announce by way of
+the daemon's `setActiveScreens` push, which is where the announcement is made
+for every screen in the set; a key change with no such push behind it is not
+announced, so this is a property of how the daemon drives the engine rather
+than a guarantee the engine makes on its own. A sticky-pin RELEASE announces
+directly, because it moves the key without going through that push. A pin
+ACQUIRE does not, and does not need to: it pins the screen to the desktop the
+key already resolves to, so nothing moves until a later switch, where the
+ordinary announcement correctly stays silent for a pinned screen.
+
+Adding a signal does not break the existing
 `windowsTileRequested` signature, so no lockstep wire break and no stale-`.so`
 hazard, which matters given the effect cannot be hot-reloaded (unload/loadEffect
 does not reload; it needs a logout).

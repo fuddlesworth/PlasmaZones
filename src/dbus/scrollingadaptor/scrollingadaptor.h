@@ -37,8 +37,10 @@ namespace PlasmaZones {
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
- * moved), the blueprintProgressJson template-seed report, and the
- * stripChanged wake-up that tells a preview its strip is worth re-reading.
+ * moved), the blueprintProgressJson template-seed report, the
+ * stripChanged wake-up that tells a preview its strip is worth re-reading,
+ * and the stripContextChanged announcement of which strip a screen is
+ * currently showing.
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -468,7 +470,13 @@ Q_SIGNALS:
     void scrollingScreensChanged(const QStringList& screenIds);
 
     /// The identity of the strip @p screenId shows changed (desktop switch,
-    /// activity switch, sticky-pin acquire or release).
+    /// activity switch, sticky-pin release). A pin ACQUIRE does not announce:
+    /// it pins the screen to the desktop its key already resolves to, so the
+    /// strip does not change under it until a later switch.
+    ///
+    /// NOT seeded at bring-up. There is no property to read the current
+    /// epochs from, so a consumer attaching after a screen was announced holds
+    /// nothing for it and its first announcement records rather than compares.
     ///
     /// Relayed straight through with no second change gate: the engine's own
     /// announcement is already emit-on-change, and damping it here would risk
