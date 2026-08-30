@@ -71,7 +71,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // the eviction set identical across the exit paths.
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedColumnMaximized.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
     // Background-context guard, as windowClosed and the float paths carry: a
     // release out of another desktop's state must not retile the strip that
     // is on screen right now. The switch back retiles the mutated one.
@@ -100,6 +100,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // windowOpened's context migration) before inserting.
     PhosphorEngine::PlacementStateKey staleKey;
     bool migratedWindowedFs = false;
+    bool migratedMaximizedToEdges = false;
     if (ScrollState* staleState = stateForWindow(windowId, &staleKey); staleState && staleKey != key) {
         const ScrollLayoutParams staleParams = layoutParamsForScreen(staleKey.screenId);
         const bool staleWasFloating = staleState->isFloating(windowId);
@@ -107,6 +108,12 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // windowOpened's migration: the receive re-applies it after its own
         // insert so the presentation survives this defence-in-depth hop too.
         migratedWindowedFs = staleState->strip().isWindowedFullscreen(windowId);
+        // The maximize-to-edges flag rides along the same way — declared column
+        // state nothing re-derives — but only off a LONE tile, floatWindowInternal's
+        // rule: a shared column survives the hop and keeps its own flag.
+        const int staleColIdx = staleState->strip().columnOfWindow(windowId);
+        migratedMaximizedToEdges = staleColIdx >= 0 && staleState->strip().columns().at(staleColIdx).tiles.size() == 1
+            && staleState->strip().columns().at(staleColIdx).maximizedToEdges;
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
         // Track BEFORE emitting, the doctrine windowOpened's migration states:
@@ -119,7 +126,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_states.setKeyForWindow(windowId, key);
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -242,9 +249,14 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         if (handoffMinW > 0 || handoffMinH > 0) {
             state->strip().setWindowMinimumSize(windowId, handoffMinW, handoffMinH);
         }
-        // Re-apply the migrated flag, mirroring windowOpened's migration.
+        // Re-apply the migrated flags, mirroring windowOpened's migration. The
+        // maximize-to-edges arm needs no lone-tile check on this side:
+        // insertWindowAt always opens a column the arrival has to itself.
         if (migratedWindowedFs) {
             state->strip().setWindowedFullscreen(windowId, true);
+        }
+        if (migratedMaximizedToEdges) {
+            state->strip().setMaximizedToEdgesForWindow(windowId, true);
         }
         m_states.setKeyForWindow(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);

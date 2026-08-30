@@ -468,7 +468,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // deliberately and say so at their own site — the bring-up fetch
     // (wiring.cpp) runs before any batch has populated the membership hash,
     // and the bring-up drain (drainDeadSessionState) calls BOTH
-    // restoreAllWindowedFullscreen AND restoreAllColumnMaximized immediately
+    // restoreAllWindowedFullscreen AND restoreAllMaximizedToEdges immediately
     // BEFORE its setScrollingScreens({}, false). A future announceFlipped=false
     // caller that can reach here with live membership owes both restores, or
     // must resolve the leaving screens independently of the announce.
@@ -479,7 +479,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // synchronously into effect handlers, and a raw pointer collected before
     // that is not safe to test with isDeleted() afterwards — that check is
     // undefined on a dangling pointer rather than a guard.
-    QList<QPointer<KWin::EffectWindow>> columnMaximizedLeavingScrolling;
+    QList<QPointer<KWin::EffectWindow>> maximizeClaimsLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -518,14 +518,22 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             }
             // The column mirror leaves with the strip for the same reason,
             // and is deferred past the managed-set write below on the same
-            // split: releaseColumnMaximized moveResizes, and doing that while
+            // split: releaseMaximizedToEdges moveResizes, and doing that while
             // m_scrollingScreens still names this screen would re-enter the
             // scrolling paths for a screen that is mid-flip. The destination
             // engine's first batch releases any window it TILES, but one it
             // floats (over maxWindows, excluded, minimize-floated) never gets
             // an entry — which is exactly the case this loop exists for.
-            if (m_columnMaximizedWindows.contains(wid)) {
-                columnMaximizedLeavingScrolling.append(it.key());
+            //
+            // Monocle membership qualifies on its own, not only alongside a
+            // maximize-to-edges claim. The claim table releases all three on a
+            // mode flip, and a monocle-only member here would otherwise not be
+            // collected at all — this loop is the payer for a mode flip that
+            // leaves the engine running (the bulk restoreAll* drains only run
+            // on disable or teardown), and both its release calls are no-ops
+            // for a non-member, so widening the predicate costs nothing.
+            if (m_maximizedToEdgesWindows.contains(wid) || m_monocleMaximizedWindows.contains(wid)) {
+                maximizeClaimsLeavingScrolling.append(it.key());
             }
         }
     }
@@ -534,7 +542,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
     }
-    for (const QPointer<KWin::EffectWindow>& w : std::as_const(columnMaximizedLeavingScrolling)) {
+    for (const QPointer<KWin::EffectWindow>& w : std::as_const(maximizeClaimsLeavingScrolling)) {
         if (w && !w->isDeleted()) {
             const QString wid = m_effect->getWindowId(w);
             // Monocle goes with it. The claim table says a mode flip releases
@@ -544,7 +552,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // window it TILES. No-op for a non-member, and it must precede the
             // column release for the funnel's stated order.
             unmaximizeMonocleWindow(wid);
-            releaseColumnMaximized(wid, w);
+            releaseMaximizedToEdges(wid, w);
         }
     }
 

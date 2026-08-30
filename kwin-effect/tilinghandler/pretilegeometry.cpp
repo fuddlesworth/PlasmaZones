@@ -193,9 +193,9 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // pre-tile restores in screenschanged.cpp use, and for the reason
                 // stated there: a bare clear strips a column-maximize member's bit
                 // while leaving the effect recorded as still holding it, which is
-                // the exact split m_columnMaximizedWindows' contract forbids.
-                if (m_columnMaximizedWindows.contains(windowId)) {
-                    releaseColumnMaximized(windowId, safeW);
+                // the exact split m_maximizedToEdgesWindows' contract forbids.
+                if (m_maximizedToEdgesWindows.contains(windowId)) {
+                    releaseMaximizedToEdges(windowId, safeW);
                 } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
                            && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
                            && !safeW->isUserResize()) {
@@ -205,7 +205,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     // down to its restore rect, and mid-gesture it snaps the
                     // window under the user's pointer.
                     //
-                    // Unlike releaseColumnMaximized, which skips on the same
+                    // Unlike releaseMaximizedToEdges, which skips on the same
                     // conditions and RETAINS membership so a later arm pays
                     // the bit, this is the non-member arm and holds no ledger,
                     // so a skip here is permanent rather than deferred. That

@@ -108,6 +108,10 @@ inline QLatin1String kActiveWindow()
 {
     return QLatin1String("activeWindow");
 }
+inline QLatin1String kMaximizedToEdges()
+{
+    return QLatin1String("maximizedToEdges");
+}
 inline QLatin1String kWindowId()
 {
     return QLatin1String("windowId");
@@ -309,6 +313,12 @@ QJsonObject ScrollEngine::serializeStripState() const
             // that fallback, which is what it always did.
             c.insert(kHeightOwner(), col.heightOwnerId);
             c.insert(kActiveWindow(), col.activeWindowId);
+            // Written only when set: the absent-key fallback below reads
+            // false, so an older blob and an unflagged column encode the
+            // same way.
+            if (col.maximizedToEdges) {
+                c.insert(kMaximizedToEdges(), true);
+            }
             columns.append(c);
         }
         QJsonObject obj;
@@ -576,6 +586,8 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
             // column on the deterministic scan — the same answer a blob
             // written before this key gets.
             col.heightOwnerId = colObj.value(kHeightOwner()).toString();
+            // Additive key: an older blob reads false.
+            col.maximizedToEdges = colObj.value(kMaximizedToEdges()).toBool(false);
             const QJsonArray tiles = colObj.value(kTiles()).toArray();
             for (const QJsonValue& tileVal : tiles) {
                 if (col.tiles.size() >= kMaxRestoredTilesPerColumn) {

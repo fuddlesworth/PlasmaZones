@@ -129,6 +129,11 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // params consumer, so clamp here.
     const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
+    // The pre-gap rect for maximize-to-edges columns, under the same
+    // never-invert clamp. Captured from `area` (already strut-adjusted), not
+    // from axisBasis: axisBasis folds the outer gaps back in, and the whole
+    // point of the raw rect is that a maximized column covers them.
+    params.rawWorkArea = (area.width() > 0 && area.height() > 0) ? area : QRect();
     params.gap = innerGap;
     // The override map was resolved ONCE above (before the smart-gaps gate)
     // and is threaded through every effective* read here — the accessors'
@@ -295,13 +300,21 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
             }
         }
         const int tabCount = drawsIndicator ? column.tiles.size() : 0;
+        // A maximized-to-edges column resolved against the RAW work area, so
+        // clipping its tiles to the gapped one would publish a zone/preview
+        // rect inset by outer gaps the real window does not have. Read off the
+        // column's DECLARED flag rather than measured from the rect, the rule
+        // ResolvedColumn::maximizedToEdges exists to state. Both fields go
+        // null together when the screen is unknown, so this cannot substitute
+        // a live area for a degenerate one.
+        const QRect clipArea = column.maximizedToEdges ? params.rawWorkArea : params.workArea;
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
                 continue;
             }
             // Clip rather than drop partially-visible columns: the cut-off
             // edge is what tells the viewer the strip continues off-screen.
-            const QRect clipped = tile.rect.intersected(params.workArea);
+            const QRect clipped = tile.rect.intersected(clipArea);
             if (!clipped.isEmpty()) {
                 // Designated, not positional: three of these eight are ints in
                 // a row, so a member inserted mid-struct would compile clean

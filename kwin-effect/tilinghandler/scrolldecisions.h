@@ -114,8 +114,8 @@ enum class MaximizeAction {
 /// restart or a KWin-dropped bit, neither of which is time-critical, so
 /// deferring it by a batch costs nothing.
 ///
-/// @p flagOnWire     the batch entry's columnMaximized
-/// @p inSet          effect-side membership (m_columnMaximizedWindows)
+/// @p flagOnWire     the batch entry's maximizedToEdges
+/// @p inSet          effect-side membership (m_maximizedToEdgesWindows)
 /// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm passes
 ///                   requestedMaximizeMode(), not the committed maximizeMode():
 ///                   the committed bit trails a client round trip on Wayland,
@@ -123,13 +123,13 @@ enum class MaximizeAction {
 ///                   lands inside that window. The interception passes the
 ///                   COMMITTED mode instead, because there it is comparing
 ///                   against what actually landed.
-/// @p toggleInFlight a dispatched toggleMaximizeColumn for this window whose
+/// @p toggleInFlight a dispatched toggleMaximizeToEdges for this window whose
 ///                   reply has not arrived. Deliberately has NO default
 ///                   argument: a defaulted parameter would let the call site
 ///                   keep compiling while silently never passing the marker,
 ///                   which is a fix present in the header and absent in
 ///                   production that no test would catch.
-inline MaximizeAction resolveColumnMaximizeAction(bool flagOnWire, bool inSet, bool kwinMaximized, bool toggleInFlight)
+inline MaximizeAction resolveMaximizeToEdgesAction(bool flagOnWire, bool inSet, bool kwinMaximized, bool toggleInFlight)
 {
     if (!flagOnWire) {
         return inSet ? MaximizeAction::Release : MaximizeAction::None;
@@ -187,7 +187,7 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
 enum class Claim {
     MonocleMaximize, ///< KWin maximize held for a monocle tile
     WindowedFullscreen, ///< KWin fullscreen + a keep-flag layer demotion
-    ColumnMaximize, ///< KWin maximize held for a maximized scroll column
+    MaximizedToEdges, ///< KWin maximize held for a maximized-to-edges scroll column
 };
 
 /// Why the effect's authority over a window is ending. Each exit path names
@@ -305,7 +305,7 @@ inline constexpr int claimReleaseOrder(Claim claim)
         return 0;
     case Claim::MonocleMaximize:
         return 1;
-    case Claim::ColumnMaximize:
+    case Claim::MaximizedToEdges:
         return 2;
     }
     return 3;

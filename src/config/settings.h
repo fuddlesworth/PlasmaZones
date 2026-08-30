@@ -645,6 +645,8 @@ public:
                    setScrollingDecreaseColumnWidthShortcut NOTIFY scrollingDecreaseColumnWidthShortcutChanged)
     Q_PROPERTY(QString scrollingMaximizeColumnShortcut READ scrollingMaximizeColumnShortcut WRITE
                    setScrollingMaximizeColumnShortcut NOTIFY scrollingMaximizeColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingMaximizeToEdgesShortcut READ scrollingMaximizeToEdgesShortcut WRITE
+                   setScrollingMaximizeToEdgesShortcut NOTIFY scrollingMaximizeToEdgesShortcutChanged)
     Q_PROPERTY(QString scrollingExpandColumnShortcut READ scrollingExpandColumnShortcut WRITE
                    setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
     Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
@@ -1598,6 +1600,8 @@ public:
     void setScrollingDecreaseColumnWidthShortcut(const QString& shortcut);
     QString scrollingMaximizeColumnShortcut() const;
     void setScrollingMaximizeColumnShortcut(const QString& shortcut);
+    QString scrollingMaximizeToEdgesShortcut() const;
+    void setScrollingMaximizeToEdgesShortcut(const QString& shortcut);
     QString scrollingExpandColumnShortcut() const;
     void setScrollingExpandColumnShortcut(const QString& shortcut);
     QString scrollingCycleWindowHeightShortcut() const;

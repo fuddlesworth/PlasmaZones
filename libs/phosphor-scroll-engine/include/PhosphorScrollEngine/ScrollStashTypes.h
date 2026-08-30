@@ -93,6 +93,32 @@ struct StashedColumn
     /// the sizing owner are allowed to differ, which is what keeps a tab
     /// switch from resizing the column.
     QString heightOwnerId;
+    /// The column's maximize-to-edges state (Column::maximizedToEdges).
+    /// Column presentation like width and display, so it rides the stash and
+    /// is re-applied when the column is rebuilt on claim.
+    bool maximizedToEdges = false;
+    /// Latched once activeWindowId above has actually been put in force on the
+    /// live column, and once heightOwnerId has. Per COLUMN, unlike the strip-
+    /// wide focus guard the restore derives from the consumed set: the two
+    /// questions are answered at different arrivals (the shown tab may be a
+    /// different tile from the extent owner, and either may still be absent
+    /// when the first sibling lands), and a strip-wide latch would stop the
+    /// re-assertion for every other column in the same burst.
+    ///
+    /// While a latch is clear the restore keeps re-asserting the stashed value
+    /// on each arrival, because every insert makes the arriving tile its
+    /// column's active one and a non-Auto height claims the extent. Once it is
+    /// set the restore hands back what the column held immediately BEFORE the
+    /// insert instead: within a burst that is the value just restored, and for
+    /// an arrival that lands long afterwards (a same-app window claiming a slot
+    /// hours later) it is the tab the user has since switched to, which the
+    /// stashed value must not rewind.
+    ///
+    /// In-memory only. Deliberately not serialized: a stash staged from the
+    /// persisted blob has restored nothing yet, so false is the right value on
+    /// the far side of a restart.
+    bool shownTabRestored = false;
+    bool heightOwnerRestored = false;
 };
 
 /// One stashed strip: the structural columns plus the focus/view pair
@@ -218,6 +244,13 @@ struct FloatRestore
     /// effect's minimize machinery drives) or a cancelled drag would otherwise
     /// resize the column and leave it resized.
     bool ownedTabbedHeight = false;
+    /// The source column's maximize-to-edges state when the window left as
+    /// the column's ONLY tile. Carried for the same reason the width is: a
+    /// minimize/unminimize round trip of a maximized column's lone window
+    /// must rebuild a maximized column, and the flag is declared state that
+    /// nothing re-derives. Left false for a tile leaving a SHARED column,
+    /// where the surviving column keeps the flag itself.
+    bool maximizedToEdges = false;
     /// The tile slot inside a SHARED column (-1 when the window had its
     /// own column). A stacked tile's float round-trip re-enters its
     /// surviving stack instead of spawning a new column at the index.

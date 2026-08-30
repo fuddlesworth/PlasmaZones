@@ -868,12 +868,12 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // cleanupClosedWindowState scrubs the monocle set but has no column
     // equivalent, and the funnel's own release retains an entry it could not
     // pay — deliberately, so a later arm can pay it. On a dying window there
-    // is no later arm, and restoreAllColumnMaximized re-inserts on a resolve
+    // is no later arm, and restoreAllMaximizedToEdges re-inserts on a resolve
     // miss, so a window closing around a daemon-loss drain leaves an entry
     // with no window and no reaper. Window ids are appId-derived and reusable,
     // and three live readers consume that entry: interceptMaximizeRequest's
-    // already-agrees test, dispatchMaximizeColumnToggle's refusal write-back,
-    // and the batch's resolveColumnMaximizeAction inSet term. A reused id
+    // already-agrees test, dispatchMaximizeToEdgesToggle's refusal write-back,
+    // and the batch's resolveMaximizeToEdgesAction inSet term. A reused id
     // therefore feeds all three a membership the new window never earned, and
     // the refusal write-back is the one that can act on it outright by
     // driving KWin to MaximizeFull for a column the engine never maximized.
@@ -881,7 +881,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is
     // a bit the effect genuinely still owes.
-    m_columnMaximizedWindows.remove(windowId);
+    m_maximizedToEdgesWindows.remove(windowId);
 
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
@@ -1032,7 +1032,7 @@ void TilingHandler::drainDeadSessionState()
     restoreAllMonocleMaximized();
     // The column-maximize mirror belongs to the dead session too, and the
     // batch Apply arm re-establishes it from the new daemon's truth.
-    restoreAllColumnMaximized();
+    restoreAllMaximizedToEdges();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The resolved per-screen scroll behaviour belongs to the dead session
     // too, and bring-up clears it rather than trusting the teardown to have:

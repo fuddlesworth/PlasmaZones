@@ -776,6 +776,9 @@ P_STORE_SET_STRING(setScrollingDecreaseColumnWidthShortcut, shortcutsScrollingGr
 P_STORE_GET(QString, scrollingMaximizeColumnShortcut, shortcutsScrollingGroup, maximizeColumnKey, QString)
 P_STORE_SET_STRING(setScrollingMaximizeColumnShortcut, shortcutsScrollingGroup, maximizeColumnKey,
                    scrollingMaximizeColumnShortcutChanged)
+P_STORE_GET(QString, scrollingMaximizeToEdgesShortcut, shortcutsScrollingGroup, maximizeToEdgesKey, QString)
+P_STORE_SET_STRING(setScrollingMaximizeToEdgesShortcut, shortcutsScrollingGroup, maximizeToEdgesKey,
+                   scrollingMaximizeToEdgesShortcutChanged)
 P_STORE_GET(QString, scrollingExpandColumnShortcut, shortcutsScrollingGroup, expandColumnKey, QString)
 P_STORE_SET_STRING(setScrollingExpandColumnShortcut, shortcutsScrollingGroup, expandColumnKey,
                    scrollingExpandColumnShortcutChanged)

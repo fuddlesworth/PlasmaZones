@@ -28,6 +28,53 @@ int nearestVisibleTileIdx(const QVector<Tile>& tiles, int fromIdx)
     return -1;
 }
 
+/// Hand a Tabbed column's extent ownership on after @p departedId left its
+/// tile list. The tab now on show takes it, which is the same rule the flip
+/// into tabbed follows; a Normal column (or one with nothing left) clears it.
+///
+/// Leaving the id naming a departed window would work for the resolver's
+/// fallback scan only while the owner is still SOMEWHERE — tabbedColumnCrossPx
+/// does not scan for an unresolvable owner, so an owner that left the strip's
+/// column entirely snaps the column to the full work-area cross extent. Every
+/// site that removes a tile by hand shares this ONE definition with
+/// removeWindowInternal's chokepoint so the four cannot drift apart.
+///
+/// Call AFTER the removal and after @p col.activeTileIdx has been re-clamped.
+void handOffTabbedHeightOwner(Column& col, const QString& departedId)
+{
+    if (col.heightOwnerId != departedId) {
+        return;
+    }
+    col.heightOwnerId = col.display == ColumnDisplay::Tabbed && !col.tiles.isEmpty()
+        ? col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId
+        : QString();
+}
+
+/// Width intent for the column a tile is expelled into: the source column's,
+/// EXCEPT when that renders full.
+///
+/// Two full-work-area columns is a strip where the expel visibly did nothing
+/// (each still covers the viewport alone), and the single
+/// m_preMaximizeColumnIdx slot can only describe one of them, so the copy
+/// silently handed the new column a state with no remembered width behind it.
+/// The expelled tile takes the context default instead, which is what "give
+/// this window its own column" means. Half the work area when the default is
+/// itself full width, the same sub-fallback the maximize toggle uses to avoid
+/// handing back a column that is still full.
+///
+/// Shared by expelWindowFromColumn and consumeOrExpel's expel arm: the chord
+/// creates the same second column and must narrow it the same way.
+ColumnWidth expelledColumnWidth(const Column& source, const ScrollLayoutParams& params)
+{
+    const int workMain = params.axis.mainSize(params.workArea);
+    if (workMain <= 0 || ScrollStrip::resolveColumnWidthPx(source.width, params) < workMain) {
+        return source.width;
+    }
+    return ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params) >= workMain
+        ? ColumnWidth::makeProportion(0.5)
+        : params.defaultColumnWidth;
+}
+
 } // namespace
 
 // ── Introspection ───────────────────────────────────────────────────────────
@@ -346,16 +393,14 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // The tab that owned this column's extent just left it (closed, taken for
     // a float, expelled, or moved to another output). Hand the ownership to
     // the tab now on show, which is the same rule the flip into tabbed
-    // follows. Leaving the id dangling would work — the resolver falls back to
-    // a scan for the first sized tab — but the fallback answers by stack
-    // order, so the column would resize to a tab the user is not looking at
-    // the moment its neighbour closes. Done here because this is the one
-    // chokepoint every removal reaches (takeWindow delegates to it).
-    if (col.heightOwnerId == windowId) {
-        col.heightOwnerId = col.display == ColumnDisplay::Tabbed && !col.tiles.isEmpty()
-            ? col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId
-            : QString();
-    }
+    // follows. Leaving the id naming the departed window would NOT work: the
+    // resolver scans for a sized tab only when no owner is recorded at all,
+    // and deliberately not when a named owner cannot be resolved, so the
+    // column would snap to the full work-area cross extent. This is the
+    // chokepoint every removal
+    // BY WINDOW ID reaches (takeWindow delegates to it); the consume/expel
+    // verbs move a tile by index and call the shared helper themselves.
+    handOffTabbedHeightOwner(col, windowId);
 
     bool columnClosed = false;
     if (col.tiles.isEmpty()) {
@@ -742,6 +787,10 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     if (source.activeTileIdx >= source.tiles.size()) {
         source.activeTileIdx = qMax(0, source.tiles.size() - 1);
     }
+    // The take is by INDEX, so it bypasses removeWindowInternal's chokepoint:
+    // consuming the neighbour's owning tab would leave heightOwnerId naming a
+    // window that is no longer in that column.
+    handOffTabbedHeightOwner(source, taken.windowId);
     Column& dest = m_columns[m_activeColumnIdx];
     dest.tiles.append(taken);
     dest.activeTileIdx = dest.tiles.size() - 1;
@@ -768,30 +817,10 @@ bool ScrollStrip::expelWindowFromColumn(const ScrollLayoutParams& params)
     if (col->activeTileIdx >= col->tiles.size()) {
         col->activeTileIdx = col->tiles.size() - 1;
     }
+    // By-index removal, so the chokepoint's owner handoff has to happen here.
+    handOffTabbedHeightOwner(*col, expelled.windowId);
     Column newCol;
-    // Inherit the source column's width, EXCEPT when that renders full.
-    //
-    // A maximized column is by definition THE full-work-area column, and the
-    // apply path publishes columnMaximized by MEASURING the rendered extent —
-    // so copying a full width here produced two columns both reporting
-    // maximized, both lighting the titlebar button, and the effect holding a
-    // KWin maximize bit for each. The single m_preMaximizeColumnIdx slot can
-    // only describe one of them, so the copy also silently handed the new
-    // column a state with no remembered width behind it.
-    //
-    // The expelled tile takes the context default instead, which is what
-    // "give this window its own column" means. Half the work area when the
-    // default is itself full width, the same sub-fallback the maximize toggle
-    // uses to avoid handing back a column that is still full.
-    const int workMain = params.axis.mainSize(params.workArea);
-    const bool sourceRendersFull = workMain > 0 && resolveColumnWidthPx(col->width, params) >= workMain;
-    if (sourceRendersFull) {
-        newCol.width = resolveColumnWidthPx(params.defaultColumnWidth, params) >= workMain
-            ? ColumnWidth::makeProportion(0.5)
-            : params.defaultColumnWidth;
-    } else {
-        newCol.width = col->width;
-    }
+    newCol.width = expelledColumnWidth(*col, params);
     newCol.display = ColumnDisplay::Normal;
     newCol.tiles.append(expelled);
     const int insertAt = m_activeColumnIdx + 1;
@@ -819,8 +848,13 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
         if (col->activeTileIdx >= col->tiles.size()) {
             col->activeTileIdx = col->tiles.size() - 1;
         }
+        // By-index removal, so the chokepoint's owner handoff happens here.
+        handOffTabbedHeightOwner(*col, expelled.windowId);
         Column newCol;
-        newCol.width = col->width;
+        // Narrowed on a full-rendering source exactly as expelWindowFromColumn
+        // does: this arm creates the same second column, and copying a full
+        // width verbatim made the chord's expel look like it did nothing.
+        newCol.width = expelledColumnWidth(*col, params);
         // Explicit, matching the consume twin: a single expelled tile is a
         // Normal column regardless of the host's (possibly Tabbed) display.
         newCol.display = ColumnDisplay::Normal;
@@ -933,13 +967,21 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     }
     // Rotate tiles + active-tile slot through the visible columns; width
     // and display stay with the SLOT so the strip's geometry holds still.
+    //
+    // heightOwnerId travels WITH THE TILES, not with the slot: it names one of
+    // them. Left behind it would name a window now sitting in another column,
+    // and tabbedColumnCrossPx does not scan for an unresolvable owner — the
+    // rotated tabbed column would snap to the full work-area cross extent.
     QVector<QVector<Tile>> tiles;
     QVector<int> activeTileIdx;
+    QVector<QString> heightOwnerId;
     tiles.reserve(visible.size());
     activeTileIdx.reserve(visible.size());
+    heightOwnerId.reserve(visible.size());
     for (const int idx : visible) {
         tiles.append(m_columns.at(idx).tiles);
         activeTileIdx.append(m_columns.at(idx).activeTileIdx);
+        heightOwnerId.append(m_columns.at(idx).heightOwnerId);
     }
     int rotated = 0;
     const int n = visible.size();
@@ -949,6 +991,7 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         Column& dest = m_columns[visible.at(i)];
         dest.tiles = tiles.at(from);
         dest.activeTileIdx = activeTileIdx.at(from);
+        dest.heightOwnerId = heightOwnerId.at(from);
         // Count non-minimized tiles only: the total feeds the user-facing
         // "Rotated %n windows" OSD copy, and a partly-minimized column's
         // hidden tiles did not visibly move. (visibleColumnIndices already

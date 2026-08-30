@@ -215,7 +215,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool isMonocle = false;
         bool isWindowedFullscreen =
             false; ///< scrolling windowed fullscreen: hold KWin fullscreen state at the column rect
-        bool isColumnMaximized = false; ///< scrolling: this window's column is maximized (mirror KWin's maximize bit)
+        bool isMaximizedToEdges = false; ///< scrolling: this window's column is maximized (mirror KWin's maximize bit)
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         /// scrolling strip: screen edge to animate from. Four-valued since
@@ -327,7 +327,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.window = w;
         entry.isMonocle = req.monocle;
         entry.isWindowedFullscreen = req.windowedFullscreen;
-        entry.isColumnMaximized = req.columnMaximized;
+        entry.isMaximizedToEdges = req.maximizedToEdges;
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
@@ -457,7 +457,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId;
         bool isMonocle = false;
         bool isWindowedFullscreen = false;
-        bool isColumnMaximized = false;
+        bool isMaximizedToEdges = false;
         QString stacking;
         QString scrollEdge;
         int viewDelta = 0;
@@ -513,7 +513,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.isWindowedFullscreen, e.isColumnMaximized, e.stacking, e.scrollEdge, e.viewDelta,
+                        e.isWindowedFullscreen, e.isMaximizedToEdges, e.stacking, e.scrollEdge, e.viewDelta,
                         e.viewImmediate, e.visualPos, e.hasVisualPos, e.tabFrom});
     }
 
@@ -1025,7 +1025,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // that would otherwise carry a cleared flag back. `win`
                     // is the exact resolve from above and is non-null and
                     // unminimized on this branch.
-                    releaseColumnMaximized(wid, win);
+                    releaseMaximizedToEdges(wid, win);
                 }
             }
         }
@@ -1686,7 +1686,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // whether THIS batch is the one that changed the maximize state.
             //
             // A membership-vs-wire delta looks like the obvious signal and is
-            // not a transition detector: releaseColumnMaximized RETAINS
+            // not a transition detector: releaseMaximizedToEdges RETAINS
             // membership on its fullscreen and mid-gesture arms, so membership
             // stays true while the wire flag stays false and the delta then
             // reads true on EVERY following batch, with no
@@ -1714,8 +1714,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // because the per-window applies are staggered and a later
                 // entry runs after the earlier ones have returned.
                 const bool kwinAlreadyFull = kwMax->requestedMaximizeMode() == KWin::MaximizeFull;
-                const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveColumnMaximizeAction(
-                    snap.isColumnMaximized, m_columnMaximizedWindows.contains(snap.windowId), kwinAlreadyFull,
+                const ScrollDecisions::MaximizeAction maxAction = ScrollDecisions::resolveMaximizeToEdgesAction(
+                    snap.isMaximizedToEdges, m_maximizedToEdgesWindows.contains(snap.windowId), kwinAlreadyFull,
                     maximizeToggleInFlight(snap.windowId));
                 if (maxAction == ScrollDecisions::MaximizeAction::Apply) {
                     // Membership BEFORE the compositor call, so a synchronous
@@ -1723,7 +1723,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // frameGeometryChanged inside it) already sees the
                     // handler owning the bit rather than reading it as a
                     // stray user maximize.
-                    m_columnMaximizedWindows.insert(snap.windowId);
+                    m_maximizedToEdgesWindows.insert(snap.windowId);
                     // The fullscreen guard the sibling ledgers take: a
                     // windowed-fullscreen tile in a maximized column is a
                     // legitimate pairing, and maximize() on a presenting
@@ -1770,7 +1770,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         maximizeBitWrittenThisBatch = !kwinAlreadyFull;
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
-                    maximizeBitWrittenThisBatch = releaseColumnMaximized(snap.windowId, snap.window);
+                    maximizeBitWrittenThisBatch = releaseMaximizedToEdges(snap.windowId, snap.window);
                 }
             }
 
@@ -1899,7 +1899,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // logical-geometry change of 1600x900 to 1280x720: both tiles
                 // held their stacked column rects and neither took KWin's
                 // maximize area. The engine's apply lands last and wins.
-                if (KWin::Window* kw = snap.window->window(); kw && !snap.isColumnMaximized
+                if (KWin::Window* kw = snap.window->window(); kw && !snap.isMaximizedToEdges
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
                     && !kw->isRequestedFullScreen()) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
@@ -2674,7 +2674,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // BETWEEN batches only — every fresh batch command re-arms
                     // the pair, so a client that keeps provoking batches is not
                     // bounded at 3/s overall.
-                    if (snap.isColumnMaximized && !snap.window->isUserMove() && !snap.window->isUserResize()
+                    if (snap.isMaximizedToEdges && !snap.window->isUserMove() && !snap.window->isUserResize()
                         && !fullscreenBailSkippedCommit && !scrollDeliveredRect.isNull()) {
                         m_effect->m_scrollCommandedRects.insert(snap.windowId, {scrollDeliveredRect, 0, 0});
                     } else {
@@ -2838,7 +2838,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // platforms — KWin's own maximize-area re-assert. That population arms a
     // commanded rect at the apply site for exactly this, and nothing else
     // reaches it, so the general exclusion and its reasoning stand.
-    // A column-maximize member whose maximize bit is mid-transition is exempt
+    // A maximized-to-edges member whose maximize bit is mid-transition is exempt
     // on EVERY platform, XWayland included, and that exemption is what keeps
     // the counter off the user's own restore.
     //
@@ -2868,11 +2868,11 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // Wine case) while exempting the one frame change that is never an
     // external mover on either platform.
     KWin::Window* kwCounter = w->window();
-    const bool inMaximizeTransition = kwCounter && m_columnMaximizedWindows.contains(windowId)
+    const bool inMaximizeTransition = kwCounter && m_maximizedToEdgesWindows.contains(windowId)
         && kwCounter->requestedMaximizeMode() != KWin::MaximizeFull;
     const bool externallyMovable = !inMaximizeTransition
         && (!w->isWaylandClient()
-            || (kwCounter && m_columnMaximizedWindows.contains(windowId)
+            || (kwCounter && m_maximizedToEdgesWindows.contains(windowId)
                 && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull));
     if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);

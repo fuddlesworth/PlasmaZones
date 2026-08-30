@@ -286,7 +286,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_declinedOpenFocus.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
@@ -354,6 +354,7 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
+        sc.maximizedToEdges = col.maximizedToEdges;
         // Rides with the display it belongs to; see StashedColumn.
         sc.heightOwnerId = col.heightOwnerId;
         // Clamped, not value(): an out-of-range activeTileIdx would record an
@@ -633,10 +634,19 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
             break;
         }
     }
+    // The column's presentation as it stands right now, for the latched arms
+    // below. Only a JOIN can have one, and it is read before the insert, which
+    // makes the arriving tile active and can take the extent with it.
+    QString shownTabBeforeInsert;
+    QString heightOwnerBeforeInsert;
     if (liveCol >= 0) {
         // Tile position among the ALREADY-ARRIVED stashed siblings.
         int at = 0;
         const Column& live = state->strip().columns().at(liveCol);
+        if (!live.tiles.isEmpty()) {
+            shownTabBeforeInsert = live.tiles.at(qBound(0, live.activeTileIdx, live.tiles.size() - 1)).windowId;
+        }
+        heightOwnerBeforeInsert = live.heightOwnerId;
         for (int j = 0; j < tileIdx; ++j) {
             if (live.indexOfWindow(sc.tiles.at(j).windowId) >= 0) {
                 ++at;
@@ -658,6 +668,18 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         inserted = state->strip().insertWindowAt(colAt, windowId, sc.width, sc.display, params);
         if (inserted) {
             state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
+            // The stashed maximize-to-edges state, applied on the arrival that
+            // CREATES the column and nowhere else — width and display above
+            // are creation-only for the same reason, and the setter stamps the
+            // whole column through any member, so whichever tile arrives first
+            // brings the flag with it. Re-asserting per arrival would replay it
+            // over a user who un-maximized (or resized, which clears it)
+            // between two sibling arrivals. Fuzzy claims included, on width's
+            // terms rather than windowed-fullscreen's: this is how the COLUMN
+            // presents, not a state pushed onto the arriving client.
+            if (sc.maximizedToEdges) {
+                state->strip().setMaximizedToEdgesForWindow(windowId, true);
+            }
         }
     }
     if (!inserted) {
@@ -680,18 +702,46 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         state->strip().setWindowedFullscreen(windowId, true);
     }
     // Re-assert the column's stashed ACTIVE tile: every insert makes the
-    // arriving tile active, so a tabbed column's shown tab would otherwise
-    // be whichever sibling announced last.
-    if (const QString tab = stash.at(colIdx).activeWindowId;
-        !tab.isEmpty() && tab != windowId && state->strip().columnOfWindow(tab) >= 0) {
-        state->strip().focusWindow(tab, params);
+    // arriving tile active, so a tabbed column's shown tab would otherwise be
+    // whichever sibling announced last.
+    //
+    // Only until it has actually been put in force once, latched per column.
+    // Past that a sibling claiming its slot hours later would rewind a tab the
+    // user has since switched; what it owes the column is the tab shown before
+    // this insert stole it, which inside the burst is the stashed tab anyway.
+    // An EMPTY stashed tab does not latch: engine_serialize.cpp clears the
+    // recorded tab when it did not survive, so arrival order decides, and
+    // latching would arm the hand-back arm for a column with nothing to hand.
+    if (const QString tab = stash.at(colIdx).activeWindowId; !stash.at(colIdx).shownTabRestored) {
+        if (!tab.isEmpty() && tab == windowId) {
+            // The arriving tile IS the shown tab and the insert just made it
+            // active, so the stashed value is in force.
+            stash[colIdx].shownTabRestored = true;
+        } else if (!tab.isEmpty() && state->strip().columnOfWindow(tab) >= 0) {
+            state->strip().focusWindow(tab, params);
+            stash[colIdx].shownTabRestored = true;
+        }
+        // Otherwise the tab has not announced yet (or was never recorded) —
+        // the latch stays clear so a later arrival tries again.
+    } else if (!shownTabBeforeInsert.isEmpty() && shownTabBeforeInsert != windowId
+               && state->strip().columnOfWindow(shownTabBeforeInsert) >= 0) {
+        state->strip().focusWindow(shownTabBeforeInsert, params);
     }
     // The stashed EXTENT owner, a different question from the shown tab and
-    // allowed to name a different window. Skipped until it is on the strip:
-    // the restore arrives one window at a time.
-    if (const QString owner = stash.at(colIdx).heightOwnerId;
-        !owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
-        state->strip().setTabbedHeightOwner(owner);
+    // allowed to name a different window, so it carries its own latch on the
+    // same terms, empty included. The insert can take the ownership on its way
+    // in (the height intent above claims it when it is not Auto), so the
+    // latched arm hands the pre-insert owner back rather than doing nothing.
+    if (const QString owner = stash.at(colIdx).heightOwnerId; !stash.at(colIdx).heightOwnerRestored) {
+        if (!owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
+            // Latched on the attempt, not on setTabbedHeightOwner's answer: it
+            // reports false both for an ownership that already stands and for a
+            // Normal column, and the stashed value has had its say either way.
+            state->strip().setTabbedHeightOwner(owner);
+            stash[colIdx].heightOwnerRestored = true;
+        }
+    } else if (!heightOwnerBeforeInsert.isEmpty() && state->strip().columnOfWindow(heightOwnerBeforeInsert) >= 0) {
+        state->strip().setTabbedHeightOwner(heightOwnerBeforeInsert);
     }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and

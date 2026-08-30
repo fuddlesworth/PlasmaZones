@@ -54,19 +54,22 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // setActiveScreens(QSet()) call in the engine) handles them via a
         // delayed defer so the resnap dispatch can land first. Doing it here
         // would race with that defer and block applyGeometriesBatch.
-        restoreAllMonocleMaximized();
-        // The exact analogue for windowed fullscreen, and deliberately the
-        // context-agnostic full-set drain: the slotScreensChanged sweep skips
-        // sticky and off-current-desktop windows (its per-context discipline
-        // protects setNoBorder), but setFullScreen and the keep flags are
-        // global per-window properties, and with the engine disabled no later
-        // batch or per-context pass exists to release a skipped window — it
-        // would stay KWin-fullscreen with keep-below held for the session.
+        // Windowed fullscreen FIRST, per claimReleaseOrder: both maximize
+        // restores skip a window that still holds fullscreen, so releasing it
+        // ahead of them is what lets a window holding both get a real restore
+        // rather than a skip. Deliberately the context-agnostic full-set
+        // drain: the slotScreensChanged sweep skips sticky and
+        // off-current-desktop windows (its per-context discipline protects
+        // setNoBorder), but setFullScreen and the keep flags are global
+        // per-window properties, and with the engine disabled no later batch
+        // or per-context pass exists to release a skipped window — it would
+        // stay KWin-fullscreen with keep-below held for the session.
         restoreAllWindowedFullscreen();
+        restoreAllMonocleMaximized();
         // Same reasoning for the column-maximize mirror: with the engine
         // disabled no later batch exists to release a window the mirror
         // still holds maximized.
-        restoreAllColumnMaximized();
+        restoreAllMaximizedToEdges();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not
@@ -385,7 +388,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // relies on the next batch, and the engine emits on change, so a
         // strip at rest schedules none. Both are no-ops for a non-member.
         unmaximizeMonocleWindow(windowId);
-        releaseColumnMaximized(windowId, w);
+        releaseMaximizedToEdges(windowId, w);
         return;
     }
     if (!w->isFullScreen()) {
@@ -419,13 +422,13 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // window with its bit still set. Both calls are no-ops for a
             // non-member, and the branch is already under !isFullScreen().
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
         if (screenId.isEmpty()) {
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
@@ -436,7 +439,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // retile coming — demote the stale tracking and release instead.
         if (!m_managedScreens.contains(screenId)) {
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
             m_effect->updateAllDecorations();
@@ -458,14 +461,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // a no-op for any window that is not a member.
             unmaximizeMonocleWindow(windowId);
             // The column mirror needs the identical repair, and now shares the
-            // shape that makes it work: releaseColumnMaximized also retains
+            // shape that makes it work: releaseMaximizedToEdges also retains
             // membership on its fullscreen skip, so a float taken during the
             // hold leaves the window KWin-maximized with the ledger held and
             // no reader — no batch reaches a window that stays floating. Same
             // two guarantees as the call above make this safe: the branch is
             // under !isFullScreen() and the window is confirmed floating, and
             // it is a no-op for a non-member.
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }

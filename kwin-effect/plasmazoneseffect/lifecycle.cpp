@@ -236,7 +236,7 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         //
         // This unload is whole-session, but the maximize INTERCEPTION is
         // per-window: a maximize on a scroll-managed tile is claimed by the
-        // strip's maximize-column verb, which skips the WindowMaximize morph
+        // strip's maximize-to-edges verb, which skips the WindowMaximize morph
         // on purpose (window_connections.cpp, the interceptMaximizeRequest
         // arm) because the column's own batch transition already carries the
         // resize and installing a second one would supersede it.
@@ -448,11 +448,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_tilingHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
-        m_tilingHandler->restoreAllMonocleMaximized();
-        // Same undo obligation for the effect's own setFullScreen calls:
-        // without it an unload strands every windowed-fullscreen client in
-        // KWin fullscreen state with nothing left owning the flag.
+        // Windowed fullscreen FIRST, per claimReleaseOrder: this is the undo
+        // obligation for the effect's own setFullScreen calls (without it an
+        // unload strands every windowed-fullscreen client in KWin fullscreen
+        // state with nothing left owning the flag), and BOTH maximize restores
+        // below skip a window that still holds fullscreen, so it has to land
+        // ahead of them.
         m_tilingHandler->restoreAllWindowedFullscreen();
+        m_tilingHandler->restoreAllMonocleMaximized();
         // And for the maximize bits mirrored for maximized columns, on the
         // same obligation. AFTER the fullscreen release, deliberately: the
         // column restore skips a window that still holds fullscreen, and on
@@ -463,7 +466,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // skipped on either platform. On Wayland the committed bit trails a
         // client round-trip, so the skip applies there too — which is why it
         // retains its ledger entry instead of dropping it.
-        m_tilingHandler->restoreAllColumnMaximized();
+        m_tilingHandler->restoreAllMaximizedToEdges();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

@@ -827,6 +827,22 @@ struct Column
     /// several sized tiles handed its extent to whichever tile sat first in
     /// the stack the moment it was tabbed.
     QString heightOwnerId;
+    /// Maximize-to-edges (niri parity): the column takes the RAW work area
+    /// (ScrollLayoutParams::rawWorkArea) on BOTH axes, with inner gaps
+    /// suppressed between its stacked tiles. Declared state, never inferred
+    /// from rendered rects — the width intent below stays untouched while the
+    /// flag holds, so clearing it is a plain "stop overriding". The user-facing
+    /// width and height sizing verbs clear it (the width toggles and presets,
+    /// expand, equalize, minimize-width, the interactive resize reconcile, and
+    /// the height verbs when they actually change a height or move a tabbed
+    /// column's extent owner); display (tab/stack) toggles do not, and neither
+    /// do the restore paths that re-state a remembered height intent through
+    /// setWindowHeightIntent. resetToDefaults is the deliberate split: it
+    /// clears the flag when a default width is supplied and keeps it when the
+    /// context's width default is "the client decides". This is the one state
+    /// the effect mirrors onto KWin's maximize
+    /// bit; toggleMaximizeColumn is a pure width verb with no mirror.
+    bool maximizedToEdges = false;
 
     bool isEmpty() const
     {
@@ -891,6 +907,12 @@ struct Column
 struct ScrollLayoutParams
 {
     QRect workArea;
+    /// The screen's available geometry BEFORE the outer-gap shrink and the
+    /// smart-gaps zeroing — still strut-adjusted, so panels stay respected.
+    /// Only a maximized-to-edges column resolves against it; everything else
+    /// reads workArea. Clamped to null exactly like workArea when the screen
+    /// is unknown or removed, so the degenerate-area bails cover both.
+    QRect rawWorkArea;
     int gap = 0;
     /// Which way this screen's strip runs. Resolved per screen in
     /// layoutParamsForScreen, so a portrait and a landscape monitor in one
@@ -1014,6 +1036,11 @@ struct ResolvedColumn
     /// read as permanently maximized and every toggle would report success
     /// while changing nothing the user can see.
     bool extentPinnedByMinimum = false;
+    /// The column's declared maximize-to-edges state, copied through from
+    /// Column::maximizedToEdges so the apply pass publishes the DECLARED
+    /// state instead of measuring the rect (measuring is exactly what the
+    /// extentPinnedByMinimum note above warns against).
+    bool maximizedToEdges = false;
     QVector<ResolvedTile> tiles;
 };
 

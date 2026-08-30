@@ -67,7 +67,13 @@ private Q_SLOTS:
         // the library's own suite.
         QCOMPARE(all.size(), DragBypassReasonCount);
         for (auto r : all) {
-            QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
+            const QString token = toWireString(r);
+            QCOMPARE(bypassReasonFromWireString(token), r);
+            // The empty token belongs to None ALONE. Without this the round
+            // trip passes for a value that fell out of toWireString's switch:
+            // it would answer the empty default and parse back to None, which
+            // is only correct for None itself.
+            QCOMPARE(token.isEmpty(), r == DragBypassReason::None);
         }
     }
 
@@ -187,7 +193,7 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
     }
 
-    void testTileRequestValidationColumnMaximized()
+    void testTileRequestValidationMaximizedToEdges()
     {
         // The same three-arm shape as the windowedFullscreen test above, for
         // the flag that mirrors a maximized scroll column onto KWin's maximize
@@ -198,21 +204,21 @@ private Q_SLOTS:
         e.screenId = QStringLiteral("s");
         e.width = 100;
         e.height = 100;
-        e.columnMaximized = true;
+        e.maximizedToEdges = true;
         QVERIFY(e.validationError().isEmpty());
-        // Discriminating substrings on both arms, as above: "columnMaximized"
+        // Discriminating substrings on both arms, as above: "maximizedToEdges"
         // alone is shared by the two messages.
         e.floating = true;
-        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("maximizedToEdges")));
         QVERIFY(e.validationError().contains(QStringLiteral("floating")));
         e.floating = false;
         e.monocle = true;
-        QVERIFY(e.validationError().contains(QStringLiteral("columnMaximized")));
+        QVERIFY(e.validationError().contains(QStringLiteral("maximizedToEdges")));
         QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
         // The pairing with windowedFullscreen is deliberately LEGAL: the two
         // drive different compositor state and a maximized column can hold a
         // windowed-fullscreen tile. Pinned because it is an absence — nothing
-        // else fails if a later tidy-up folds columnMaximized into the
+        // else fails if a later tidy-up folds maximizedToEdges into the
         // windowedFullscreen arms and starts rejecting it.
         e.monocle = false;
         e.windowedFullscreen = true;
@@ -275,7 +281,10 @@ private Q_SLOTS:
         // windowId argument, in one step, because neither form ever shipped;
         // v7 then gave that verb a boolean return so the effect can tell
         // whether the strip changed, since it no longer writes KWin's
-        // maximize bit before dispatching.
+        // maximize bit before dispatching, and later folded in the retarget of
+        // that field to maximizedToEdges plus the new toggleMaximizeToEdges
+        // verb that carries the answer now, again because no form in between
+        // ever shipped.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened
         // struct or method signature does leave a stale peer's slot simply

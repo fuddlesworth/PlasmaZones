@@ -375,10 +375,11 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //   v7: Scrolling.toggleMaximizeColumn gains a BOOLEAN RETURN, (ss) -> (ss)b.
 //       A signature change, so it takes a bump like any other.
 //
-//       It is the only verb on that interface that reports what it did, and it
-//       needs to because it is the only one whose caller is holding compositor
-//       state that only the answer can settle: the effect leaves KWin's
-//       maximize bit where the user's click put it and dispatches, so a request
+//       It and its later twin toggleMaximizeToEdges are the only verbs on that
+//       interface that report what they did, and the twin needs to because its
+//       caller is holding compositor state that only the answer can settle: the
+//       effect leaves KWin's maximize bit where the user's click put it and
+//       dispatches, so a request
 //       nothing acts on leaves the window in the state the user asked for with
 //       no batch coming to impose the strip's own. A void method still replies
 //       success on a silent no-op, so nothing short of a return value can carry
@@ -398,6 +399,23 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       reason v5 states above: no released peer ever spoke an intermediate
 //       version, so the steps within this cycle are unobservable outside the
 //       branch. A change to it AFTER v7 ships needs v8.
+//
+//       Folded into this same unreleased cycle (v5's rule again — neither form
+//       ever shipped): the TileRequestEntry field is RETARGETED from
+//       columnMaximized to maximizedToEdges, same position after
+//       windowedFullscreen, signature unchanged at a(siiiissbbbbssiiibsb).
+//       The old flag was MEASURED (rendered extent vs work area) and mirrored
+//       maximize-column; the new one is DECLARED per-column state (niri
+//       maximize-window-to-edges: raw work area on both axes, gap-free),
+//       driven by the new Scrolling.toggleMaximizeToEdges verb, (ss) -> b on
+//       toggleMaximizeColumn's exact shape. The KWin maximize bit now mirrors
+//       ONLY this state; toggleMaximizeColumn reverts to a pure width verb
+//       with no wire representation (niri Mod+F), though it keeps its boolean
+//       return, and the effect's maximize interception dispatches the new
+//       verb instead. A peer mismatched on the retarget demarshals perfectly
+//       and then mirrors the wrong state — the handshake, not the signature,
+//       is what refuses that pairing. Both verbs answer the same boolean under
+//       the same name on the wire, `changed`.
 inline constexpr int ApiVersion = 7;
 inline constexpr int MinPeerApiVersion = 7;
 

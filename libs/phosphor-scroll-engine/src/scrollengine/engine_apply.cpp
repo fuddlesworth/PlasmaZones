@@ -476,73 +476,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 }
             }
         }
-        // Column maximize, for the effect to mirror onto KWin's maximize bit.
-        // Measured on the RENDERED column rather than read off the strip's
-        // pre-maximize slot: the slot says "we own a stored width to go back
-        // to", which is not the same question. toggleMaximizeColumnAt has
-        // a deliberate arm for a column sitting at full width with NO stored
-        // slot (maximized in an earlier session, or another column's maximize
-        // discarded the single slot), and that column is maximized as far as
-        // the user and the titlebar button are concerned.
-        //
-        // ResolvedColumn::rect is the column's FULL extent, before any
-        // within-column tab-indicator reservation — which is exactly why the
-        // flag is measured here and not effect-side off a tile rect: the
-        // tiles carry the REDUCED rects, so a maximized tabbed column would
-        // measure under full width there.
-        //
-        // The degenerate work area is guarded belt-and-braces: applyLayout
-        // already returned on an invalid work area, so unlike
-        // toggleMaximizeColumnAt's bail — which IS reachable, since a verb
-        // can be driven at any time — this one cannot currently fire. Kept
-        // because the compare it protects reads true for every column at a
-        // zero main extent, which would tell the effect to maximize the whole
-        // strip against a viewport that does not exist.
-        //
-        // A column PINNED BY ITS MINIMUM is excluded. Its extent comes from
-        // its tiles' declared minimum rather than from any width the user
-        // chose, so when that floor alone reaches the work area the column
-        // renders full width whatever the intent says. Measured off the rect
-        // alone it would report maximized permanently: the titlebar button
-        // would latch with no way to un-latch it, and every toggle press
-        // would rewrite persisted intent invisibly while reporting success.
-        // The toggle takes the same exclusion at its pinned-by-minimum bail
-        // (scrollstrip_sizing.cpp, the `columnMinExtentPx >= mainSize` arm),
-        // so the verb and the published verdict agree about which columns are
-        // out of scope. That agreement covers the pinned half ONLY; see below.
-        //
-        // A column is also excluded when the context's DEFAULT width itself
-        // renders full. Under such a setting every column on the strip spans
-        // the work area simply by existing, so a rect-only measure reports
-        // every one of them maximized in every batch, and the effect then
-        // asserts KWin MaximizeFull on every scroll-managed window on the
-        // screen with an is-maximized window rule firing strip-wide. That is
-        // not what the flag means. It names a column the user made full when
-        // full is not the norm.
-        //
-        // THE TOGGLE AND THIS PREDICATE DIVERGE HERE, deliberately on both
-        // sides, and it is worth being plain about it rather than implying
-        // they agree. Under a full-width default the toggle still acts: its
-        // fallback arm (the `defaultIsFullWidth` line in
-        // scrollstrip_sizing.cpp) halves the column and reports true, because
-        // a user whose default is itself full width would otherwise dead-end
-        // with no way to shrink a column. This predicate still publishes
-        // false, for the strip-wide latch reason above. So on such a strip a
-        // maximize press changes the column's width without the flag ever
-        // going true, and the effect's own anti-ballooning clear is what keeps
-        // KWin's maximize bit in step. The two answer different questions:
-        // this one is "should the titlebar button read toggled, safely, for
-        // every column on the strip", the toggle's is "did this press change
-        // the column".
-        const int workAreaMain = params.axis.mainSize(params.workArea);
-        const bool defaultRendersFull =
-            workAreaMain > 0 && ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params) >= workAreaMain;
-        const bool columnMaximized = workAreaMain > 0 && !column.extentPinnedByMinimum && !defaultRendersFull
-            && params.axis.mainSize(column.rect) >= workAreaMain;
+        // Maximize-to-edges, for the effect to mirror onto KWin's maximize
+        // bit. DECLARED state read straight off the resolved column
+        // (Column::maximizedToEdges via ResolvedColumn), never measured from
+        // the rendered rect. The measuring predecessor (columnMaximized)
+        // needed a pinned-by-minimum exclusion and a default-renders-full
+        // exclusion to keep incidental full-width columns from latching the
+        // titlebar button; a declared flag cannot be set incidentally, so
+        // both exclusions die with the measurement. toggleMaximizeColumn is a
+        // pure width verb now and has no wire representation at all — a
+        // full-width column lights nothing, matching niri's Mod+F.
+        const bool maximizedToEdges = column.maximizedToEdges;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 // The dragged window gets NO entry at all for the whole
-                // gesture, columnMaximized included — and since absence is the
+                // gesture, maximizedToEdges included — and since absence is the
                 // only encoding of "not maximized", it is worth stating what
                 // the effect does with that.
                 //
@@ -642,8 +590,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // shape requires — the effect has no column identity to hang it
             // on, and every tile of a maximized column is genuinely in a
             // maximized column.
-            if (columnMaximized) {
-                obj[QLatin1String("columnMaximized")] = true;
+            if (maximizedToEdges) {
+                obj[QLatin1String("maximizedToEdges")] = true;
             }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
@@ -762,22 +710,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             } else {
                 m_lastAppliedWindowedFs.remove(tile.windowId);
             }
-            // The column-maximize flag needs the same leg, and for a stronger
-            // reason than its sibling. It is not just that a toggle moves no
-            // rect: the flag is derived partly from extentPinnedByMinimum, so
-            // it flips whenever a client reports a minimum anywhere in
-            // [resolveColumnWidthPx(width), workAreaMain] on a column already
-            // at full width, or whenever respectMinimumSize is toggled over
-            // one — in both cases with every committed rect byte-identical.
-            // Without this the batch is suppressed and the compositor keeps
-            // asserting a maximize the engine has already dropped.
-            if (m_lastAppliedColumnMaximized.contains(tile.windowId) != columnMaximized) {
+            // The maximize-to-edges flag needs the same leg: a toggle on a
+            // column pinned wider than the raw area by its client minimum
+            // moves no rect at all, and the un-maximize half of any toggle
+            // can land rect-identical when the stored width still renders
+            // full. Without this the batch is suppressed and the compositor
+            // keeps asserting a maximize the engine has already dropped.
+            if (m_lastAppliedMaximizedToEdges.contains(tile.windowId) != maximizedToEdges) {
                 anyEntryChanged = true;
             }
-            if (columnMaximized) {
-                m_lastAppliedColumnMaximized.insert(tile.windowId);
+            if (maximizedToEdges) {
+                m_lastAppliedMaximizedToEdges.insert(tile.windowId);
             } else {
-                m_lastAppliedColumnMaximized.remove(tile.windowId);
+                m_lastAppliedMaximizedToEdges.remove(tile.windowId);
             }
         }
     }

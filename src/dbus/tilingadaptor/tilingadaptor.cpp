@@ -162,7 +162,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // Scrolling column maximize. Same shape as the flag above: only
         // meaningful on a tiled entry, and validationError() below rejects
         // the floating and monocle pairs.
-        entry.columnMaximized = obj.value(QLatin1String("columnMaximized")).toBool(false);
+        entry.maximizedToEdges = obj.value(QLatin1String("maximizedToEdges")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
