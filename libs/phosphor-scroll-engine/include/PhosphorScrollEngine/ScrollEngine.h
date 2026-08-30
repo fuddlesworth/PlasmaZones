@@ -989,7 +989,13 @@ private:
     /// storage — so identity can never drift from the storage it names. That
     /// is what lets the epoch stay opaque: pins, activities and any future
     /// context dimension come along without a consumer learning about them.
-    void announceStripContextIfChanged(const QString& screenId);
+    ///
+    /// Returns whether it actually announced. Callers use that to decide
+    /// whether to arm the force-emit, which pairs the two correctly: the batch
+    /// is forced exactly when a consumer was told to retire, so a retire is
+    /// never left without the batch that repopulates it, and a push that moved
+    /// no screen's context forces nothing.
+    bool announceStripContextIfChanged(const QString& screenId);
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
