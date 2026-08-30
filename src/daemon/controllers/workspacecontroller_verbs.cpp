@@ -90,7 +90,15 @@ void WorkspaceController::drainQuietQueue()
     // Re-entrancy: a drained verb emits mapChanged, which is wired straight
     // back to this slot. Without the latch the nested call would walk the
     // member queue a second time and run the re-queued remainder out of order.
-    if (m_draining || m_quietQueue.isEmpty() || m_reconciler.hasPendingStructuralOps()) {
+    if (m_draining || m_reconciler.hasPendingStructuralOps()) {
+        return;
+    }
+    // Parked open-path routes drain here too, so the emptiness test covers
+    // both queues. They are NOT put on m_quietQueue: that queue is ordered
+    // against the user's verbs, while a parked route is a rule acting on one
+    // window and has its own liveness check for a window that closed while
+    // the reconciler was busy.
+    if (m_quietQueue.isEmpty() && m_parkedNamedRoutes.isEmpty()) {
         return;
     }
     m_draining = true;
@@ -118,6 +126,15 @@ void WorkspaceController::drainQuietQueue()
             }
             queue.at(i)();
         }
+    }
+    // Inside the latch: a re-issued route can start churn of its own (the
+    // move fills the destination, which cuts a new trailing empty there), and
+    // that mapChanged comes straight back to this slot. Draining here means
+    // the nested call is swallowed by m_draining rather than walking a
+    // half-exchanged hash, and anything that re-parks waits for the next
+    // quiet edge exactly as it would have.
+    if (!m_reconciler.hasPendingStructuralOps()) {
+        drainParkedNamedRoutes();
     }
     m_draining = false;
 }
@@ -411,9 +428,21 @@ int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const 
     // later cannot be promised. That is NOT the same as an undeclared name:
     // the positional route is the author's fallback for a name this session
     // does not have, and substituting it here would land the window on a
-    // different desktop for the duration of a transient reconciler op. Report
-    // Unresolvable and let the window stay where it spawned.
+    // different desktop for the duration of a transient reconciler op.
+    //
+    // Parked rather than simply refused, because this is the COMMON case, not
+    // a rare one: a window arriving is itself what fills a workspace, and a
+    // filled workspace is what makes the reconciler cut a new trailing empty.
+    // So the op in flight is usually the one this very window started, and
+    // answering "unresolvable" alone meant an open-path rule reliably did
+    // nothing at exactly the moment it was supposed to act. The park re-issues
+    // it once the reconciler is quiet, on the same queue and with the same
+    // registry liveness check the pre-adoption park already uses. The verdict
+    // stays Unresolvable so the caller still does not substitute the
+    // positional route in the meantime.
     if (m_reconciler.hasPendingStructuralOps()) {
+        m_parkedNamedRoutes.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId),
+                                   ParkedNamedRoute{name, moveOutput});
         return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
     const QString target = desktopIdForName(name);
