@@ -236,7 +236,7 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         //
         // This unload is whole-session, but the maximize INTERCEPTION is
         // per-window: a maximize on a scroll-managed tile is claimed by the
-        // strip's maximize-column verb, which skips the WindowMaximize morph
+        // strip's maximize-to-edges verb, which skips the WindowMaximize morph
         // on purpose (window_connections.cpp, the interceptMaximizeRequest
         // arm) because the column's own batch transition already carries the
         // resize and installing a second one would supersede it.

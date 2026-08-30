@@ -76,6 +76,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
         // (not tracked by the autotile handler's m_notifiedWindowScreens).
         m_trackedScreenPerWindow[w] = getWindowScreenId(w);
+        // Flags-settle eviction backstop: a client can set keep-above or
+        // skip-switcher AFTER mapping (Yakuake queues both in its map-time
+        // request burst; another client may flip one seconds later). Either
+        // flag flips a structural placement filter, and without these the
+        // map-time tileability verdict was permanent — the pre-settle window
+        // got inserted, focused and column-sized. The one-tick routing defer
+        // in slotWindowAdded harvests the same-burst case before any insert;
+        // these catch the late case and release the window
+        // (reevaluateWindowEligibility gates itself on announced windows, so
+        // the connection is free for everything else).
+        connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;
@@ -778,7 +794,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // correction coming.
                     //
                     // CANCEL ONLY, never a dispatch. Routing this through
-                    // interceptMaximizeRequest would cancel and then toggle,
+                    // interceptMaximizeRequest would dispatch a toggle,
                     // turning the user's quick tile into a column maximize (or,
                     // on a member, into an un-maximize).
                     m_tilingHandler->cancelAxisOnlyMaximize(window);
@@ -805,8 +821,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 //
                 // The suppression check keeps this off the handler's own
                 // bracketed writes; interceptMaximizeRequest additionally
-                // no-ops on the Wayland-lagged echo of its cancel, which
-                // arrives with the counter back at 0.
+                // no-ops on the Wayland-lagged echo of the refusal handler's
+                // write-back, which arrives with the counter back at 0.
                 //
                 // A claimed request skips the maximize shader deliberately.
                 // The window does still resize when the column grows, but
@@ -838,15 +854,6 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // effect authored belongs to the strip's own transition, not
                 // to a maximize morph replayed over it.
                 if (m_tilingHandler && m_tilingHandler->isSuppressingMaximizeChanged()) {
-                    // The refusal replay's pass-through marker is consumed
-                    // HERE on X11, because this return is what stops its only
-                    // other consumer running: the replay's emission is
-                    // synchronous with the counter held, so the interception
-                    // above never sees it and the marker would survive to
-                    // swallow the user's next genuine edge. The call is a
-                    // no-op on Wayland, where the committed echo arrives with
-                    // the counter at 0 and the interception consumes it.
-                    m_tilingHandler->consumeSuppressedMaximizePassThrough(window);
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
                 }
@@ -1264,6 +1271,14 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     st->toGeometry = newFrame;
     if (!st->oldSnapshot) {
         st->fromGeometry = preFrame;
+        // preFrame is a REAL rect the window occupied, so any synthetic-origin
+        // marker a kept scroll leg carried no longer describes fromGeometry.
+        // Clear it, or the pending capture wrongly takes the raw path and the
+        // maximize morph's old side loses its decorated composite seed. The
+        // invariant: fromIsSynthetic tracks the provenance of the CURRENT
+        // fromGeometry, maintained at every writer (see drag_snap.cpp's
+        // sticky retarget arm for the synthetic-path counterpart).
+        st->fromIsSynthetic = false;
         // Old-content cross-fade: same guard as the move-start hookup. The
         // raw capture happens on the first paint (post-jump, so it degrades
         // to the live content for undecorated windows), but decorated

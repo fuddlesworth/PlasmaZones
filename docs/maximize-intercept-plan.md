@@ -53,9 +53,10 @@ signal.
 
 The neighbouring `windowMaximizedStateAboutToChange` (connected at
 `window_connections.cpp:713`) is the morph's departure-rect capture and is NOT
-the hook: it fires pre-commit, so the cancel would race the very state change
-it is trying to replace. The post-commit signal lets the interception read
-what actually landed and write the engine's answer over it.
+the hook: it fires pre-commit, so a handler there would race the very state
+change it is reacting to. The post-commit signal lets the interception read
+what actually landed. That capture is still load-bearing for the animation,
+which departs from the rect it recorded.
 
 **Dispatch, not gate.** Resolve the window's engine-authoritative screen and
 its mode, then hand off to that mode's arm (see Per-mode dispatch). The effect
@@ -80,10 +81,15 @@ twice cancels itself. Reuse the fully-maximized edge tracking already at
 or out of `MaximizeFull` drives the verb.
 
 **KWin bit.** Geometry needs no rescue, but the maximize-mode bit does: left
-set it desyncs the titlebar button and fights later frame changes. Clear it
-under the existing `m_suppressMaximizeChanged` guard (`signals.cpp`) so
-`slotWindowMaximizedStateChanged` does not read our own clear as a manual
-unmaximize.
+disagreeing with the engine it desyncs the titlebar button and fights later
+frame changes. This paragraph originally said to clear it on every
+interception. It is NOT cleared there any more, for the reason the Inbound
+section below records: KWin has already moved the window by then, so clearing
+moved it a second time. The bit is left where the user's click put it, and it
+is written back only on the reply handler's refusal path, where no batch is
+coming to impose the strip's own. Every such write goes under the existing
+`m_suppressMaximizeChanged` guard so `slotWindowMaximizedStateChanged` does not
+read our own write as a manual unmaximize.
 
 **Transport.** `ScrollingAdaptor` has no `toggleMaximizeColumn` — the verb is
 shortcut-only today, `ShortcutManager::scrollMaximizeColumnRequested` →
@@ -100,7 +106,7 @@ driven by a shortcut, which means "act on what I am looking at", so the active
 column is the right target and the screen is enough. This one is driven by a
 maximize request naming ONE window, and that window is frequently not the
 active one — a client maximizing itself from the background, a titlebar click
-that does not raise first. Screen-scoped, the verb cancelled the clicked
+that does not raise first. Screen-scoped, the verb claimed the clicked
 window's maximize and then resized a different column. The window id is
 therefore on the wire, and an empty id keeps the shortcut's "active column"
 meaning.
@@ -259,10 +265,26 @@ slot is re-validated against the CURRENT work area for the same reason: a
 **Inbound.** `ScrollingAdaptor::toggleMaximizeColumn`, forwarding to the same
 `ScrollEngine::toggleMaximizeColumn` the shortcut uses.
 `TilingHandler::interceptMaximizeRequest` gates on tiled membership (float
-passes through) and `isScrollingScreen`, CANCELS KWin's flip back to engine
-state, and dispatches the toggle. Hooked into the existing
+passes through) and `isScrollingScreen`, leaves KWin's bit exactly where the
+user's click put it, and dispatches the toggle. Hooked into the existing
 `windowMaximizedStateChanged` lambda after its edge filter, so per-axis double
-firing cannot cancel the toggle against itself.
+firing cannot toggle against itself.
+
+An earlier revision of this plan had the interception CANCEL the flip back to
+engine state before dispatching. That shipped and was then removed, because
+KWin has already moved the window by the time the interception runs, so
+cancelling moved it a second time and the batch's animated leg then departed
+from wherever the cancel had left it. Two consequences of removing it are
+carried elsewhere in the design and are easy to miss. The refused case is no
+longer covered for free, which is why the verb reports whether the strip
+CHANGED rather than whether the call arrived and why the reply handler writes
+the bit back. And the round trip became raceable, which is why
+`m_maximizeToggleInFlight` exists: without it a batch the daemon emitted before
+it dequeued the toggle re-maximizes the window mid-restore.
+
+**Wire (v6 → v7).** `Scrolling.toggleMaximizeColumn` gained a boolean return,
+`(ss)` → `(ss)b`. False means the strip did not change, from either kind of
+refusal, deliberately not distinguished.
 
 **Outbound.** `m_columnMaximizedWindows`, an ownership ledger on the
 `m_monocleMaximizedWindows` pattern, driven from the batch by a pure 3-way
@@ -287,12 +309,32 @@ window, matching `unmaximizeMonocleWindow`. Shedding it there stranded the bit:
 the Apply arm cannot re-assert on any path that reaches the release, because
 Apply requires the wire flag and every such path has it false.
 
-**No in-flight marker**, unlike `clearWindowedFullscreen`. The interception
-changes no membership of its own, so effect state still agrees with the
-pre-toggle flag during the round trip and a stale batch resolves to None on its
-own terms. A toggle is not idempotent, so a marker could not be applied
-symmetrically anyway. Both directions are pinned in
-`staleBatchDuringToggleIsInert`.
+**An in-flight marker**, like `clearWindowedFullscreen` but for a different
+reason. This paragraph originally said none was needed, and that was true only
+while the interception cancelled KWin's flip before dispatching: effect state
+then agreed with the pre-toggle flag for the whole round trip, so a stale batch
+resolved to `None` on its own terms. Removing the cancel took that guarantee
+with it, and the reasoning survived here long enough that two comments in the
+effect cited it as authority for a marker they needed.
+
+`m_maximizeToggleInFlight` covers the gap. On a RESTORE the user's click has
+already cleared KWin's bit while membership has not moved, so a batch the
+daemon emitted before it dequeued the toggle arrives as `(1, 1, 0)` and
+resolves to `Apply`, re-maximizing the window mid-flight. Maximize is `(0, 0,
+1)` and inert, so the exposure is asymmetric. The marker suppresses only the
+`inSet && !kwinMaximized` leg; adopt and `Release` must still run while it is
+armed, or the engine's own answer would be dropped. A toggle is not idempotent,
+which is why the suppression is one-sided rather than symmetric. It is bounded
+in time, because the leg it suppresses is the effect-restart repair and
+latching that off would be worse than the race it closes.
+
+The marker also carries a press that arrives mid-round-trip, so a fast
+double-click toggles twice rather than once.
+
+The unarmed steady state stays pinned in `staleBatchDuringToggleIsInert`; the
+armed cell and the never-suppress-the-engine's-answer invariant are pinned in
+`staleBatchOnRestoreDoesNotReMaximize` and
+`markerNeverSuppressesTheEnginesAnswer`.
 
 **Idempotence against our own echo.** `m_suppressMaximizeChanged` covers the
 synchronous X11 emission from inside `maximize()`, but the Wayland committed

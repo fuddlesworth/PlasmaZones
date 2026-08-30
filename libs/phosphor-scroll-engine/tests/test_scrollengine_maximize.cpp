@@ -175,6 +175,7 @@ private Q_SLOTS:
     void namedVerbTogglesBackOnASecondPress();
     void maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot();
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
+    void verbReportsWhetherTheStripActuallyChanged();
     void maximizedToEdgesRoundTripsThroughTheBlob();
     void maximizedToEdgesTransfersOnAFuzzyAppIdClaim();
     void floatingASoleTileCarriesTheFlagBothWays();
@@ -332,20 +333,34 @@ void TestScrollEngineMaximize::twoColumnsCanBeMaximizedAtOnce()
     const ColumnWidth aOriginal = widthOf(engine, QStringLiteral("app|a"));
     QCOMPARE(aOriginal, ColumnWidth::makeFixed(377));
 
+    // ARMED BEFORE the toggles. applyLayout emits on CHANGE, so a retile after
+    // the state has already settled emits nothing at all — which is why the
+    // spy that used to sit below this point could never be read, and why
+    // wrapping its assertion in an isEmpty() check made it vacuous rather than
+    // tolerant.
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
 
-    // BOTH columns are full width at the same time. The headline claim, and
-    // asserted on the stored WIDTH rather than on a batch: these are the width
-    // verb's presses, which have no wire flag of their own, and only one of two
-    // full-width columns fits the viewport so the other's emitted rect is a
-    // parked one. The maximize arm writes Proportion(1.0) verbatim, so an
-    // implementation that un-maximized a on b's behalf would leave a at the
-    // no-slot fallback width instead and fail here.
+    // BOTH columns are full width at the same time. The headline claim the
+    // slot NAME promises, and asserted on the stored WIDTH rather than on the
+    // batch's flag membership: these are the width verb's presses, which carry
+    // no wire flag of their own since the split, and only one of two full-width
+    // columns fits the viewport so the other's emitted rect is a parked one.
+    // The maximize arm writes Proportion(1.0) verbatim, so an implementation
+    // that un-maximized a on b's behalf would leave a at the no-slot fallback
+    // width instead and fail here.
     QCOMPARE(widthOf(engine, QStringLiteral("app|a")), ColumnWidth::makeProportion(1.0));
     QCOMPARE(widthOf(engine, QStringLiteral("app|b")), ColumnWidth::makeProportion(1.0));
+    // The spy armed above is READ, rather than built and left unexamined: the
+    // presses moved real rects so a batch must exist, and it must publish
+    // maximizedToEdges for nobody. The width verb lighting the wire flag would
+    // put the titlebar button back on a plain full-width column, which is the
+    // behaviour the split removed.
+    QVERIFY2(!tiled.isEmpty(), "the maximize presses must emit a batch");
+    QVERIFY(maximizedInBatch(tiled).isEmpty());
 
     // a's stored width is gone with the single slot, so its un-maximize takes
     // the no-slot fallback rather than restoring aOriginal.
@@ -374,8 +389,18 @@ void TestScrollEngineMaximize::namedVerbTogglesBackOnASecondPress()
     // Focus a, act on b, so the two answers differ throughout.
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
     QCoreApplication::processEvents();
+    // A DISTINCTIVE width on a, for the reason twoColumnsCanBeMaximizedAtOnce
+    // spells out beside its own Fixed(377). Both columns were just opened and
+    // never sized, so without this aBefore == bBefore == the context default
+    // and the cross-talk guard at the end cannot discriminate: it would pass
+    // even if a's column had been handed b's width, and it would pass for any
+    // bug that simply left both at the default.
+    engine->setColumnWidth(ColumnWidth::makeFixed(311), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
     const ColumnWidth aBefore = widthOf(engine, QStringLiteral("app|a"));
     const ColumnWidth bBefore = widthOf(engine, QStringLiteral("app|b"));
+    QCOMPARE(aBefore, ColumnWidth::makeFixed(311));
+    QVERIFY2(aBefore != bBefore, "the two columns must start at distinguishable widths");
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
@@ -408,11 +433,27 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     QCoreApplication::processEvents();
 
+    // A DISTINCTIVE pre-maximize width, for the reason the sibling slots spell
+    // out beside their own Fixed values. Without it the column starts at the
+    // context default, which is exactly what the no-usable-slot arm restores,
+    // so "the slot did not survive" would be indistinguishable from "the slot
+    // survived and restored the same number".
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    engine->setColumnWidth(ColumnWidth::makeFixed(423), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    const ColumnWidth preMaximizeWidth = widthOf(engine, QStringLiteral("app|a"));
+    QCOMPARE(preMaximizeWidth, ColumnWidth::makeFixed(423));
+
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
+    // The wire flag is a SECOND press since the split: the width verb above
+    // moves the column, toggleMaximizeToEdges is what the effect mirrors. Both
+    // halves have to survive the round trip, so both are driven here.
     engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
     const ColumnWidth maximized = widthOf(engine, QStringLiteral("app|a"));
+    QVERIFY2(maximized != preMaximizeWidth, "the maximize must actually widen the column");
 
     // Mode reassignment of the same context — the engine-side proxy for a
     // placement-mode flip, which is arbitrated in the daemon and has no seam
@@ -424,6 +465,9 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     engine->setActiveScreens({});
     QCoreApplication::processEvents();
     engine->setActiveScreens({QStringLiteral("S1")});
+    // ARMED BEFORE the re-adoption, for the same emit-on-change reason: by the
+    // time the windows are back the flag is already settled, so a retile here
+    // emits nothing and a spy armed after it can never be read.
     QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
@@ -445,11 +489,72 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     QVERIFY2(maximizedInBatch(tiled).contains(QStringLiteral("app|a")),
              "the re-adopted column must re-publish maximizedToEdges, since nothing else restores the KWin bit");
 
-    // The slot did NOT survive, so this press takes the no-usable-slot arm.
+    // The slot did NOT survive, so this press takes the no-usable-slot arm,
+    // which restores the context DEFAULT rather than the user's old width.
+    // Asserted on BOTH counts: "narrower than full" alone also passes for a
+    // correct restore-to-old-width, which is the behaviour this slot exists to
+    // show did NOT survive the round trip.
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(engine, QStringLiteral("app|a")) != maximized,
-             "the press must leave the column narrower than full");
+    const ColumnWidth aAfterRoundTrip = widthOf(engine, QStringLiteral("app|a"));
+    QVERIFY2(aAfterRoundTrip != maximized, "the press must leave the column narrower than full");
+    QVERIFY2(aAfterRoundTrip != preMaximizeWidth,
+             "the pre-maximize slot did not survive the mode round trip, so the press must NOT restore it");
+}
+
+void TestScrollEngineMaximize::verbReportsWhetherTheStripActuallyChanged()
+{
+    // The return value is what the compositor's maximize interception steers
+    // on, and it has to mean "the strip changed", not "the call arrived".
+    //
+    // The effect no longer writes KWin's maximize bit before dispatching: the
+    // user's own flip stands for the length of the round trip, so a request
+    // this engine does nothing with leaves the window holding a state no batch
+    // is coming to correct. False is the effect's only cue to put it back.
+    // A verb that answered true for a no-op would strand the window silently.
+    //
+    // BOTH twins are probed. toggleMaximizeToEdges is the verb the effect
+    // actually dispatches, and toggleMaximizeColumn answers the same question
+    // for a scripted caller; they are kept identical by hand, so a drift in
+    // either has to fail here.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+
+    // No windows anywhere: the empty-strip arm.
+    QVERIFY2(!engine->toggleMaximizeColumn(QStringLiteral("S1")), "an empty strip changed nothing");
+    QVERIFY2(!engine->toggleMaximizeToEdges(QStringLiteral("S1")), "an empty strip changed nothing to edges either");
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // A window no column holds. columnOfWindow answers -1 and the strip
+    // refuses, which used to be reported as success because the effect's
+    // response was the same either way. It no longer is.
+    QVERIFY2(!engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|nosuchwindow")),
+             "a window the strip does not hold changed nothing");
+    QVERIFY2(!engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|nosuchwindow")),
+             "a window the strip does not hold changed nothing to edges either");
+
+    // NOT probed here: an unowned screen id. resolveOperationScreen falls back
+    // to the active scrolling screen (then to the lexicographic minimum) for
+    // any id it does not recognise, so a bogus one acts on S1 and reports true
+    // — by design, and unreachable as a negative through this entry point. The
+    // screen-ownership refusal is the ADAPTOR's (refusesScreenVerb), which is
+    // where the D-Bus boundary tests cover it.
+
+    // And the positives, so the slot discriminates rather than just proving
+    // the verb can say no: both directions of a real toggle report true.
+    QVERIFY2(engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "maximizing a real column changed the strip");
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "un-maximizing it changed the strip too");
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "maximizing a real column to edges changed the strip");
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a")),
+             "un-maximizing it to edges changed the strip too");
 }
 
 void TestScrollEngineMaximize::maximizedToEdgesRoundTripsThroughTheBlob()

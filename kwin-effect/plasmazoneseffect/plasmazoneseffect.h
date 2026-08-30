@@ -2514,6 +2514,23 @@ private:
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
 
+    /// Frozen strip displacement for a CLOSE-GRABBED corpse. A deleted window
+    /// cannot re-derive its relocation or view offset in the paint path —
+    /// scrollManagedOutputFor answers null on isDeleted, and the close slot's
+    /// untrack funnel scrubs the tracked screen anyway — yet the corpse keeps
+    /// painting for the whole close animation (ours via holdCloseGrab, or any
+    /// other effect's). Without this, a panned strip's corpse snapped to its
+    /// raw committed rect the frame it died (the park row, for a
+    /// parked-committed tile: a slide to the bottom of the screen). The value
+    /// is the relocation + view offset at the instant of death, applied
+    /// verbatim by paintWindow's deleted-window arm; the corpse's frame is
+    /// frozen too, so a constant is exact. Keyed by EffectWindow* because the
+    /// id caches drop at the end of the close slot. Written only in
+    /// slotWindowClosed (never for a fully-parked corpse, which paints
+    /// nothing anyone can see), erased in the windowDeleted handler with the
+    /// other pointer-keyed maps.
+    QHash<KWin::EffectWindow*, QPointF> m_scrollCorpseFreeze;
+
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
     /// committed rect stays the column slot, stored here as the value. The

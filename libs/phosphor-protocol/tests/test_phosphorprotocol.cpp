@@ -279,10 +279,11 @@ private Q_SLOTS:
         // ServiceConstants.h for what it covers: it widened TileRequestEntry
         // with columnMaximized AND gave Scrolling.toggleMaximizeColumn its
         // windowId argument, in one step, because neither form ever shipped;
-        // v7 then gave that verb a boolean return so the effect can see a
-        // refusal it has already cancelled KWin's maximize for, and later
-        // folded in the retarget of that field to maximizedToEdges plus the
-        // new toggleMaximizeToEdges verb, again because no form in between
+        // v7 then gave that verb a boolean return so the effect can tell
+        // whether the strip changed, since it no longer writes KWin's
+        // maximize bit before dispatching, and later folded in the retarget of
+        // that field to maximizedToEdges plus the new toggleMaximizeToEdges
+        // verb that carries the answer now, again because no form in between
         // ever shipped.
         //
         // The bump is NOT redundant with Qt's signature matching. A widened

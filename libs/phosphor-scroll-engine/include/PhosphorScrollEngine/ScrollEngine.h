@@ -24,6 +24,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -238,14 +239,26 @@ public:
     /// the strip does not hold it, which is what the compositor's maximize
     /// interception needs — that request names one window and the active
     /// column is frequently a different one.
-    void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
+    ///
+    /// Answers whether the strip actually CHANGED, which is the contract the
+    /// compositor's maximize interception is built on. That interception
+    /// dispatches toggleMaximizeToEdges below rather than this verb, and both
+    /// twins answer the same way so the wire shape and the effect's reply
+    /// handling do not have to fork: a request the engine quietly does nothing
+    /// with (no state for the context, an empty strip, a window no column
+    /// holds, a column the verb refuses) leaves the window holding the state
+    /// the USER asked for with no batch coming to impose the strip's answer.
+    /// False is the effect's cue to put the bit back where the engine last had
+    /// it.
+    bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     /// Toggle a column's maximize-to-edges state (full raw work area on both
     /// axes, gap-free; niri maximize-window-to-edges generalized to the
-    /// column). Same window/screen addressing as toggleMaximizeColumn, and
-    /// this is the verb the compositor's maximize interception dispatches:
-    /// the KWin maximize bit mirrors THIS state alone, toggleMaximizeColumn
-    /// being a pure width verb with no mirror.
-    void toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
+    /// column). Same window/screen addressing and the same changed-reporting
+    /// return as toggleMaximizeColumn, and this is the verb the compositor's
+    /// maximize interception dispatches: the KWin maximize bit mirrors THIS
+    /// state alone, toggleMaximizeColumn being a pure width verb with no
+    /// mirror.
+    bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -884,9 +897,10 @@ Q_SIGNALS:
     /// Batch of absolute pixel rects for the KWin effect, same JSON contract
     /// as AutotileEngine::windowsTiled. The field list and semantics live
     /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
-    /// which is the single source: an inline copy here named six of the
-    /// fourteen fields actually emitted and drifted every time one was
-    /// added. Float transitions are signalled separately via
+    /// which is the single source: an inline copy here named a handful of
+    /// the fields actually emitted and drifted every time one was added,
+    /// which is why no count is repeated here. Float transitions are
+    /// signalled separately via
     /// windowFloatingChanged — this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same
@@ -1171,6 +1185,28 @@ private:
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
+    /// Queue-time stamps for m_pendingSelfActivations (latest-wins per id),
+    /// against m_selfActivationClock. An echo the compositor genuinely
+    /// DROPPED (show desktop, focus-stealing prevention) leaves its entry
+    /// stranded — there is no reclaim-on-genuine-focus any more (see the
+    /// windowFocused drain for why that reclaim was wrong) — and without an
+    /// expiry the stranded entry ate the FIRST real click on that window.
+    /// An entry older than kSelfActivationEchoExpiryMs cannot be a live echo
+    /// (echo round trips are milliseconds), so the drain treats a match on
+    /// one as genuine focus. Entries are unstamped/removed at every sweep
+    /// that removes them from the list.
+    ///
+    /// The expiry sits at echo scale, NOT human scale. Multi-desktop use
+    /// strands entries systematically — an activation fired just as the user
+    /// switches desktops never echoes (the compositor refuses or redirects
+    /// the focus) — and every stranded entry eats the FIRST real click on
+    /// its window for the whole expiry window (the 3.4.2→3.4.3 regression:
+    /// clicking a parked window in the taskbar appeared to do nothing, and
+    /// only the second click worked). One second still dwarfs a D-Bus round
+    /// trip under load while sitting below any deliberate re-click.
+    QHash<QString, qint64> m_pendingSelfActivationQueuedAt;
+    QElapsedTimer m_selfActivationClock;
+    static constexpr qint64 kSelfActivationEchoExpiryMs = 1000;
     /// The one arrival whose focus an `openFocused = false` rule declined, held
     /// until its compositor focus report arrives and is consumed exactly once.
     ///
@@ -1251,6 +1287,35 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
+    /// the animation duration): a close-triggered reflow — and the
+    /// focus-adoption reflow the compositor's successor pick fires
+    /// milliseconds later — waits this long so the closing window's
+    /// disappear animation plays over an unchanged strip before the
+    /// neighbours move in. 0 (the no-IScrollSettings seed and the
+    /// animations-off answer) keeps the historical immediate reflow.
+    /// User-driven verbs deliberately bypass the hold: a deliberate action
+    /// mid-animation outranks the settle, and the scheduled flush behind it
+    /// is an idempotent re-apply. windowOpened bypasses it too, accepted
+    /// knowingly: an arrival must place itself (and usually takes focus, so
+    /// its apply cannot wait), which means a close-then-immediate-open chain
+    /// (a file dialog handing back to its parent) reflows over the corpse as
+    /// it always did — best-effort degradation to the pre-hold behaviour,
+    /// not a correctness bug. Only windowClosed and windowFocused defer.
+    /// scheduleRetileForScreen's queued apply is outside the hold for the
+    /// same reason and on the same terms: a config/per-screen change or a
+    /// min-size report landing mid-hold reflows on its own turn.
+    int m_closeReflowDelayMs = 0;
+    /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
+    /// guard that keeps one timer per screen however many closes land inside
+    /// one hold window (each close pushes the deadline; the flush lambda
+    /// reschedules itself for the remainder instead of applying early).
+    QHash<QString, qint64> m_closeReflowHoldUntil;
+    QSet<QString> m_closeReflowFlushScheduled;
+    QElapsedTimer m_closeReflowClock;
+    void startCloseReflowHold(const QString& screenId);
+    bool deferForCloseReflowHold(const QString& screenId);
+    void scheduleCloseReflowFlush(const QString& screenId);
     /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
     /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
     /// is false: tiling defaults this on because a sole window fills the screen

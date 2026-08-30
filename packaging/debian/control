@@ -46,6 +46,11 @@ Build-Depends:
  qt6-base-dev (>= 6.10.0),
  qt6-base-private-dev,
  qt6-declarative-dev,
+# Debian ships QtQuick's private headers in their own package, which
+# phosphor-animation needs for Qt6::QuickPrivate. Note there is no matching
+# split for shadertools: qt6-shadertools-dev already carries the private
+# headers that Qt6::ShaderToolsPrivate wants.
+ qt6-declarative-private-dev,
  qt6-tools-dev,
  qt6-shadertools-dev | libqt6shadertools6-dev,
  qt6-svg-dev | libqt6svg6-dev,
@@ -56,6 +61,9 @@ Build-Depends:
  kwin-dev (>= 6.7.0),
  libxkbcommon-dev,
  libwayland-dev,
+# KWinConfig.cmake does find_dependency(Libdrm), so configuring the KWin
+# effect needs libdrm's headers even though we never include them ourselves.
+ libdrm-dev,
  libvulkan-dev,
  qt6-wayland-dev (>= 6.10.0),
  qt6-wayland-private-dev (>= 6.10.0),

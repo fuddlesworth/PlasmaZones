@@ -22,6 +22,7 @@
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -75,9 +76,10 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
     // entry seen here is consumed regardless of which branch below runs (the
     // entry has been considered for routing whether or not it was applied,
     // so the next open of the same appId won't re-evaluate a dead entry).
-    // Shared by slotWindowAdded and the deferred-routing dispatch
-    // (completeDeferredWindowRoutes) — before the deferred path consumed the
-    // cache too, a deferred window left its entry alive for a later same-app
+    // Sole caller is the deferred-routing dispatch
+    // (completeDeferredWindowRoutes) — every tileable window routes through
+    // the settle defer now, and the dispatch consumes the cache so a
+    // deferred window cannot leave its entry alive for a later same-app
     // sibling to claim.
     const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId);
     if (!cached) {
@@ -257,133 +259,46 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
     }
 
-    if (tileableWindow && m_tilingHandler->isScreenQueryPending()) {
+    // One-tick settle defer: EVERY tileable window routes through the
+    // deferred dispatch (completeDeferredWindowRoutes), not just the
+    // pending-screen-query case that machinery was built for. A client can
+    // map its surface with window-management flags still queued in the same
+    // request burst — Yakuake maps first, then sets keep-above and
+    // skip-switcher — so at windowAdded time it reads as a plain tileable
+    // window, and the inline routing used to insert it, steal focus onto it
+    // and column-size it before the flags landed. Deferring by one
+    // event-loop turn lets the already-queued requests be processed first;
+    // the dispatch re-runs the eligibility filters against the settled
+    // window. The turn is spent inside the first-frame suppression armed
+    // below, so nothing paints early and placement latency is unchanged in
+    // any human-visible sense. Flags that arrive later than the tick are
+    // the eviction arm's job (reevaluateWindowEligibility).
+    if (tileableWindow) {
         if (tileableAppWindow) {
-            // DELIBERATELY broader than the post-query gate below
-            // (canSnapRestore || onManagedScreen): the screen's mode is
-            // exactly what the pending query will tell us, so it cannot
-            // discriminate here. The dispatch releases non-repositioned
-            // windows promptly and re-arms the deadline for the rest
-            // (refreshRestoreSuppressionDeadline), so the over-suppression
-            // costs at most the query latency.
+            // DELIBERATELY broader than the dispatch-side gate
+            // (canSnapRestore || onManagedScreen): the screen's mode may be
+            // mid-query and cannot discriminate here. The dispatch releases
+            // non-repositioned windows promptly and re-arms the deadline for
+            // the rest (refreshRestoreSuppressionDeadline), so the
+            // over-suppression costs one event-loop turn, or the query
+            // latency when one is in flight.
             beginRestoreSuppression(w);
         }
         m_tilingHandler->deferWindowRouting(w, canSnapRestore);
         return;
     }
 
-    bool onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
-
-    // First-frame suppression: KWin places a new window at its centred
-    // placement geometry and composites it there before this handler can
-    // move it into a zone / tile. Withhold the window from compositing
-    // until its repositioning configure lands (see RestoreSuppression) so
-    // it never flashes at the screen centre. Applies to every window we
-    // are about to reposition on open: snap-restore candidates (which
-    // always run resolveWindowRestore below) and tileable windows on an
-    // autotile screen (which the autotile engine tiles). The window is
-    // released by endRestoreSuppression on geometry-settle, on a negative
-    // resolve, or on the hard deadline.
-    if (canSnapRestore || (tileableAppWindow && onManagedScreen)) {
-        beginRestoreSuppression(w);
-    }
-
-    // Instant snap restore: if we have a cached zone geometry for this app,
-    // restore the window immediately — no D-Bus round-trip — so it animates
-    // into its zone without waiting for the async resolve. The async
-    // callResolveWindowRestore still runs to register the zone assignment in
-    // the daemon; this just eliminates the visual lag.
-    //
-    // The cache is authoritative about the target SCREEN, not the window's current
-    // placement. Each entry carries the screenId of the saved zone; the daemon
-    // populates the cache only for pending restores whose saved screen is in snap
-    // mode, so an entry being present means "this app wants to land on a
-    // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
-    // takes absolute compositor coordinates, so applyWindowGeometry moves the
-    // window to whichever screen the cached rect lives on. After teleport,
-    // re-evaluate onManagedScreen because KWin updates the window's output
-    // assignment.
-    //
-    // Rare race: the saved screen may have flipped from snap→autotile between
-    // when the cache was populated and when the window opens. Re-check the
-    // entry's screen mode via the autotile handler before applying.
-    if (tryInstantSnapRestore(w, windowId, canSnapRestore)) {
-        // Re-evaluate screen after teleport — cross-VS/cross-monitor
-        // moveResize updates KWin's output assignment, so the window
-        // may no longer be on an autotile screen.
-        onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
-    }
-
-    if (onManagedScreen && canSnapRestore) {
-        // Window landed on an autotile screen, but may have a pending snap restore
-        // to a non-autotile screen. KWin's session restore places windows at their
-        // saved geometry, which may be a pre-snap floating position in the autotile
-        // screen's area — even though the window was snapped in the snap screen
-        // before logout. Try snap restore FIRST: if it moves the window off the
-        // autotile screen, we avoid the autotile add→float→remove→resnap dance
-        // that causes visible flickering and repeated resizing.
-        QPointer<KWin::EffectWindow> safeW = w;
-        // releaseSuppressionOnMiss=false: if snap-restore finds no zone, the
-        // onComplete autotile path may still reposition the window — keep it
-        // suppressed until that reposition's geometry settles. If autotile
-        // ALSO declines to act (notifyWindowAdded returns false: ineligible
-        // window, daemon decided not to tile, already-notified), nothing
-        // further will move the window, so release suppression immediately
-        // rather than waiting for the 250ms deadline.
-        m_snapHandler->callResolveWindowRestore(
-            w,
-            [this, safeW](bool snapApplied) {
-                if (!safeW || safeW->isDeleted()) {
-                    return;
-                }
-                // Snap restore either moved the window to a snap screen (no-op for
-                // autotile) or didn't apply (window genuinely belongs on autotile).
-                // knownFreeFloating only when it did NOT apply: a zone-placed
-                // window's live frame is the zone rect, and reporting it as a
-                // known free frame would persist the zone rect as float-back.
-                if (!m_tilingHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/!snapApplied)) {
-                    endRestoreSuppression(safeW.data());
-                }
-            },
-            /*releaseSuppressionOnMiss=*/false);
-        return;
-    }
-
-    // Standard path: notify autotile first, then try snap restore. If
-    // autotile is on this screen but doesn't actually act (daemon-side
-    // filter, already-notified, etc.), and snap-restore won't run either
-    // (the !onManagedScreen guard below), nothing will move the window —
-    // release suppression so it doesn't wait out the deadline.
-    const bool autotileTookOver = m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
-    if (!autotileTookOver && onManagedScreen) {
-        endRestoreSuppression(w);
-    }
-
-    if (!onManagedScreen && canSnapRestore) {
-        // Always run the daemon round-trip — INCLUDING after an instant
-        // restore. Instant restore only teleports the window to the cached
-        // zone geometry; it does NOT register the window in the daemon's
-        // SnapState. Zone registration happens exclusively via the daemon's
-        // resolveWindowRestore → commitSnap path, so skipping this call left
-        // every instant-restored window a "ghost": visually in its zone but
-        // absent from SnapState::zoneAssignments. buildOccupiedZoneSet() then
-        // reported the occupied zone as free, so getEmptyZones / snap-assist
-        // / empty-zone auto-placement all treated it as empty. On login the
-        // instant-restore cache serves nearly every window at once, so almost
-        // nothing got registered (zones=1 of 7 in the field logs).
-        //
-        // The earlier skip of this call after an instant restore assumed the
-        // daemon "would just answer no zone" once the snap restore cache
-        // entry was consumed. That is false: the snap restore cache is an
-        // effect-side latency cache, separate from the daemon's pending-restore queue.
-        // pendingRestoreGeometries() (which populates the cache) is a const
-        // read and does NOT consume the daemon queue, so resolveWindowRestore
-        // still matches the pending entry, consumes it, and commits. When
-        // instant restore already placed the window the daemon returns the
-        // same zone rect, so the re-apply is a no-op moveResize to the
-        // current geometry — the price of correct registration.
-        m_snapHandler->callResolveWindowRestore(w);
-    }
+    // Non-tileable windows only from here on (every tileable window returned
+    // through the defer above, and canSnapRestore implies tileable). The
+    // snap-restore, instant-restore and suppression arms that used to live
+    // inline here run in completeDeferredWindowRoutes now. One announce is
+    // still live for THIS path: isEligibleForTilingNotify carries a
+    // fullscreen exemption for scrolling screens that shouldHandleWindow
+    // (and therefore tileableWindow) does not, so a windowed-fullscreen
+    // strip member re-announced at effect bring-up arrives here and must
+    // still reach the daemon — see the re-adoption contract in
+    // floatcleanup.cpp.
+    m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
@@ -451,6 +366,39 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     if (!parkedOffAllOutputs) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/true);
+        // Freeze the corpse's strip displacement BEFORE the removals below
+        // and before onWindowClosed's untrack funnel scrubs the tracked
+        // screen. The paint path cannot re-derive either term for a deleted
+        // window (scrollManagedOutputFor's isDeleted gate), so without this
+        // the delta removal below pulled the relocation out from under a
+        // still-painting corpse and it snapped to its raw committed rect —
+        // for a panned strip's parked-committed tile, the park row at the
+        // bottom of the screen. Applies with or without our close shader:
+        // KWin's own close animation paints the corpse either way. The
+        // corpse's frame is frozen at death, so a one-shot constant is
+        // exact; a mid-leg view offset freezes at its close-instant value,
+        // which just means a dying window stops riding the strip.
+        //
+        // Two accepted approximations. (1) The freeze derives from the
+        // TRACKED screen alone, while the live draw's predicate additionally
+        // exempts user-move/resize and floats from displacement — a tracked
+        // window closed mid-drag mid-leg would inherit an offset it was not
+        // drawn with. The pre-death exemption state is not recoverable from
+        // a Deleted window, so it cannot be honoured here. (2) Damage for
+        // the displaced draw region: our close shader's grab pump repaints
+        // the output per frame; under a purely FOREIGN close animation the
+        // foreign effect's own damage is what keeps the corpse fresh, which
+        // in practice the reflow and neighbour legs also cover.
+        QPointF frozen = scrollVisualTranslationFor(closingWindowId, closingFrame);
+        const QString corpseScreen = m_tilingHandler->scrollTrackedScreenFor(closingWindowId);
+        if (!corpseScreen.isEmpty()) {
+            if (KWin::LogicalOutput* corpseOutput = outputForScreenId(corpseScreen)) {
+                frozen += m_stripViewAnimator->offsetFor(corpseOutput);
+            }
+        }
+        if (!frozen.isNull()) {
+            m_scrollCorpseFreeze.insert(w, frozen);
+        }
     }
     m_windowAnimator->removeAnimation(w);
     // Pairs with damage like every other remover. Note this is not the only

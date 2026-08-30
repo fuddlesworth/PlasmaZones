@@ -325,12 +325,12 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // the strip itself, which is the only place that knows which columns it
     // holds.
     //
-    // ACCEPTANCE IS REPORTED here only to keep the wire shape identical to
-    // toggleMaximizeToEdges below, which is the verb that actually needs it;
-    // that method carries the reason. False means REFUSED HERE, at the
-    // boundary, on both. It does not report what the engine did with an
-    // accepted call — a strip that does not hold the named window refuses
-    // inside the engine and still returns true.
+    // WHETHER THE STRIP CHANGED IS REPORTED here only to keep the wire shape
+    // identical to toggleMaximizeToEdges below, which is the verb whose caller
+    // actually steers on the answer; that method carries the reason. True on
+    // both means the strip changed. False covers a refusal at this boundary
+    // and an accepted call the engine acted on with nothing, and deliberately
+    // does not distinguish them.
     //
     // GATED ON THE CALLER'S SCREEN, ACTED ON THE WINDOW'S. For a named window
     // the engine re-resolves to that window's own tracked screen and acts
@@ -342,36 +342,53 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // needs ScrollEngine::stateForWindow, which is private, and the adaptor
     // deliberately holds no view of engine state beyond isActiveOnScreen.
     // Same on toggleMaximizeToEdges below.
+    //
+    // False therefore covers BOTH refusals, and deliberately does not
+    // distinguish them: refused here at the boundary (no engine, empty screen
+    // id, the engine not active on that screen, the per-context gate closed),
+    // and accepted but acted on by nothing (no state for the context, an empty
+    // strip, a window no column holds, a column the toggle itself refuses).
+    // The effect's response is identical either way — put the bit back where
+    // the engine last had it — so splitting them would be a distinction with
+    // no consumer.
     if (refusesScreenVerb(screenId)) {
         return false;
     }
-    m_engine->toggleMaximizeColumn(screenId, windowId);
-    return true;
+    return m_engine->toggleMaximizeColumn(screenId, windowId);
 }
 
 bool ScrollingAdaptor::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
 {
     // toggleMaximizeColumn's contract, verbatim: same gate chain, same
     // caller-screen gate against an engine that resolves the named window's
-    // own screen, same boundary-only meaning of false.
+    // own screen, same two-refusals meaning of false.
     //
-    // This is the verb the acceptance report exists FOR. The KWin effect
-    // cancels KWin's own maximize before dispatching it, so a silently refused
-    // call would leave the maximize button doing nothing and un-maximizing the
-    // window, on every click, with nothing recording the loss. A void method
-    // still replies success on a silent no-op, so only a real return value can
-    // carry the refusal back.
+    // This is the verb the report exists FOR. The KWin effect leaves KWin's
+    // maximize bit exactly where the user's click put it and dispatches, so a
+    // request nothing acts on leaves the window in the state the user asked
+    // for, and no tile batch is coming to impose the strip's own. False is the
+    // effect's only cue to put the bit back where the engine has it. A void
+    // method still replies success on a silent no-op, so only a real return
+    // value can carry that back.
     if (refusesScreenVerb(screenId)) {
         return false;
     }
-    m_engine->toggleMaximizeToEdges(screenId, windowId);
-    return true;
+    return m_engine->toggleMaximizeToEdges(screenId, windowId);
 }
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
-    // Same wire-boundary policy as focusColumn: malformed input is a silent
-    // no-op, and the engine's own lookup rejects an untracked window.
+    // Malformed input is a silent no-op and the engine's own lookup rejects an
+    // untracked window.
+    //
+    // NOT the same gate chain as focusColumn, and the difference is deliberate.
+    // The screen-scoped verbs also carry ownership and the per-context gate;
+    // this one is window-keyed, so ownership does not apply, and it skips the
+    // CONTEXT gate on purpose. It is a reconciliation call reporting something
+    // that has already happened to the client, so it must follow reality even
+    // into a context whose scrolling the user has switched off. Refusing there
+    // would leave the strip holding a windowed-fullscreen flag for a window
+    // that is no longer fullscreen, with nothing to clear it later.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }
@@ -380,9 +397,10 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 
 void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 {
-    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
-    // is a silent no-op, and the engine's own lookup rejects an untracked
-    // window.
+    // Same wire-boundary policy as clearWindowedFullscreen above, including
+    // its deliberate skip of the per-context gate and the reason for it:
+    // malformed input is a silent no-op, and the engine's own lookup rejects
+    // an untracked window.
     if (!m_engine || windowId.isEmpty()) {
         return;
     }

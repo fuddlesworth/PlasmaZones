@@ -1,6 +1,24 @@
 {
     "releases": [
         {
+            "version": "3.4.3",
+            "date": "2026-08-29",
+            "highlights": [
+                "New: Debian testing and unstable have an apt repository, published through the openSUSE Build Service and rebuilt whenever KWin moves. The install lines are in the README (#1000)",
+                "New: a window moved to another desktop from the pager or the Overview is placed on the desktop it arrives on instead of sitting on top of the stack until you leave and come back (#996)",
+                "New: Default height under Scrolling → New columns offers Window decides, so a window joining a column can keep the height the application asked for (#995)",
+                "Changed: maximizing a window on a scrolling monitor maximizes its column along the strip instead of handing the window to the compositor's maximize. Pressing it again gives the column its width back, and the button lights up whenever a column fills the monitor (#994)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#994)",
+                "Fixed: closing a window in the middle of a panned scrolling strip no longer sends it sliding off the bottom of the screen, and the strip settles once afterwards instead of bouncing between two focus picks (#1003)",
+                "Fixed: restoring a maximized scrolling column no longer snaps out to full width first, a maximize animates from where the window actually was, and a fast double-click does both presses (#1001)",
+                "Fixed: zone shader previews number their zones again, decoration previews show the wallpaper behind the window, and a pack looks the same on its browser card as in its detail preview (#998)",
+                "Fixed: turning a column into tabs keeps every window's height, and the tab in front of you decides the column's height (#995)",
+                "Fixed: clicking the window that already has focus brings it back into view on a strip you had scrolled away from (#992)",
+                "Fixed: the shortcut cheatsheet lists a mode that is actually switched on, and follows the enable switches while it is open (#993)",
+                "Fixed: 345 strings across the German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish translations said the wrong thing and have been corrected (#1004)"
+            ]
+        },
+        {
             "version": "3.4.2",
             "date": "2026-08-27",
             "highlights": [

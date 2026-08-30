@@ -282,6 +282,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
+        m_pendingSelfActivationQueuedAt.remove(windowId);
         m_declinedOpenFocus.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -1144,6 +1145,11 @@ void ScrollEngine::refreshConfigFromSettings()
         : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
     m_smartGaps = settings->scrollingSmartGaps();
+    // Bounded like every other cast/derived read here: the value is derived
+    // daemon-side from the animation duration, but nothing stops a future
+    // implementor handing back garbage, and a multi-second hold would read
+    // as the strip hanging after every close.
+    m_closeReflowDelayMs = qBound(0, settings->scrollingCloseReflowDelayMs(), kMaxCloseReflowDelayMs);
 
     // Tab-indicator geometry. The numeric fields are taken as-is: the config
     // schema already clamps every one of them, and re-clamping here with a

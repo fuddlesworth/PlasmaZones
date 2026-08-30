@@ -70,12 +70,6 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // disabled no later batch exists to release a window the mirror
         // still holds maximized.
         restoreAllMaximizedToEdges();
-        // A pass-through armed by a refused toggle must not outlive the engine
-        // that refused it: its only consumer is the interception, which no
-        // longer runs with scrolling disabled, so a surviving marker would be
-        // spent on the user's first genuine maximize after the engine came
-        // back.
-        m_maximizePassThrough.clear();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not

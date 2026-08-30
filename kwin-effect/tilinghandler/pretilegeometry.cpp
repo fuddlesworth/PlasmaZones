@@ -196,7 +196,27 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // the exact split m_maximizedToEdgesWindows' contract forbids.
                 if (m_maximizedToEdgesWindows.contains(windowId)) {
                     releaseMaximizedToEdges(windowId, safeW);
-                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
+                           && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
+                           && !safeW->isUserResize()) {
+                    // The fullscreen and gesture pair every sibling maximize
+                    // write in this tree carries: maximize() has no fullscreen
+                    // conditional and would moveResize a presenting surface
+                    // down to its restore rect, and mid-gesture it snaps the
+                    // window under the user's pointer.
+                    //
+                    // Unlike releaseMaximizedToEdges, which skips on the same
+                    // conditions and RETAINS membership so a later arm pays
+                    // the bit, this is the non-member arm and holds no ledger,
+                    // so a skip here is permanent rather than deferred. That
+                    // is the accepted trade against shrinking a presenting
+                    // surface.
+                    //
+                    // The gesture terms are REDUNDANT in this file: the
+                    // enclosing lambda already returns early on the same pair
+                    // above. They are kept so this arm reads identically to
+                    // its twin in screenschanged.cpp, where they are live.
+                    // Do not treat this as the place that guard lives.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.

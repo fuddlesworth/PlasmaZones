@@ -910,9 +910,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // Remember the request so windowFocused can tell this
             // activation's echo apart from genuine user focus (the echo
             // contract on windowFocused's drain). Bounded: an effect-side
-            // drop leaves an entry behind until the clear-on-mismatch
-            // reclaims it, and the cap keeps a pathological run of drops
-            // from growing the queue without limit.
+            // drop leaves an entry behind until the per-entry expiry lets
+            // the next genuine click on that window through (see
+            // kSelfActivationEchoExpiryMs), and the cap keeps a pathological
+            // run of drops from growing the queue without limit.
             queueSelfActivation(active);
             Q_EMIT activateWindowRequested(active);
         }
@@ -927,9 +928,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 
 void ScrollEngine::queueSelfActivation(const QString& windowId)
 {
+    if (!m_selfActivationClock.isValid()) {
+        m_selfActivationClock.start();
+    }
     m_pendingSelfActivations.append(windowId);
+    // Latest-wins stamp per id: a re-queue refreshes the entry's liveness,
+    // which is the right answer for the expiry (the newest request's echo is
+    // the one still plausibly in flight).
+    m_pendingSelfActivationQueuedAt.insert(windowId, m_selfActivationClock.elapsed());
     while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
-        m_pendingSelfActivations.removeFirst();
+        const QString dropped = m_pendingSelfActivations.takeFirst();
+        if (!m_pendingSelfActivations.contains(dropped)) {
+            m_pendingSelfActivationQueuedAt.remove(dropped);
+        }
     }
 }
 

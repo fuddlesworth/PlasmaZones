@@ -780,7 +780,17 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // without the other.
         if (m_maximizedToEdgesWindows.contains(it.key())) {
             releaseMaximizedToEdges(it.key(), w);
-        } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+        } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
+                   && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+            // The fullscreen and gesture pair every sibling maximize write in
+            // this tree carries: maximize() has no fullscreen conditional and
+            // would moveResize a presenting surface down to its restore rect,
+            // and mid-gesture it snaps the window under the user's pointer.
+            //
+            // Unlike releaseMaximizedToEdges, which skips on the same
+            // conditions and RETAINS membership so a later arm pays the bit,
+            // this is the non-member arm and holds no ledger, so a skip here
+            // is permanent rather than deferred.
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }
         m_effect->applyWindowGeometry(w, it.value().toRect(), /*allowDuringDrag=*/false,

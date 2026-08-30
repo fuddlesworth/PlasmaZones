@@ -414,6 +414,18 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
         // animated leg, which is what a non-parked window should get.
         return false;
     }
+    return rectAtScrollPark(frame);
+}
+
+bool TilingHandler::rectAtScrollPark(const QRect& rect) const
+{
+    // Shared tail of atScrollPark, split out so the batch apply can ask the
+    // same question of a commit TARGET (see the header doc). The frame-side
+    // preconditions (null window, degenerate geometry) stay in atScrollPark;
+    // this half owns the union test and its fail-closed arms.
+    if (rect.isEmpty()) {
+        return false;
+    }
     if (!KWin::effects) {
         // The doc promises fail-closed on "no resolvable outputs", and every
         // sibling m_scrollVisualDelta damage pair guards this pointer — an
@@ -427,7 +439,7 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
     }
     // No resolvable outputs (disconnect race): the union is empty and every
     // rect is trivially "off" it. Fail closed for the same reason as above.
-    return !unionRect.isEmpty() && !unionRect.intersects(frame);
+    return !unionRect.isEmpty() && !unionRect.intersects(rect);
 }
 
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
@@ -574,7 +586,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     // then send one batch D-Bus call instead of per-window round-trips.
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
-    QStringList batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
+    QSet<QString> batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
     // Announce stamps, one PER ENTRY rather than one for the batch: a single
     // batch-wide stamp would let one superseded window (re-announced on its own
     // between dispatch and reply, or closed) disarm the rollback for every other
@@ -649,7 +661,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // the initial screen query was pending retains explicit spawn provenance.
         const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
         if (wasFresh) {
-            batchFreshWindowIds.append(windowId);
+            batchFreshWindowIds.insert(windowId);
         }
         const bool knownFreeFloating =
             wasFresh || (enteringAutotile && !TilingStateHelpers::isTiledWindow(m_border, windowId));
@@ -739,11 +751,18 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_untiledMinimizeFloats.remove(windowId);
     m_unfloatInFlight.remove(windowId);
-    // The refusal pass-through is a one-shot for the NEXT maximize event on
-    // this window; an unconsumed one must not outlive the tracking, or a
-    // reused appId-derived id inherits it and its first maximize is silently
-    // handed to KWin.
-    m_maximizePassThrough.remove(windowId);
+    // Same reasoning as the retry budget below: ids are appId-derived and
+    // reusable, so a reused id must not inherit an armed toggle. Without this
+    // a window closing inside its own round trip leaves an entry that
+    // suppresses the next occupant's repair arm until it expires.
+    //
+    // This funnel also serves the cross-output transfer of a LIVE window,
+    // where dropping the marker reopens the race for the remainder of a trip
+    // that is still genuinely in flight. Accepted rather than worked around:
+    // the window is changing screens, so the batch that would have been
+    // suppressed is describing the strip it is leaving, and the arriving
+    // strip answers on its own first batch.
+    m_maximizeToggleInFlight.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a
     // reused windowId must not inherit an exhausted budget, and every direct
     // caller of this cleanup (not just onWindowClosed) must drop the
@@ -852,9 +871,12 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // is no later arm, and restoreAllMaximizedToEdges re-inserts on a resolve
     // miss, so a window closing around a daemon-loss drain leaves an entry
     // with no window and no reaper. Window ids are appId-derived and reusable,
-    // and two live readers consume that entry: interceptMaximizeRequest reads
-    // it to decide what to cancel to, so a reused id makes the next window's
-    // first maximize click maximize instead of restore.
+    // and three live readers consume that entry: interceptMaximizeRequest's
+    // already-agrees test, dispatchMaximizeToEdgesToggle's refusal write-back,
+    // and the batch's resolveMaximizeToEdgesAction inSet term. A reused id
+    // therefore feeds all three a membership the new window never earned, and
+    // the refusal write-back is the one that can act on it outright by
+    // driving KWin to MaximizeFull for a column the engine never maximized.
     //
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is
@@ -880,122 +902,6 @@ void TilingHandler::releaseWindowTracking(const QString& windowId, const QString
                                                        QStringLiteral("releaseWindowTracking"));
         qCDebug(lcEffect) << "Notified tiling: releaseWindowTracking" << windowId << "on screen" << screenId;
     }
-}
-
-void TilingHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore)
-{
-    if (!window || window->isDeleted()) {
-        return;
-    }
-    const QString windowId = m_effect->getWindowId(window);
-    m_pendingFreshWindows.insert(windowId);
-    m_deferredWindowRoutes.insert(windowId, DeferredWindowRoute{QPointer<KWin::EffectWindow>(window), canSnapRestore});
-}
-
-QSet<QString> TilingHandler::completeDeferredWindowRoutes()
-{
-    const auto routes = m_deferredWindowRoutes;
-    m_deferredWindowRoutes.clear();
-    QSet<QString> routedWindowIds;
-    routedWindowIds.reserve(routes.size());
-    for (auto it = routes.constBegin(); it != routes.constEnd(); ++it) {
-        routedWindowIds.insert(it.key());
-        KWin::EffectWindow* window = it->window.data();
-        if (!window || window->isDeleted()) {
-            m_pendingFreshWindows.remove(it.key());
-            continue;
-        }
-        const QString windowId = m_effect->getWindowId(window);
-        routedWindowIds.insert(windowId);
-        // The pending-fresh entry was keyed by the id at defer time; if the
-        // live id diverged, the old key would leak forever (the tail prune
-        // below only drops dead/off-screen windows, and this window is
-        // neither).
-        if (windowId != it.key()) {
-            m_pendingFreshWindows.remove(it.key());
-        }
-        // The defer-time first-frame suppression was armed with the standard
-        // deadline, but the screen query this dispatch waited on can outlast
-        // it — re-arm (deadline only, no-op for unsuppressed windows) so the
-        // window doesn't return to compositing at its centred spawn placement
-        // between deadline expiry and the reposition below.
-        m_effect->refreshRestoreSuppressionDeadline(window);
-        // Consume (and maybe apply) the instant snap-restore cache entry,
-        // exactly as the non-deferred open path does — a deferred window must
-        // not leave its entry alive for a later same-app sibling to claim.
-        // A teleport can move the window to another screen; re-resolve after.
-        QString screenId = m_effect->getWindowScreenId(window);
-        if (it->canSnapRestore && !window->isMinimized()
-            && m_effect->tryInstantSnapRestore(window, windowId, /*canSnapRestore=*/true)) {
-            screenId = m_effect->getWindowScreenId(window);
-        }
-        if (m_managedScreens.contains(screenId)) {
-            if (window->isMinimized()) {
-                // A window that minimized while the screen query was pending
-                // is excluded from the follow-up batch (it is in
-                // routedWindowIds), so nothing else will claim it — claim it
-                // here, release the first-frame suppression (a minimized
-                // window paints nothing, and leaving the suppression armed
-                // stalls its eventual restore for the 250 ms deadline), and
-                // drop the spawn-provenance marker so a later re-add cannot
-                // inherit knownFreeFloating=true from a stale entry.
-                // Empty filter: passing m_managedScreens duplicated the
-                // claim's own internal autotile-screen gate verbatim.
-                claimAlreadyMinimizedAsFloated(window, windowId, {}, /*enteringAutotile=*/true);
-                m_pendingFreshWindows.remove(windowId);
-                m_effect->endRestoreSuppression(window);
-                continue;
-            }
-            if (it->canSnapRestore && m_effect->snapHandler()) {
-                QPointer<KWin::EffectWindow> safeWindow = window;
-                m_effect->snapHandler()->callResolveWindowRestore(
-                    window,
-                    [this, safeWindow, windowId](bool snapApplied) {
-                        if (!safeWindow || safeWindow->isDeleted()) {
-                            return;
-                        }
-                        if (!m_managedScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
-                            m_pendingFreshWindows.remove(windowId);
-                            m_effect->endRestoreSuppression(safeWindow.data());
-                            return;
-                        }
-                        // knownFreeFloating only when the restore did NOT
-                        // apply — a zone-placed window's live frame is the
-                        // zone rect, not a genuine free frame.
-                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied)
-                            && !m_notifiedWindows.contains(windowId)) {
-                            m_effect->endRestoreSuppression(safeWindow.data());
-                        }
-                    },
-                    /*releaseSuppressionOnMiss=*/false);
-            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true)
-                       && !m_notifiedWindows.contains(windowId)) {
-                m_effect->endRestoreSuppression(window);
-            }
-            continue;
-        }
-
-        m_pendingFreshWindows.remove(it.key());
-        m_pendingFreshWindows.remove(windowId);
-        if (it->canSnapRestore && !window->isMinimized() && m_effect->snapHandler()) {
-            m_effect->snapHandler()->callResolveWindowRestore(window);
-        } else {
-            m_effect->endRestoreSuppression(window);
-        }
-    }
-
-    const auto pendingIds = m_pendingFreshWindows.values();
-    for (const QString& windowId : pendingIds) {
-        // EXACT resolve: the entry is keyed to a specific instance's id, so a
-        // fuzzy hit on a same-app sibling must not keep a dead entry alive —
-        // a retained stale entry later flips knownFreeFloating to true and
-        // poisons the free-geometry capture.
-        KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
-        if (!window || window->isDeleted() || !m_managedScreens.contains(m_effect->getWindowScreenId(window))) {
-            m_pendingFreshWindows.remove(windowId);
-        }
-    }
-    return routedWindowIds;
 }
 
 void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
@@ -1376,12 +1282,6 @@ void TilingHandler::clearPerSessionDaemonState()
     // cleared map (reading back 0) can never match, and its rollback would
     // otherwise undo the tracking this bring-up's own re-announce establishes.
     m_announceGen.clear();
-    // A maximize pass-through armed by a refusal from the DEAD daemon session
-    // describes a request the new one never saw. Its only consumer is the
-    // interception, and the replay whose echo would have spent it is long
-    // past, so a survivor is handed to the user's next genuine maximize
-    // instead — which is precisely the edge the interception exists to claim.
-    m_maximizePassThrough.clear();
 }
 
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via

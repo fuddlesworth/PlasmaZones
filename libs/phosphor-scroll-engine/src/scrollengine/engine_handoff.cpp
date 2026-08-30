@@ -53,6 +53,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // report, and a mark surviving the release would eat the first genuine
     // focus after re-adoption.
     m_pendingSelfActivations.removeAll(windowId);
+    m_pendingSelfActivationQueuedAt.remove(windowId);
     m_declinedOpenFocus.remove(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
