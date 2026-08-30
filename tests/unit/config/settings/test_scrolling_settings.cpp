@@ -822,6 +822,9 @@ private Q_SLOTS:
         const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
         QVERIFY(respectMin);
         QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());
+        const auto* centerShort = findKey(schema, group, ConfigDefaults::centerShortColumnsKey());
+        QVERIFY(centerShort);
+        QCOMPARE(centerShort->defaultValue.toBool(), ConfigDefaults::scrollingCenterShortColumns());
         const auto* restore = findKey(schema, group, ConfigDefaults::restoreOnLoginKey());
         QVERIFY(restore);
         QCOMPARE(restore->defaultValue.toBool(), ConfigDefaults::scrollingRestoreStripsOnLogin());

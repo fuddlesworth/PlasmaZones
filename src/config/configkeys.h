@@ -500,6 +500,7 @@ public:
     // shared leaf names, disambiguated by group)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    P_CONFIG_KEY(centerShortColumnsKey, "CenterShortColumns")
     P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")

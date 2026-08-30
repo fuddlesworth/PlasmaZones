@@ -765,6 +765,8 @@ void ActionRegistry::registerBuiltinsAppearance()
     for (const ScrollBehaviourToggle& t : {
              ScrollBehaviourToggle{ActionType::SetScrollAlwaysCenterSingleColumn,
                                    ActionSlot::ScrollAlwaysCenterSingleColumn, 30, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollCenterShortColumns, ActionSlot::ScrollCenterShortColumns, 29,
+                                   1.0},
              ScrollBehaviourToggle{ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize, 31,
                                    0.0},
              ScrollBehaviourToggle{ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers, 32, 1.0},

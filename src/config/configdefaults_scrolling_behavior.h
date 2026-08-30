@@ -182,6 +182,15 @@ public:
     {
         return true;
     }
+    /// Center a column's windows on the CROSS axis when their resolved
+    /// extents plus gaps come to less than the column's own extent. Off (the
+    /// niri default), a column shorter than the work area hugs the start
+    /// edge and leaves the slack behind it. Only affects columns that do not
+    /// fill the cross axis, so an all-Auto column is unaffected either way.
+    static constexpr bool scrollingCenterShortColumns()
+    {
+        return false;
+    }
     /// Restore the persisted strip snapshot (column order, widths, tab
     /// stacks, focus) when windows reopen after a restart. Gates only the
     /// cross-session restore; in-session mode round-trips always restore.

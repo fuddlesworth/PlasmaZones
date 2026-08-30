@@ -38,6 +38,10 @@ public:
     /// width floor, tile height floor, interactive-resize floor). The
     /// work-area-oversized float escape ignores this and always fires.
     virtual bool scrollingRespectMinimumSize() const = 0;
+    /// Whether a column whose windows do not fill the cross axis is centred
+    /// on it instead of hugging the start edge. See
+    /// ScrollLayoutParams::centerShortColumns.
+    virtual bool scrollingCenterShortColumns() const = 0;
     /// Zero the outer gaps when the strip holds a single column.
     ///
     /// Scrolling's OWN setting, not the tiling one: the gap VALUES above are

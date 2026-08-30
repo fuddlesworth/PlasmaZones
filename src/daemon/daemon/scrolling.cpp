@@ -266,6 +266,10 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::alwaysCenterSingleColumn(),
                              *params.alwaysCenterSingleColumn);
         }
+        if (params.centerShortColumns) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::centerShortColumns(),
+                             *params.centerShortColumns);
+        }
         if (params.respectMinimumSize) {
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::respectMinimumSize(),
                              *params.respectMinimumSize);

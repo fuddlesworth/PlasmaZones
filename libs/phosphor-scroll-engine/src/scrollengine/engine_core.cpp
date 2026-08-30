@@ -1094,6 +1094,7 @@ void ScrollEngine::refreshConfigFromSettings()
         ? static_cast<PhosphorEngine::StickyWindowHandling>(sticky)
         : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
+    m_centerShortColumns = settings->scrollingCenterShortColumns();
     m_smartGaps = settings->scrollingSmartGaps();
     // Bounded like every other cast/derived read here: the value is derived
     // daemon-side from the animation duration, but nothing stops a future

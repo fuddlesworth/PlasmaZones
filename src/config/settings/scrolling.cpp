@@ -607,6 +607,10 @@ P_STORE_GET(bool, scrollingRespectMinimumSize, scrollingBehaviorGroup, respectMi
 P_STORE_SET_BOOL(setScrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey,
                  scrollingRespectMinimumSizeChanged)
 
+P_STORE_GET(bool, scrollingCenterShortColumns, scrollingBehaviorGroup, centerShortColumnsKey, bool)
+P_STORE_SET_BOOL(setScrollingCenterShortColumns, scrollingBehaviorGroup, centerShortColumnsKey,
+                 scrollingCenterShortColumnsChanged)
+
 P_STORE_GET(bool, scrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey, bool)
 P_STORE_SET_BOOL(setScrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey,
                  scrollingRestoreStripsOnLoginChanged)

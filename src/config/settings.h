@@ -527,6 +527,8 @@ public:
                    setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
     Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
                    NOTIFY scrollingRespectMinimumSizeChanged)
+    Q_PROPERTY(bool scrollingCenterShortColumns READ scrollingCenterShortColumns WRITE setScrollingCenterShortColumns
+                   NOTIFY scrollingCenterShortColumnsChanged)
     Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
                    setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
     Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
@@ -1548,6 +1550,8 @@ public:
     void setScrollingStickyWindowHandling(int handling);
     bool scrollingRespectMinimumSize() const override;
     void setScrollingRespectMinimumSize(bool respect);
+    bool scrollingCenterShortColumns() const override;
+    void setScrollingCenterShortColumns(bool center);
     bool scrollingRestoreStripsOnLogin() const;
     void setScrollingRestoreStripsOnLogin(bool restore);
     bool scrollingRestoreFloatedWindowsOnLogin() const override;

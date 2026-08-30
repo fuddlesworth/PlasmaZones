@@ -80,6 +80,7 @@ private Q_SLOTS:
 
     void focusNewWindowsOverrideIsPerScreen();
     void alwaysCenterSingleColumnOverrideIsPerScreen();
+    void centerShortColumnsOverrideIsPerScreen();
     void centerFocusedColumnOverrideIsPerScreen();
     void respectMinimumSizeOverrideIsPerScreen();
     void smartGapsOverrideIsPerScreen();
@@ -176,6 +177,34 @@ void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
     const QVector<QRect> anchored = engine->visibleTileRects(kS2);
     QCOMPARE(anchored.size(), 1);
     QCOMPARE(Ax::mainPos(anchored.first()), 0);
+}
+
+void TestScrollEngineBehaviour::centerShortColumnsOverrideIsPerScreen()
+{
+    // The CROSS-axis twin of the lone-column slot above, and the rule seam's
+    // only engine-visible effect. Both screens open a window at a fixed
+    // height shorter than the work area; only the overridden one centres it
+    // across the strip, and neither column changes extent.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->centerShortColumns = false;
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 250.0;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::centerShortColumns(), true));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    const QVector<QRect> centered = engine->visibleTileRects(kS1);
+    QCOMPARE(centered.size(), 1);
+    QCOMPARE(Ax::crossLen(centered.first()), 250);
+    QCOMPARE(Ax::crossPos(centered.first()), (ScrollTestUtils::kCrossExtent - 250) / 2);
+
+    const QVector<QRect> anchored = engine->visibleTileRects(kS2);
+    QCOMPARE(anchored.size(), 1);
+    QCOMPARE(Ax::crossLen(anchored.first()), 250);
+    QCOMPARE(Ax::crossPos(anchored.first()), 0);
 }
 
 void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()

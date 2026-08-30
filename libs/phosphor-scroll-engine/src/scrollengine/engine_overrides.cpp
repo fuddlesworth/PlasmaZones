@@ -221,6 +221,11 @@ bool ScrollEngine::effectiveAlwaysCenterSingleColumn(const QVariantMap& override
                                  m_alwaysCenterSingleColumn);
 }
 
+bool ScrollEngine::effectiveCenterShortColumns(const QVariantMap& overrides) const
+{
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::centerShortColumns(), m_centerShortColumns);
+}
+
 bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) const
 {
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::respectMinimumSize(), m_respectMinimumSize);

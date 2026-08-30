@@ -503,6 +503,7 @@ struct ContextScrollingParams
     /// effect, whose paint clip and direct-scanout gate need it, and
     /// `focusFollowsMouse` is effect-only (see its own note below).
     std::optional<bool> alwaysCenterSingleColumn;
+    std::optional<bool> centerShortColumns;
     std::optional<bool> respectMinimumSize;
     std::optional<bool> cropStraddlers;
     std::optional<bool> focusNewWindows;
@@ -602,8 +603,8 @@ struct ContextScrollingParams
     /// behaviour override like the rest and isEmpty() has to see it.
     bool hasBehaviourOverrides() const
     {
-        return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
-            || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
+        return alwaysCenterSingleColumn || centerShortColumns || respectMinimumSize || cropStraddlers || focusNewWindows
+            || smartGaps || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
     }
 
     bool isEmpty() const

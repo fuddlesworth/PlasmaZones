@@ -470,6 +470,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // configured value, rather than coercing to false and silently disabling
     // a behaviour the user never turned off.
     readBool(PWR::ActionSlot::ScrollAlwaysCenterSingleColumn, params.alwaysCenterSingleColumn);
+    readBool(PWR::ActionSlot::ScrollCenterShortColumns, params.centerShortColumns);
     readBool(PWR::ActionSlot::ScrollRespectMinimumSize, params.respectMinimumSize);
     readBool(PWR::ActionSlot::ScrollCropStraddlers, params.cropStraddlers);
     readBool(PWR::ActionSlot::ScrollFocusNewWindows, params.focusNewWindows);

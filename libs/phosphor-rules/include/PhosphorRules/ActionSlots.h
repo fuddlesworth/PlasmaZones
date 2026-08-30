@@ -150,6 +150,7 @@ inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-win
 /// at all: the daemon resolves each per screen and pushes a resolved set to
 /// the compositor (see their own notes).
 inline constexpr QLatin1StringView ScrollAlwaysCenterSingleColumn{"scroll-always-center-single-column"};
+inline constexpr QLatin1StringView ScrollCenterShortColumns{"scroll-center-short-columns"};
 inline constexpr QLatin1StringView ScrollRespectMinimumSize{"scroll-respect-minimum-size"};
 inline constexpr QLatin1StringView ScrollCropStraddlers{"scroll-crop-straddlers"};
 inline constexpr QLatin1StringView ScrollFocusNewWindows{"scroll-focus-new-windows"};

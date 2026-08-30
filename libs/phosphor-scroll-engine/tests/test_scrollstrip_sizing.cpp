@@ -66,6 +66,11 @@ private Q_SLOTS:
     void widthPresetCycleWrapsByExtentNotByPosition();
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
     void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
+    void aShortColumnHugsTheStartEdgeByDefault();
+    void centeringPutsAShortColumnsSlackOnBothSides();
+    void centeringLeavesAColumnThatFillsTheCrossExtentAlone();
+    void centeringMeasuresTheWholeStackIncludingItsGaps();
+    void centeringMovesAShortTabbedColumnAndItsTabsTogether();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -760,6 +765,110 @@ void TestScrollStripSizing::maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot()
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < narrowMain,
              "restoring a stale full-width slot must fall through to the default width");
+}
+
+// The centre-short-columns policy, whose whole surface is the cross-axis
+// ORIGIN of a column that resolved shorter than the work area. The four slots
+// below pin both verdicts (off is the historical top-hugging layout, on is
+// the centred one), the case that must be identical under either (a column
+// that fills), and that the measurement is the stack rather than one tile.
+// Each asserts the cross EXTENT alongside the position: a policy that
+// accidentally resized instead of moving would satisfy a position-only
+// assertion.
+void TestScrollStripSizing::aShortColumnHugsTheStartEdgeByDefault()
+{
+    ScrollLayoutParams params = defaultParams();
+    QVERIFY(!params.centerShortColumns);
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    const QRect r = rectOf(strip.relayout(params), QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(r), 300);
+    QCOMPARE(Ax::crossPos(r), 0);
+}
+
+void TestScrollStripSizing::centeringPutsAShortColumnsSlackOnBothSides()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.centerShortColumns = true;
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    const QRect r = rectOf(strip.relayout(params), QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(r), 300);
+    QCOMPARE(Ax::crossPos(r), (ScrollTestUtils::kCrossExtent - 300) / 2);
+}
+
+void TestScrollStripSizing::centeringLeavesAColumnThatFillsTheCrossExtentAlone()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.centerShortColumns = true;
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+
+    // Auto on a lone tile takes the whole column, so there is no slack to
+    // split and the policy must be a no-op rather than a half-pixel drift.
+    const QRect r = rectOf(strip.relayout(params), QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(r), ScrollTestUtils::kCrossExtent);
+    QCOMPARE(Ax::crossPos(r), 0);
+}
+
+void TestScrollStripSizing::centeringMeasuresTheWholeStackIncludingItsGaps()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.centerShortColumns = true;
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(200)));
+    QVERIFY(strip.focusAdjacentTile(1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+
+    // 200 + gap + 300 = 510 of the 800 available, so 145 of slack leads.
+    // Asserting the SECOND tile too is what pins the gap term: an offset
+    // computed from the heights alone would still place the first one right.
+    const int expectedStart = (ScrollTestUtils::kCrossExtent - (200 + params.gap + 300)) / 2;
+    const auto resolved = strip.relayout(params);
+    const QRect a = rectOf(resolved, QStringLiteral("a"));
+    const QRect b = rectOf(resolved, QStringLiteral("b"));
+    QCOMPARE(Ax::crossPos(a), expectedStart);
+    QCOMPARE(Ax::crossLen(a), 200);
+    QCOMPARE(Ax::crossPos(b), expectedStart + 200 + params.gap);
+    QCOMPARE(Ax::crossLen(b), 300);
+}
+
+// A tabbed column is the second arm the policy touches: it takes its own
+// cross extent from the owning tab's intent, so it can be short for a reason
+// the stack branch never sees. Its tiles ride the column rect, so proving the
+// column moved and the hidden tab came with it is the whole contract.
+void TestScrollStripSizing::centeringMovesAShortTabbedColumnAndItsTabsTogether()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(400)));
+
+    const QRect uncentred = rectOf(strip.relayout(params), QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(uncentred), 400);
+    QCOMPARE(Ax::crossPos(uncentred), 0);
+
+    params.centerShortColumns = true;
+    const auto resolved = strip.relayout(params);
+    const QRect shown = rectOf(resolved, QStringLiteral("b"));
+    QCOMPARE(Ax::crossLen(shown), 400);
+    QCOMPARE(Ax::crossPos(shown), (ScrollTestUtils::kCrossExtent - 400) / 2);
+    // The hidden tab shares the shown tab's rect, so it must have moved too.
+    QCOMPARE(rectOf(resolved, QStringLiteral("a")), shown);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

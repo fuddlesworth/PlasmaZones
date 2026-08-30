@@ -349,6 +349,11 @@ inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaul
 /// policy. Boolean `ActionParam::Value`. Rides the per-screen override map to
 /// `ScrollLayoutParams::alwaysCenterSingleColumn`, beside CenterFocusedColumn.
 inline constexpr QLatin1StringView SetScrollAlwaysCenterSingleColumn{"setScrollAlwaysCenterSingleColumn"};
+/// Whether a column whose windows do not fill the work area is centred across
+/// the strip instead of hugging the start edge. Boolean `ActionParam::Value`.
+/// Rides the per-screen override map to
+/// `ScrollLayoutParams::centerShortColumns`, beside AlwaysCenterSingleColumn.
+inline constexpr QLatin1StringView SetScrollCenterShortColumns{"setScrollCenterShortColumns"};
 /// Whether the strip honours each window's declared minimum size when sizing
 /// its column. Boolean `ActionParam::Value`. Off lets a column go narrower
 /// than the client asked for, which the compositor then clamps on commit.

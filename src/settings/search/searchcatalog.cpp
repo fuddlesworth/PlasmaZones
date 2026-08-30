@@ -861,6 +861,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingRespectMinimumSize"),
                PhosphorI18n::tr("Respect minimum size"),
                {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("resize")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingCenterShortColumns"),
+               PhosphorI18n::tr("Center short columns"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("centre"), PhosphorI18n::tr("vertical"),
+                PhosphorI18n::tr("height"), PhosphorI18n::tr("column")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingRestoreStripsOnLogin"),
                PhosphorI18n::tr("Restore columns on login"),
                {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("session"),

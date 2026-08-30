@@ -1277,6 +1277,7 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    bool m_centerShortColumns = false;
     /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
     /// the animation duration): a close-triggered reflow — and the
     /// focus-adoption reflow the compositor's successor pick fires
@@ -1481,6 +1482,7 @@ private:
     /// keeps a map-taking form, because the open path resolves several values
     /// for one screen off a single fetch.
     bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
+    bool effectiveCenterShortColumns(const QVariantMap& overrides) const;
     bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
     bool effectiveSmartGaps(const QVariantMap& overrides) const;
     /// Hoisted out of the emit loop by its one caller: it is a per-SCREEN

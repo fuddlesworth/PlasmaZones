@@ -483,6 +483,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool,
          QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, which can push other "
                         "windows off screen.")},
+        {CD::centerShortColumnsKey(), CD::scrollingCenterShortColumns(), QMetaType::Bool,
+         QStringLiteral("Center the windows of a column that does not fill the screen, rather than leaving the unused "
+                        "space below them.")},
         {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool,
          QStringLiteral("When windows reopen after a restart, rebuild their columns with the same order, widths, and "
                         "tab groups.")},

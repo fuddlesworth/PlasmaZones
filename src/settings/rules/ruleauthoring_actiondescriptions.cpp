@@ -330,6 +330,11 @@ QString actionDescription(const QString& type)
             "Centers a column on the matched context whenever it is the only one on the strip, "
             "whatever the centering policy says.");
     }
+    if (type == ActionType::SetScrollCenterShortColumns) {
+        return PhosphorI18n::tr(
+            "Centers a column on the matched context when its windows do not fill the screen, "
+            "rather than leaving the unused space below them.");
+    }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(
             "Keeps columns on the matched context at least as large as each window asks to be. "

@@ -149,6 +149,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // hand one monitor the other's axis.
     params.axis = effectiveStripAxis(overrides, axisBasis);
     params.respectMinimumSize = effectiveRespectMinimumSize(overrides);
+    params.centerShortColumns = effectiveCenterShortColumns(overrides);
     params.cropStraddlers = effectiveCropStraddlers(overrides);
     // Each template preset VOCABULARY is likewise parsed once and threaded
     // through: the two default resolvers below resolve a Preset kind against

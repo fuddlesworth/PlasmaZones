@@ -1071,6 +1071,7 @@ Q_SIGNALS:
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();
     void scrollingRespectMinimumSizeChanged();
+    void scrollingCenterShortColumnsChanged();
     void scrollingRestoreStripsOnLoginChanged();
     void scrollingRestoreFloatedWindowsOnLoginChanged();
     void scrollingKeepFloatingAboveChanged();
