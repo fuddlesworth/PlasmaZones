@@ -1174,7 +1174,12 @@ public:
      * RouteToDesktop. Null while dynamic workspaces are off, which makes the
      * RouteToWorkspace slot an inert no-op.
      */
-    void setWorkspaceRouteResolver(std::function<bool(const QString&, const QString&)> resolver)
+    /// The resolver answers the REALIZED desktop number a RouteToWorkspace
+    /// landed the window on (> 0), 0 when the name is not realized (the
+    /// positional RouteToDesktop applies instead), or < 0 when the name is
+    /// declared but momentarily unresolvable (no route, and no positional
+    /// stand-in either — see WorkspaceController::WorkspaceRouteVerdict).
+    void setWorkspaceRouteResolver(std::function<int(const QString&, const QString&)> resolver)
     {
         m_workspaceRouteResolver = std::move(resolver);
     }
@@ -1516,9 +1521,16 @@ public:
      * desktop move for it, so carrying the handoff would diverge daemon state
      * from the compositor. An empty @p targetScreenId (an as-yet-unowned
      * workspace) degrades to the window's own screen for a tracked window.
+     *
+     * @p moveOutput false performs the desktop half only and leaves the window
+     * on the monitor it is already on. The RouteToWorkspace open-path arm uses
+     * it: a workspace route names a desktop, not a monitor, and issuing an
+     * output move there fought the placement pipeline's own screen resolution
+     * (and any RouteToScreen in the same cascade). @p targetScreenId is still
+     * honoured for the engine handoff, which needs a destination context.
      */
     void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
-                                   const QString& direction);
+                                   const QString& direction, bool moveOutput = true);
 
 private:
     /**
@@ -1856,7 +1868,15 @@ private:
     /// Effect-probed per-output-desktops mode (unset until the first report).
     std::optional<bool> m_perOutputDesktopsMode;
     /// Named-workspace open-routing hook (see setWorkspaceRouteResolver).
-    std::function<bool(const QString&, const QString&)> m_workspaceRouteResolver;
+    std::function<int(const QString&, const QString&)> m_workspaceRouteResolver;
+    /// The desktop a RouteToWorkspace realized for a window, written by
+    /// emitOpenRoutingIfMatched and read back in the SAME open round trip by
+    /// the two placement-context builders (calculateSnapToPlacementRule's
+    /// directive and applyOpenRoutingForTiling's destination desktop), which
+    /// would otherwise resolve zones and modes in the desktop the window is
+    /// leaving. Set or cleared on every routing pass, so it cannot go stale
+    /// across opens; also dropped when the window closes.
+    QHash<QString, int> m_workspaceRoutedDesktop;
 };
 
 } // namespace PlasmaZones

@@ -20,6 +20,7 @@
 #include "daemon/controllers/workspacecontroller.h"
 #include "daemon/daemon/helpers.h"
 #include "daemon/overlayservice.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include "phosphor_i18n.h"
@@ -108,19 +109,60 @@ QString kwinShortcutBackupPath()
     // note. The one-time move from the earlier nested path happens here too —
     // dropping this file would strand the user's stolen KWin chords on
     // "none" forever.
-    const QString path =
-        QStandardPaths::writableLocation(QStandardPaths::StateLocation) + QStringLiteral("/kwin-shortcut-backup.json");
-    const QString legacyPath = QStandardPaths::writableLocation(QStandardPaths::StateLocation)
-        + QStringLiteral("/plasmazones/kwin-shortcut-backup.json");
-    if (!QFile::exists(path) && QFile::exists(legacyPath)) {
-        // The destination directory is not guaranteed to exist yet (the
-        // legacy path lives one level DEEPER, so its existence says nothing
-        // about the parent being writable); rename fails silently otherwise
-        // and the user's stolen chords stay stranded in the old file.
+    // .ini, not .json: every reader and writer of this file opens it as
+    // QSettings::IniFormat, and the old .json name described a format it never
+    // had.
+    const QString stateDir = QStandardPaths::writableLocation(QStandardPaths::StateLocation);
+    const QString path = stateDir + QStringLiteral("/kwin-shortcut-backup.ini");
+    // Two legacy names to adopt, both holding the user's stolen chords: the
+    // earlier double-nested path, and the misnamed .json beside the current
+    // one. Dropping either would strand those chords on "none" forever.
+    const QStringList legacyPaths{stateDir + QStringLiteral("/kwin-shortcut-backup.json"),
+                                  stateDir + QStringLiteral("/plasmazones/kwin-shortcut-backup.json"),
+                                  stateDir + QStringLiteral("/plasmazones/kwin-shortcut-backup.ini")};
+    for (const QString& legacyPath : legacyPaths) {
+        if (QFile::exists(path) || !QFile::exists(legacyPath)) {
+            continue;
+        }
+        // The destination directory is not guaranteed to exist yet (a legacy
+        // path can live one level DEEPER, so its existence says nothing about
+        // the parent being writable); rename fails silently otherwise and the
+        // user's stolen chords stay stranded in the old file.
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile::rename(legacyPath, path);
     }
     return path;
+}
+
+/// The adhoc ids bound for named workspaces on the last run. The ids are
+/// derived from the workspace NAME, so a rename or a delete performed while
+/// the daemon is DOWN leaves the old id registered in kglobalshortcutsrc
+/// forever: the backend's transient scrub only covers the first registration
+/// of the SAME id, and the teardown purge walks only the ids this process
+/// holds. Persisting the list is what lets the next bring-up unregister what
+/// no declaration names any more.
+QString namedShortcutIdsPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::StateLocation)
+        + QStringLiteral("/workspace-shortcut-ids.ini");
+}
+
+QStringList loadBoundNamedShortcutIds()
+{
+    const QSettings store(namedShortcutIdsPath(), QSettings::IniFormat);
+    return store.value(QStringLiteral("Shortcuts/boundIds")).toStringList();
+}
+
+void saveBoundNamedShortcutIds(const QStringList& ids)
+{
+    QDir().mkpath(QFileInfo(namedShortcutIdsPath()).absolutePath());
+    QSettings store(namedShortcutIdsPath(), QSettings::IniFormat);
+    if (ids.isEmpty()) {
+        store.remove(QStringLiteral("Shortcuts/boundIds"));
+    } else {
+        store.setValue(QStringLiteral("Shortcuts/boundIds"), ids);
+    }
+    store.sync();
 }
 
 /// Give KWin its stolen desktop-switch chords back (feature or rebind toggle
@@ -223,33 +265,74 @@ void Daemon::initializeWorkspaces()
             }
         }
     };
-    connect(m_workspaceController.get(), &WorkspaceController::desktopReapRequested, wiring,
-            [this, forEachEngine](int desktop) {
-                forEachEngine([desktop](PhosphorEngine::PlacementEngineBase* engine) {
-                    engine->reapDesktopState(desktop);
-                });
+    connect(m_workspaceController.get(), &WorkspaceController::desktopsReapRequested, wiring,
+            [this, forEachEngine](const QList<int>& desktops) {
+                if (desktops.isEmpty()) {
+                    return;
+                }
+                // Cancel BEFORE the prunes, the ordering both count-based
+                // siblings in start.cpp use. The engines cancel their own
+                // drag-insert previews, but cancelDragInsertIfActive also stops
+                // the drag-scroll heartbeat and clears the drop indicator, and
+                // neither of those is engine state — a desktop deleted mid
+                // drag-insert otherwise left the indicator painted and the
+                // timer running for the rest of the session.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviews();
+                }
+                // The whole removal batch runs under one latch: a reap is a
+                // CONTEXT prune, and handleEngineWindowsReleased must not read
+                // it as a mode exit (see m_reapingDesktopState).
+                m_reapingDesktopState = true;
+                for (int desktop : desktops) {
+                    forEachEngine([desktop](PhosphorEngine::PlacementEngineBase* engine) {
+                        engine->reapDesktopState(desktop);
+                    });
+                }
+                m_reapingDesktopState = false;
+
                 // The unified placement store's per-record desktop tag: a
-                // record on the dead desktop degrades to 0 (unknown) and the
+                // record on a dead desktop degrades to 0 (unknown) and the
                 // effect's next report re-stamps it; KWin relocates the real
                 // window either way.
                 if (m_windowTrackingAdaptor) {
                     if (auto* service = m_windowTrackingAdaptor->service()) {
-                        service->placementStore().transform([desktop](PhosphorEngine::WindowPlacement& record) {
-                            if (record.virtualDesktop == desktop) {
-                                record.virtualDesktop = 0;
-                                return true;
-                            }
-                            return false;
-                        });
+                        const QSet<int> dead(desktops.cbegin(), desktops.cend());
+                        const int changed =
+                            service->placementStore().transform([&dead](PhosphorEngine::WindowPlacement& record) {
+                                if (record.virtualDesktop > 0 && dead.contains(record.virtualDesktop)) {
+                                    record.virtualDesktop = 0;
+                                    return true;
+                                }
+                                return false;
+                            });
+                        // transform only MUTATES and counts; it sets no dirty
+                        // bit of its own, and saveState is dirty-gated — so
+                        // without this the degraded records were live in
+                        // memory and absent from the file, and the next
+                        // session restored windows onto desktops that no
+                        // longer exist. Same shape as the excluded-app prune
+                        // in lifecycle.cpp. markDirty is what emits
+                        // stateChanged, which is the save trigger.
+                        if (changed > 0) {
+                            service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+                        }
+                        // The strip snapshots are keyed by
+                        // "screen|desktop|activity", so the reap changed what
+                        // a save would write for them too. Their sole
+                        // producer is the engine's placementChanged, which the
+                        // desktop prune does not raise.
+                        service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyScrollStrips);
                     }
                 }
                 // Daemon-side per-context order cache keyed by desktop NUMBER.
-                // Left behind, the dead desktop's key survives the renumber
+                // Left behind, a dead desktop's key survives the renumber
                 // untouched (it is absent from oldToNew) and a survivor
                 // shifted into that number would land on an identical key.
                 if (!m_lastEngineOrders.isEmpty()) {
+                    const QSet<int> dead(desktops.cbegin(), desktops.cend());
                     for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
-                        if (it.key().desktop == desktop) {
+                        if (dead.contains(it.key().desktop)) {
                             it = m_lastEngineOrders.erase(it);
                         } else {
                             ++it;
@@ -257,25 +340,27 @@ void Daemon::initializeWorkspaces()
                     }
                 }
                 // Same story for the per-mode disabled-desktop gates: the
-                // count-based sweep in start.cpp stands down while the
-                // controller lives, so this is the only cleanup they get.
+                // count-based sweep in start.cpp stands down once this
+                // controller has adopted, so this is the only cleanup they
+                // get from then on.
                 // Composite entries are "screenId/desktopNumber" and virtual
                 // screen ids contain '/' themselves, so the number is the
                 // segment after the LAST one (the split the renumber arm
                 // below uses).
                 if (m_settings) {
+                    const QSet<int> dead(desktops.cbegin(), desktops.cend());
                     bool anyChanged = false;
                     for (const auto mode : PhosphorZones::allModes()) {
                         QStringList disabled = m_settings->disabledDesktops(mode);
                         const auto removed =
-                            std::remove_if(disabled.begin(), disabled.end(), [desktop](const QString& entry) {
+                            std::remove_if(disabled.begin(), disabled.end(), [&dead](const QString& entry) {
                                 const int slash = entry.lastIndexOf(QLatin1Char('/'));
                                 if (slash < 0) {
                                     return false;
                                 }
                                 bool ok = false;
                                 const int entryDesktop = QStringView(entry).mid(slash + 1).toInt(&ok);
-                                return ok && entryDesktop == desktop;
+                                return ok && dead.contains(entryDesktop);
                             });
                         if (removed == disabled.end()) {
                             continue;
@@ -284,6 +369,8 @@ void Daemon::initializeWorkspaces()
                         m_settings->setDisabledDesktops(mode, disabled);
                         anyChanged = true;
                     }
+                    // Once for the whole batch, not once per removed desktop:
+                    // each save is preceded by a full allModes() scan.
                     if (anyChanged) {
                         m_settings->save();
                     }
@@ -291,29 +378,46 @@ void Daemon::initializeWorkspaces()
             });
     connect(m_workspaceController.get(), &WorkspaceController::desktopRenumberRequested, wiring,
             [this, forEachEngine](const QHash<int, int>& oldToNew) {
+                // Cancel before the rewrite, the same ordering the reap arm and
+                // both count-based siblings use: the daemon-side drop indicator
+                // and drag-scroll heartbeat are not engine state and no engine
+                // clears them.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviews();
+                }
                 forEachEngine([&oldToNew](PhosphorEngine::PlacementEngineBase* engine) {
                     engine->renumberDesktopState(oldToNew);
                 });
                 if (m_windowTrackingAdaptor) {
                     if (auto* service = m_windowTrackingAdaptor->service()) {
-                        service->placementStore().transform([&oldToNew](PhosphorEngine::WindowPlacement& record) {
-                            if (record.virtualDesktop <= 0) {
-                                return false; // 0 = sticky/unknown sentinel
-                            }
-                            const int mapped = oldToNew.value(record.virtualDesktop, record.virtualDesktop);
-                            if (mapped == record.virtualDesktop) {
-                                return false;
-                            }
-                            record.virtualDesktop = mapped;
-                            return true;
-                        });
+                        const int changed =
+                            service->placementStore().transform([&oldToNew](PhosphorEngine::WindowPlacement& record) {
+                                if (record.virtualDesktop <= 0) {
+                                    return false; // 0 = sticky/unknown sentinel
+                                }
+                                const int mapped = oldToNew.value(record.virtualDesktop, record.virtualDesktop);
+                                if (mapped == record.virtualDesktop) {
+                                    return false;
+                                }
+                                record.virtualDesktop = mapped;
+                                return true;
+                            });
+                        // transform mutates and counts, nothing more — no dirty
+                        // bit, and saveState is dirty-gated, so a shift that
+                        // nothing else dirtied never reached the file and the
+                        // next session restored every window one renumber
+                        // behind.
+                        if (changed > 0) {
+                            service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+                        }
                     }
                 }
                 // Daemon-side per-context caches keyed by desktop NUMBER. The
-                // count-based sweep in start.cpp is disabled while the
-                // controller lives (it only knows counts and would destroy
-                // the wrong desktop's state), so this renumber pass is the
-                // only thing that keeps them aligned with the engines.
+                // count-based sweep in start.cpp stands down once this
+                // controller has ADOPTED (it only knows counts and would
+                // destroy the wrong desktop's state), so from that point this
+                // renumber pass is the only thing that keeps them aligned with
+                // the engines.
                 if (!m_lastEngineOrders.isEmpty()) {
                     QHash<TilingStateKey, QStringList> remapped;
                     remapped.reserve(m_lastEngineOrders.size());
@@ -458,13 +562,14 @@ void Daemon::initializeWorkspaces()
             });
     // Window relocation: the same handoff machinery the cross-mode
     // directional moves use, same-engine allowed (plan §4.2 reuse).
-    connect(
-        m_workspaceController.get(), &WorkspaceController::windowWorkspaceMoveRequested, wiring,
-        [this](const QString& windowId, const QString& targetScreenId, int targetDesktop, const QString& direction) {
-            if (m_windowTrackingAdaptor) {
-                m_windowTrackingAdaptor->moveWindowToWorkspaceVerb(windowId, targetScreenId, targetDesktop, direction);
-            }
-        });
+    connect(m_workspaceController.get(), &WorkspaceController::windowWorkspaceMoveRequested, wiring,
+            [this](const QString& windowId, const QString& targetScreenId, int targetDesktop, const QString& direction,
+                   bool moveOutput) {
+                if (m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->moveWindowToWorkspaceVerb(windowId, targetScreenId, targetDesktop,
+                                                                       direction, moveOutput);
+                }
+            });
     // Owner-wins snap-back hint (plain prose; toggleable).
     connect(m_workspaceController.get(), &WorkspaceController::snapBackOccurred, wiring,
             [this](const QString& screenId) {
@@ -588,7 +693,16 @@ void Daemon::initializeWorkspaces()
         // once each, and on the Portal backend every flush supersedes the
         // prior in-flight Response, so a user with several named workspaces
         // lost the confirmation for all but the last chord.
-        m_shortcutManager->unregisterAdhocShortcuts(m_workspaceNamedShortcutIds);
+        // Anything this process bound, PLUS anything the LAST run left behind.
+        // Without the persisted half, a workspace renamed or deleted while the
+        // daemon was down keeps its name-derived adhoc id registered for good.
+        QStringList stale = m_workspaceNamedShortcutIds;
+        for (const QString& id : loadBoundNamedShortcutIds()) {
+            if (!stale.contains(id)) {
+                stale.append(id);
+            }
+        }
+        m_shortcutManager->unregisterAdhocShortcuts(stale);
         m_workspaceNamedShortcutIds.clear();
         QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding> bindings;
         // Two names differing only in surrounding whitespace trim to the same
@@ -640,6 +754,7 @@ void Daemon::initializeWorkspaces()
             }
         }
         m_shortcutManager->registerAdhocShortcuts(bindings);
+        saveBoundNamedShortcutIds(m_workspaceNamedShortcutIds);
     };
     m_workspaceController->applyNamedDeclarations(m_settings->workspacesNamedEntries());
     rebindNamedShortcuts();
@@ -691,7 +806,7 @@ void Daemon::initializeWorkspaces()
     // up (state dir, once) and clear it via the KGlobalAccel foreign-rebind
     // pass-through; restore on toggle-off. If the backend cannot rebind
     // (portal), nothing is stolen and snap-back-with-hint stays the story.
-    static const QStringList kKWinDesktopActions{
+    static const QStringList KWinDesktopActions{
         QStringLiteral("Switch One Desktop Up"),          QStringLiteral("Switch One Desktop Down"),
         QStringLiteral("Switch One Desktop to the Left"), QStringLiteral("Switch One Desktop to the Right"),
         QStringLiteral("Walk Through Desktops"),          QStringLiteral("Walk Through Desktops (Reverse)")};
@@ -702,7 +817,7 @@ void Daemon::initializeWorkspaces()
         }
         QDir().mkpath(QFileInfo(kwinShortcutBackupPath()).absolutePath());
         QSettings backup(kwinShortcutBackupPath(), QSettings::IniFormat);
-        for (const QString& action : kKWinDesktopActions) {
+        for (const QString& action : KWinDesktopActions) {
             // A backup entry already present means the chord is ALREADY
             // stolen, so nothing re-reads it. That also means a user who
             // re-binds the stock chord by hand while we hold the backup keeps
@@ -726,9 +841,18 @@ void Daemon::initializeWorkspaces()
             if (current->isEmpty()) {
                 continue; // genuinely unbound; nothing to steal or restore
             }
-            if (m_shortcutManager->setForeignShortcuts(QStringLiteral("kwin"), action, {})) {
-                // The FULL binding (primary + alternates) round-trips.
-                backup.setValue(action, QKeySequence::listToString(*current, QKeySequence::PortableText));
+            // The backup is written and FLUSHED before the clear, per action.
+            // The other order lost the user's chords outright: a crash (or a
+            // kglobalaccel hiccup) between the clear and the post-loop sync
+            // left every chord cleared with nothing on disk to restore from.
+            // A backup for a clear that then failed is harmless — the restore
+            // simply rewrites a value that is already live.
+            // The FULL binding (primary + alternates) round-trips.
+            backup.setValue(action, QKeySequence::listToString(*current, QKeySequence::PortableText));
+            backup.sync();
+            if (!m_shortcutManager->setForeignShortcuts(QStringLiteral("kwin"), action, {})) {
+                qCWarning(lcDaemon) << "could not clear KWin shortcut" << action
+                                    << "- its backup entry stands and the next restore rewrites what is already live";
             }
         }
         backup.sync();
@@ -752,12 +876,16 @@ void Daemon::initializeWorkspaces()
     // RouteToDesktop is skipped); false = name unrealized, fall through.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setWorkspaceRouteResolver([this](const QString& name, const QString& windowId) {
-            // Returns true only when the move was ISSUED (name realized,
-            // desktop resolvable, no structural churn deferring the verb) —
-            // a true suppresses the positional RouteToDesktop fallback, so a
-            // deferred-then-failed move must instead return false here and
-            // let the number route the window.
-            return m_workspaceController && m_workspaceController->routeWindowToNamedWorkspace(name, windowId);
+            // > 0 is the REALIZED desktop the move was issued to (the caller
+            // resolves its placement context on that number, outranking any
+            // positional RouteToDesktop in the same cascade). 0 means the name
+            // is not realized and the positional route applies; < 0 means the
+            // name IS declared but is momentarily unresolvable, and the
+            // positional route must NOT stand in for it.
+            if (!m_workspaceController) {
+                return static_cast<int>(WorkspaceController::WorkspaceRouteVerdict::Unrealized);
+            }
+            return m_workspaceController->routeWindowToNamedWorkspace(name, windowId);
         });
     }
 
@@ -829,6 +957,8 @@ void Daemon::teardownWorkspaces()
     // the next start() would hand unregisterAdhocShortcuts a list of ids the
     // fresh registry has never heard of.
     m_workspaceNamedShortcutIds.clear();
+    // Nothing is bound any more, so the next bring-up has nothing to purge.
+    saveBoundNamedShortcutIds({});
     m_workspaceController.reset();
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setWorkspaceRouteResolver(nullptr);

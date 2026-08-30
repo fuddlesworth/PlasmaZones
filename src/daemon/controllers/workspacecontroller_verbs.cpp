@@ -11,6 +11,9 @@
 
 #include "config/configdefaults.h"
 
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 #include <QLoggingCategory>
@@ -46,16 +49,26 @@ bool WorkspaceController::watchWindowMove(const QString& windowId, const QString
     // match the SECOND watch's entry, clear it and warn — while the second
     // move was still perfectly in flight, and its own arrival then had no
     // entry left to retire.
+    // Keyed on the BARE instance id, not on whatever the verb was handed. The
+    // shortcut verbs pass the registry-canonical COMPOSITE "appId|instanceId",
+    // while the only thing that retires a watch - the census arrival in
+    // onMetadataChanged - is keyed on the instance id the registry reports. A
+    // composite-keyed entry therefore never retired: every successful chord
+    // move warned two seconds later, and reuniteWindowWithOwner's in-flight
+    // guard missed those moves and could fire a reunion mid-move. The instance
+    // id is also the id that cannot change mid-life; the composite can (a
+    // WM_CLASS-mutating app renames it).
+    const QString watchKey = PhosphorIdentity::WindowId::extractInstanceId(windowId);
     const quint64 sequence = ++m_windowMoveSequence;
-    m_pendingWindowMoves.insert(windowId, targetDesktopId);
-    m_windowMoveSequences.insert(windowId, sequence);
-    QTimer::singleShot(WindowMoveTimeoutMs, this, [this, windowId, targetDesktopId, sequence]() {
-        if (m_windowMoveSequences.value(windowId) != sequence) {
+    m_pendingWindowMoves.insert(watchKey, targetDesktopId);
+    m_windowMoveSequences.insert(watchKey, sequence);
+    QTimer::singleShot(WindowMoveTimeoutMs, this, [this, watchKey, windowId, targetDesktopId, sequence]() {
+        if (m_windowMoveSequences.value(watchKey) != sequence) {
             return; // superseded by a later watch (or already retired)
         }
-        if (m_pendingWindowMoves.value(windowId) == targetDesktopId) {
-            m_pendingWindowMoves.remove(windowId);
-            m_windowMoveSequences.remove(windowId);
+        if (m_pendingWindowMoves.value(watchKey) == targetDesktopId) {
+            m_pendingWindowMoves.remove(watchKey);
+            m_windowMoveSequences.remove(watchKey);
             qCWarning(lcWorkspaceCtl) << "workspace move for window" << windowId << "to desktop" << targetDesktopId
                                       << "saw no arrival (effect not loaded, window closed, or handoff refused)";
         }
@@ -111,10 +124,20 @@ void WorkspaceController::drainQuietQueue()
 
 void WorkspaceController::switchScreenToDesktop(const QString& screenId, const QString& desktopId)
 {
-    // The reconciler ledgers the switch and re-emits requestSetCurrent, which
-    // the ctor wiring translates to the effect command. A refusal (a switch
-    // already in flight for this screen) is simply dropped — the in-flight
-    // one wins, matching the snap-back single-correction rule.
+    // Refuse BEFORE the ledger, not after. issueSetCurrent ledgers the switch
+    // and only then re-emits requestSetCurrent; if the translation to a live
+    // desktop number fails there, the entry is already open and nothing can
+    // retire it short of its own expiry, which short-circuits this screen's
+    // foreign evaluation for the whole timeout and then fires a spurious
+    // resync. Asking the same question here keeps a hopeless switch out of the
+    // ledger entirely.
+    if (m_vdm->desktopIndexOf(desktopId) <= 0) {
+        qCWarning(lcWorkspaceCtl) << "not switching" << screenId << "to" << desktopId
+                                  << "- that desktop has no live number yet";
+        return;
+    }
+    // A refusal (a switch already in flight for this screen) is simply dropped
+    // — the in-flight one wins, matching the snap-back single-correction rule.
     m_reconciler.issueSetCurrent(screenId, desktopId);
 }
 
@@ -158,28 +181,8 @@ void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const Q
             return;
         }
         Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop,
-                                            delta < 0 ? QStringLiteral("up") : QStringLiteral("down"));
-    });
-}
-
-void WorkspaceController::moveWindowToWorkspaceAt(const QString& screenId, const QString& windowId, int sliceIndex)
-{
-    if (windowId.isEmpty()) {
-        return;
-    }
-    runWhenQuiet([this, screenId, windowId, sliceIndex]() {
-        const QString target = m_reconciler.desktopIdAtSliceIndex(screenId, sliceIndex);
-        if (target.isEmpty()) {
-            return;
-        }
-        const int desktop = m_vdm->desktopIndexOf(target);
-        if (desktop <= 0) {
-            return;
-        }
-        if (!watchWindowMove(windowId, target)) {
-            return;
-        }
-        Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, QStringLiteral("down"));
+                                            delta < 0 ? QStringLiteral("up") : QStringLiteral("down"),
+                                            /*moveOutput=*/true);
     });
 }
 
@@ -207,7 +210,7 @@ void WorkspaceController::moveColumnToWorkspace(const QString& screenId, const Q
             if (!watchWindowMove(windowId, target)) {
                 continue;
             }
-            Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, direction);
+            Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, direction, /*moveOutput=*/true);
         }
     });
 }
@@ -227,6 +230,13 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
         const QStringList order = m_reconciler.map().screenOrder();
         const int index = order.indexOf(screenId);
         if (index < 0) {
+            return;
+        }
+        // Public API: anything that is neither left nor right is a caller
+        // error, not a synonym for right.
+        if (direction != QLatin1String("left") && direction != QLatin1String("right")) {
+            qCWarning(lcWorkspaceCtl) << "moveWorkspaceToOutput: unknown direction" << direction
+                                      << "- expected left or right";
             return;
         }
         const int neighbourIndex = direction == QLatin1String("left") ? index - 1 : index + 1;
@@ -260,7 +270,8 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
                 if (!watchWindowMove(windowId, movedId)) {
                     continue;
                 }
-                Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, direction);
+                Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, direction,
+                                                    /*moveOutput=*/true);
             }
             // niri semantics: the moved workspace gains focus on its new
             // output (the source already snapped back inside the transfer).
@@ -285,7 +296,23 @@ void WorkspaceController::applyNamedDeclarations(const QVariantList& entries)
             const QVariantMap map = value.toMap();
             PhosphorWorkspaces::NamedWorkspace decl;
             decl.name = map.value(ConfigDefaults::namedEntryNameField()).toString().trimmed();
-            decl.outputId = map.value(ConfigDefaults::namedEntryOutputField()).toString();
+            // The settings UI stores an EFFECTIVE screen id: a "<phys>/vs:N"
+            // virtual id on a subdivided output, or a bare connector name in
+            // the Qt fallback. The map only ever knows physical,
+            // effect-reported ids, so copying the raw value through silently
+            // degraded every pin to unpinned. Same normalization every other
+            // externally sourced screen id in this controller goes through.
+            const QString rawOutput = map.value(ConfigDefaults::namedEntryOutputField()).toString().trimmed();
+            decl.outputId = rawOutput.isEmpty()
+                ? QString()
+                : canonicalScreenId(PhosphorIdentity::VirtualScreenId::extractPhysicalId(rawOutput));
+            if (!decl.outputId.isEmpty() && !m_reconciler.map().screenOrder().contains(decl.outputId)) {
+                // Not fatal - the monitor may simply be unplugged, and the pin
+                // takes effect when it returns - but silently unpinning was
+                // indistinguishable from the id-space bug above.
+                qCWarning(lcWorkspaceCtl) << "named workspace" << decl.name << "pins output" << rawOutput
+                                          << "(resolved to" << decl.outputId << ") which is not a known screen";
+            }
             decl.position = map.value(ConfigDefaults::namedEntryPositionField(), -1).toInt();
             declarations.append(decl);
         }
@@ -316,13 +343,28 @@ QString WorkspaceController::desktopIdForName(const QString& name) const
     if (!m_adopted) {
         return QString();
     }
+    // Tie-break: the FIRST match in the map's canonical desktop-id order wins,
+    // and a second match is reported. The declaration side cannot produce one
+    // - WorkspaceReconciler::applyNamedWorkspaces skips a duplicate trimmed
+    // name outright and realizes each name onto exactly one id - so a
+    // duplicate here means two entries picked up the same name from KWin's own
+    // desktop names, which is the user's to resolve. Deterministic and loud
+    // beats first-hit-and-hope.
     const QStringList ids = m_reconciler.map().allDesktopIds();
+    QString match;
     for (const QString& id : ids) {
-        if (m_reconciler.map().entryFor(id).name == name) {
-            return id;
+        if (m_reconciler.map().entryFor(id).name != name) {
+            continue;
         }
+        if (match.isEmpty()) {
+            match = id;
+            continue;
+        }
+        qCWarning(lcWorkspaceCtl) << "more than one workspace is named" << name << "- using" << match << "and ignoring"
+                                  << id;
+        break;
     }
-    return QString();
+    return match;
 }
 
 void WorkspaceController::focusNamedWorkspace(const QString& name)
@@ -347,32 +389,55 @@ void WorkspaceController::focusNamedWorkspace(const QString& name)
     });
 }
 
-bool WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const QString& windowId)
+int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const QString& windowId)
 {
     // Rules-pipeline arm: no runWhenQuiet — the caller needs the truth NOW.
+    if (windowId.isEmpty()) {
+        return static_cast<int>(WorkspaceRouteVerdict::Unrealized);
+    }
+    // Before adoption the map is the PREVIOUS session's candidate, so
+    // desktopIdForName refuses - and that window is exactly the login /
+    // session-restore population these rules are written for. Park the request
+    // and re-issue it once adoption completes rather than dropping it, and
+    // report Unresolvable so the positional route does not move the window in
+    // the meantime (it would then be moved twice, to two different desktops).
+    if (!m_adopted) {
+        m_parkedNamedRoutes.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId), name);
+        return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
+    }
     // During structural churn the slice index a deferred move would resolve
-    // later cannot be promised, so report false and let the positional
-    // desktop route (if the cascade carries one) handle the window instead.
-    if (windowId.isEmpty() || m_reconciler.hasPendingStructuralOps()) {
-        return false;
+    // later cannot be promised. That is NOT the same as an undeclared name:
+    // the positional route is the author's fallback for a name this session
+    // does not have, and substituting it here would land the window on a
+    // different desktop for the duration of a transient reconciler op. Report
+    // Unresolvable and let the window stay where it spawned.
+    if (m_reconciler.hasPendingStructuralOps()) {
+        return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
     const QString target = desktopIdForName(name);
     if (target.isEmpty()) {
-        return false;
+        return static_cast<int>(WorkspaceRouteVerdict::Unrealized);
     }
     const int desktop = m_vdm->desktopIndexOf(target);
     if (desktop <= 0) {
-        return false;
+        // The name IS realized; only its live number is momentarily missing
+        // (a settled-list echo still in flight). Same reasoning as the
+        // structural-churn arm above.
+        return static_cast<int>(WorkspaceRouteVerdict::Unresolvable);
     }
-    // A sticky refusal (watchWindowMove answering false) reports TRUE, not
-    // false: the rule asked for the window to be on that workspace and it
-    // already is, so the positional RouteToDesktop fallback would be refused
-    // for the very same reason.
+    // A sticky refusal (watchWindowMove answering false) still reports the
+    // REALIZED desktop: the rule asked for the window to be on that workspace
+    // and it already is, so the positional RouteToDesktop fallback would be
+    // refused for the very same reason.
     if (!watchWindowMove(windowId, target)) {
-        return true;
+        return desktop;
     }
-    Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"));
-    return true;
+    // Desktop leg only (see the header): the owner screen is carried so the
+    // handoff re-homes engine state on the right output when the window is
+    // already tracked there, but no output move is issued.
+    Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, QStringLiteral("down"),
+                                        /*moveOutput=*/false);
+    return desktop;
 }
 
 void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const QString& windowId)
@@ -393,8 +458,26 @@ void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const 
             return;
         }
         Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop,
-                                            QStringLiteral("down"));
+                                            QStringLiteral("down"), /*moveOutput=*/true);
     });
+}
+
+void WorkspaceController::drainParkedNamedRoutes()
+{
+    if (m_parkedNamedRoutes.isEmpty()) {
+        return;
+    }
+    const QHash<QString, QString> parked = std::exchange(m_parkedNamedRoutes, {});
+    for (auto it = parked.constBegin(); it != parked.constEnd(); ++it) {
+        // Windows that went away while adoption was pending have nothing to
+        // route. The registry is keyed by instance id, which is how the park
+        // stored them.
+        if (!m_registry || !m_registry->metadata(it.key())) {
+            continue;
+        }
+        qCInfo(lcWorkspaceCtl) << "re-issuing the parked workspace route for" << it.key() << "to" << it.value();
+        routeWindowToNamedWorkspace(it.value(), it.key());
+    }
 }
 
 } // namespace PlasmaZones

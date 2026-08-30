@@ -156,6 +156,7 @@ public:
                           const QString& description, bool persistent) override;
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
+    void suspendShortcut(const QString& id) override;
     void flush() override;
     std::optional<QStringList> currentTriggers(const QString& id) const override;
     bool setForeignShortcuts(const QString& componentName, const QString& actionName,

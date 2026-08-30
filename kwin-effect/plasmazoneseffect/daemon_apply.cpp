@@ -135,7 +135,13 @@ void PlasmaZonesEffect::slotWindowOutputMoveRequested(const QString& windowId, c
         qCDebug(lcEffect) << "slotWindowOutputMoveRequested: unknown screen" << targetScreenId;
         return;
     }
-    if (w->screen() == output) {
+    // windowOutput, not w->screen(): KWin can name the WRONG one of two
+    // identical-model outputs (Discussion #724, see windowOutput's comment),
+    // and the rest of the effect resolves a window's monitor by frame-centre
+    // containment. Deciding "already there" from w->screen() early-returns on a
+    // genuinely needed move, and the daemon's floating-rider leg that follows
+    // this call then silently never happens.
+    if (windowOutput(w) == output) {
         return; // already there (the common tracked-window case never gets here)
     }
     KWin::effects->windowToScreen(w, output);
@@ -156,10 +162,43 @@ void PlasmaZonesEffect::slotSetScreenDesktopRequested(const QString& screenId, i
         qCDebug(lcEffect) << "slotSetScreenDesktopRequested: no desktop numbered" << desktop;
         return;
     }
-    // Per-output switch (Plasma 6.7): only THIS output changes desktop. The
-    // resulting desktopChanged report is the daemon's confirmation (its
-    // reconciler retires the matching SetCurrent ledger entry on it).
-    KWin::effects->setCurrentDesktop(target, output);
+    // Per-output switch (Plasma 6.7): only THIS output changes desktop.
+    //
+    // Suppress the full-screen desktop.switch blend for the duration of the
+    // call: this is a corrective bounce the daemon asked for (owner-wins
+    // snap-back), not a switch the user made, and blending it costs two
+    // output-sized GLTexture captures per output. KWin emits desktopChanged
+    // from inside setCurrentDesktop on the paths that emit it at all, so the
+    // scope guard drops the flag the instant the call returns; if the signal
+    // were ever queued instead, the flag is already down and the blend runs as
+    // it does today. EffectsHandler::setCurrentDesktop returns void, so there
+    // is no status to inspect here — the report below is what makes the
+    // outcome observable.
+    m_programmaticDesktopSwitch = true;
+    {
+        const auto restoreSwitchFlag = qScopeGuard([this] {
+            m_programmaticDesktopSwitch = false;
+        });
+        KWin::effects->setCurrentDesktop(target, output);
+    }
+
+    // FORCED report, and unconditional. The daemon's reconciler retires this
+    // screen's SetCurrent ledger entry on the next screenDesktopChanged for it
+    // and allows only one SetCurrent per screen in flight, so an ALREADY
+    // SATISFIED request — which produces no desktopChanged at all — would
+    // otherwise leave the entry pending until the daemon-side timeout, blocking
+    // that screen's workspace switching and suppressing evaluateForeign for the
+    // same window. Read the live value back rather than echoing `desktop`: a
+    // switch KWin declined must report what actually happened, and that is the
+    // only diagnosis anyone gets for the daemon's expiry warning.
+    if (auto* live = KWin::effects->currentDesktop(output)) {
+        const int liveDesktop = static_cast<int>(live->x11DesktopNumber());
+        if (liveDesktop != desktop) {
+            qCWarning(lcEffect) << "slotSetScreenDesktopRequested: setCurrentDesktop to" << desktop << "on" << screenId
+                                << "left the output on" << liveDesktop;
+        }
+        reportScreenDesktop(output, liveDesktop, /*force=*/true);
+    }
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,

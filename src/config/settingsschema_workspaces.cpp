@@ -4,15 +4,18 @@
 // The workspaces half of the settings schema: the Workspaces.Behavior gate
 // scalars, the Workspaces.Named declaration list and its canonicalizing
 // validator, and the Workspaces.Slots target family. Split out of
-// settingsschema.cpp for file-size; the single entry point
-// (appendWorkspacesSchema) is declared alongside every other appendXxxSchema
-// in settingsschema.h.
+// settingsschema.cpp for file-size, along with the workspace rows of the
+// Shortcuts.Global list. Both entry points (appendWorkspacesSchema and
+// appendWorkspacesShortcutKeys) are declared alongside every other
+// appendXxxSchema in settingsschema.h.
 
 #include "settingsschema.h"
 
 #include "configdefaults.h"
 
 #include <QSet>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -45,6 +48,22 @@ QVariant canonicalNamedEntries(const QVariant& v)
         const QVariantMap src = entry.toMap();
         const QString name = src.value(CD::namedEntryNameField()).toString().trimmed();
         if (name.isEmpty() || seenNames.contains(name)) {
+            continue;
+        }
+        // The name leaves this process: the daemon uses it as the objectName
+        // and description of an ad-hoc KGlobalAccel action, and KGlobalAccel
+        // persists both into kglobalshortcutsrc. A hand-edited config is the
+        // one path that reaches here unvalidated (the D-Bus boundary checks
+        // its own callers), so bound the length and drop anything carrying a
+        // control or formatting character, which an INI file cannot round-trip
+        // and no real workspace name contains.
+        if (name.size() > CD::WorkspaceNameMaxLength) {
+            continue;
+        }
+        const bool printable = std::all_of(name.cbegin(), name.cend(), [](QChar c) {
+            return c.isPrint();
+        });
+        if (!printable) {
             continue;
         }
         seenNames.insert(name);
@@ -98,6 +117,55 @@ void appendWorkspacesSchema(PhosphorConfig::Schema& schema)
         slots.append(
             {CD::workspaceSlotTargetKey(slot), CD::workspaceSlotTarget(), QMetaType::QString,
              QStringLiteral("The named workspace quick slot %1 targets. Empty leaves the slot unassigned.").arg(slot)});
+    }
+}
+
+/// The Shortcuts.Global rows for the dynamic-workspaces verbs and quick
+/// slots. Declared in settingsschema.h and called from appendShortcutsSchema
+/// while it builds that group's list.
+void appendWorkspacesShortcutKeys(QVector<PhosphorConfig::KeyDef>& globals)
+{
+    using CD = ConfigDefaults;
+    const auto addShortcut = [](QVector<PhosphorConfig::KeyDef>& list, const QString& key, const QString& defaultValue,
+                                const QString& description) {
+        list.append({key, defaultValue, QMetaType::QString, description});
+    };
+    addShortcut(globals, CD::workspaceFocusUpKey(), CD::workspaceFocusUpShortcut(),
+                QStringLiteral("Switches this monitor to the workspace above its current one."));
+    addShortcut(globals, CD::workspaceFocusDownKey(), CD::workspaceFocusDownShortcut(),
+                QStringLiteral("Switches this monitor to the workspace below its current one."));
+    addShortcut(globals, CD::workspaceMoveWindowUpKey(), CD::workspaceMoveWindowUpShortcut(),
+                QStringLiteral("Moves the focused window to the workspace above this monitor's current one."));
+    addShortcut(globals, CD::workspaceMoveWindowDownKey(), CD::workspaceMoveWindowDownShortcut(),
+                QStringLiteral("Moves the focused window to the workspace below this monitor's current one."));
+    addShortcut(globals, CD::workspaceMoveColumnUpKey(), CD::workspaceMoveColumnUpShortcut(),
+                QStringLiteral("Moves the focused window's whole scrolling column to the workspace above."));
+    addShortcut(globals, CD::workspaceMoveColumnDownKey(), CD::workspaceMoveColumnDownShortcut(),
+                QStringLiteral("Moves the focused window's whole scrolling column to the workspace below."));
+    addShortcut(globals, CD::workspaceReorderUpKey(), CD::workspaceReorderUpShortcut(),
+                QStringLiteral("Moves the current workspace one place earlier in this monitor's list."));
+    addShortcut(globals, CD::workspaceReorderDownKey(), CD::workspaceReorderDownShortcut(),
+                QStringLiteral("Moves the current workspace one place later in this monitor's list."));
+    addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut(),
+                QStringLiteral("Hands the current workspace to the monitor to the left."));
+    addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut(),
+                QStringLiteral("Hands the current workspace to the monitor to the right."));
+    // Workspace quick-shortcut slots. Both families ship unbound: a slot's
+    // target workspace is unassigned until the user picks one, so a factory
+    // chord would claim a global binding that resolves to nothing on a fresh
+    // install. Both are daemon-registered, so the user assigns the chords in
+    // KDE's Shortcuts settings and the targets in the app.
+    for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
+        addShortcut(globals, CD::workspaceMoveSlotKey(slot), CD::workspaceMoveSlotShortcut(),
+                    QStringLiteral("Moves the focused window to the named workspace assigned to quick slot %1. "
+                                   "Unbound by default.")
+                        .arg(slot));
+        // Positional, unlike the move slot above: this switches the acting
+        // monitor to the Nth workspace of its own list. It does not read the
+        // Workspaces.Slots target assignments.
+        addShortcut(
+            globals, CD::workspaceFocusSlotKey(slot), CD::workspaceFocusSlotShortcut(),
+            QStringLiteral("Switches this monitor to workspace %1 of its own list. Unbound by default.").arg(slot));
     }
 }
 

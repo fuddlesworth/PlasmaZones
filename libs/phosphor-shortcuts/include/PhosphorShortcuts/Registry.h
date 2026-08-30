@@ -100,6 +100,29 @@ public:
     void unbind(const QString& id);
 
     /**
+     * Park or revive a binding without forgetting it and without destroying
+     * what the platform persists about it. Takes effect after flush().
+     * Unknown ids are logged and ignored. Entries are active when bound.
+     *
+     * This is how a consumer gates a whole family of shortcuts on a feature
+     * switch. Rebinding the family to an empty sequence looks equivalent and
+     * is not: that routes through IBackend::unregisterShortcut, which on
+     * KGlobalAccel wipes the user's saved chords for every id in the family,
+     * so turning the feature back on hands back the compiled-in defaults
+     * rather than what the user had. An inactive entry goes through
+     * IBackend::suspendShortcut instead, and reviving it re-registers with
+     * the stored binding intact.
+     *
+     * An inactive entry reports no effectiveTriggers(): nothing the user can
+     * press reaches it. shortcut() still reports the stored sequence, which
+     * is what the consumer would grab again on revival.
+     */
+    void setActive(const QString& id, bool active);
+
+    /// Whether the id is currently active. Unknown ids report false.
+    bool isActive(const QString& id) const;
+
+    /**
      * Forward queued bind/rebind ops to the backend. Does NOT include
      * unbind() — those are applied immediately at the call site. Matches
      * the backend's queue-then-flush model for register / update.
@@ -195,6 +218,11 @@ private:
         // value. Only meaningful once `registered` is true.
         bool lastSentPersistent = true;
         bool persistent = true; // surfaces in bindings(persistentOnly=true)
+        // Feature gate, see setActive(). An inactive entry keeps its sequence
+        // and its callback but holds no grab; flush() parks it through
+        // IBackend::suspendShortcut instead of unregistering it, so the
+        // platform's record of the user's own chord survives the gate.
+        bool active = true;
     };
 
     QPointer<IBackend> m_backend;

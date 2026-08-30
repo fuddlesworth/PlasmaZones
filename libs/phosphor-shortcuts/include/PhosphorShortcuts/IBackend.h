@@ -109,6 +109,29 @@ public:
     virtual void unregisterShortcut(const QString& id) = 0;
 
     /**
+     * Release the key grab for an id WITHOUT destroying whatever the
+     * platform persists about it. The id can be brought back later with a
+     * plain registerShortcut(), which must pick the user's stored binding
+     * back up.
+     *
+     * This exists because unregisterShortcut() is deliberately destructive
+     * on KGlobalAccel: it calls removeAllShortcuts, the one path that wipes
+     * the record in kglobalshortcutsrc, so using it to park a feature-gated
+     * family destroys every chord the user customised for that family. A
+     * feature toggled off and on again must give the user back the chords
+     * they had.
+     *
+     * The default implementation forwards to unregisterShortcut(), which is
+     * the right answer for backends that keep no user-owned record of their
+     * own (Portal grabs live for the session, the D-Bus fallback has no
+     * grabs at all). KGlobalAccelBackend overrides it.
+     */
+    virtual void suspendShortcut(const QString& id)
+    {
+        unregisterShortcut(id);
+    }
+
+    /**
      * Commit any queued register/update ops. Emits ready() once the
      * underlying backend has acknowledged the batch (may be synchronous or
      * asynchronous depending on backend). unregisterShortcut() is NOT

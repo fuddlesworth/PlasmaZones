@@ -411,15 +411,42 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                     return;
                 }
                 if (output) {
-                    reportScreenDesktop(outputScreenId(output), static_cast<int>(newDesktop->x11DesktopNumber()));
+                    reportScreenDesktop(output, static_cast<int>(newDesktop->x11DesktopNumber()));
                     return;
                 }
-                for (auto* out : KWin::effects->screens()) {
-                    if (auto* vd = KWin::effects->currentDesktop(out)) {
-                        reportScreenDesktop(outputScreenId(out), static_cast<int>(vd->x11DesktopNumber()));
-                    }
-                }
+                resyncAllScreenDesktops();
             });
+
+    // Runtime desktop create / destroy (the dynamic-workspaces feature drives
+    // both). KWin's desktop NUMBERS are positional: adding or removing a
+    // desktop renumbers x11DesktopNumber() for every desktop after the
+    // insertion point, but desktopChanged fires only for outputs whose current
+    // VirtualDesktop OBJECT changed. Every unaffected screen therefore keeps a
+    // number that now names a different desktop, on both sides — the effect's
+    // own dedup cache and the daemon's per-screen map. The daemon names the
+    // effect as the fixer for exactly this
+    // (VirtualDesktopManager::reportScreenDesktop's contract), so re-push every
+    // screen's fresh number. Deferred and coalesced: see
+    // scheduleScreenDesktopResync for why the numbering cannot be read from
+    // inside the signal.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopAdded, this, [this](KWin::VirtualDesktop*) {
+        scheduleScreenDesktopResync();
+    });
+
+    // Live per-output-desktops mode. The bringup report samples this once, but
+    // the compositor property is writable at runtime (System Settings, or the
+    // daemon's own consented kwinrc write followed by a reconfigure). The
+    // daemon's self-heal arm keys off a reported `false` to re-apply that
+    // write, so without this connection the one scenario it exists for stays
+    // invisible until the next daemon restart. The daemon change-gates the
+    // value, so a repeat costs nothing. The connection is made once (this
+    // wiring runs once per effect) and torn down with the effect by QObject's
+    // receiver-side auto-disconnect.
+    if (auto* vdm = KWin::VirtualDesktopManager::self()) {
+        connect(vdm, &KWin::VirtualDesktopManager::perOutputVirtualDesktopsChanged, this, [this] {
+            reportPerOutputDesktopsMode();
+        });
+    }
 
     // The strip view spring is per-OUTPUT while scroll state is
     // per-(screen, desktop, activity), so a desktop switch orphans any
@@ -500,6 +527,16 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
                    KWin::LogicalOutput* output) {
                 if (!oldDesktop || !newDesktop) {
+                    return;
+                }
+                // Skip the blend for a switch the effect issued itself to
+                // satisfy a daemon setScreenDesktopRequested. The owner-wins
+                // snap-back is a corrective bounce the user did not ask for,
+                // and blending it costs two output-sized GLTexture captures per
+                // output on top of the switch that provoked it. The daemon
+                // reporting, decoration, strip and client-area arms all keep
+                // firing — those are correctness arms, this one is decoration.
+                if (m_programmaticDesktopSwitch) {
                     return;
                 }
                 // Honour the global animations master toggle, exactly as the two
@@ -583,6 +620,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // live desktop.
     connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
         m_desktopTransition.desktopRemoved(desktop);
+        // Removal renumbers every surviving desktop after it, silently
+        // invalidating both the effect's dedup cache and the daemon's
+        // per-screen map for every screen KWin did not switch. Twin of the
+        // desktopAdded arm above; see it for the full rationale.
+        scheduleScreenDesktopResync();
     });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred

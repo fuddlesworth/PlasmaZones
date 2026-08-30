@@ -135,51 +135,21 @@ public:
         return QString();
     }
 
-    // Move-slot chords (quick-layout model: fixed factory chords, rebindable
-    // in the Shortcuts KCM; the settings app assigns the TARGET workspace).
-    // Meta+Shift+N is niri's own move-to-workspace-N family and is unclaimed
-    // by every other PlasmaZones default (collision-checked in the daemon's
-    // duplicate-defaults test).
-    static QString workspaceMoveSlot1Shortcut()
+    /// Move-slot chords: unset by default for every slot, matching the
+    /// focus-slot family below. A slot's target workspace is unassigned until
+    /// the user picks one in the settings app, so a factory chord here would
+    /// claim a global binding that resolves to nothing on a fresh install.
+    /// The user assigns both halves, the target in the settings app and the
+    /// chord in KDE's Shortcuts settings. One accessor rather than nine
+    /// identical ones, since the value does not vary by slot.
+    static QString workspaceMoveSlotShortcut()
     {
-        return QStringLiteral("Meta+Shift+1");
-    }
-    static QString workspaceMoveSlot2Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+2");
-    }
-    static QString workspaceMoveSlot3Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+3");
-    }
-    static QString workspaceMoveSlot4Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+4");
-    }
-    static QString workspaceMoveSlot5Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+5");
-    }
-    static QString workspaceMoveSlot6Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+6");
-    }
-    static QString workspaceMoveSlot7Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+7");
-    }
-    static QString workspaceMoveSlot8Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+8");
-    }
-    static QString workspaceMoveSlot9Shortcut()
-    {
-        return QStringLiteral("Meta+Shift+9");
+        return QString();
     }
 
-    /// Focus-slot chords: unset by default for every slot. The family is
-    /// daemon-registered and bound by the user in KDE's Shortcuts settings,
-    /// so there is no factory chord to collide with anything. One accessor
+    /// Focus-slot chords: unset by default for every slot, for the same
+    /// reason as the move slots above. The family is daemon-registered and
+    /// bound by the user in KDE's Shortcuts settings. One accessor
     /// rather than nine identical ones — the value does not vary by slot, and
     /// the schema loop reads it per slot.
     static QString workspaceFocusSlotShortcut()

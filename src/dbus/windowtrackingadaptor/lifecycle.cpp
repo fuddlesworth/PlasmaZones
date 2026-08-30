@@ -664,6 +664,14 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
             m_ruleEvaluator->evictCached(windowId);
         }
     }
+    // The open-path RouteToWorkspace answer is keyed the same way (the raw id
+    // its emitter was handed), and is normally consumed within the open round
+    // trip. Drop both spellings so a window that opened with a workspace route
+    // and closed before anything read it back cannot leak an entry.
+    m_workspaceRoutedDesktop.remove(shadowId);
+    if (windowId != shadowId) {
+        m_workspaceRoutedDesktop.remove(windowId);
+    }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The

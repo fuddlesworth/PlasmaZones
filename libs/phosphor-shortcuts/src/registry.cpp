@@ -128,6 +128,22 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
     it->binding.currentSeq = seq;
 }
 
+void Registry::setActive(const QString& id, bool active)
+{
+    auto it = m_entries.find(id);
+    if (it == m_entries.end()) {
+        qCWarning(lcPhosphorShortcuts) << "setActive(): unknown shortcut id" << id;
+        return;
+    }
+    it->active = active;
+}
+
+bool Registry::isActive(const QString& id) const
+{
+    const auto it = m_entries.constFind(id);
+    return it != m_entries.constEnd() && it->active;
+}
+
 void Registry::unbind(const QString& id)
 {
     if (m_entries.remove(id) > 0 && m_backend) {
@@ -148,6 +164,20 @@ void Registry::flush()
 
     for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
         auto& entry = *it;
+        if (!entry.active) {
+            // Parked by setActive(). Release the grab through the
+            // non-destructive path so the platform keeps whatever the user
+            // customised, and reset the sent-state so reviving the entry
+            // re-registers it from scratch with the stored binding.
+            if (entry.registered) {
+                m_backend->suspendShortcut(entry.binding.id);
+                entry.registered = false;
+                entry.lastSentDefault = QKeySequence();
+                entry.lastSentCurrent = QKeySequence();
+                entry.lastSentPersistent = true;
+            }
+            continue;
+        }
         if (entry.binding.currentSeq.isEmpty()) {
             // Don't ask the backend to grab nothing — skips the stale-grab
             // hazard on KGlobalAccel. Entry stays in the registry (so a
@@ -198,6 +228,12 @@ QStringList Registry::effectiveTriggers(const QString& id) const
 {
     const auto it = m_entries.constFind(id);
     if (it == m_entries.constEnd()) {
+        return {};
+    }
+    if (!it->active) {
+        // Parked by setActive(): no key reaches this entry, so there is
+        // nothing for the user to press. Reporting the stored sequence would
+        // advertise a chord that does nothing.
         return {};
     }
     if (m_backend) {

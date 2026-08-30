@@ -524,48 +524,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     QVector<PhosphorConfig::KeyDef> globals;
-    addShortcut(globals, CD::workspaceFocusUpKey(), CD::workspaceFocusUpShortcut(),
-                QStringLiteral("Switches this monitor to the workspace above its current one."));
-    addShortcut(globals, CD::workspaceFocusDownKey(), CD::workspaceFocusDownShortcut(),
-                QStringLiteral("Switches this monitor to the workspace below its current one."));
-    addShortcut(globals, CD::workspaceMoveWindowUpKey(), CD::workspaceMoveWindowUpShortcut(),
-                QStringLiteral("Moves the focused window to the workspace above this monitor's current one."));
-    addShortcut(globals, CD::workspaceMoveWindowDownKey(), CD::workspaceMoveWindowDownShortcut(),
-                QStringLiteral("Moves the focused window to the workspace below this monitor's current one."));
-    addShortcut(globals, CD::workspaceMoveColumnUpKey(), CD::workspaceMoveColumnUpShortcut(),
-                QStringLiteral("Moves the focused window's whole scrolling column to the workspace above."));
-    addShortcut(globals, CD::workspaceMoveColumnDownKey(), CD::workspaceMoveColumnDownShortcut(),
-                QStringLiteral("Moves the focused window's whole scrolling column to the workspace below."));
-    addShortcut(globals, CD::workspaceReorderUpKey(), CD::workspaceReorderUpShortcut(),
-                QStringLiteral("Moves the current workspace one place earlier in this monitor's list."));
-    addShortcut(globals, CD::workspaceReorderDownKey(), CD::workspaceReorderDownShortcut(),
-                QStringLiteral("Moves the current workspace one place later in this monitor's list."));
-    addShortcut(globals, CD::workspaceMoveToMonitorLeftKey(), CD::workspaceMoveToMonitorLeftShortcut(),
-                QStringLiteral("Hands the current workspace to the monitor to the left."));
-    addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut(),
-                QStringLiteral("Hands the current workspace to the monitor to the right."));
-    // Workspace quick-shortcut slots (quick-layout model): fixed factory
-    // chords, rebindable in the Shortcuts KCM; the target workspace is
-    // assigned per slot in the app (Workspaces.Slots below). The focus
-    // family stays unset by default and daemon-registered only.
-    const QString workspaceMoveSlotDefaults[] = {
-        CD::workspaceMoveSlot1Shortcut(), CD::workspaceMoveSlot2Shortcut(), CD::workspaceMoveSlot3Shortcut(),
-        CD::workspaceMoveSlot4Shortcut(), CD::workspaceMoveSlot5Shortcut(), CD::workspaceMoveSlot6Shortcut(),
-        CD::workspaceMoveSlot7Shortcut(), CD::workspaceMoveSlot8Shortcut(), CD::workspaceMoveSlot9Shortcut()};
-    // Bound by the slot-count constant, not a local 9 — the same reason the
-    // quick-layout loop below is bound by its protocol constant: the key
-    // builders qFatal outside [1, WorkspaceSlotCount], so a raised constant
-    // with a stale literal here would silently declare too few keys.
-    static_assert(std::size(workspaceMoveSlotDefaults) == CD::WorkspaceSlotCount,
-                  "workspace move-slot defaults array must cover every slot");
-    for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
-        addShortcut(
-            globals, CD::workspaceMoveSlotKey(slot), workspaceMoveSlotDefaults[slot - 1],
-            QStringLiteral("Moves the focused window to the named workspace assigned to quick slot %1.").arg(slot));
-        addShortcut(
-            globals, CD::workspaceFocusSlotKey(slot), CD::workspaceFocusSlotShortcut(),
-            QStringLiteral("Switches to the named workspace assigned to quick slot %1. Unbound by default.").arg(slot));
-    }
+    appendWorkspacesShortcutKeys(globals);
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut(), QStringLiteral("Open zone editor."));
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut(), QStringLiteral("Open settings."));
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut(),

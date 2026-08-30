@@ -1014,7 +1014,15 @@ Q_SIGNALS:
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
 
-    // Workspaces settings (dynamic per-monitor workspaces)
+    // Workspaces settings (dynamic per-monitor workspaces).
+    //
+    // Notification-only, the same shape as the autotile shortcut signals
+    // above: no matching pure-virtual getters. Every consumer of these holds a
+    // concrete Settings* and reads the value there, and the workspace surface
+    // is thirty-odd scalars plus two slot families, so mirroring it into the
+    // interface would grow ISettings by more than it would buy. A consumer
+    // that genuinely needs to read one through the interface should have the
+    // getter added here alongside its signal rather than reach around it.
     void workspacesEnabledChanged();
     void workspacesManageKWinPerOutputChanged();
     void workspacesSnapBackOsdHintChanged();

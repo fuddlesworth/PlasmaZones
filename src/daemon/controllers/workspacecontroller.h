@@ -58,6 +58,13 @@ public:
 
     PhosphorWorkspaces::WorkspaceReconciler& reconciler();
 
+    /// Whether adoption has completed. Until it has, this controller emits no
+    /// reap and no renumber at all — the map is still the previous session's
+    /// candidate — so the daemon's count-based desktop sweeps must keep
+    /// running rather than standing down on the controller merely existing.
+    /// Adoption can take up to three seconds (the per-output report grace).
+    bool isAdopted() const;
+
     /// Inject the window → physical-screen resolver (the daemon backs it with
     /// the placement store's last managed-context screen). Powers the
     /// owner-wins reunion arm: a window sitting on a desktop owned by another
@@ -84,8 +91,6 @@ public:
     /// Switch the screen to the 0-based slice index (focus-slot family).
     void focusWorkspaceAt(const QString& screenId, int sliceIndex);
     void moveWindowToWorkspace(const QString& screenId, const QString& windowId, int delta);
-    /// 0-based slice index (the quick-shortcut slots pass slot-1).
-    void moveWindowToWorkspaceAt(const QString& screenId, const QString& windowId, int sliceIndex);
     /// The scrolling column variant: every window of the focused column moves
     /// together. `columnWindows` is enumerated by the daemon from the scroll
     /// engine (empty → OSD-level no-op, the screen is not scrolling).
@@ -109,19 +114,43 @@ public:
     /// rule resolver's guard — an unrealized name falls through to the
     /// positional desktop route).
     bool hasNamedWorkspace(const QString& name) const;
-    /// The RouteToWorkspace rule arm: issue the move NOW and report whether it
-    /// was actually issued. False (name unrealized, desktop unresolvable, or a
-    /// structural op in flight) tells the rules pipeline to fall back to the
-    /// positional desktop route — a deferred move must not return true, since
-    /// true suppresses that fallback for good.
-    bool routeWindowToNamedWorkspace(const QString& name, const QString& windowId);
+    /// Verdict of the RouteToWorkspace rule arm (see
+    /// routeWindowToNamedWorkspace).
+    enum class WorkspaceRouteVerdict {
+        /// A structural op is in flight, or the realized name's desktop cannot
+        /// be resolved right now. The name IS declared, so the cascade's
+        /// positional RouteToDesktop is NOT a valid stand-in: that number was
+        /// authored as the fallback for an UNDECLARED name, and applying it to
+        /// a momentarily unresolvable one silently lands the window on a
+        /// different desktop. The window stays where it spawned.
+        Unresolvable = -1,
+        /// The name is not realized in the map. The positional route applies.
+        Unrealized = 0,
+    };
+    /// The RouteToWorkspace rule arm: issue the move NOW and report the
+    /// REALIZED desktop number so the caller's placement context can resolve
+    /// on it. A value > 0 is the desktop the window was routed to (the sticky
+    /// "already there" case reports its desktop too — the rule asked for the
+    /// window to be on that workspace and it is). Values <= 0 are
+    /// WorkspaceRouteVerdict.
+    ///
+    /// The OUTPUT leg is deliberately not issued: a workspace route names a
+    /// desktop, not a monitor, and on the open path the placement pipeline
+    /// resolves the window's screen from its spawn output or from an explicit
+    /// RouteToScreen. Issuing an owner-screen move here snapped the window
+    /// into a zone of the screen it had just left, and contradicted a
+    /// RouteToScreen in the same cascade.
+    int routeWindowToNamedWorkspace(const QString& name, const QString& windowId);
 
 Q_SIGNALS:
     /// → adaptor setScreenDesktopRequested (effect per-output switch).
     void screenDesktopSwitchRequested(const QString& screenId, int desktop);
     /// → adaptor moveWindowToWorkspaceVerb (handoff-based window relocation).
+    /// @p moveOutput false issues the desktop half only, leaving the window on
+    /// its current monitor (the RouteToWorkspace open-path arm; see
+    /// routeWindowToNamedWorkspace).
     void windowWorkspaceMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
-                                      const QString& direction);
+                                      const QString& direction, bool moveOutput);
     /// Owner-wins snap-back fired for this screen (OSD hint hook; gated by
     /// the snapBackOsdHint setting daemon-side).
     void snapBackOccurred(const QString& screenId);
@@ -134,10 +163,20 @@ Q_SIGNALS:
     void workspaceMapPublished(const QString& mapJson);
     /// Engine fan-out relays (identity-based; the daemon drives all three
     /// engines + the placement store from these).
-    void desktopReapRequested(int desktop);
+    /// The WHOLE removed set of one settled change, not one signal per
+    /// desktop: the daemon's fan-out schedules a config save and a state save
+    /// at its tail, and per-desktop emissions made that N saves (each preceded
+    /// by a full allModes() scan) for one removal batch.
+    void desktopsReapRequested(const QList<int>& desktops);
     void desktopRenumberRequested(const QHash<int, int>& oldToNew);
 
 private:
+    /// The map, the census and the reconciler all key screens by the id the
+    /// KWin effect REPORTS; ScreenManager and the settings UI hand out other
+    /// spellings. Every externally sourced screen id passes through here.
+    /// Static and private rather than file-local: the verbs TU canonicalizes
+    /// the settings-UI output ids of the named declarations with it.
+    static QString canonicalScreenId(const QString& connectorOrId);
     void wireVirtualDesktops();
     void wireWindows();
     void wireScreens();
@@ -195,6 +234,13 @@ private:
     /// Last applied named declarations (re-applied after adoption).
     QVariantList m_namedEntries;
     bool m_namedApplied = false;
+    /// Open-path RouteToWorkspace requests that arrived before adoption
+    /// (windowId → declared name). desktopIdForName refuses while !m_adopted,
+    /// which is exactly the login / session-restore population such rules are
+    /// written for, and nothing re-drove them afterwards. Re-issued once
+    /// adoption completes, for windows that still exist.
+    QHash<QString, QString> m_parkedNamedRoutes;
+    void drainParkedNamedRoutes();
     /// Map entry id for a declared name, or empty.
     QString desktopIdForName(const QString& name) const;
 

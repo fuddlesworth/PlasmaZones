@@ -45,13 +45,6 @@ constexpr DefaultGetter kQuickLayoutDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::quickLayout4Shortcut, &ConfigDefaults::quickLayout5Shortcut, &ConfigDefaults::quickLayout6Shortcut,
     &ConfigDefaults::quickLayout7Shortcut, &ConfigDefaults::quickLayout8Shortcut, &ConfigDefaults::quickLayout9Shortcut,
 };
-constexpr DefaultGetter kWorkspaceMoveSlotDefaults[kIndexedSlotCount] = {
-    &ConfigDefaults::workspaceMoveSlot1Shortcut, &ConfigDefaults::workspaceMoveSlot2Shortcut,
-    &ConfigDefaults::workspaceMoveSlot3Shortcut, &ConfigDefaults::workspaceMoveSlot4Shortcut,
-    &ConfigDefaults::workspaceMoveSlot5Shortcut, &ConfigDefaults::workspaceMoveSlot6Shortcut,
-    &ConfigDefaults::workspaceMoveSlot7Shortcut, &ConfigDefaults::workspaceMoveSlot8Shortcut,
-    &ConfigDefaults::workspaceMoveSlot9Shortcut,
-};
 constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::snapToZone1Shortcut, &ConfigDefaults::snapToZone2Shortcut, &ConfigDefaults::snapToZone3Shortcut,
     &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
@@ -211,6 +204,19 @@ void ShortcutManager::registerShortcuts()
         // first flush reflects the user's saved preference, not only the
         // compiled-in default.
         m_registry->rebind(e.id, e.currentSeq());
+    }
+
+    if (!m_settings->workspacesEnabled()) {
+        // Register the workspace family first and park it on the settle,
+        // rather than never registering it at all. Registration is what puts
+        // the ids into kglobalshortcutsrc, and that record is what makes them
+        // appear as rebindable rows in the System Settings Shortcuts module —
+        // so a user running with the feature off can still assign the chords
+        // they want before switching it on. The family holds a grab for the
+        // one event-loop turn between this flush and the settle; the
+        // alternative is no KCM rows at all, since there is no way to publish
+        // an id to kglobalaccel without registering it.
+        m_settingsDirty = true;
     }
 
     // Tag this batch so a settle that arrives late (either path) can tell
@@ -590,6 +596,7 @@ bool ShortcutManager::drainPendingAdhocOps()
 
 bool ShortcutManager::rebindAll()
 {
+    const bool workspacesOn = m_settings && m_settings->workspacesEnabled();
     bool anyChanged = false;
     for (const auto& e : std::as_const(m_entries)) {
         const QKeySequence seq = e.currentSeq();
@@ -597,6 +604,20 @@ bool ShortcutManager::rebindAll()
             anyChanged = true;
         }
         m_registry->rebind(e.id, seq);
+        // The workspace family holds a grab only while the feature is on: an
+        // inert system-wide grab shadows those chords for every other
+        // application. Parked through Registry::setActive rather than by
+        // rebinding to an empty sequence, because the empty-sequence path
+        // unregisters on the backend and KGlobalAccel's unregister wipes the
+        // user's saved chords for the whole family. The active flag counts
+        // towards anyChanged: a save that only flipped the feature switch
+        // moves no sequence, and without this the flush that applies the park
+        // would never run.
+        const bool active = workspacesOn || !isWorkspaceShortcutId(e.id);
+        if (m_registry->isActive(e.id) != active) {
+            anyChanged = true;
+        }
+        m_registry->setActive(e.id, active);
     }
     return anyChanged;
 }
@@ -661,13 +682,17 @@ void ShortcutManager::buildEntries()
         m_entries.push_back(std::move(e));
     }
 
-    // Workspace quick-shortcut slots. Quick-layout model: fixed factory
-    // chords (KCM-rebindable); the slot's target workspace is assigned in
-    // the settings app.
+    // Workspace quick-shortcut slots. The slot's target workspace is
+    // assigned in the settings app.
+    //
+    // Deliberately no defaultSeq: this family ships unbound, like the focus
+    // slots below. A slot targets no workspace until the user assigns one, so
+    // a factory chord would claim a global binding that does nothing on a
+    // fresh install. The ids are registered either way, so the chords stay
+    // assignable in KDE's Shortcuts settings.
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = workspaceMoveSlotId(i);
-        e.defaultSeq = parseSequence(kWorkspaceMoveSlotDefaults[i](), e.id);
         // "Slot", not a bare number: this is what KGlobalAccel shows in the
         // Shortcuts KCM, and the chord does NOT move the window to the Nth
         // workspace. It moves it to whichever named workspace the settings
@@ -687,9 +712,11 @@ void ShortcutManager::buildEntries()
     // Workspace focus slots (plan §7): switch the acting monitor to workspace
     // N of its own list. Bound via KDE's Shortcuts settings only.
     //
-    // Deliberately no defaultSeq: this family ships unbound. The digit row is
-    // already spoken for by quick layouts and snap-to-zone, so shipping a
-    // factory chord here would collide with one of them on a fresh install.
+    // Deliberately no defaultSeq: this family ships unbound, for the same
+    // reason as the move slots above. A slot resolves to whatever workspace
+    // sits at that position in the acting monitor's list, which on a fresh
+    // install is usually nothing, so squatting a global chord for it would
+    // take a binding away from the rest of the desktop for no benefit.
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = workspaceFocusSlotId(i);
@@ -703,20 +730,6 @@ void ShortcutManager::buildEntries()
             Q_EMIT workspaceFocusSlotRequested(slot);
         };
         m_entries.push_back(std::move(e));
-    }
-
-    // Workspace chords grab only while the feature is on: with dynamic
-    // workspaces off the verbs are inert, and a system-wide grab that does
-    // nothing shadows those chords for every other application. rebindAll()
-    // (riding every settings save, the enable toggle included) re-applies
-    // the real sequences when the feature turns on.
-    for (auto& e : m_entries) {
-        if (isWorkspaceShortcutId(e.id)) {
-            const auto inner = e.currentSeq;
-            e.currentSeq = [s, inner] {
-                return s->workspacesEnabled() ? inner() : QKeySequence();
-            };
-        }
     }
 
     // Snap-to-zone slots. Mirror of quick-layout slots — separate signal,

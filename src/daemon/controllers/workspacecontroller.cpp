@@ -21,6 +21,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 
 Q_LOGGING_CATEGORY(lcWorkspaceCtl, "plasmazones.workspaces.controller", QtWarningMsg)
@@ -28,19 +29,6 @@ Q_LOGGING_CATEGORY(lcWorkspaceCtl, "plasmazones.workspaces.controller", QtWarnin
 namespace PlasmaZones {
 
 namespace {
-/// The map, the census, and the reconciler all key screens by the id the
-/// KWin effect REPORTS (the EDID-style "Vendor:Model:Serial" form of
-/// outputScreenId). ScreenManager hands out CONNECTOR names ("DP-2"), so
-/// every ScreenManager-sourced id must pass through here — mixing the two
-/// spaces made every owner check fail, which turned every ordinary desktop
-/// switch into a "foreign" one and looped snap-back against the user (the
-/// desktop churn that crashed plasmashell's Pager).
-QString canonicalScreenId(const QString& connectorOrId)
-{
-    const QString id = PhosphorScreens::ScreenIdentity::idForName(connectorOrId);
-    return id.isEmpty() ? connectorOrId : id;
-}
-
 /// Adoption grace: how long to wait for every screen's per-output desktop
 /// report before adopting with the global-current fallback.
 constexpr int AdoptionTimeoutMs = 3000;
@@ -54,6 +42,19 @@ constexpr qint64 SnapBackCooldownMs = 1000;
 /// State-file write debounce: map churn (a create + settle + maintenance
 /// run) coalesces into one atomic write.
 constexpr int StateSaveDebounceMs = 1000;
+}
+
+/// The map, the census, and the reconciler all key screens by the id the
+/// KWin effect REPORTS (the EDID-style "Vendor:Model:Serial" form of
+/// outputScreenId). ScreenManager hands out CONNECTOR names ("DP-2"), so
+/// every ScreenManager-sourced id must pass through here — mixing the two
+/// spaces made every owner check fail, which turned every ordinary desktop
+/// switch into a "foreign" one and looped snap-back against the user (the
+/// desktop churn that crashed plasmashell's Pager).
+QString WorkspaceController::canonicalScreenId(const QString& connectorOrId)
+{
+    const QString id = PhosphorScreens::ScreenIdentity::idForName(connectorOrId);
+    return id.isEmpty() ? connectorOrId : id;
 }
 
 WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManager* vdm,
@@ -79,17 +80,30 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
             &PhosphorWorkspaces::VirtualDesktopManager::setDesktopName);
     connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::renumberComputed, this,
             [this](const QHash<int, int>& oldToNew, const QList<int>& removed) {
-                // Reap by identity first, then shift the survivors — the
-                // contract every engine arm implements.
-                for (int desktop : removed) {
-                    Q_EMIT desktopReapRequested(desktop);
-                }
                 // The engine-side stores refuse a poisoned mapping WHOLE
                 // (PhosphorEngine::desktopRenumberMappingIsValid), but the
                 // fan-out below this signal walks three more stores entry by
-                // entry, one of them persisted. Ask the same question here so
-                // every tier refuses together instead of drifting apart.
-                if (!oldToNew.isEmpty() && PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
+                // entry, one of them persisted. Ask the same question BEFORE
+                // the reap, not between the two halves: the reap destroys
+                // state in all three engines, degrades placement records and
+                // drops persisted disabled-desktop entries, and if the shift
+                // is then refused the survivors are left permanently one
+                // renumber behind with nothing to repair them (the count-based
+                // sweep stands down whenever this controller exists). Refuse
+                // the whole pass instead, and ask for a resync so the next
+                // settled list re-derives a clean mapping.
+                if (!oldToNew.isEmpty() && !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
+                    qCWarning(lcWorkspaceCtl)
+                        << "refusing a poisoned desktop renumber mapping; no reap and no shift ran:" << oldToNew;
+                    QMetaObject::invokeMethod(m_vdm, "refreshFromKWin");
+                    return;
+                }
+                // Reap by identity first, then shift the survivors — the
+                // contract every engine arm implements.
+                if (!removed.isEmpty()) {
+                    Q_EMIT desktopsReapRequested(removed);
+                }
+                if (!oldToNew.isEmpty()) {
                     Q_EMIT desktopRenumberRequested(oldToNew);
                 }
             });
@@ -126,7 +140,18 @@ WorkspaceController::WorkspaceController(PhosphorWorkspaces::VirtualDesktopManag
                 const int desktop = m_vdm->desktopIndexOf(desktopId);
                 if (desktop > 0) {
                     Q_EMIT screenDesktopSwitchRequested(screenId, desktop);
+                    return;
                 }
+                // The id has no live number right now (a settled-list echo
+                // still in flight). The reconciler has ALREADY ledgered this
+                // SetCurrent, so the entry can only retire on its own timeout,
+                // which expires into a resync — and until then this screen's
+                // foreign evaluation is short-circuited. switchScreenToDesktop
+                // refuses ahead of the ledger for every VERB path; what can
+                // still reach here is the reconciler's own snap-back, which
+                // ledgers internally. Say so rather than dropping it silently.
+                qCWarning(lcWorkspaceCtl) << "refusing a per-screen switch for" << screenId << "to" << desktopId
+                                          << "- that desktop has no live number; its ledger entry will expire";
             });
     // Deferred verbs resume once the structural churn settles — and also
     // after a ledger expiry, which clears the structural op WITHOUT a map
@@ -212,7 +237,8 @@ void WorkspaceController::wireVirtualDesktops()
                 if (!watchWindowMove(windowId, target)) {
                     return;
                 }
-                Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"));
+                Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"),
+                                                    /*moveOutput=*/true);
                 if (!*hinted) {
                     *hinted = true;
                     Q_EMIT windowDisplacedByRemoval(ownerScreen);
@@ -241,6 +267,15 @@ void WorkspaceController::wireVirtualDesktops()
             return;
         }
         m_reconciler.onDesktopListSettled(ids);
+        // A DETECTED removal that was then aborted (KWin kept the desktop)
+        // leaves its census snapshot behind for the life of the daemon: the
+        // record is consumed only by kwinDesktopRemoved, which now never
+        // comes. The settled list is the authority on which desktops exist,
+        // so anything it still names has nothing left to re-route.
+        const QSet<QString> settled(ids.cbegin(), ids.cend());
+        for (auto it = m_displacedByRemoval.begin(); it != m_displacedByRemoval.end();) {
+            it = settled.contains(it.key()) ? m_displacedByRemoval.erase(it) : std::next(it);
+        }
         // Named declarations re-verify against the settled truth (idempotent;
         // heals a create-echo FIFO mismatch via KWin's own name list).
         if (m_namedApplied && !m_namedEntries.isEmpty()) {
@@ -270,8 +305,16 @@ void WorkspaceController::wireScreens()
 {
     using SM = PhosphorScreens::ScreenManager;
     connect(m_screens, &SM::screenAdded, this, [this](const PhosphorScreens::PhysicalScreen& screen) {
-        refreshScreenOrder();
+        // onScreenAdded FIRST, refreshScreenOrder second — the mirror of the
+        // removal path below. ScreenManager emits screenAdded only after it has
+        // synced its tracked set, so refreshing the order first would already
+        // have registered the new output and onScreenAdded's own
+        // "do I know this screen" guard would then early-return on every
+        // replug, skipping the home-migration loop and the slice maintenance
+        // the replug exists to run. onScreenAdded appends the id itself, and
+        // the refresh that follows re-sorts the whole order by geometry.
         m_reconciler.onScreenAdded(canonicalScreenId(screen.name));
+        refreshScreenOrder();
     });
     connect(m_screens, &SM::screenRemoved, this, [this](const PhosphorScreens::PhysicalScreen& screen) {
         const QString screenId = canonicalScreenId(screen.name);
@@ -284,6 +327,27 @@ void WorkspaceController::wireScreens()
         refreshScreenOrder();
     });
     connect(m_screens, &SM::screenGeometryChanged, this, [this](const PhosphorScreens::PhysicalScreen&) {
+        refreshScreenOrder();
+    });
+    // A same-model hotplug can flip a screen's id between its bare and
+    // "/CONNECTOR"-qualified spellings with NO screenAdded / screenRemoved
+    // pair. Without an arm here the map keeps its slice under the dead id,
+    // refreshScreenOrder appends the live one alongside it, and the state file
+    // persists a phantom screen while the real output owns nothing. Treat it
+    // as an unplug of the old id followed by a plug of the new one, which is
+    // exactly what the reconciler's migration and home-stamping already model:
+    // the slice migrates with homeScreenId stamped, and onScreenAdded brings
+    // it home under the new id.
+    connect(m_screens, &SM::screenIdentifierChanged, this, [this](const QString& oldId, const QString& newId) {
+        const QString from = canonicalScreenId(oldId);
+        const QString to = canonicalScreenId(newId);
+        if (from.isEmpty() || to.isEmpty() || from == to) {
+            return;
+        }
+        qCInfo(lcWorkspaceCtl) << "screen id changed from" << from << "to" << to << "- re-keying its slice";
+        m_reconciler.onScreenRemoved(from);
+        m_lastSnapBackMs.remove(from);
+        m_reconciler.onScreenAdded(to);
         refreshScreenOrder();
     });
 }
@@ -377,9 +441,17 @@ void WorkspaceController::saveStateFile() const
         qCWarning(lcWorkspaceCtl) << "cannot write workspace state file" << path;
         return;
     }
+    // Only screens that actually REPORTED a current desktop contribute one.
+    // currentDesktopForScreen falls back to the GLOBAL current for an unknown
+    // screen, and publishing that asserts a current workspace the screen is
+    // not showing — the same reason the adoption gate asks for report presence
+    // explicitly rather than trusting the fallback.
     QHash<QString, int> currentByScreen;
     const QStringList order = m_reconciler.map().screenOrder();
     for (const QString& screenId : order) {
+        if (!m_vdm->hasScreenDesktopReport(screenId)) {
+            continue;
+        }
         currentByScreen.insert(screenId, m_vdm->currentDesktopForScreen(screenId));
     }
     const QString json = m_reconciler.map().toJson(
@@ -407,6 +479,17 @@ void WorkspaceController::start()
     // reality (ids in both keep owner/name/home; vanished ids drop; new ids
     // adopt). Loaded BEFORE the screen order so a stored slice for a screen
     // that is gone survives long enough to be migrated with home stamping.
+    // The save wiring goes up FIRST. loadStateFile, refreshScreenOrder and the
+    // stored-screen migration loop below all mutate the map, and with the
+    // connects made afterwards those mutations raised no save at all — the
+    // migrated homes only reached disk if something unrelated dirtied the map
+    // later in the session.
+    m_stateSaveTimer.setSingleShot(true);
+    m_stateSaveTimer.setInterval(StateSaveDebounceMs);
+    connect(&m_stateSaveTimer, &QTimer::timeout, this, &WorkspaceController::saveStateFile);
+    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
+            &WorkspaceController::scheduleStateSave);
+
     loadStateFile();
     const QStringList storedScreens = m_reconciler.map().screenOrder();
 
@@ -427,12 +510,6 @@ void WorkspaceController::start()
         }
     }
 
-    m_stateSaveTimer.setSingleShot(true);
-    m_stateSaveTimer.setInterval(StateSaveDebounceMs);
-    connect(&m_stateSaveTimer, &QTimer::timeout, this, &WorkspaceController::saveStateFile);
-    connect(&m_reconciler, &PhosphorWorkspaces::WorkspaceReconciler::mapChanged, this,
-            &WorkspaceController::scheduleStateSave);
-
     // Census seed from the registry's current truth (windows that registered
     // before the feature came up).
     const QStringList ids = m_registry->instanceIds();
@@ -448,7 +525,7 @@ void WorkspaceController::start()
                     << "adoption timeout: not every screen reported a desktop; using global fallback";
                 m_adopted = true;
                 QHash<QString, QString> currentById;
-                const QStringList ids = m_vdm->desktopIds();
+                const QStringList desktopIds = m_vdm->desktopIds();
                 const auto order = m_reconciler.map().screenOrder();
                 for (const QString& screenId : order) {
                     const int current = m_vdm->currentDesktopForScreen(screenId);
@@ -465,7 +542,7 @@ void WorkspaceController::start()
                     }
                     currentById.insert(screenId, id);
                 }
-                m_reconciler.adoptAll(ids, currentById);
+                m_reconciler.adoptAll(desktopIds, currentById);
                 // The SAME tail tryFirstAdoption runs. Without it, a session
                 // that adopted on the timeout never realized its named
                 // workspaces at all: the declarations arrived before adoption,
@@ -533,6 +610,7 @@ void WorkspaceController::applyNamedDeclarationsAfterAdoption()
     for (auto it = seeded.constBegin(); it != seeded.constEnd(); ++it) {
         reuniteWindowWithOwner(it.key(), it.value());
     }
+    drainParkedNamedRoutes();
 }
 
 void WorkspaceController::setWindowScreenResolver(std::function<QString(const QString&)> resolver)
@@ -602,7 +680,8 @@ void WorkspaceController::reuniteWindowWithOwner(const QString& instanceId, cons
         // would suppress the next real reunion for a full second.
         m_lastReunionMs.insert(instanceId, QDateTime::currentMSecsSinceEpoch());
         qCInfo(lcWorkspaceCtl) << "reuniting window" << instanceId << "with its workspace's owner screen" << owner;
-        Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, QStringLiteral("down"));
+        Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, QStringLiteral("down"),
+                                            /*moveOutput=*/true);
     });
 }
 
@@ -670,6 +749,7 @@ void WorkspaceController::onWindowDisappeared(const QString& instanceId)
     m_pendingReunions.remove(instanceId);
     m_pendingWindowMoves.remove(instanceId);
     m_windowMoveSequences.remove(instanceId);
+    m_parkedNamedRoutes.remove(instanceId);
     // A closed window also leaves the removal-race snapshots. Otherwise the
     // deferred re-route emits a move for a window that no longer exists, and
     // the watchdog then warns about the arrival that was never coming.
@@ -700,6 +780,15 @@ void WorkspaceController::onMetadataChanged(const QString& instanceId, const Pho
     if (!newId.isEmpty() && m_pendingWindowMoves.value(instanceId) == newId) {
         m_pendingWindowMoves.remove(instanceId);
         m_windowMoveSequences.remove(instanceId);
+    } else if (m_pendingWindowMoves.contains(instanceId)
+               && (newMeta.isSticky.value_or(false) || newMeta.virtualDesktops.size() > 1)) {
+        // Sticky (or on several desktops) is the OTHER way a move can be
+        // satisfied: the window is on the target workspace now, censusDesktop
+        // answers 0 for it and the arrival branch above can never match. The
+        // watch would otherwise sit until its timeout and warn about an
+        // arrival that has, in the only sense the verb asked for, happened.
+        m_pendingWindowMoves.remove(instanceId);
+        m_windowMoveSequences.remove(instanceId);
     }
     if (oldId == newId) {
         if (!oldId.isEmpty()) {
@@ -723,11 +812,24 @@ PhosphorWorkspaces::WorkspaceReconciler& WorkspaceController::reconciler()
     return m_reconciler;
 }
 
+bool WorkspaceController::isAdopted() const
+{
+    return m_adopted;
+}
+
 QString WorkspaceController::currentMapJson() const
 {
+    // Only screens that actually REPORTED a current desktop contribute one.
+    // currentDesktopForScreen falls back to the GLOBAL current for an unknown
+    // screen, and publishing that asserts a current workspace the screen is
+    // not showing — the same reason the adoption gate asks for report presence
+    // explicitly rather than trusting the fallback.
     QHash<QString, int> currentByScreen;
     const QStringList order = m_reconciler.map().screenOrder();
     for (const QString& screenId : order) {
+        if (!m_vdm->hasScreenDesktopReport(screenId)) {
+            continue;
+        }
         currentByScreen.insert(screenId, m_vdm->currentDesktopForScreen(screenId));
     }
     return m_reconciler.map().toJson(

@@ -79,6 +79,21 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // genuine mode exit has already dropped the screen from the
             // derived set, and a removed output answers false to
             // isActiveOnScreen, so both of those keep their existing path.
+            if (m_reapingDesktopState) {
+                // A desktop reap: this window's (screen, desktop, activity)
+                // state was destroyed, the screen's MODE did not change, and
+                // the releasing engine still runs there on every other
+                // desktop. Nothing below is a correct answer for that, and
+                // the screen-level claim test underneath cannot see it — it
+                // answers through the screen's CURRENT desktop, so a screen
+                // snapping on desktop 1 while holding scroll state on the
+                // reaped desktop 3 reads as "not mine" and the window would
+                // be un-floated and queued for a snap restore it never asked
+                // for. Skipping is the whole handling a reap needs.
+                qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId
+                                  << "- a desktop reap is a context prune, not a mode exit";
+                continue;
+            }
             const bool releasingEngineClaims = m_updateEngineScreensInProgress
                 ? (releasedFromScroll ? m_derivedScrollingScreens.contains(windowScreen)
                                       : m_derivedAutotileScreens.contains(windowScreen))

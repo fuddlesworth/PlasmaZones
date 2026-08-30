@@ -6,23 +6,30 @@
 
 #include <KGlobalAccel>
 #include <QAction>
+#include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QCoreApplication>
 #include <QDBusMetaType>
 #include <QHash>
+
+namespace PhosphorShortcuts::detail {
 
 // Wire type for kglobalaccel's a(ai): each element is a STRUCT wrapping one
 // sequence's chord ints. Registered (not hand-marshalled) so QtDBus derives
 // the exact signature for setForeignShortcutKeys.
-struct PhosphorDBusKeySequence
+//
+// Namespaced rather than left at global scope: Q_DECLARE_METATYPE and
+// qDBusRegisterMetaType both need external linkage, so an anonymous namespace
+// is not available, and a bare name in a library TU is an ODR hazard against
+// anything else that links this library. The stream operators live here too so
+// ADL finds them from the registration below.
+struct DBusKeySequence
 {
     QList<int> keys;
 };
-Q_DECLARE_METATYPE(PhosphorDBusKeySequence)
 
-inline QDBusArgument& operator<<(QDBusArgument& arg, const PhosphorDBusKeySequence& seq)
+inline QDBusArgument& operator<<(QDBusArgument& arg, const DBusKeySequence& seq)
 {
     arg.beginStructure();
     arg << seq.keys;
@@ -30,13 +37,17 @@ inline QDBusArgument& operator<<(QDBusArgument& arg, const PhosphorDBusKeySequen
     return arg;
 }
 
-inline const QDBusArgument& operator>>(const QDBusArgument& arg, PhosphorDBusKeySequence& seq)
+inline const QDBusArgument& operator>>(const QDBusArgument& arg, DBusKeySequence& seq)
 {
     arg.beginStructure();
     arg >> seq.keys;
     arg.endStructure();
     return arg;
 }
+
+} // namespace PhosphorShortcuts::detail
+
+Q_DECLARE_METATYPE(PhosphorShortcuts::detail::DBusKeySequence)
 
 namespace PhosphorShortcuts {
 
@@ -336,6 +347,47 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
     }
 }
 
+void KGlobalAccelBackend::suspendShortcut(const QString& id)
+{
+    auto it = m_impl->entries.find(id);
+    if (it == m_impl->entries.end()) {
+        return;
+    }
+    if (!it->persistent) {
+        // A transient grab carries no user customisation, and its on-disk
+        // record is the very thing the destructor purges, so parking one is
+        // the same operation as dropping it.
+        unregisterShortcut(id);
+        return;
+    }
+    QAction* action = it->action;
+    m_impl->entries.erase(it);
+    // Drop the dedup seed with the entry, exactly as unregisterShortcut does:
+    // a stale value would swallow the first legitimate triggersChanged after
+    // the id is resumed.
+    m_impl->lastReportedTriggers.remove(id);
+    if (action) {
+        // Destroying the QAction is what releases the grab. KGlobalAccel drops
+        // the action from its live table on destruction and leaves the
+        // kglobalshortcutsrc record alone, which is the whole point here and
+        // the same reasoning the destructor above relies on for persistent
+        // ids. A later registerShortcut() builds a fresh action under the same
+        // objectName and its autoloading setShortcut picks the stored user
+        // value back up.
+        //
+        // disconnect() first, for the destructor's reason: the triggered
+        // lambda captures `this`, and a queued activation dispatched mid-delete
+        // would emit activated() for an id that is no longer registered.
+        //
+        // Deleted synchronously rather than deleteLater'd: a resume in the same
+        // event-loop turn would otherwise create the replacement action while
+        // the old one is still pending destruction, and the deferred ~QAction
+        // would then unregister the id that had just been re-established.
+        action->disconnect();
+        delete action;
+    }
+}
+
 std::optional<QStringList> KGlobalAccelBackend::currentTriggers(const QString& id) const
 {
     const auto it = m_impl->entries.constFind(id);
@@ -404,20 +456,20 @@ bool KGlobalAccelBackend::setForeignShortcuts(const QString& componentName, cons
     // idempotent but takes a lock and hashes the type on every invocation, and
     // this runs per action during the takeover walk.
     static const bool wireTypesRegistered = [] {
-        qDBusRegisterMetaType<PhosphorDBusKeySequence>();
-        qDBusRegisterMetaType<QList<PhosphorDBusKeySequence>>();
+        qDBusRegisterMetaType<detail::DBusKeySequence>();
+        qDBusRegisterMetaType<QList<detail::DBusKeySequence>>();
         return true;
     }();
     Q_UNUSED(wireTypesRegistered);
-    QList<PhosphorDBusKeySequence> wire;
+    QList<detail::DBusKeySequence> wire;
     if (sequences.isEmpty()) {
         // Explicit "unbound": one sequence of a single 0 key.
-        PhosphorDBusKeySequence unbound;
+        detail::DBusKeySequence unbound;
         unbound.keys.append(0);
         wire.append(unbound);
     } else {
         for (const QKeySequence& sequence : sequences) {
-            PhosphorDBusKeySequence seq;
+            detail::DBusKeySequence seq;
             for (int i = 0; i < sequence.count(); ++i) {
                 seq.keys.append(sequence[i].toCombined());
             }
@@ -455,8 +507,12 @@ std::optional<QList<QKeySequence>> KGlobalAccelBackend::foreignShortcuts(const Q
         // told the takeover caller the action was already unbound, so it wrote
         // no backup and a later restore put the unbound sentinel on top of a
         // chord the user still had.
-        qCWarning(lcPhosphorShortcuts) << "shortcutKeys query failed for" << componentName << actionName << ":"
-                                       << reply.errorMessage();
+        // reply.type() as well as the message: this branch also catches a
+        // well-formed ReplyMessage that carried no arguments, and an
+        // errorMessage() on one of those is empty, which logged a failure with
+        // no stated reason.
+        qCWarning(lcPhosphorShortcuts) << "shortcutKeys query failed for" << componentName << actionName
+                                       << "— reply type" << reply.type() << ":" << reply.errorMessage();
         return std::nullopt;
     }
     const QVariant payload = reply.arguments().constFirst();
@@ -477,6 +533,10 @@ std::optional<QList<QKeySequence>> KGlobalAccelBackend::foreignShortcuts(const Q
         arg >> keys;
         arg.endStructure();
         if (!keys.isEmpty() && keys.first() != 0) {
+            // Four chords, deliberately: QKeySequence itself holds at most
+            // four, so a fifth int could not be represented however it were
+            // read, and value() returns 0 for the short lists that are the
+            // normal case. The lossiness is the type's, not an oversight here.
             sequences.append(QKeySequence(keys.value(0), keys.value(1), keys.value(2), keys.value(3)));
         }
     }

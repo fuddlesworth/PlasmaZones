@@ -363,6 +363,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
         ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — animation gating + blur density
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
+        ConfigDefaults::workspacesGroup(), // "Workspaces" — covers Workspaces.Behavior + Workspaces.Named +
+                                           // Workspaces.Slots
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
     };

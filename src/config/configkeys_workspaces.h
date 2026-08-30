@@ -5,17 +5,10 @@
 
 #include "configkeys_scrolling.h"
 
-// Local copy of configkeys.h's accessor macro (that header #undefs it at end
-// of file); same expansion, undef'd again below. A tweak to the original
-// (e.g. attribute annotation) must be applied HERE by hand too — both
-// expansions compile either way, so nothing catches the drift.
-#define P_CONFIG_KEY(name, str)                                                                                        \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
-
-#define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
+// configkeys_scrolling.h above undefines the accessor macros at its end, so
+// pull them back in for this link's own declarations and undefine them again
+// below.
+#include "configkeymacro.h"
 
 namespace PlasmaZones {
 
@@ -38,6 +31,10 @@ public:
     // Config Groups — Workspaces.*
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // The top-level container. Not a group anything reads or writes directly:
+    // it exists so reset() can drop the whole Workspaces subtree in one
+    // deleteGroup, the way the "Snapping" and "Shortcuts" rows do for theirs.
+    P_CONFIG_GROUP(workspacesGroup, "Workspaces")
     P_CONFIG_GROUP(workspacesBehaviorGroup, "Workspaces.Behavior")
     P_CONFIG_GROUP(workspacesNamedGroup, "Workspaces.Named")
     P_CONFIG_GROUP(workspacesSlotsGroup, "Workspaces.Slots")
@@ -53,6 +50,15 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     static constexpr int WorkspaceSlotCount = 9;
+
+    /// Longest accepted named-workspace name. A name is not just display
+    /// text: the daemon hands it to KGlobalAccel as an ad-hoc action's
+    /// objectName and description, and KGlobalAccel writes that verbatim into
+    /// kglobalshortcutsrc, an INI file. Anything a person would actually type
+    /// as a workspace name fits well inside this, and the cap keeps a
+    /// hand-edited config from pushing an unbounded string into another
+    /// program's state file.
+    static constexpr int WorkspaceNameMaxLength = 64;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Workspaces.Behavior
@@ -141,5 +147,4 @@ public:
 
 } // namespace PlasmaZones
 
-#undef P_CONFIG_KEY
-#undef P_CONFIG_GROUP
+#include "configkeymacro_undef.h"

@@ -13,20 +13,9 @@
 
 #include <QString>
 
-// Macro to define a static config key accessor returning a QStringLiteral.
-// Usage: P_CONFIG_KEY(snappingEnabledKey, "SnappingEnabled")
-// Expands to: static QString snappingEnabledKey() { return QStringLiteral("SnappingEnabled"); }
-#define P_CONFIG_KEY(name, str)                                                                                        \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
-
-// Alias for group-name accessors — same body as P_CONFIG_KEY, single
-// definition so a future tweak to P_CONFIG_KEY (e.g. attribute
-// annotation) automatically applies to groups too. Separate macro
-// name preserved for readability at the call sites.
-#define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
+// The accessor macros. Defined in one place for the whole ConfigKeys chain,
+// undef'd again at the bottom of this file.
+#include "configkeymacro.h"
 
 // Single definition point for the per-screen group prefix spellings.
 // All five are rows in PerScreenPathResolver's prefix→category mapping table,
@@ -1095,8 +1084,7 @@ private:
 
 } // namespace PlasmaZones
 
-#undef P_CONFIG_KEY
-#undef P_CONFIG_GROUP
+#include "configkeymacro_undef.h"
 // P_PER_SCREEN_PREFIX_* deliberately NOT undef'd: perscreenresolver.cpp
 // consumes them after including this header (the single-definition-point
 // contract above). Do not "clean up" by undef'ing them here.

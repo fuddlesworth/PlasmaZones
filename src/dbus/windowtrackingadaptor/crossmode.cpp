@@ -59,7 +59,7 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
 }
 
 void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId,
-                                                      int targetDesktop, const QString& direction)
+                                                      int targetDesktop, const QString& direction, bool moveOutput)
 {
     if (rawWindowId.isEmpty() || targetDesktop < 1) {
         return;
@@ -100,7 +100,7 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId
         // never leave the source output. The effect no-ops the output move
         // when the window is already there.
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
-        if (!targetScreenId.isEmpty()) {
+        if (moveOutput && !targetScreenId.isEmpty()) {
             Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
         }
         return;
@@ -114,11 +114,19 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId
     // no other monitor to name, and same-output cross-desktop IS the ordinary
     // shape of this verb — rather than the untracked branch's bare desktop
     // move, which would part a tracked window from its engine state.
-    QString resolvedScreenId = targetScreenId;
+    // Desktop-only route (RouteToWorkspace): the window stays on the monitor
+    // it is on, so the handoff's destination context is that monitor, not the
+    // workspace's owner screen. Resolving it here rather than passing the
+    // owner through keeps crossModeMoveImpl's "re-home on the target screen"
+    // contract intact instead of quietly re-keying engine state onto an output
+    // the window never reaches.
+    QString resolvedScreenId = moveOutput ? targetScreenId : QString();
     if (resolvedScreenId.isEmpty()) {
         resolvedScreenId = sourceEngine->screenForTrackedWindow(windowId);
-        qCWarning(lcDbusWindow) << "workspace move: no owner screen for" << windowId << "- falling back to its own"
-                                << resolvedScreenId;
+        if (moveOutput) {
+            qCWarning(lcDbusWindow) << "workspace move: no owner screen for" << windowId << "- falling back to its own"
+                                    << resolvedScreenId;
+        }
         if (resolvedScreenId.isEmpty()) {
             return;
         }

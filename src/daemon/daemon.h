@@ -1233,6 +1233,19 @@ private:
     /// (see its head comment).
     bool m_updateEngineScreensInProgress = false;
     bool m_updateEngineScreensQueued = false;
+    /// Set while a DESKTOP REAP is being fanned out to the engines (identity
+    /// pass under dynamic workspaces, count sweep without it). A reap releases
+    /// the windows of one (screen, desktop, activity) state while the
+    /// releasing engine keeps running on that very screen, so it is a CONTEXT
+    /// prune and never a mode exit — but the screen-level question
+    /// handleEngineWindowsReleased asks (isActiveOnScreen, and the derived
+    /// sets) answers through the screen's CURRENT desktop, which for a reaped
+    /// desktop the screen is not showing says "not mine" and sent the windows
+    /// down the mode-exit path: float bit cleared, snap restore queued, for
+    /// windows that never left the releasing mode. The reaped context is the
+    /// authority here, not the screen's live one, so the fan-out states it
+    /// outright. Read by handleEngineWindowsReleased.
+    bool m_reapingDesktopState = false;
     /// PhosphorContext::ContextResolver wiring.
     ///
     /// DECLARATION ORDER INVARIANT: the three adapter members must be
@@ -1363,6 +1376,18 @@ private:
      * (the effect already processed the float from the windowsTileRequested batch).
      */
     void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
+
+    /**
+     * @brief Whether the dynamic-workspaces IDENTITY pass owns desktop
+     *        reap/renumber right now, so the count-based sweeps must stand
+     *        down.
+     *
+     * True only once the controller exists AND has adopted. Mere existence is
+     * not enough: nothing is emitted until adoption, and adoption waits up to
+     * three seconds for every screen's per-output desktop report — a desktop
+     * removed inside that window was cleaned by neither path.
+     */
+    bool workspaceIdentityPassOwnsDesktops() const;
 
     /** @brief Prune m_lastEngineOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);

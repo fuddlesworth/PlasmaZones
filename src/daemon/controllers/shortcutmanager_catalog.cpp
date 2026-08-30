@@ -261,7 +261,12 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Backward"));
         // ── Dynamic workspaces (mode-neutral; the feature gates the grabs,
-        // not the catalog — an off feature shows unbound rows, not a hole).
+        // not the catalog). With the feature off the family is parked, so
+        // this cheatsheet lists the rows with no trigger against them rather
+        // than dropping them. The System Settings Shortcuts module is a
+        // different surface and does show the chords: the ids are registered
+        // with kglobalaccel once at startup precisely so they stay rebindable
+        // there while the feature is off.
         // Short labels drop the "Workspace" the group heading already says.
         add(kIdWorkspaceFocusUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Focus Above"));
