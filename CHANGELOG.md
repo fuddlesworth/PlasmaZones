@@ -11,6 +11,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Short scrolling columns can be centered**: a window given a height that does not fill the screen sat at the start of its column with the leftover space after it. Center short columns, under Scrolling → Window → Window handling, centers the column's windows instead. On a horizontal strip that centers them vertically, and on a vertical strip horizontally. It is off by default, so nothing moves until you turn it on, and a column that already fills the screen is left alone either way. A window rule can turn it on or off for a particular monitor, desktop or activity.
 
+### Fixed
+
+- **Scrolling past a maximized column moves it once**: a maximized column sits flush against the edges of the monitor, and it was given that flush position only while it filled the view. Scrolling away put it back inside the gaps, so the column travelled a gap further than the strip it rides on, and that leftover ran as a second animation on top of the strip's own. On a window the size of the screen it read as two animations playing at once. The column now keeps the same offset whether or not it fills the view, so it travels exactly as far as the strip does ([#1012](https://github.com/fuddlesworth/PlasmaZones/pull/1012)).
+
 ## [3.4.3] - 2026-08-29
 
 ### Added
