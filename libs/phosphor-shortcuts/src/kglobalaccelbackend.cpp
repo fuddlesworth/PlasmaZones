@@ -24,6 +24,16 @@ namespace PhosphorShortcuts::detail {
 // is not available, and a bare name in a library TU is an ODR hazard against
 // anything else that links this library. The stream operators live here too so
 // ADL finds them from the registration below.
+/// Number of ints inside each (ai) struct. KGlobalAccel's own QKeySequence
+/// demarshaller reads EXACTLY this many, unconditionally — it does not stop at
+/// the array's end. A shorter array therefore makes it read past the last
+/// element, which libdbus answers with an abort() in the RECEIVING process.
+/// kglobalaccel runs in-process inside kwin_wayland on a Plasma session, so a
+/// short array here does not fail the call, it takes the compositor down with
+/// it. Verified against the live service: every sequence it hands back is
+/// four ints wide, zero-padded (e.g. Meta+1 reads as [285212720, 0, 0, 0]).
+constexpr int DBusKeySequenceInts = 4;
+
 struct DBusKeySequence
 {
     QList<int> keys;
@@ -32,7 +42,14 @@ struct DBusKeySequence
 inline QDBusArgument& operator<<(QDBusArgument& arg, const DBusKeySequence& seq)
 {
     arg.beginStructure();
-    arg << seq.keys;
+    // Zero-pad to the fixed width rather than writing keys directly. Trimming
+    // to the chord count is what a reader cannot survive, and an over-long
+    // list would leave the reader mid-array at endStructure.
+    QList<int> padded = seq.keys.mid(0, DBusKeySequenceInts);
+    while (padded.size() < DBusKeySequenceInts) {
+        padded.append(0);
+    }
+    arg << padded;
     arg.endStructure();
     return arg;
 }
