@@ -1123,6 +1123,19 @@ public:
     /// remembered-placement fallback (the cross-screen tile reclaim).
     bool applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
+    /// Drops any workspace-route record @p windowId's open did not consume.
+    ///
+    /// The record is written by applyOpenDesktopRouting and taken by whichever
+    /// placement builder runs, but not every open reaches one: a window that
+    /// opens on a scrolling or tiling screen defers by mode, and a window
+    /// carrying a cross-screen snapped record can report a snap without the
+    /// zone builder ever running. Both leave the record behind, where
+    /// SnapEngine::unfloatToZone reaches the same reader — so a Meta+F unfloat
+    /// long afterwards would resolve against the desktop and monitor that open
+    /// was routed to. Call this at every exit of the open path; it is a no-op
+    /// when the record was already taken.
+    void clearOpenWorkspaceRoute(const QString& windowId);
+
     /// Shared by the two open-routing entry points: send @p windowId to the
     /// workspace or desktop @p resolved names. A RouteToWorkspace action is
     /// tried first through the late-bound workspace resolver (named workspaces

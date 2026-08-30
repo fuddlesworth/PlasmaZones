@@ -1024,13 +1024,16 @@ void WorkspaceReconciler::maintainScreen(const QString& screenId)
                 if (spare.isEmpty()) {
                     continue;
                 }
-                qCWarning(lcWorkspaceRec) << "at the desktop cap; transferring" << spare << "from" << donor << "to"
-                                          << screenId << "so no screen is left without a workspace";
+                qCWarning(lcWorkspaceRec)
+                    << (createRefused ? "create budget spent;" : "at the desktop cap;") << "transferring" << spare
+                    << "from" << donor << "to" << screenId << "so no screen is left without a workspace";
                 m_map.transfer(spare, screenId, 0);
                 maintainScreen(donor);
                 return;
             }
-            qCWarning(lcWorkspaceRec) << "at the desktop cap with no donor; screen" << screenId << "holds no workspace";
+            qCWarning(lcWorkspaceRec) << "cannot give screen" << screenId << "a workspace:"
+                                      << (createRefused ? "its create budget is spent" : "at the desktop cap")
+                                      << "and no donor screen can spare one; it holds no workspace";
             return;
         }
         requestCreateAt(screenId, 0, QString());

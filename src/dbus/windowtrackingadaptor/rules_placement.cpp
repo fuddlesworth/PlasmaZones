@@ -341,20 +341,14 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 
-bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
+void WindowTrackingAdaptor::clearOpenWorkspaceRoute(const QString& windowId)
 {
-    // Drop any workspace-route stash this open did not consume. Reached only
-    // from the no-snap branch of the open path, which is exactly the case
-    // where placementZonesByRule never ran to take it: a scrolling or tiling
-    // screen defers by mode and never calls calculateSnapToPlacementRule, and
-    // a plain no-match never gets that far either. Left behind, the entry
-    // survives until the next routing pass for this id or its close, and
-    // SnapEngine::unfloatToZone reaches the same reader — so a later Meta+F
-    // unfloat would resolve against this open's routed desktop and screen.
-    // Clearing here rather than at each return keeps the one-open lifetime
-    // the stash documents.
     m_workspaceRoutedDesktop.remove(windowId);
     m_workspaceRoutedScreen.remove(windowId);
+}
+
+bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
+{
     if (!m_ruleStore) {
         return false;
     }

@@ -144,8 +144,13 @@ public:
     /// owner screen so the caller can resolve the snap / tiling placement
     /// against the DESTINATION monitor rather than the spawn one.
     ///
-    /// @p ownerScreenOut is written on every > 0 return (empty when ownership
-    /// has not settled) and left untouched otherwise.
+    /// @p ownerScreenOut is written only when a move is actually issued, and
+    /// is left untouched otherwise. Note that includes one > 0 return: a
+    /// sticky window is already on every workspace, so the call reports the
+    /// realized desktop (to suppress the caller's positional fallback) while
+    /// issuing no move and naming no owner. Reporting one there pinned the
+    /// placement to a monitor the window never reaches, so a caller must
+    /// treat an untouched value as "no destination screen", not as an error.
     int routeWindowToNamedWorkspace(const QString& name, const QString& windowId, bool moveOutput,
                                     QString* ownerScreenOut = nullptr);
 
