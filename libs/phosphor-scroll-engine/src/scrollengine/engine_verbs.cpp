@@ -251,6 +251,45 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     }
 }
 
+void ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
+{
+    // The maximize-to-edges twin of toggleMaximizeColumn above, and every
+    // structural choice is inherited from it verbatim — the canonicalize, the
+    // resolve-from-the-window, and the quiet named path (this verb IS the
+    // compositor interception's dispatch target, so a background client
+    // maximizing itself must not pop an OSD over the user's work). The
+    // comments there carry the reasons; this copy only records that the two
+    // must stay in step.
+    const QString canonicalId = canonicalizeForLookup(windowId);
+    QString resolvedScreen = screenId;
+    if (!canonicalId.isEmpty()) {
+        PhosphorEngine::PlacementStateKey windowKey;
+        if (stateForWindow(canonicalId, &windowKey)) {
+            resolvedScreen = windowKey.screenId;
+        }
+    }
+    const bool quiet = !canonicalId.isEmpty();
+    P_SCROLL_RESOLVE(resolvedScreen);
+    if (!state || state->strip().isEmpty()) {
+        if (!quiet) {
+            Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
+                                      QString(), screen);
+        }
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeToEdgesActiveColumn(params)
+                                               : state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
+    if (changed) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    if (!quiet) {
+        Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
+                                  sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+    }
+}
+
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().expandActiveColumnToAvailableWidth(params), "resize", false, QString());

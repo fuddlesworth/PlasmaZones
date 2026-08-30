@@ -24,6 +24,16 @@ int crossExtent(const ScrollLayoutParams& params)
     return params.axis.crossSize(params.workArea);
 }
 
+/// The rect a maximized-to-edges column resolves against: the pre-gap work
+/// area when the caller supplied one, else the gapped work area. The fallback
+/// keeps every params construction that never sets rawWorkArea (tests, pure
+/// verb math) meaning "fill the work area, gap-free" instead of collapsing to
+/// the degenerate-area arms on a null rect.
+QRect rawAreaFor(const ScrollLayoutParams& params)
+{
+    return params.rawWorkArea.isValid() ? params.rawWorkArea : params.workArea;
+}
+
 } // namespace
 
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
@@ -195,6 +205,18 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
     // it.
     if (c.isEmpty() || c.isFullyMinimized()) {
         return 0;
+    }
+    // Maximize-to-edges: the extent is DECLARED, not resolved from the width
+    // intent (which stays stored, untouched, for the un-maximize restore).
+    // No minimum floor and no work-area cap — the raw main extent already
+    // exceeds the capped answer, and a client minimum wider than the output
+    // overhangs under the compositor's own enforcement, the same outcome the
+    // respectMinimumSize=false arm accepts everywhere else.
+    if (c.maximizedToEdges) {
+        const int rawMain = params.axis.mainSize(rawAreaFor(params));
+        if (rawMain > 0) {
+            return rawMain;
+        }
     }
     const int px = qMax(resolveColumnWidthPx(c.width, params), columnMinExtentPx(c, params));
     return qMin(px, mainExtent(params));
@@ -728,16 +750,33 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
+        // Maximize-to-edges: the column resolves against the RAW work area on
+        // both axes with the inner gap suppressed inside it. Its strip-space
+        // position stays cursor-derived like every other column (the strip
+        // still scrolls it), but once its span fully covers the viewport the
+        // emitted rect snaps to the raw area exactly — cursor math is
+        // workArea-based, and any anchor policy (pin, center, overflow) then
+        // differs from the raw rect only by outer-gap slivers that would
+        // otherwise peek through at the screen edges.
+        const bool toEdges = col.maximizedToEdges;
+        const QRect colArea = toEdges ? rawAreaFor(params) : area;
+        const int colGap = toEdges ? 0 : gap;
+        const bool coversViewport =
+            toEdges && mainCursor <= axis.mainLow(area) && mainCursor + colW >= axis.mainLow(area) + mainExtent(params);
+        const int mainStart = coversViewport ? axis.mainLow(colArea) : mainCursor;
         // Published so a consumer can tell "the user asked for this extent"
         // from "this column cannot be any narrower" — columnExtentPx takes the
-        // max of the two and the answer is indistinguishable afterwards.
-        rc.extentPinnedByMinimum = columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
+        // max of the two and the answer is indistinguishable afterwards. A
+        // maximized-to-edges extent is declared, never minimum-pinned.
+        rc.extentPinnedByMinimum =
+            !toEdges && columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
+        rc.maximizedToEdges = toEdges;
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
         // rewrites this rect from the height intent of the tab that OWNS the
         // column (see tabbedColumnCrossPx), which is not necessarily the tab
         // on show and is not the only tab that may carry an intent.
-        rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
+        rc.rect = axis.makeRect(mainStart, axis.crossLow(colArea), colW, axis.crossSize(colArea));
 
         QVector<int> visible;
         visible.reserve(col.tiles.size());
@@ -759,7 +798,13 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // is replaced before anything derives from it. Everything below —
             // the indicator rect, the content rect the tabs are committed at —
             // then follows the shortened column on its own.
-            rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, tabbedColumnCrossPx(col, params));
+            //
+            // Maximize-to-edges wins over the owner's height intent: the flag
+            // declares the full raw cross extent, so the default rect above
+            // stands and the intent survives untouched for the restore.
+            if (!toEdges) {
+                rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, tabbedColumnCrossPx(col, params));
+            }
             // Only the active tile is laid out, at the column's content rect;
             // the others share its rect but are reported hidden.
             int activeTi = qBound(0, col.activeTileIdx, col.tiles.size() - 1);
@@ -789,8 +834,11 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // cross-axis extent, which is why "height" keeps its name — it is
             // the role, not the screen dimension.
             const int n = visible.size();
-            const int gapsTotal = gap * (n - 1);
-            const int availH = qMax(n, crossExtent(params) - gapsTotal);
+            // colGap is 0 for a maximized-to-edges column: its stack divides
+            // the raw cross extent with no separation, matching the gap-free
+            // look the flag promises on every side.
+            const int gapsTotal = colGap * (n - 1);
+            const int availH = qMax(n, axis.crossSize(colArea) - gapsTotal);
 
             QVector<int> heights(n, 0);
             qreal autoWeightTotal = 0;
@@ -806,7 +854,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     heights[vi] =
                         qMin(availH,
                              proportionalPx(nearestPresetValue(params.presetWindowHeights, t.height.presetFraction),
-                                            crossExtent(params), gap));
+                                            axis.crossSize(colArea), colGap));
                     fixedTotal += heights[vi];
                     break;
                 case WindowHeight::Auto:
@@ -917,14 +965,14 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 }
             } // respectMinimumSize
 
-            int crossCursor = axis.crossLow(area);
+            int crossCursor = axis.crossLow(colArea);
             for (int vi = 0; vi < n; ++vi) {
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(visible.at(vi)).windowId;
-                rt.rect = axis.makeRect(mainCursor, crossCursor, colW, heights[vi]);
+                rt.rect = axis.makeRect(mainStart, crossCursor, colW, heights[vi]);
                 rt.windowedFullscreen = col.tiles.at(visible.at(vi)).windowedFullscreen;
                 rc.tiles.append(rt);
-                crossCursor += heights[vi] + gap;
+                crossCursor += heights[vi] + colGap;
             }
         }
 

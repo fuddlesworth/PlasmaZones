@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Column maximize at the ENGINE layer: what the published columnMaximized flag
-// means, which column the window-scoped verb acts on, and what survives the
-// state transitions that discard the strip's single pre-maximize slot.
+// Column maximize at the ENGINE layer: what the published maximizedToEdges
+// flag means (declared per-column state, driven by toggleMaximizeToEdges —
+// toggleMaximizeColumn is a pure width verb with no wire representation),
+// which column the window-scoped verbs act on, and what survives the state
+// transitions that discard the strip's single pre-maximize slot.
 //
 // Its own file rather than more of test_scrollengine_smoke, whose sanctioned
 // size exception says in as many words that a new concern takes a sibling. The
@@ -44,7 +46,7 @@ ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
     return static_cast<ScrollState*>(engine->stateForScreen(screenId));
 }
 
-/// Every windowId carrying columnMaximized in the last emitted batch.
+/// Every windowId carrying maximizedToEdges in the last emitted batch.
 QSet<QString> maximizedInBatch(const QSignalSpy& spy)
 {
     QSet<QString> out;
@@ -54,7 +56,7 @@ QSet<QString> maximizedInBatch(const QSignalSpy& spy)
     const QJsonArray arr = QJsonDocument::fromJson(spy.last().at(0).toString().toUtf8()).array();
     for (const QJsonValue& v : arr) {
         const QJsonObject o = v.toObject();
-        if (o.value(QLatin1String("columnMaximized")).toBool(false)) {
+        if (o.value(QLatin1String("maximizedToEdges")).toBool(false)) {
             out.insert(o.value(QLatin1String("windowId")).toString());
         }
     }
@@ -96,17 +98,15 @@ private Q_SLOTS:
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
 };
 
-// Expel copies the source column's width to the new one, which is right for
-// every width except a full one. A maximized column IS the full-work-area
-// column, and the apply path decides columnMaximized by MEASURING the rendered
-// extent, so the copy produced two columns both reporting maximized, both
-// lighting the titlebar button, and the effect holding a KWin maximize bit for
-// each. The strip's single pre-maximize slot can only describe one of them, so
-// the second also had the state with no remembered width behind it.
+// The maximize-to-edges flag lives on the COLUMN and must not travel with an
+// expelled tile: the expelled window arrives in a fresh column (default
+// constructed, so unflagged) while the source keeps its flag. Under the old
+// MEASURED flag the expel's width copy produced two columns both reporting
+// maximized; the declared flag cannot be copied by accident, and this slot
+// pins that it is not.
 //
-// Asserted on the published FLAG rather than on the stored width, because the
-// flag is what the effect acts on and an intent assertion would pass for a
-// column that stored something narrow and still rendered full.
+// Asserted on the published FLAG rather than on any stored state, because the
+// flag is what the effect mirrors onto KWin's maximize bit.
 void TestScrollEngineMaximize::expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile()
 {
     QObject owner;
@@ -121,7 +121,7 @@ void TestScrollEngineMaximize::expellingFromAMaximizedColumnDoesNotMaximizeTheEx
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
     // One column holding both tiles, then maximized.
     engine->consumeWindowIntoColumn(QStringLiteral("S1"));
-    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QCOMPARE(maximizedInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
 
@@ -160,7 +160,7 @@ void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()
     // Maximize the FIRST column, then scroll away so it parks off-viewport.
     engine->focusColumnFirst(QStringLiteral("S1"));
     QCoreApplication::processEvents();
-    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"));
     QCoreApplication::processEvents();
 
     QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
@@ -198,11 +198,11 @@ void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()
     // which way the earlier press left it: the fold and the tab both relayout,
     // and a press on an already-full column un-maximizes it.
     QSignalSpy tabbed(engine, &ScrollEngine::windowsTiled);
-    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     if (!maximizedInBatch(tabbed).contains(tabIds.first())) {
         tabbed.clear();
-        engine->toggleMaximizeColumn(QStringLiteral("S1"));
+        engine->toggleMaximizeToEdges(QStringLiteral("S1"));
         QCoreApplication::processEvents();
     }
     QVERIFY2(!tabbed.isEmpty(), "the maximize must emit a batch");
@@ -319,11 +319,14 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     // caught it: the column's WIDTH is stashed and comes back, the strip's
     // single pre-maximize slot is not stashed and does not.
     //
-    // So after a mode round trip the column is still full width and still
-    // publishes columnMaximized (the effect re-asserts the KWin bit from that,
-    // which is the only thing that restores it), while the next un-maximize
-    // press falls to the default-width arm instead of the user's old width.
-    // Both halves are asserted, because it is the PAIR that is the contract.
+    // So after a mode round trip the column is still full width and, since
+    // the maximize-to-edges flag rides the stash, still publishes
+    // maximizedToEdges (the effect re-asserts the KWin bit from that, which
+    // is the only thing that restores it), while the next un-maximize press
+    // falls to the default-width arm instead of the user's old width. Both
+    // halves are asserted, because it is the PAIR that is the contract. The
+    // wire flag is driven by toggleMaximizeToEdges beside the width verb —
+    // the width verb alone publishes nothing.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
@@ -340,6 +343,8 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     };
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
+    QCoreApplication::processEvents();
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
     const ColumnWidth maximized = widthOf(QStringLiteral("app|a"));
 

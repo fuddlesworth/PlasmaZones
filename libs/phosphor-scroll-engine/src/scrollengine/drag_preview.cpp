@@ -351,7 +351,7 @@ void ScrollEngine::commitDragInsertPreview()
         // exception (a stale true only forces one redundant emit, but the
         // symmetry is the documented contract).
         m_lastAppliedWindowedFs.remove(p.windowId);
-        m_lastAppliedColumnMaximized.remove(p.windowId);
+        m_lastAppliedMaximizedToEdges.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);

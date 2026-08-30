@@ -588,7 +588,7 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
 
 void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
 {
-    // The columnMaximized wire flag: it must ride EVERY tile of a maximized
+    // The maximizedToEdges wire flag: it must ride EVERY tile of a maximized
     // column (the wire is per window and the effect has no column identity to
     // hang a per-column flag on), must not leak onto a sibling column, and
     // must clear on the toggle back.
@@ -623,13 +623,13 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
         for (const QJsonValue& v : batch) {
             const QJsonObject o = v.toObject();
             out.insert(o.value(QLatin1String("windowId")).toString(),
-                       o.value(QLatin1String("columnMaximized")).toBool(false));
+                       o.value(QLatin1String("maximizedToEdges")).toBool(false));
         }
         return out;
     };
 
     QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QVERIFY(tiled.count() > 0);
     QHash<QString, bool> flags = flagsByWindow(tiled);
@@ -649,7 +649,7 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
     // all, which is the failure this leg most needs to catch: a Release the
     // effect never sees is indistinguishable from a Release it sees as false.
     tiled.clear();
-    engine->toggleMaximizeColumn(QStringLiteral("S1"));
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"));
     QCoreApplication::processEvents();
     QVERIFY(tiled.count() > 0);
     flags = flagsByWindow(tiled);
@@ -693,9 +693,9 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // geometry, so on their own they would pass for a column whose intent
     // moved while its rendered extent did not. The rendered side is covered
     // where it belongs: test_scrollengine_maximize.cpp asserts the PUBLISHED
-    // columnMaximized flag, which the apply path derives by measuring the
-    // rect, and test_scrollstrip_sizing.cpp asserts resolved pixels for the
-    // toggle's own arms.
+    // maximizedToEdges flag (declared state on its own verb), and
+    // test_scrollstrip_sizing.cpp asserts resolved pixels for the toggle's
+    // own arms.
     const auto widthOf = [engine](const QString& windowId) {
         // Both guards, matching columnDisplayOf above and the null-guard rule
         // this file states at stateFor: a dropped state or a window the strip
@@ -826,12 +826,13 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
 
 void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
 {
-    // extentPinnedByMinimum is the whole reason the published columnMaximized
-    // flag is not just "the rect fills the work area", and nothing exercised
-    // it: deleting that term from the conjunction left the entire suite green.
-    // What it prevents is a column whose TILES' declared minimum alone reaches
-    // the work area reporting maximized forever — the titlebar button latches
-    // with no way to un-latch, because the verb refuses the same column.
+    // The published maximizedToEdges flag is DECLARED state on its own verb,
+    // never derived from the rendered rect — this slot pins that a column
+    // rendering full width for an incidental reason (here, its tiles'
+    // declared minimum alone reaching the work area) publishes nothing. A
+    // regression back to any rect-measured derivation reports such a column
+    // maximized forever: the titlebar button latches with no way to un-latch,
+    // because the width verb refuses the same column.
     //
     // The band is exactly one value. Below kMainExtent the column does not
     // render full and the flag is false for an ordinary reason; above it the
@@ -870,8 +871,8 @@ void TestScrollEngineSmoke::minPinnedFullWidthColumnDoesNotPublishMaximized()
         QCOMPARE(Ax::entryMainLen(o), ScrollTestUtils::kMainExtent);
         // ...and still must not claim to be maximized, because the user chose
         // none of it and the toggle cannot undo it.
-        QVERIFY2(!o.contains(QLatin1String("columnMaximized")),
-                 "a column pinned full width by its minimum must not publish columnMaximized");
+        QVERIFY2(!o.contains(QLatin1String("maximizedToEdges")),
+                 "a column pinned full width by its minimum must not publish maximizedToEdges");
     }
     QVERIFY2(sawA, "the batch must carry the pinned window");
 }

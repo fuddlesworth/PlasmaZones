@@ -66,6 +66,9 @@ private Q_SLOTS:
     void widthPresetCycleWrapsByExtentNotByPosition();
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
     void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
+    void maximizeToEdgesResolvesTheRawAreaGapFree();
+    void maximizeToEdgesRestoreIsJustTheStoredIntentAgain();
+    void widthAndHeightVerbsClearMaximizeToEdges();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -760,6 +763,93 @@ void TestScrollStripSizing::maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot()
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QVERIFY2(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) < narrowMain,
              "restoring a stale full-width slot must fall through to the default width");
+}
+
+// The geometry contract of the maximize-to-edges flag: the column resolves
+// against the RAW work area (pre outer gaps) on BOTH axes, its stacked tiles
+// divide the raw cross extent with no inner gap, and a sibling column keeps
+// its ordinary gapped resolution.
+void TestScrollStripSizing::maximizeToEdgesResolvesTheRawAreaGapFree()
+{
+    ScrollLayoutParams params = defaultParams();
+    // Simulated outer gaps: the gapped work area sits 20px inside the raw
+    // screen rect on every side. rawWorkArea is what engine_query captures
+    // BEFORE the shrink.
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+
+    const ResolvedStrip resolved = strip.relayout(params);
+    const QRect a = rectOf(resolved, QStringLiteral("a"));
+    const QRect b = rectOf(resolved, QStringLiteral("b"));
+    QCOMPARE(Ax::mainLen(a), Ax::mainLen(params.rawWorkArea));
+    QCOMPARE(Ax::mainLen(b), Ax::mainLen(params.rawWorkArea));
+    // Gap-free stack: the two cross extents partition the raw cross exactly.
+    QCOMPARE(Ax::crossLen(a) + Ax::crossLen(b), Ax::crossLen(params.rawWorkArea));
+    // And the union is the raw rect itself, corners included — the emitted
+    // rect snaps to the raw area whenever the column covers the viewport.
+    QCOMPARE(a.united(b), params.rawWorkArea);
+}
+
+// Un-maximizing is "stop overriding": the stored width intent was never
+// touched, so one toggle out re-renders exactly the pre-toggle rects with no
+// pre-maximize slot involved.
+void TestScrollStripSizing::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(377), ColumnDisplay::Normal, params));
+    const QRect before = rectOf(strip.relayout(params), QStringLiteral("a"));
+    QCOMPARE(Ax::mainLen(before), 377);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QCOMPARE(strip.columns().first().width, ColumnWidth::makeFixed(377)); // intent untouched while flagged
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), before);
+}
+
+// D3: any width or height verb on a flagged column drops the flag first and
+// reports the drop as a change, so a verb that would otherwise refuse still
+// visibly un-maximizes.
+void TestScrollStripSizing::widthAndHeightVerbsClearMaximizeToEdges()
+{
+    ScrollLayoutParams params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+
+    const auto flagged = [&strip] {
+        return strip.columns().first().maximizedToEdges;
+    };
+
+    // Width adjust.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY(flagged());
+    QVERIFY(strip.adjustActiveColumnWidth(10, params));
+    QVERIFY(!flagged());
+
+    // The width-maximize toggle is a width verb too.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY(!flagged());
+
+    // Height write.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(!flagged());
+
+    // An explicit width SET that matches the stored intent still clears, and
+    // the clear alone is the reported change.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    const ColumnWidth stored = strip.columns().first().width;
+    QVERIFY(strip.setActiveColumnWidth(stored));
+    QVERIFY(!flagged());
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

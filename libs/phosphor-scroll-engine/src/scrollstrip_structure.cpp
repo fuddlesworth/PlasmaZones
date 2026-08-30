@@ -771,13 +771,12 @@ bool ScrollStrip::expelWindowFromColumn(const ScrollLayoutParams& params)
     Column newCol;
     // Inherit the source column's width, EXCEPT when that renders full.
     //
-    // A maximized column is by definition THE full-work-area column, and the
-    // apply path publishes columnMaximized by MEASURING the rendered extent —
-    // so copying a full width here produced two columns both reporting
-    // maximized, both lighting the titlebar button, and the effect holding a
-    // KWin maximize bit for each. The single m_preMaximizeColumnIdx slot can
-    // only describe one of them, so the copy also silently handed the new
-    // column a state with no remembered width behind it.
+    // Two full-work-area columns is a strip where the expel visibly did
+    // nothing (each still covers the viewport alone), and the single
+    // m_preMaximizeColumnIdx slot can only describe one of them, so the copy
+    // silently handed the new column a state with no remembered width behind
+    // it. The maximize-to-edges FLAG never copies at all — the fresh Column
+    // below default-constructs it false, which is the per-column contract.
     //
     // The expelled tile takes the context default instead, which is what
     // "give this window its own column" means. Half the work area when the

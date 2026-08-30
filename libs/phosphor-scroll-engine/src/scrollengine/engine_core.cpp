@@ -285,7 +285,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_declinedOpenFocus.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
@@ -353,6 +353,7 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
+        sc.maximizedToEdges = col.maximizedToEdges;
         // Rides with the display it belongs to; see StashedColumn.
         sc.heightOwnerId = col.heightOwnerId;
         // Clamped, not value(): an out-of-range activeTileIdx would record an
@@ -691,6 +692,16 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (const QString owner = stash.at(colIdx).heightOwnerId;
         !owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
         state->strip().setTabbedHeightOwner(owner);
+    }
+    // The stashed maximize-to-edges state, column presentation like the width
+    // and display the inserts above already re-applied. Re-asserted per
+    // arrival (the setter is a no-op once it matches) rather than only on the
+    // column-creating one, so it survives whichever tile happened to arrive
+    // first. Fuzzy claims included, on width's terms rather than windowed-
+    // fullscreen's: this is how the COLUMN presents, not a state pushed onto
+    // the arriving client.
+    if (stash.at(colIdx).maximizedToEdges) {
+        state->strip().setMaximizedToEdgesForWindow(windowId, true);
     }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and

@@ -315,6 +315,23 @@ public:
     /// column would cancel the clicked window's maximize and resize somebody
     /// else's column.
     bool toggleMaximizeColumnForWindow(const QString& windowId, const ScrollLayoutParams& params);
+    /// Toggle the active column's maximize-to-edges state (niri
+    /// maximize-window-to-edges, generalized to the column): full raw work
+    /// area on both axes, gap-free (Column::maximizedToEdges carries the
+    /// contract). Pure declared state — the stored width intent is untouched,
+    /// so the un-maximize arm is just "stop overriding". Refuses only on a
+    /// degenerate work area (the sibling verbs' bail) and on a missing
+    /// column.
+    bool toggleMaximizeToEdgesActiveColumn(const ScrollLayoutParams& params);
+    /// The same verb aimed at the column OWNING @p windowId, for the
+    /// compositor's maximize interception — toggleMaximizeColumnForWindow's
+    /// doc carries why the named form is load-bearing.
+    bool toggleMaximizeToEdgesForWindow(const QString& windowId, const ScrollLayoutParams& params);
+    /// Restore-path setter for the column owning @p windowId: a stash claim
+    /// re-asserting the state it captured, not a user verb, so none of the
+    /// toggle's addressing or feedback applies. No-op (false) when the strip
+    /// does not hold the window or the state already matches.
+    bool setMaximizedToEdgesForWindow(const QString& windowId, bool maximized);
     /// Grow the active column into the on-screen MAIN-axis space not taken by
     /// the FULLY visible columns at the current view (niri
     /// expand-column-to-available-width).
@@ -747,6 +764,10 @@ private:
     /// Shared core of the two maximize-toggle entry points. Out-of-range
     /// @p columnIndex (including columnOfWindow's -1 miss) refuses.
     bool toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params);
+    /// Shared core of the two maximize-to-edges entry points; the same
+    /// refusal shape as toggleMaximizeColumnAt minus the pinned-by-minimum
+    /// arm (the flag is declared state, never measured).
+    bool toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutParams& params);
     Tile* activeTileMutable();
     void clampActiveIndices();
 

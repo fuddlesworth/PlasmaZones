@@ -70,7 +70,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // the eviction set identical across the exit paths.
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedColumnMaximized.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
     // Background-context guard, as windowClosed and the float paths carry: a
     // release out of another desktop's state must not retile the strip that
     // is on screen right now. The switch back retiles the mutated one.
@@ -118,7 +118,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_states.setKeyForWindow(windowId, key);
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);

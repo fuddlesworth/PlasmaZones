@@ -129,6 +129,11 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // params consumer, so clamp here.
     const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
+    // The pre-gap rect for maximize-to-edges columns, under the same
+    // never-invert clamp. Captured from `area` (already strut-adjusted), not
+    // from axisBasis: axisBasis folds the outer gaps back in, and the whole
+    // point of the raw rect is that a maximized column covers them.
+    params.rawWorkArea = (area.width() > 0 && area.height() > 0) ? area : QRect();
     params.gap = innerGap;
     // The override map was resolved ONCE above (before the smart-gaps gate)
     // and is threaded through every effective* read here — the accessors'

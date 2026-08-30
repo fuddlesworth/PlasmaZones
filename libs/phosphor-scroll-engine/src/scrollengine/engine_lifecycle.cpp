@@ -696,7 +696,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // redundant emit, but the exit sets should stay identical).
         m_scrollFloatedWindows.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         if (wasFloating) {
             // Announce the dropped float bit: signal-driven subscribers
             // (the effect's FloatingCache) would otherwise keep believing
@@ -1010,7 +1010,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // is different — it is retained on purpose for the close capture.)
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedColumnMaximized.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
 
     if (inStrip && key == currentKeyForScreen(key.screenId)) {
         // Background-context guard: applyLayout resolves the screen's

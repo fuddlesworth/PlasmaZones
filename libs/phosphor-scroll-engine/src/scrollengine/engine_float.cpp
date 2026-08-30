@@ -64,7 +64,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -75,23 +75,29 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // Captured VERBATIM, a full width included, and that is the intended
     // trade rather than an oversight.
     //
-    // A minimize/unminimize round trip of a maximized column's only window
-    // therefore rebuilds a full-width column, which publishes columnMaximized
-    // again — correct, since the user did maximize it — but WITHOUT the
-    // strip's pre-maximize slot, which is per-strip state this restore does
-    // not carry. The consequence is bounded: the un-maximize press falls
-    // through to the context default instead of a remembered width, which is
-    // the same arm a column maximized in an earlier session takes.
+    // A minimize/unminimize round trip of a full-width column's only window
+    // therefore rebuilds a full-width column, but WITHOUT the strip's
+    // pre-maximize slot, which is per-strip state this restore does not
+    // carry. The consequence is bounded: the un-maximize press falls through
+    // to the context default instead of a remembered width, which is the
+    // same arm a column maximized in an earlier session takes. The
+    // maximize-to-edges FLAG is carried separately below — it is declared
+    // state, not a width, and nothing re-derives it.
     //
     // Deliberately not "fixed" by capturing a narrower width. That would drop
-    // the maximized state across a minimize, which is a visible regression for
-    // the ordinary case, to avoid losing a remembered width in the rare one.
-    // This is the opposite call from expelWindowFromColumn, which DOES narrow
-    // the new column, because there the copy created a SECOND maximized column
-    // rather than restoring the one the user made.
+    // the full-width state across a minimize, which is a visible regression
+    // for the ordinary case, to avoid losing a remembered width in the rare
+    // one. This is the opposite call from expelWindowFromColumn, which DOES
+    // narrow the new column, because there the copy created a SECOND
+    // full-width column rather than restoring the one the user made.
     restore.width = sourceColumn.width;
     restore.display = sourceColumn.display;
     restore.ownedTabbedHeight = sourceColumn.display == ColumnDisplay::Tabbed && sourceColumn.heightOwnerId == windowId;
+    // Only when this window is the column's LAST tile: a shared column
+    // survives the float and keeps its own flag, and re-asserting it from a
+    // returning sibling could re-maximize a column the user un-maximized in
+    // the meantime.
+    restore.maximizedToEdges = sourceColumn.tiles.size() == 1 && sourceColumn.maximizedToEdges;
     const QSize minSize = state->strip().windowMinimumSize(windowId);
     restore.minWidth = minSize.width();
     restore.minHeight = minSize.height();
@@ -132,7 +138,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // not carry it — float and windowed fullscreen are exclusive), so the
     // emit-gate memory goes with it.
     m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedColumnMaximized.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {
@@ -262,6 +268,14 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
             if (restore.ownedTabbedHeight) {
                 state->strip().setTabbedHeightOwner(windowId);
             }
+            // The maximize-to-edges flag the lone-tile capture carried:
+            // declared column state nothing else re-derives, so a
+            // minimize/unminimize round trip of a maximized column's only
+            // window rebuilds a maximized column. Captured false for a
+            // shared-column tile, so this cannot re-flag a surviving column.
+            if (restore.maximizedToEdges) {
+                state->strip().setMaximizedToEdgesForWindow(windowId, true);
+            }
         } else {
             // A seeded entry has no remembered height, so the tile carries the
             // context default the fresh insert seeded. Under "the client
@@ -344,7 +358,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

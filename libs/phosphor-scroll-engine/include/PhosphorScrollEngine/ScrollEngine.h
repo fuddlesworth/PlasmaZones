@@ -239,6 +239,13 @@ public:
     /// interception needs — that request names one window and the active
     /// column is frequently a different one.
     void toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
+    /// Toggle a column's maximize-to-edges state (full raw work area on both
+    /// axes, gap-free; niri maximize-window-to-edges generalized to the
+    /// column). Same window/screen addressing as toggleMaximizeColumn, and
+    /// this is the verb the compositor's maximize interception dispatches:
+    /// the KWin maximize bit mirrors THIS state alone, toggleMaximizeColumn
+    /// being a pure width verb with no mirror.
+    void toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -1279,17 +1286,15 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
-    /// Windows whose last EMITTED batch entry carried columnMaximized. The
+    /// Windows whose last EMITTED batch entry carried maximizedToEdges. The
     /// column twin of m_lastAppliedWindowedFs and its own leg of the same
-    /// emit-on-change gate, for the same reason and one more: this flag can
-    /// flip with every committed rect byte-identical. It is derived partly
-    /// from extentPinnedByMinimum, which moves when a client reports a
-    /// minimum anywhere in [resolveColumnWidthPx(width), workAreaMain] on an
-    /// already-full-width column, or when respectMinimumSize is toggled over
-    /// one. Without this leg the batch is suppressed and the compositor keeps
-    /// asserting a maximize the engine has dropped. Maintained wherever
-    /// m_lastAppliedWindowedFs is.
-    QSet<QString> m_lastAppliedColumnMaximized;
+    /// emit-on-change gate, for the same reason and one more: the flag can
+    /// flip with every committed rect byte-identical (a toggle on a column
+    /// whose client minimum already outruns the raw area, or an un-maximize
+    /// whose stored width still renders full). Without this leg the batch is
+    /// suppressed and the compositor keeps asserting a maximize the engine
+    /// has dropped. Maintained wherever m_lastAppliedWindowedFs is.
+    QSet<QString> m_lastAppliedMaximizedToEdges;
     /// Which screen edge each currently-parked window went out by — one of
     /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
     /// the screen's strip axis: a horizontal strip goes out left/right, a
