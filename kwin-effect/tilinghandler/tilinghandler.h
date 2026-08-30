@@ -232,11 +232,15 @@ public:
     {
         m_savedPreTileForDesktopMove.remove(windowId);
     }
-    bool isScreenQueryPending() const
-    {
-        return m_initialScreenQueryPending;
-    }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
+    /// Flags-settle eviction backstop: re-run the structural placement
+    /// filters for an already-announced window whose keep-above /
+    /// skip-switcher flag just changed, and release it from its engine
+    /// (restoring the captured spawn frame) when it is no longer tileable.
+    /// Wired to KWin::Window's flag-change signals in
+    /// setupWindowConnections; free for windows this handler never
+    /// announced.
+    void reevaluateWindowEligibility(KWin::EffectWindow* window);
     void onDaemonReady();
 
     /// Drop everything the DEAD daemon session owned, at the moment its
@@ -1448,6 +1452,10 @@ private:
         bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
+    /// One zero-tick dispatch armed at a time for the settle defer
+    /// (deferWindowRouting); windows deferred in the same event-loop burst
+    /// share the tick.
+    bool m_deferredRouteDispatchScheduled = false;
     /// Per-screen rules-visible active layout ids, pushed by the daemon
     /// (see activeLayoutForScreen). A pure ruleQuery input like
     /// m_scrollingScreens — no lifecycle transitions key on it.

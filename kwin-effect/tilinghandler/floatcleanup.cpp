@@ -15,6 +15,7 @@
 
 #include "tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
@@ -22,6 +23,9 @@
 #include <window.h>
 
 #include <QLoggingCategory>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -145,6 +149,213 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
                       << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
                       << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
     return true;
+}
+
+void TilingHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore)
+{
+    if (!window || window->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(window);
+    m_pendingFreshWindows.insert(windowId);
+    m_deferredWindowRoutes.insert(windowId, DeferredWindowRoute{QPointer<KWin::EffectWindow>(window), canSnapRestore});
+    // Zero-tick dispatch when no screen query is in flight: the defer is a
+    // flags-settle turn, not a wait (see the routing block in
+    // slotWindowAdded). When a query IS pending its finished handler owns
+    // the dispatch — every arm of it calls completeDeferredWindowRoutes —
+    // and a tick that was already armed before the query started finds an
+    // empty route map and no-ops. The re-check inside the tick covers the
+    // opposite race, a query starting between this schedule and the tick
+    // firing.
+    if (!m_initialScreenQueryPending && !m_deferredRouteDispatchScheduled) {
+        m_deferredRouteDispatchScheduled = true;
+        QTimer::singleShot(0, this, [this] {
+            m_deferredRouteDispatchScheduled = false;
+            if (m_initialScreenQueryPending) {
+                return;
+            }
+            completeDeferredWindowRoutes();
+        });
+    }
+}
+
+void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    // Only a window this handler actually announced is a candidate; for
+    // everything else a flag flip stays free. Snap-owned windows are
+    // deliberately out of scope: their capture window is closed by the
+    // routing defer (resolveWindowRestore now runs post-settle), and a LATE
+    // keep-above on a snapped window is dominated by the user raising it
+    // from the title-bar menu, where an unsnap would fight them.
+    if (!m_notifiedWindows.contains(windowId)) {
+        return;
+    }
+    // The STRUCTURAL pair only, NOT isEligibleForTilingNotify: its desktop /
+    // activity / minimized arms describe visibility, not eligibility, and
+    // testing them here would evict a healthy tile on a plain desktop
+    // switch. Both predicates consult the window's OWN keep-above
+    // (windowOwnKeepAbove), so a SetWindowLayer-raised window does not
+    // evict itself.
+    //
+    // Same scrolling-fullscreen exemption as isEligibleForTilingNotify: the
+    // strip keeps tiling a window through real fullscreen, so a benign flag
+    // edge (keep-above cleared, say) on a fullscreen scrolling tile must not
+    // read shouldHandleWindow's structural fullscreen reject as an eviction
+    // verdict.
+    KWin::Window* kwFs = w->window();
+    const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
+    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));
+    if (m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)
+        && m_effect->isTileableWindow(w)) {
+        return;
+    }
+    const QString screenId = m_effect->getWindowScreenId(w);
+    // Spawn frame read BEFORE the release: cleanupAutotileTracking (inside
+    // releaseWindowTracking) clears the pre-tile bucket with the rest of
+    // the tracking.
+    const QRectF spawnGeo = findPreTileGeometry(windowId);
+    qCInfo(lcEffect) << "Flags-settle eviction:" << windowId << "no longer tileable, releasing from" << screenId;
+    releaseWindowTracking(windowId, screenId);
+    if (spawnGeo.isValid() && !w->isUserMove() && !w->isUserResize()) {
+        // Same VS-crossing suppression bracket as every other effect-made
+        // geometry write (save/restore, nesting-safe), and the same
+        // tracked-screen re-seed the daemon pre-tile restore does after a
+        // suppressed apply.
+        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+        m_effect->m_daemonGate.inGeometryApply = true;
+        const auto restoreGate = qScopeGuard([this, prevInApply] {
+            m_effect->m_daemonGate.inGeometryApply = prevInApply;
+        });
+        m_effect->applyWindowGeometry(w, spawnGeo.toRect(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+        m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
+    }
+    // The release means no daemon moveResize is coming, and the spawn restore
+    // above lands the window back ON its suppression spawnGeometry — so the
+    // geometry-settle release can never fire. Release first-frame suppression
+    // here (no-op for an unsuppressed window) rather than letting an eviction
+    // that raced the daemon's first tile keep the window invisible until the
+    // 250 ms deadline.
+    m_effect->endRestoreSuppression(w);
+}
+
+QSet<QString> TilingHandler::completeDeferredWindowRoutes()
+{
+    const auto routes = m_deferredWindowRoutes;
+    m_deferredWindowRoutes.clear();
+    QSet<QString> routedWindowIds;
+    routedWindowIds.reserve(routes.size());
+    for (auto it = routes.constBegin(); it != routes.constEnd(); ++it) {
+        routedWindowIds.insert(it.key());
+        KWin::EffectWindow* window = it->window.data();
+        if (!window || window->isDeleted()) {
+            m_pendingFreshWindows.remove(it.key());
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(window);
+        routedWindowIds.insert(windowId);
+        // The pending-fresh entry was keyed by the id at defer time; if the
+        // live id diverged, the old key would leak forever (the tail prune
+        // below only drops dead/off-screen windows, and this window is
+        // neither).
+        if (windowId != it.key()) {
+            m_pendingFreshWindows.remove(it.key());
+        }
+        // The defer exists so the eligibility filters run against SETTLED
+        // flags, and the snap arms need that re-run as much as the tiling
+        // one: it->canSnapRestore was computed at windowAdded time, before a
+        // same-burst keep-above / skip-switcher landed, and acting on the
+        // stale verdict would instant-restore (or daemon-resolve) a
+        // now-excluded window into a zone. Recompute the structural pair the
+        // slotWindowAdded predicate used — the tiling arm re-filters on its
+        // own through isEligibleForTilingNotify either way.
+        const bool canSnapRestore =
+            it->canSnapRestore && m_effect->shouldHandleWindow(window) && m_effect->isTileableWindow(window);
+        // The defer-time first-frame suppression was armed with the standard
+        // deadline, but the screen query this dispatch waited on can outlast
+        // it — re-arm (deadline only, no-op for unsuppressed windows) so the
+        // window doesn't return to compositing at its centred spawn placement
+        // between deadline expiry and the reposition below.
+        m_effect->refreshRestoreSuppressionDeadline(window);
+        // Consume (and maybe apply) the instant snap-restore cache entry —
+        // a deferred window must not leave its entry alive for a later
+        // same-app sibling to claim.
+        // A teleport can move the window to another screen; re-resolve after.
+        QString screenId = m_effect->getWindowScreenId(window);
+        if (canSnapRestore && !window->isMinimized()
+            && m_effect->tryInstantSnapRestore(window, windowId, /*canSnapRestore=*/true)) {
+            screenId = m_effect->getWindowScreenId(window);
+        }
+        if (m_managedScreens.contains(screenId)) {
+            if (window->isMinimized()) {
+                // A window that minimized while the screen query was pending
+                // is excluded from the follow-up batch (it is in
+                // routedWindowIds), so nothing else will claim it — claim it
+                // here, release the first-frame suppression (a minimized
+                // window paints nothing, and leaving the suppression armed
+                // stalls its eventual restore for the 250 ms deadline), and
+                // drop the spawn-provenance marker so a later re-add cannot
+                // inherit knownFreeFloating=true from a stale entry.
+                // Empty filter: passing m_managedScreens duplicated the
+                // claim's own internal autotile-screen gate verbatim.
+                claimAlreadyMinimizedAsFloated(window, windowId, {}, /*enteringAutotile=*/true);
+                m_pendingFreshWindows.remove(windowId);
+                m_effect->endRestoreSuppression(window);
+                continue;
+            }
+            if (canSnapRestore && m_effect->snapHandler()) {
+                QPointer<KWin::EffectWindow> safeWindow = window;
+                m_effect->snapHandler()->callResolveWindowRestore(
+                    window,
+                    [this, safeWindow, windowId](bool snapApplied) {
+                        if (!safeWindow || safeWindow->isDeleted()) {
+                            return;
+                        }
+                        if (!m_managedScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
+                            m_pendingFreshWindows.remove(windowId);
+                            m_effect->endRestoreSuppression(safeWindow.data());
+                            return;
+                        }
+                        // knownFreeFloating only when the restore did NOT
+                        // apply — a zone-placed window's live frame is the
+                        // zone rect, not a genuine free frame.
+                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied)
+                            && !m_notifiedWindows.contains(windowId)) {
+                            m_effect->endRestoreSuppression(safeWindow.data());
+                        }
+                    },
+                    /*releaseSuppressionOnMiss=*/false);
+            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true)
+                       && !m_notifiedWindows.contains(windowId)) {
+                m_effect->endRestoreSuppression(window);
+            }
+            continue;
+        }
+
+        m_pendingFreshWindows.remove(it.key());
+        m_pendingFreshWindows.remove(windowId);
+        if (canSnapRestore && !window->isMinimized() && m_effect->snapHandler()) {
+            m_effect->snapHandler()->callResolveWindowRestore(window);
+        } else {
+            m_effect->endRestoreSuppression(window);
+        }
+    }
+
+    const auto pendingIds = m_pendingFreshWindows.values();
+    for (const QString& windowId : pendingIds) {
+        // EXACT resolve: the entry is keyed to a specific instance's id, so a
+        // fuzzy hit on a same-app sibling must not keep a dead entry alive —
+        // a retained stale entry later flips knownFreeFloating to true and
+        // poisons the free-geometry capture.
+        KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
+        if (!window || window->isDeleted() || !m_managedScreens.contains(m_effect->getWindowScreenId(window))) {
+            m_pendingFreshWindows.remove(windowId);
+        }
+    }
+    return routedWindowIds;
 }
 
 void TilingHandler::applyFloatCleanup(const QString& windowId)
