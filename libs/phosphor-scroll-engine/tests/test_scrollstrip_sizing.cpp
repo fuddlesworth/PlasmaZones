@@ -72,6 +72,7 @@ private Q_SLOTS:
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
     void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
     void maximizeToEdgesResolvesTheRawAreaGapFree();
+    void scrollingPastAMaximizedColumnMovesItByExactlyTheViewDelta();
     void maximizeToEdgesRestoreIsJustTheStoredIntentAgain();
     void widthAndHeightVerbsClearMaximizeToEdges();
     void equalizeClearsTheActiveColumnsMaximizeToEdges();
@@ -806,8 +807,65 @@ void TestScrollStripSizing::maximizeToEdgesResolvesTheRawAreaGapFree()
     // Gap-free stack: the two cross extents partition the raw cross exactly.
     QCOMPARE(Ax::crossLen(a) + Ax::crossLen(b), Ax::crossLen(params.rawWorkArea));
     // And the union is the raw rect itself, corners included — the emitted
-    // rect snaps to the raw area whenever the column covers the viewport.
+    // rect is shifted low by the outer gap, so a column at the anchor lands on
+    // the raw area exactly.
     QCOMPARE(a.united(b), params.rawWorkArea);
+}
+
+// The maximize-to-edges rect is shifted low by the outer gap on EVERY frame,
+// not only while the column covers the viewport. The batch's viewDelta is
+// differenced from the view coordinate alone, so a shift that appears and
+// disappears with coverage is motion the effect is never told about: it
+// differences the window's live rect against viewDelta, finds an outer gap of
+// residual, and runs a second per-window spring for it beside the one-spring-
+// per-output view slide. On a column the size of the screen that shows up as
+// two animations playing at once. The invariant that forbids it is here: a
+// maximized column's main position moves by exactly the view's own travel.
+void TestScrollStripSizing::scrollingPastAMaximizedColumnMovesItByExactlyTheViewDelta()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+
+    // Four columns so the strip is longer than the viewport and a focus
+    // change actually moves the view — with a strip that fits, the anchor
+    // policy re-centres and the view offset never leaves zero, which would
+    // make the comparison below vacuous.
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("d"), kHalf, ColumnDisplay::Normal, params));
+    // "d" is the active column: maximize it, then focus its neighbour so the
+    // maximized column leaves the viewport it was covering.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    // Re-anchor onto the now-maximized column so it starts out COVERING the
+    // viewport. That is the state the old gate treated specially, and a
+    // fixture that never enters it cannot tell the two behaviours apart.
+    QVERIFY(strip.focusAdjacentColumn(-1, params));
+    QVERIFY(strip.focusAdjacentColumn(1, params));
+
+    const ResolvedStrip covering = strip.relayout(params);
+    QCOMPARE(Ax::mainPos(rectOf(covering, QStringLiteral("d"))), Ax::mainPos(params.rawWorkArea));
+    // Premise: the flag really took, so the column below is the wide one and
+    // not an ordinary column that would ride the view either way.
+    QCOMPARE(Ax::mainLen(rectOf(covering, QStringLiteral("d"))), Ax::mainLen(params.rawWorkArea));
+
+    // Move the view itself rather than leaning on the anchor policy: what is
+    // under test is that the maximized column tracks the view exactly, and a
+    // direct scroll states the travel without the fixture having to be shaped
+    // so a focus change happens to produce one.
+    QVERIFY(strip.scrollViewBy(-300, params));
+    const ResolvedStrip scrolled = strip.relayout(params);
+
+    const int viewTravel = covering.viewOffset - scrolled.viewOffset;
+    QVERIFY2(viewTravel != 0, "the fixture must actually scroll the view");
+    QCOMPARE(Ax::mainPos(rectOf(scrolled, QStringLiteral("d"))) - Ax::mainPos(rectOf(covering, QStringLiteral("d"))),
+             viewTravel);
+    // The un-maximized neighbour is the control: it rides the same view, and
+    // the maximized column must not be special.
+    QCOMPARE(Ax::mainPos(rectOf(scrolled, QStringLiteral("c"))) - Ax::mainPos(rectOf(covering, QStringLiteral("c"))),
+             viewTravel);
 }
 
 // Un-maximizing is "stop overriding": the stored width intent was never
