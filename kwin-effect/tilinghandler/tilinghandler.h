@@ -232,10 +232,6 @@ public:
     {
         m_savedPreTileForDesktopMove.remove(windowId);
     }
-    bool isScreenQueryPending() const
-    {
-        return m_initialScreenQueryPending;
-    }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
     /// Flags-settle eviction backstop: re-run the structural placement
     /// filters for an already-announced window whose keep-above /

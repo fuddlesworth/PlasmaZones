@@ -76,9 +76,10 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
     // entry seen here is consumed regardless of which branch below runs (the
     // entry has been considered for routing whether or not it was applied,
     // so the next open of the same appId won't re-evaluate a dead entry).
-    // Shared by slotWindowAdded and the deferred-routing dispatch
-    // (completeDeferredWindowRoutes) — before the deferred path consumed the
-    // cache too, a deferred window left its entry alive for a later same-app
+    // Sole caller is the deferred-routing dispatch
+    // (completeDeferredWindowRoutes) — every tileable window routes through
+    // the settle defer now, and the dispatch consumes the cache so a
+    // deferred window cannot leave its entry alive for a later same-app
     // sibling to claim.
     const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId);
     if (!cached) {
