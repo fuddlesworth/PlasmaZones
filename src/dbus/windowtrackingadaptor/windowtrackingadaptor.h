@@ -1402,6 +1402,22 @@ Q_SIGNALS:
     /// Cross-desktop directional move: KWin should move @p windowId to virtual
     /// desktop @p desktop (1-based). The effect calls windowToDesktops.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
+    /// Same move, but naming the desktop by its STABLE ID instead of its
+    /// position. Used by the named-workspace route, which is the one caller
+    /// holding an id worth preserving.
+    ///
+    /// The positional signal above resolves the number daemon-side and sends
+    /// it, which loses a race this feature creates for itself: the move fills
+    /// the destination workspace, a filled workspace makes the reconciler cut
+    /// a new trailing empty, and that renumber can land before the effect
+    /// applies the number — so the window arrives on whichever desktop now
+    /// occupies that position. Observed live: a route to a workspace at
+    /// position 2 landed the window on the desktop that had just taken
+    /// position 2, one place off the intended one. A workspace NAME is the
+    /// identity that is supposed to survive renumbering (see the
+    /// RouteToWorkspace descriptor), so the id travels the wire and the
+    /// effect matches on VirtualDesktop::id().
+    void windowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId);
     /// Move a window to another OUTPUT with no engine handoff (untracked /
     /// floating windows on the workspace verbs); the effect calls
     /// windowToScreen. No-op when the window already sits on the target.
@@ -1524,9 +1540,16 @@ private:
      * from any invocation context (tests, invokeMethod), not just a nested
      * slot call where sender() happens to survive.
      */
+    /// Emit the desktop half of a move, preferring the stable id when the
+    /// caller has one. Single place so every move path makes the same choice.
+    void emitDesktopMove(const QString& windowId, int targetDesktop, const QString& targetDesktopId);
+
+    /// @p targetDesktopId, when non-empty, names the destination desktop by
+    /// its stable id and is emitted instead of @p targetDesktop, which is a
+    /// position and can be renumbered out from under the request in flight.
     void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
                            const QString& targetScreenId, int targetDesktop, const QString& direction,
-                           bool allowSameEngine = false);
+                           bool allowSameEngine = false, const QString& targetDesktopId = QString());
 
 public:
     /**
@@ -1556,7 +1579,7 @@ public:
      * honoured for the engine handoff, which needs a destination context.
      */
     void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
-                                   const QString& direction, bool moveOutput = true);
+                                   const QString& targetDesktopId, const QString& direction, bool moveOutput = true);
 
 private:
     /**

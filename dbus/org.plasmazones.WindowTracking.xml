@@ -335,6 +335,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop (1-based)."/>
             </arg>
         </signal>
+        <signal name="windowDesktopMoveByIdRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to move a window to a virtual desktop named by its STABLE ID rather than its position. Used by the named-workspace route. The positional variant above resolves the number daemon-side and sends it, which loses a race the workspace feature creates for itself: the move fills the destination, that makes the reconciler cut a new trailing empty, and the renumber can land before the effect applies the number — so the window arrives on whichever desktop now sits at that position. A workspace name is meant to survive renumbering, so the id travels instead and the effect matches on VirtualDesktop::id(). An unknown id is dropped."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to move."/>
+            </arg>
+            <arg name="desktopId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop's stable id (VirtualDesktop::id())."/>
+            </arg>
+        </signal>
         <signal name="windowOutputMoveRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to move a window to another output. Used by the workspace verbs for engine-untracked (floating) windows, where no tiling handoff carries the output change; the effect calls windowToScreen. A window already on the target output is a no-op."/>
             <arg name="windowId" type="s">

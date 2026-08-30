@@ -108,11 +108,49 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: no desktop numbered" << desktop;
         return;
     }
+    applyDesktopMove(w, target, windowId);
+}
+
+void PlasmaZonesEffect::slotWindowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId)
+{
+    if (windowId.isEmpty() || desktopId.isEmpty() || !KWin::effects) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: window not found" << windowId;
+        return;
+    }
+    // Matched on the STABLE id, which is the whole point of this variant: a
+    // position resolved before the D-Bus hop can name a different desktop by
+    // the time it arrives, because the workspace feature renumbers alongside
+    // its own moves. An id that is gone means the desktop was reaped in the
+    // meantime, and dropping the move is right — there is nowhere to put it.
+    KWin::VirtualDesktop* target = nullptr;
+    const auto desktops = KWin::effects->desktops();
+    for (KWin::VirtualDesktop* d : desktops) {
+        if (d && d->id() == desktopId) {
+            target = d;
+            break;
+        }
+    }
+    if (!target) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: no desktop with id" << desktopId;
+        return;
+    }
+    applyDesktopMove(w, target, windowId);
+}
+
+void PlasmaZonesEffect::applyDesktopMove(KWin::EffectWindow* w, KWin::VirtualDesktop* target, const QString& windowId)
+{
+    if (!w || !target || !KWin::effects) {
+        return;
+    }
     // A sticky (on-all-desktops) window is already present on the target; pinning
     // it to a single desktop here would silently un-sticky it. Directional
     // cross-desktop move is meaningless for an everywhere window — leave it.
     if (w->isOnAllDesktops()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        qCDebug(lcEffect) << "desktop move: window is on all desktops, ignoring" << windowId;
         return;
     }
     // Single-desktop membership (not on-all-desktops) so the window genuinely

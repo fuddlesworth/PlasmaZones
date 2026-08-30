@@ -244,7 +244,7 @@ void WorkspaceController::wireVirtualDesktops()
                 if (!watchWindowMove(windowId, target)) {
                     return;
                 }
-                Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, QStringLiteral("down"),
+                Q_EMIT windowWorkspaceMoveRequested(windowId, ownerScreen, desktop, target, QStringLiteral("down"),
                                                     /*moveOutput=*/true);
                 if (!*hinted) {
                     *hinted = true;
@@ -692,7 +692,7 @@ void WorkspaceController::reuniteWindowWithOwner(const QString& instanceId, cons
         // would suppress the next real reunion for a full second.
         m_lastReunionMs.insert(instanceId, QDateTime::currentMSecsSinceEpoch());
         qCInfo(lcWorkspaceCtl) << "reuniting window" << instanceId << "with its workspace's owner screen" << owner;
-        Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, QStringLiteral("down"),
+        Q_EMIT windowWorkspaceMoveRequested(instanceId, owner, desktop, desktopId, QStringLiteral("down"),
                                             /*moveOutput=*/true);
     });
 }

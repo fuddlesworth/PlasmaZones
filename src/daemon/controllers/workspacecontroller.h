@@ -161,8 +161,13 @@ Q_SIGNALS:
     /// @p moveOutput false issues the desktop half only, leaving the window on
     /// its current monitor (the RouteToWorkspace open-path arm; see
     /// routeWindowToNamedWorkspace).
+    /// @p targetDesktopId is the destination's STABLE id, carried beside the
+    /// number so the compositor-side move can name the desktop rather than a
+    /// position. Empty for the verbs that genuinely mean "whatever is at that
+    /// position" (the directional moves); set by the named-workspace route,
+    /// whose whole premise is an identity that outlives renumbering.
     void windowWorkspaceMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
-                                      const QString& direction, bool moveOutput);
+                                      const QString& targetDesktopId, const QString& direction, bool moveOutput);
     /// Owner-wins snap-back fired for this screen (OSD hint hook; gated by
     /// the snapBackOsdHint setting daemon-side).
     void snapBackOccurred(const QString& screenId);

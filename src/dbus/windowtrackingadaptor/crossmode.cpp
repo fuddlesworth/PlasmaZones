@@ -59,7 +59,8 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
 }
 
 void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId,
-                                                      int targetDesktop, const QString& direction, bool moveOutput)
+                                                      int targetDesktop, const QString& targetDesktopId,
+                                                      const QString& direction, bool moveOutput)
 {
     if (rawWindowId.isEmpty() || targetDesktop < 1) {
         return;
@@ -99,7 +100,7 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId
         // desktop move alone would be a no-op and the floating rider would
         // never leave the source output. The effect no-ops the output move
         // when the window is already there.
-        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        emitDesktopMove(windowId, targetDesktop, targetDesktopId);
         if (moveOutput && !targetScreenId.isEmpty()) {
             Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
         }
@@ -131,12 +132,30 @@ void WindowTrackingAdaptor::moveWindowToWorkspaceVerb(const QString& rawWindowId
             return;
         }
     }
-    crossModeMoveImpl(sourceEngine, windowId, resolvedScreenId, targetDesktop, direction, /*allowSameEngine=*/true);
+    crossModeMoveImpl(sourceEngine, windowId, resolvedScreenId, targetDesktop, direction, /*allowSameEngine=*/true,
+                      targetDesktopId);
+}
+
+void WindowTrackingAdaptor::emitDesktopMove(const QString& windowId, int targetDesktop, const QString& targetDesktopId)
+{
+    // Prefer the id. The number is a POSITION, resolved daemon-side and then
+    // sent, and the workspace feature renumbers concurrently with its own
+    // moves: the move fills the destination, a filled workspace makes the
+    // reconciler cut a new trailing empty, and that shift can land before the
+    // effect applies the number. Observed live — a route to the workspace at
+    // position 2 arrived on the desktop that had just taken position 2.
+    // Callers with no id (the directional verbs) genuinely mean the position.
+    if (!targetDesktopId.isEmpty()) {
+        Q_EMIT windowDesktopMoveByIdRequested(windowId, targetDesktopId);
+        return;
+    }
+    Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
 }
 
 void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine,
                                               const QString& windowId, const QString& targetScreenId, int targetDesktop,
-                                              const QString& direction, bool allowSameEngine)
+                                              const QString& direction, bool allowSameEngine,
+                                              const QString& targetDesktopId)
 {
     if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
         return;
@@ -320,7 +339,7 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     // re-homed onto the SOURCE context, and physically relocating the real
     // window anyway would part it from its state.
     if (placedOnTarget && targetDesktop > 0) {
-        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        emitDesktopMove(windowId, targetDesktop, targetDesktopId);
         if (needsOutputMove) {
             Q_EMIT windowOutputMoveRequested(windowId, targetScreenId);
         }

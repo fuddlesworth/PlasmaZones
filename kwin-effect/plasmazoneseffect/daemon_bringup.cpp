@@ -809,6 +809,15 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
 
+    // The same move naming the desktop by its stable id, for the
+    // named-workspace route. Separate signal rather than a wider one: the
+    // directional verbs genuinely mean "the desktop at that position", and
+    // only the route holds an identity worth preserving across the hop.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowDesktopMoveByIdRequested"), this,
+                                          SLOT(slotWindowDesktopMoveByIdRequested(QString, QString)));
+
     // Output move with no engine handoff (untracked/floating windows on the
     // workspace verbs); windowToScreen, no-op when already there.
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

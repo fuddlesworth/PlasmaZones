@@ -581,11 +581,11 @@ void Daemon::initializeWorkspaces()
     // Window relocation: the same handoff machinery the cross-mode
     // directional moves use, same-engine allowed (plan §4.2 reuse).
     connect(m_workspaceController.get(), &WorkspaceController::windowWorkspaceMoveRequested, wiring,
-            [this](const QString& windowId, const QString& targetScreenId, int targetDesktop, const QString& direction,
-                   bool moveOutput) {
+            [this](const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                   const QString& targetDesktopId, const QString& direction, bool moveOutput) {
                 if (m_windowTrackingAdaptor) {
                     m_windowTrackingAdaptor->moveWindowToWorkspaceVerb(windowId, targetScreenId, targetDesktop,
-                                                                       direction, moveOutput);
+                                                                       targetDesktopId, direction, moveOutput);
                 }
             });
     // Owner-wins snap-back hint (plain prose; toggleable).

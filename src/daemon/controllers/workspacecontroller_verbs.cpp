@@ -197,7 +197,7 @@ void WorkspaceController::moveWindowToWorkspace(const QString& screenId, const Q
         if (!watchWindowMove(windowId, target)) {
             return;
         }
-        Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop,
+        Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, QString(),
                                             delta < 0 ? QStringLiteral("up") : QStringLiteral("down"),
                                             /*moveOutput=*/true);
     });
@@ -227,7 +227,7 @@ void WorkspaceController::moveColumnToWorkspace(const QString& screenId, const Q
             if (!watchWindowMove(windowId, target)) {
                 continue;
             }
-            Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, direction, /*moveOutput=*/true);
+            Q_EMIT windowWorkspaceMoveRequested(windowId, screenId, desktop, QString(), direction, /*moveOutput=*/true);
         }
     });
 }
@@ -287,7 +287,7 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
                 if (!watchWindowMove(windowId, movedId)) {
                     continue;
                 }
-                Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, direction,
+                Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, QString(), direction,
                                                     /*moveOutput=*/true);
             }
             // niri semantics: the moved workspace gains focus on its new
@@ -473,7 +473,7 @@ int WorkspaceController::routeWindowToNamedWorkspace(const QString& name, const 
     // The owner screen is always carried so the handoff re-homes engine state
     // on the right output; @p moveOutput decides whether the OUTPUT leg is
     // issued as well (see the header).
-    Q_EMIT windowWorkspaceMoveRequested(windowId, owner, desktop, QStringLiteral("down"), moveOutput);
+    Q_EMIT windowWorkspaceMoveRequested(windowId, owner, desktop, target, QStringLiteral("down"), moveOutput);
     return desktop;
 }
 
@@ -494,7 +494,7 @@ void WorkspaceController::moveWindowToNamedWorkspace(const QString& name, const 
         if (!watchWindowMove(windowId, target)) {
             return;
         }
-        Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop,
+        Q_EMIT windowWorkspaceMoveRequested(windowId, m_reconciler.map().ownerOf(target), desktop, target,
                                             QStringLiteral("down"), /*moveOutput=*/true);
     });
 }

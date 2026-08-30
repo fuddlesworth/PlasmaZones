@@ -299,6 +299,17 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
+    /// Same move, with the desktop named by its stable id. The daemon sends
+    /// this for a named-workspace route, where a position resolved before the
+    /// D-Bus hop can be renumbered by the time it lands here.
+    void slotWindowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId);
+
+private:
+    /// Shared tail of both desktop-move slots, so the two agree on the sticky
+    /// carve-out and the membership write.
+    void applyDesktopMove(KWin::EffectWindow* w, KWin::VirtualDesktop* target, const QString& windowId);
+
+private Q_SLOTS:
     void slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
     /// Cache the dynamic-workspaces ownership map (daemon stream + replay).
     /// Consumer stub: the future overview renders from this; nothing else
