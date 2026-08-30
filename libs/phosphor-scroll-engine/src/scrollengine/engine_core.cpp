@@ -1102,18 +1102,31 @@ void ScrollEngine::refreshConfigFromSettings()
     // as the strip hanging after every close.
     m_closeReflowDelayMs = qBound(0, settings->scrollingCloseReflowDelayMs(), kMaxCloseReflowDelayMs);
 
-    // Tab-indicator geometry. The numeric fields are taken as-is: the config
-    // schema already clamps every one of them, and re-clamping here with a
-    // second set of literals is exactly the drift the ConfigDefaults asserts
-    // exist to prevent. The POSITION is the exception — it is cast to an enum,
-    // so it gets the same validate-then-fall-back guard the other cast enums
-    // above carry, and an unknown value leaves the configured default alone.
+    // Tab-indicator geometry. The numeric fields get the same reject-and-keep
+    // guard as the POSITION cast below (NOT the Fixed-width read above, which
+    // clamps instead), against the shared bounds in enginelimits.h rather than
+    // a second set of literals — sharing the constants is what avoids the
+    // drift the ConfigDefaults asserts exist to prevent, without having to
+    // trust the value. The daemon's Settings is already clamped by the config
+    // schema and so always passes; the guard is for a third-party
+    // IScrollSettings, an injected interface as untrusted as the override map.
+    // Out of range leaves the last accepted value (the struct default on a
+    // first refresh) alone.
     m_tabIndicator.enabled = settings->scrollingTabIndicatorEnabled();
     m_tabIndicator.hideWhenSingleTab = settings->scrollingTabIndicatorHideWhenSingleTab();
     m_tabIndicator.placeWithinColumn = settings->scrollingTabIndicatorPlaceWithinColumn();
-    m_tabIndicator.gap = settings->scrollingTabIndicatorGap();
-    m_tabIndicator.width = settings->scrollingTabIndicatorWidth();
-    m_tabIndicator.lengthProportion = settings->scrollingTabIndicatorLengthProportion();
+    const int indicatorGap = settings->scrollingTabIndicatorGap();
+    if (indicatorGap >= kMinTabIndicatorGap && indicatorGap <= kMaxTabIndicatorGap) {
+        m_tabIndicator.gap = indicatorGap;
+    }
+    const int indicatorWidth = settings->scrollingTabIndicatorWidth();
+    if (indicatorWidth >= kMinTabIndicatorWidth && indicatorWidth <= kMaxTabIndicatorWidth) {
+        m_tabIndicator.width = indicatorWidth;
+    }
+    const qreal indicatorLength = settings->scrollingTabIndicatorLengthProportion();
+    if (indicatorLength >= kMinTabIndicatorLengthProportion && indicatorLength <= kMaxTabIndicatorLengthProportion) {
+        m_tabIndicator.lengthProportion = indicatorLength;
+    }
     const int indicatorPos = settings->scrollingTabIndicatorPosition();
     if (indicatorPos >= static_cast<int>(TabIndicatorPosition::Left)
         && indicatorPos <= static_cast<int>(TabIndicatorPosition::Bottom)) {

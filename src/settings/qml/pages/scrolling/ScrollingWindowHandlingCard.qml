@@ -83,7 +83,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Center short columns")
             searchAnchor: "scrollingCenterShortColumns"
-            description: i18n("Center the windows of a column that does not fill the screen, rather than leaving the unused space below them")
+            description: i18n("Center the windows in a column that does not fill the screen, rather than leaving the unused space at the end of the column")
 
             SettingsSwitch {
                 checked: appSettings.scrollingCenterShortColumns

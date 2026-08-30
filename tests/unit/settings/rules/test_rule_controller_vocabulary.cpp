@@ -460,6 +460,7 @@ void TestRuleControllerVocabulary::defaultPayloadForSeedsParams()
              // The per-context scrolling toggles, each seeded against its own
              // global default.
              BoolSeed{QStringLiteral("setScrollAlwaysCenterSingleColumn"), true},
+             BoolSeed{QStringLiteral("setScrollCenterShortColumns"), true},
              BoolSeed{QStringLiteral("setScrollRespectMinimumSize"), false},
              BoolSeed{QStringLiteral("setScrollCropStraddlers"), true},
              BoolSeed{QStringLiteral("setScrollFocusNewWindows"), false},

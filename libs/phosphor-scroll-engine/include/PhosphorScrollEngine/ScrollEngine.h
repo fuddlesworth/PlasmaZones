@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QString>
@@ -1157,7 +1158,11 @@ private:
     std::function<QRect(const QString&)> m_availableGeometryProvider;
     std::function<QRect(const QString&)> m_screenGeometryProvider;
     std::function<QList<QRect>()> m_allScreenGeometriesProvider;
-    PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
+    /// QPointer, not a raw pointer: this is set post-construction by
+    /// setWindowRegistry and never cleared, so a teardown order that takes the
+    /// registry first would leave it dangling. Matches the shape
+    /// WindowTrackingService holds the same object with.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
 
     PhosphorEngine::PerScreenStates<ScrollState> m_states;

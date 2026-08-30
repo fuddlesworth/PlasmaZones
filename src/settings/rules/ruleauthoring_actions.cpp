@@ -657,11 +657,12 @@ QString boolActionStateLabel(const QString& type, bool on)
     // same discipline the tab-indicator family follows: these override a
     // config value, so switching one off is an instruction rather than an
     // absence.
-    if (type == ActionType::SetScrollCenterShortColumns) {
-        return on ? PhosphorI18n::tr("Center short columns") : PhosphorI18n::tr("Leave the space below a short column");
-    }
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
         return on ? PhosphorI18n::tr("Center a lone column") : PhosphorI18n::tr("Leave a lone column where it sits");
+    }
+    if (type == ActionType::SetScrollCenterShortColumns) {
+        return on ? PhosphorI18n::tr("Center short columns")
+                  : PhosphorI18n::tr("Leave the space at the end of a short column");
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return on ? PhosphorI18n::tr("Respect minimum window sizes") : PhosphorI18n::tr("Ignore minimum window sizes");

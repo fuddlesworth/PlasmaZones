@@ -213,7 +213,7 @@ public:
     bool tabIndicatorEnabled = true;
     bool tabIndicatorHideWhenSingleTab = false;
     bool tabIndicatorPlaceWithinColumn = false;
-    int tabIndicatorGap = 5;
+    int tabIndicatorGap = 2;
     int tabIndicatorWidth = 4;
     qreal tabIndicatorLengthProportion = 0.5;
     int tabIndicatorPosition = static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Left);

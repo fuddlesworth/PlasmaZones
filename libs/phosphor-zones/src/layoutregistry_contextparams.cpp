@@ -245,6 +245,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         QString(PWR::ActionSlot::DropIndicatorBorderRadius),
         QString(PWR::ActionSlot::DropIndicatorOpacity),
         QString(PWR::ActionSlot::ScrollAlwaysCenterSingleColumn),
+        QString(PWR::ActionSlot::ScrollCenterShortColumns),
         QString(PWR::ActionSlot::ScrollRespectMinimumSize),
         QString(PWR::ActionSlot::ScrollCropStraddlers),
         QString(PWR::ActionSlot::ScrollFocusNewWindows),

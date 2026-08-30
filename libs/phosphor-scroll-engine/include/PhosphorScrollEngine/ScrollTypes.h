@@ -985,6 +985,13 @@ struct ResolvedColumn
     /// The column's bounding rect. This is the column's FULL extent, before
     /// any within-column indicator reservation — the tiles carry the reduced
     /// rects, and @c tabIndicatorRect carries what was reserved.
+    ///
+    /// On the CROSS axis this rect always spans the whole work area, even when
+    /// centerShortColumns has centred the tiles WITHIN it, so a stack's tiles
+    /// may not start where this rect starts. A tabbed column is the exception:
+    /// its tiles ride this rect, so centring moves the rect itself. Read the
+    /// tile rects, never this one, to ask where a column's windows sit on the
+    /// cross axis.
     QRect rect;
     bool tabbed = false;
     /// Where the tab indicator is drawn, in the same absolute screen

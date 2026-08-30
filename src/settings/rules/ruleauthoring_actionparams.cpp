@@ -122,7 +122,7 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Center a lone column (off = leave it where it sits)");
     }
     if (type == ActionType::SetScrollCenterShortColumns && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Center a short column (off = leave the space below it)");
+        return PhosphorI18n::tr("Center short columns (off = leave the space at the end of the column)");
     }
     if (type == ActionType::SetScrollRespectMinimumSize && key == ActionParam::Value) {
         return PhosphorI18n::tr("Respect minimum window sizes (off = let columns go narrower)");

@@ -746,15 +746,19 @@ void ActionRegistry::registerBuiltinsAppearance()
     });
 
     // ── per-context scrolling BEHAVIOUR overrides (domain Context) ──
-    // The six boolean toggles that had no rule seam until now. Same shape as
-    // the sizing slots above: five ride the per-screen override map and the
+    // The seven boolean toggles that had no rule seam until now. Same shape as
+    // the sizing slots above: six ride the per-screen override map and the
     // engine reads each through an `effective*` accessor falling back to the
     // global config value, while focus-follows-mouse is resolved per screen
     // and pushed to the compositor instead (its consumer lives there).
     // Each seeds the polarity a user reaches for: the three whose global
     // default is ON seed FALSE (the meaningful rule is "turn it off here"),
-    // and the three whose global default is OFF — cropStraddlers,
-    // alwaysCenterSingleColumn and focusFollowsMouse — seed TRUE.
+    // and the four whose global default is OFF — cropStraddlers,
+    // alwaysCenterSingleColumn, centerShortColumns and focusFollowsMouse —
+    // seed TRUE.
+    // The orders below are not contiguous: 35, 37 and 38 belong to unrelated
+    // layout-engine actions, so centerShortColumns took the free 29 rather
+    // than renumbering its neighbours. Nothing reads displayOrder today.
     struct ScrollBehaviourToggle
     {
         QLatin1StringView type;

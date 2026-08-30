@@ -467,7 +467,7 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
+ * SetScrollDefaultWindowHeight / SetScrollStripAxis, the eight scrolling
  * behaviour toggles and the focus-follows-mouse scroll cap beside them,
  * the eighteen SetTabIndicator* slots and the six
  * SetDropIndicator* slots, each documented in its own block below); an unset
@@ -598,7 +598,7 @@ struct ContextScrollingParams
             || tabIndicatorFontItalic || tabIndicatorFontUnderline || tabIndicatorFontStrikeout;
     }
 
-    /// True when at least one of the seven behaviour toggles resolved, or the
+    /// True when at least one of the eight behaviour toggles resolved, or the
     /// scroll cap did. The cap is a percent rather than a toggle, but it is a
     /// behaviour override like the rest and isEmpty() has to see it.
     bool hasBehaviourOverrides() const

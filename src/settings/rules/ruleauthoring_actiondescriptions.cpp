@@ -333,7 +333,7 @@ QString actionDescription(const QString& type)
     if (type == ActionType::SetScrollCenterShortColumns) {
         return PhosphorI18n::tr(
             "Centers a column on the matched context when its windows do not fill the screen, "
-            "rather than leaving the unused space below them.");
+            "rather than leaving the unused space at the end of the column.");
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(

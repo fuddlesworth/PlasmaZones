@@ -97,8 +97,10 @@ inline PhosphorScrollEngine::StripAxis stripAxis()
 // -- The transpose, owned by the harness -------------------------------
 //
 // T(QRect(x, y, w, h)) = QRect(y, x, h, w) — a reflection through the line
-// y = x. Every fixture in the suite is anchored at the origin, so there is no
-// offset term and T is an involution: T(T(r)) == r.
+// y = x, so T is an involution unconditionally: T(T(r)) == r. Almost every
+// fixture in the suite is anchored at the origin; the centring policy's
+// work-area fixture is the exception, and deliberately so, because an
+// origin-anchored work area cannot tell a cross ORIGIN from zero.
 
 inline QRect t(const QRect& r)
 {

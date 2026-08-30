@@ -835,8 +835,11 @@ private Q_SLOTS:
         QVERIFY(keepAbove);
         QCOMPARE(keepAbove->defaultValue.toBool(), ConfigDefaults::scrollingKeepFloatingAbove());
 
-        // The drag-insert trio. Every other key in the group is pinned
-        // above, and these three were the only ones that were not.
+        const auto* smartGaps = findKey(schema, group, ConfigDefaults::smartGapsKey());
+        QVERIFY(smartGaps);
+        QCOMPARE(smartGaps->defaultValue.toBool(), ConfigDefaults::scrollingSmartGaps());
+
+        // The drag-insert trio, pinned last as a group.
         const auto* grace = findKey(schema, group, ConfigDefaults::releaseGraceMsKey());
         QVERIFY(grace && grace->validator);
         QCOMPARE(grace->defaultValue.toInt(), ConfigDefaults::scrollingDragInsertGraceMs());

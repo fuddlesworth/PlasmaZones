@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Short scrolling columns can be centered**: a window given a height that does not fill the screen sat at the top of its column with the leftover space below it. Center short columns, under Scrolling → Window → Window handling, centers the column's windows across the strip instead. It is off by default, so nothing moves until you turn it on, and a column that already fills the screen is left alone either way. On a vertical strip it centers them horizontally. A window rule can turn it on or off for a monitor, desktop or activity of its own.
+- **Short scrolling columns can be centered**: a window given a height that does not fill the screen sat at the start of its column with the leftover space after it. Center short columns, under Scrolling → Window → Window handling, centers the column's windows instead. On a horizontal strip that centers them vertically, and on a vertical strip horizontally. It is off by default, so nothing moves until you turn it on, and a column that already fills the screen is left alone either way. A window rule can turn it on or off for a particular monitor, desktop or activity.
 
 ## [3.4.3] - 2026-08-29
 
