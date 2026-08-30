@@ -81,6 +81,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Center short columns")
+            searchAnchor: "scrollingCenterShortColumns"
+            description: i18n("Center the windows in a column that does not fill the screen, rather than leaving the unused space at the end of the column")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingCenterShortColumns
+                accessibleName: i18n("Center short columns")
+                onToggled: function (newValue) {
+                    appSettings.scrollingCenterShortColumns = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Restore columns on login")
             searchAnchor: "scrollingRestoreStripsOnLogin"
             description: i18n("When windows reopen after a restart, rebuild their columns with the same order, widths, and tab groups")

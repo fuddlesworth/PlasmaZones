@@ -34,6 +34,27 @@ QRect rawAreaFor(const ScrollLayoutParams& params)
     return params.rawWorkArea.isValid() ? params.rawWorkArea : params.workArea;
 }
 
+/// Where a column's content starts on the CROSS axis given the extent it
+/// actually resolved to. With the centre policy off, or with a column that
+/// fills (or overflows) the cross extent, this is the area's start edge and
+/// the layout is unchanged. With it on and slack left over, the content is
+/// centred in that slack, which is what puts a half-height solo window in the
+/// middle of the screen instead of against the top.
+///
+/// Takes the whole RECT rather than a start edge, so the low edge and the
+/// extent it is centred within always come from the same place and cannot
+/// disagree. That matters here beyond tidiness: a maximized-to-edges column
+/// resolves against the RAW work area, which is wider than the gapped one, so
+/// deriving the extent from params would centre it in the wrong slack.
+int crossStartFor(int contentCross, const ScrollLayoutParams& params, const QRect& areaRect)
+{
+    const int crossLow = params.axis.crossLow(areaRect);
+    if (!params.centerShortColumns) {
+        return crossLow;
+    }
+    return crossLow + qMax(0, params.axis.crossSize(areaRect) - contentCross) / 2;
+}
+
 } // namespace
 
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
@@ -801,9 +822,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             //
             // Maximize-to-edges wins over the owner's height intent: the flag
             // declares the full raw cross extent, so the default rect above
-            // stands and the intent survives untouched for the restore.
+            // stands and the intent survives untouched for the restore. A
+            // column that IS short then takes the centre policy, which is why
+            // the start edge comes from crossStartFor rather than the area.
             if (!toEdges) {
-                rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, tabbedColumnCrossPx(col, params));
+                const int tabbedCross = tabbedColumnCrossPx(col, params);
+                rc.rect = axis.makeRect(mainCursor, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
             }
             // Only the active tile is laid out, at the column's content rect;
             // the others share its rect but are reported hidden.
@@ -965,7 +989,21 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 }
             } // respectMinimumSize
 
-            int crossCursor = axis.crossLow(colArea);
+            // The stack is laid out from the column's start edge unless the
+            // centre policy is on and it came out short — see crossStartFor.
+            // Measured from the RESOLVED heights, so every arm above (the
+            // Fixed/Preset renormalize, the Auto share, the min-size clamp
+            // and its rebalance) is already folded in, and an overflowing
+            // stack yields no offset rather than a negative one.
+            //
+            // Against colArea, not area: a maximized-to-edges column is laid
+            // out in the RAW work area, and centring it in the gapped one
+            // would offset it by half the outer gap.
+            int stackCross = gapsTotal;
+            for (int vi = 0; vi < n; ++vi) {
+                stackCross += heights[vi];
+            }
+            int crossCursor = crossStartFor(stackCross, params, colArea);
             for (int vi = 0; vi < n; ++vi) {
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(visible.at(vi)).windowId;

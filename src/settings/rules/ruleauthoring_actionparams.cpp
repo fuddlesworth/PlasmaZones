@@ -113,13 +113,16 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
         return PhosphorI18n::tr("Placement");
     }
-    // The six scrolling behaviour toggles. Each label names the ON outcome and
+    // The seven scrolling behaviour toggles. Each label names the ON outcome and
     // spells out the off one, the same shape the other bool params use: these
     // override a config value, so the off position is an instruction rather
     // than an absence. Without an entry the editor falls back to the wire key,
     // which is what Accessible.name would announce.
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn && key == ActionParam::Value) {
         return PhosphorI18n::tr("Center a lone column (off = leave it where it sits)");
+    }
+    if (type == ActionType::SetScrollCenterShortColumns && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Center short columns (off = leave the space at the end of the column)");
     }
     if (type == ActionType::SetScrollRespectMinimumSize && key == ActionParam::Value) {
         return PhosphorI18n::tr("Respect minimum window sizes (off = let columns go narrower)");

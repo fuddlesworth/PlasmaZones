@@ -681,6 +681,7 @@ void TestRuleController::actionMetadata()
     // submenu with nothing else noticing. Pin the whole set rather than a
     // sample, because the omission is per type.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollAlwaysCenterSingleColumn"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollCenterShortColumns"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollRespectMinimumSize"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollCropStraddlers"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusNewWindows"), -1), 4);
