@@ -179,8 +179,7 @@ Window {
     }
 
     // Convert a FileDialog URL to a local filesystem path. Single URL→path
-    // implementation for the editor (import/export dialogs here and
-    // ShaderSettingsDialog's preset/image dialogs). decodeURIComponent is
+    // implementation for the editor's import/export dialogs. decodeURIComponent is
     // required for %-encoded characters (spaces etc.); the +-quantified slash
     // regex normalizes both file:// and file:/// forms to an absolute path.
     function urlToLocalPath(url) {
@@ -403,7 +402,6 @@ Window {
         availableScreens: editorWindow._editorController ? editorWindow._editorController.screenModel : []
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
-        shaderDialog: shaderDialog
         visibilityDialog: visibilityDialog
         layoutSettingsDialog: layoutSettingsDialog
         importDialog: importDialog
@@ -1006,16 +1004,6 @@ Window {
             editorWindow: editorWindow
             templateMode: editorWindow.templateMode
         }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // SHADER SETTINGS DIALOG
-    // ═══════════════════════════════════════════════════════════════════
-    ShaderSettingsDialog {
-        id: shaderDialog
-
-        editorController: editorWindow._editorController
-        editorWindow: editorWindow
     }
 
     // ═══════════════════════════════════════════════════════════════════

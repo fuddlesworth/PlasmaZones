@@ -750,6 +750,22 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
+
+    // Zone-overlay shader tree (JSON blob round-trip via D-Bus), the third
+    // tree alongside the two above. The settings app writes assignments here;
+    // the daemon consumes the tree in-process (OverlayService shader resolve).
+    m_getters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = [this]() {
+        return m_settings->overlayShaderTreeJson();
+    };
+    m_setters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] =
+        [this](const QVariant& v) -> bool {
+        QJsonDocument doc;
+        if (!validProfileTreeBlob(v, &doc))
+            return false;
+        m_settings->setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
+        return true;
+    };
+    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = QStringLiteral("string");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Per-mode families, one TU each: settingsadaptor_registry_snapping.cpp,

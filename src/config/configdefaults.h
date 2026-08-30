@@ -717,6 +717,15 @@ public:
         return {};
     }
 
+    /// Zone-overlay shader assignments (Snapping.OverlayShaders /
+    /// OverlayShaderTree). Schema default is the empty tree — no baseline
+    /// shader, no per-layout overrides — same materialization as the
+    /// animation shaderProfileTree above (a bare {}).
+    static QVariantMap overlayShaderTree()
+    {
+        return {};
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;

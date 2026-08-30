@@ -59,7 +59,7 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.migrations = {
         {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
         {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
-        {5, &ConfigMigration::migrateV5ToV6},
+        {5, &ConfigMigration::migrateV5ToV6}, {6, &ConfigMigration::migrateV6ToV7},
     };
     // clang-format on
     return s;
@@ -395,14 +395,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath);
+                        return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
                     // crash may have left behind (and prunes the retired
                     // provider-default rule from rules.json), a no-op once clean.
-                    return finalizeV4Conversion(jsonPath);
+                    return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
                 }
                 corrupt = true;
             }
@@ -431,7 +431,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
-                return finalizeV4Conversion(jsonPath);
+                return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -450,7 +450,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // Fresh install — no old config. Still run the v4 finalizer so a
         // stray assignments.json from a partial earlier conversion is folded
         // into rules.json rather than left orphaned.
-        return finalizeV4Conversion(jsonPath);
+        return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -477,7 +477,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
     // finalizeV4Conversion also adopts a legacy windowrules.json as
     // rules.json (a first-step, all-paths action) and prunes the retired
     // provider-default rule.
-    return finalizeV4Conversion(jsonPath);
+    return finalizeV4Conversion(jsonPath) && relocateOverlayShaderAssignments(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()

@@ -476,6 +476,8 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsPresetsPage.qml
         qml/pages/animations/AnimationsShadersPage.qml
         qml/pages/snapping/SnappingShadersPage.qml
+        qml/pages/snapping/SnappingShaderAssignmentsPage.qml
+        qml/pages/snapping/SnappingShaderAssignmentCard.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
         # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
         # list with per-pack params) and border/titlebar field overrides via

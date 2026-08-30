@@ -252,8 +252,16 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-shortcuts"), QStringLiteral("snapping-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/snapping/SnappingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
-    regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Shaders"),
-            QStringLiteral("pages/snapping/SnappingShadersPage.qml"), QStringLiteral("preferences-desktop-display"),
+    // Overlay shader assignment page — edits the OverlayShaderTree (global
+    // default + per-layout overrides) through m_snappingShadersPage's
+    // invokables. Registered as a virtual leaf: the controller stays bound
+    // to the "snapping-shaders" id below (regPage), and dirty tracking rides
+    // the global overlayShaderTreeChanged NOTIFY loop either way.
+    regVirtual(QStringLiteral("snapping-shader-assignments"), QStringLiteral("snapping-config-cat"),
+               PhosphorI18n::tr("Shaders"), QStringLiteral("pages/snapping/SnappingShaderAssignmentsPage.qml"),
+               QStringLiteral("preferences-desktop-display"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-config-cat"), PhosphorI18n::tr("Shader Library"),
+            QStringLiteral("pages/snapping/SnappingShadersPage.qml"), QStringLiteral("folder-templates"),
             /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Tiling children — organised by subject (Window / Algorithm / Configuration)

@@ -16,7 +16,6 @@
 #include "core/utils/translationloader.h"
 #include "../config/configdefaults.h"
 #include "version.h"
-#include "../daemon/rendering/zoneshaderitem.h"
 #include "daemon/rendering/vulkansupport.h"
 
 #include <QApplication>
@@ -197,9 +196,6 @@ int main(int argc, char* argv[])
         }
     }
 
-    // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
-    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
-
     // Resolve target screen and collect launch args up front so we can forward
     // them to an already-running editor instance before doing any heavy setup.
     // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
@@ -283,8 +279,8 @@ int main(int argc, char* argv[])
     EditorLaunchController launcher(&controller);
 
     // Claim the D-Bus well-known name BEFORE applyLaunchArgs(). applyLaunchArgs
-    // triggers blocking daemon calls (queryShadersEnabled, queryAvailableShaders,
-    // loadLayout) — if we registered after those, a second launch racing during
+    // triggers blocking daemon calls (loadLayout among them) — if we
+    // registered after those, a second launch racing during
     // startup would run its own heavy init before discovering the conflict,
     // redundantly contending on the daemon's event loop. Registering first means
     // rapid-fire launches forward cleanly the moment they check the bus.

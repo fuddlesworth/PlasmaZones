@@ -377,6 +377,7 @@ p_add_test(test_settings_animation_profile config/settings/test_settings_animati
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
+p_add_test(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
@@ -428,6 +429,7 @@ p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
 p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
+p_add_test(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
 
 # Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.

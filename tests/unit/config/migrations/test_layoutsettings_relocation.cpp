@@ -185,7 +185,19 @@ private Q_SLOTS:
 
         const QJsonObject reconstructed =
             PhosphorZones::LayoutSettingsStore::mergeSettings(slim, store.settingsFor(layoutId));
-        QCOMPARE(reconstructed, original);
+        // The runtime store no longer merges the retired shaderId/shaderParams
+        // keys (v7 relocates overlay shader assignments into the config's
+        // OverlayShaderTree), so the roundtrip reconstructs everything BUT
+        // them. The v4 relocation still carries them into the sidecar — that
+        // frozen behavior is what the v7 lift consumes — so assert they
+        // survived there.
+        QJsonObject expected = original;
+        expected.remove(QStringLiteral("shaderId"));
+        expected.remove(QStringLiteral("shaderParams"));
+        QCOMPARE(reconstructed, expected);
+        const QJsonObject sidecarEntry =
+            readJsonConfig(ConfigDefaults::layoutSettingsFilePath()).value(layoutId).toObject();
+        QCOMPARE(sidecarEntry.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
     }
 
     void testLayoutSettingsRelocation_mergesIntoExistingSidecar()

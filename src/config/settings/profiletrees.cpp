@@ -5,6 +5,7 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "core/types/animationshadersupportedpaths.h"
+#include "core/types/overlayshadertree.h"
 
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
@@ -247,6 +248,62 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
         return;
     }
     setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+}
+
+// ── Overlay shader tree (PhosphorConfig::Store-backed) ──────────────────────
+// Persisted as one nested JSON entry under Snapping.OverlayShaders/
+// OverlayShaderTree, mirroring the two trees above. No prune (the paths are
+// layout UUIDs, validated by existence only at the UI layer — a stale UUID
+// for a deleted layout is inert, never resolved) and no seed overlay (the
+// schema default is the bare empty tree, like the animation tree).
+
+OverlayShaderTree Settings::overlayShaderTree() const
+{
+    const QVariantMap map = m_store->read<QVariantMap>(ConfigDefaults::snappingOverlayShadersGroup(),
+                                                       ConfigDefaults::overlayShaderTreeKey());
+    return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+OverlayShaderTree Settings::committedOverlayShaderTree() const
+{
+    // Baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline lookup, same as the two committed getters above.
+    const QVariantMap map = m_baseline.value(ConfigDefaults::snappingOverlayShadersGroup())
+                                .value(ConfigDefaults::overlayShaderTreeKey())
+                                .toMap();
+    return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+void Settings::setOverlayShaderTree(const OverlayShaderTree& tree)
+{
+    refreshCleanBackendFromDisk();
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal (discard-changes writes back the tree it just read).
+    if (tree == overlayShaderTree())
+        return;
+    m_store->write(ConfigDefaults::snappingOverlayShadersGroup(), ConfigDefaults::overlayShaderTreeKey(),
+                   tree.toJson().toVariantMap());
+    Q_EMIT overlayShaderTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::overlayShaderTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(overlayShaderTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setOverlayShaderTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        setOverlayShaderTree(OverlayShaderTree{});
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setOverlayShaderTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
 }
 
 } // namespace PlasmaZones

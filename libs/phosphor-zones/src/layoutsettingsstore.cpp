@@ -47,8 +47,6 @@ const std::array<QLatin1String, 14> layoutSettingKeys{{
     ZoneJsonKeys::AutoAssign,
     ZoneJsonKeys::HiddenFromSelector,
     ZoneJsonKeys::UseFullScreenGeometry,
-    ZoneJsonKeys::ShaderId,
-    ZoneJsonKeys::ShaderParams,
 }};
 
 } // namespace

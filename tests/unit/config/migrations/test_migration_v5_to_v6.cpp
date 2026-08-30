@@ -126,11 +126,11 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject after = readJson(ConfigDefaults::configFilePath());
-        // The step stamps the frozen literal 6, not ConfigSchemaVersion —
-        // assert the literal so the frozen-output contract is test-gated
-        // when the chain grows again (the runner catches a wrong bump only
-        // at runtime).
-        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 6);
+        // Full-chain run through ensureJsonConfig, so the file ends at the
+        // CURRENT schema version (v7 stamps on top of the v6 output this
+        // test is really about); the frozen v6 step output is asserted by
+        // the direct-step case below.
+        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 7);
         // Every colour was a palette snapshot: each key becomes the EXPLICIT
         // empty sentinel (delta-safe spelling of "follow the palette"); the
         // Labels group keeps the unrelated FontFamily key.
@@ -205,7 +205,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject after = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 6);
+        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 7);
         const QJsonObject colorsOut = colorsAfter(after);
         QCOMPARE(colorsOut.value(QStringLiteral("Highlight")).toString(), QStringLiteral("#80112233"));
         QCOMPARE(colorsOut.value(QStringLiteral("Border")).toString(), QStringLiteral("#c85294e2"));

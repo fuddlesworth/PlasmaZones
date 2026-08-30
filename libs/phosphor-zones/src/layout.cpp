@@ -132,8 +132,6 @@ Layout* Layout::clone(QObject* parent) const
     copy->m_defaultOrder = m_defaultOrder;
     copy->m_autoAssign = m_autoAssign;
     copy->m_useFullScreenGeometry = m_useFullScreenGeometry;
-    copy->m_shaderId = m_shaderId;
-    copy->m_shaderParams = m_shaderParams;
     copy->m_aspectRatioClass = m_aspectRatioClass;
     copy->m_minAspectRatio = m_minAspectRatio;
     copy->m_maxAspectRatio = m_maxAspectRatio;
@@ -158,8 +156,6 @@ LAYOUT_SETTER(const QString&, Name, m_name, nameChanged)
 LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
 LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(OverlayDisplayMode, m_overlayDisplayMode, overlayDisplayModeChanged)
-LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
-LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
 LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
 LAYOUT_SETTER(bool, UseFullScreenGeometry, m_useFullScreenGeometry, useFullScreenGeometryChanged)

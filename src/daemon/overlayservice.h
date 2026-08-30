@@ -34,6 +34,7 @@
 #include <PhosphorOverlay/ShellState.h>
 
 #include "core/interfaces/interfaces.h"
+#include "core/types/overlayshadertree.h"
 #include "overlayservice_types.h"
 #include <PhosphorZones/Layout.h>
 
@@ -1576,6 +1577,19 @@ private:
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
     // Shader support methods
+    /**
+     * @brief The shader a screen's overlay should draw: rule override →
+     *        per-layout tree override → tree baseline.
+     *
+     * A context overlay rule wins BOTH id and params (an engaged rule id
+     * with no params falls back to the shader's defaults), preserving the
+     * pre-tree rule-wins-both semantics. Otherwise the OverlayShaderTree
+     * from settings resolves per layout UUID with baseline fallback. An
+     * empty shaderId in the result means "no shader"
+     * (ShaderRegistry::isNoneShader).
+     */
+    OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                                const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;
     bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;

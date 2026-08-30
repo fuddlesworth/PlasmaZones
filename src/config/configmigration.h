@@ -84,7 +84,13 @@ namespace PlasmaZones {
 ///     theme-fallback strings (EMPTY means "follow the system palette"); the
 ///     Snapping.Zones.Colors/UseSystem bool and the "accent" token default
 ///     are retired (see migrateV5ToV6).
-inline constexpr int ConfigSchemaVersion = 6;
+/// v7: zone-overlay shader assignments move out of the layout-settings
+///     sidecar into the config's Snapping.OverlayShaders/OverlayShaderTree
+///     blob (global baseline + per-layout overrides). The chain step itself
+///     is a stamp-only no-op; the sidecar lift runs from ensureJsonConfig's
+///     finalize pass (see relocateOverlayShaderAssignments), mirroring how
+///     the v4 layout-settings relocation runs outside the chain.
+inline constexpr int ConfigSchemaVersion = 7;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -264,6 +270,21 @@ public:
     /// is removed so the key falls back to following the system accent.
     /// Stamps `_version = 6`.
     static void migrateV5ToV6(QJsonObject& root);
+
+    /// v6 → v7 schema step. Stamp-only: the real work (lifting per-layout
+    /// shaderId/shaderParams out of layout-settings.json into the
+    /// Snapping.OverlayShaders/OverlayShaderTree config blob) needs
+    /// filesystem access and must not run on sparse profile deltas, so it
+    /// lives in relocateOverlayShaderAssignments below.
+    static void migrateV6ToV7(QJsonObject& root);
+
+    /// Lift zone-overlay shader assignments from the layout-settings sidecar
+    /// into the config's OverlayShaderTree, stripping the relocated keys from
+    /// the sidecar. Idempotent and crash-safe — ensureJsonConfig calls it on
+    /// every run beside finalizeV4Conversion. An already-present tree entry
+    /// for a layout always wins over the sidecar copy (a retry after a
+    /// partial run must not clobber a since-edited assignment).
+    static bool relocateOverlayShaderAssignments(const QString& jsonPath);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

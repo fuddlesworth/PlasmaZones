@@ -571,8 +571,6 @@ private Q_SLOTS:
         QVERIFY(!structural.contains(QStringLiteral("zonePadding")));
         QVERIFY(!structural.contains(QStringLiteral("autoAssign")));
         QVERIFY(!structural.contains(QStringLiteral("useFullScreenGeometry")));
-        QVERIFY(!structural.contains(QStringLiteral("shaderId")));
-        QVERIFY(!structural.contains(QStringLiteral("shaderParams")));
         QVERIFY(!structural.contains(QStringLiteral("overlayDisplayMode")));
         QVERIFY(!structural.contains(QStringLiteral("usePerSideOuterGap")));
         QVERIFY(!structural.contains(QStringLiteral("outerGapTop")));
@@ -586,11 +584,10 @@ private Q_SLOTS:
         QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("overlayDisplayMode")).toInt(), 1);
         QCOMPARE(settings.value(QStringLiteral("outerGapLeft")).toInt(), 3);
-        QCOMPARE(settings.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
-        // The object-valued setting must survive as a nested object, not be flattened.
-        const QJsonObject sp = settings.value(QStringLiteral("shaderParams")).toObject();
-        QCOMPARE(sp.value(QStringLiteral("intensity")).toDouble(), 0.75);
-        QCOMPARE(sp.value(QStringLiteral("seed")).toInt(), 42);
+        // shaderId/shaderParams are no longer settings keys: overlay shader
+        // assignments live in the config's OverlayShaderTree since schema v7.
+        QVERIFY(!settings.contains(QStringLiteral("shaderId")));
+        QVERIFY(!settings.contains(QStringLiteral("shaderParams")));
         const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
         QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
     }
@@ -737,10 +734,6 @@ private:
                          {QStringLiteral("zoneNumber"), 1},
                          {QStringLiteral("relativeGeometry"), relGeo},
                          {QStringLiteral("appearance"), appearance}};
-        // shaderParams is the only object-valued setting — the highest-risk one
-        // for a strip/merge bug — so it's covered here alongside the sentinel
-        // (overlayDisplayMode) and per-side gap keys.
-        const QJsonObject shaderParams{{QStringLiteral("intensity"), 0.75}, {QStringLiteral("seed"), 42}};
         return QJsonObject{
             {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
             {QStringLiteral("name"), QStringLiteral("Settings Layout")},
@@ -755,8 +748,6 @@ private:
             {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
-            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
-            {QStringLiteral("shaderParams"), shaderParams},
             {QStringLiteral("zones"), QJsonArray{zone}},
         };
     }

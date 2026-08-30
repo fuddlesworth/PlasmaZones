@@ -6,13 +6,11 @@
 #include "../services/ILayoutService.h"
 #include "../services/ZoneManager.h"
 #include "../undo/UndoController.h"
-#include "../helpers/ShaderDbusQueries.h"
 #include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "core/interfaces/shaderregistry.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -576,20 +574,12 @@ void EditorController::createNewLayout()
     m_isNewLayout = true;
     m_hasUnsavedChanges = true;
 
-    // Reset shader state
-    m_currentShaderId.clear();
-    m_currentShaderParams.clear();
-    m_cachedShaderParameters.clear();
-
     // Reset per-layout gap overrides (-1 = use global). Signals are emitted
     // together with the other layout signals below.
     m_gaps->resetOverrides();
     m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
     m_aspectRatioClass = 0;
-
-    // Refresh available shaders from daemon
-    refreshAvailableShaders();
 
     // Publish the screen-derived reference size if the previous layout had
     // overridden it to a fixed-zone bounding box, or if setTargetScreen
@@ -609,9 +599,6 @@ void EditorController::createNewLayout()
     Q_EMIT selectedZoneIdChanged();
     Q_EMIT selectedZoneIdsChanged();
     Q_EMIT hasUnsavedChangesChanged();
-    Q_EMIT currentShaderIdChanged();
-    Q_EMIT currentShaderParamsChanged();
-    Q_EMIT currentShaderParametersChanged();
     m_gaps->emitOverrideSignals();
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
@@ -794,15 +781,6 @@ bool EditorController::loadLayout(const QString& layoutId)
         m_zoneManager->setZones(zones);
     }
 
-    // Load shader settings
-    m_currentShaderId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
-    if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
-        m_currentShaderParams =
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
-    } else {
-        m_currentShaderParams.clear();
-    }
-
     // Load visibility filtering allow-lists
     PhosphorZones::LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
                                                       m_allowedActivities);
@@ -884,26 +862,6 @@ bool EditorController::loadLayout(const QString& layoutId)
         m_undoController->clear();
     }
 
-    // Refresh available shaders from daemon
-    refreshAvailableShaders();
-
-    // Update cached shader parameters after refresh (needs D-Bus access)
-    if (ShaderRegistry::isNoneShader(m_currentShaderId)) {
-        m_cachedShaderParameters.clear();
-    } else {
-        QVariantMap info = getShaderInfo(m_currentShaderId);
-        if (info.contains(QLatin1String("parameters"))) {
-            m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
-        } else {
-            m_cachedShaderParameters.clear();
-        }
-    }
-
-    // Strip stale params accumulated from previous shader selections
-    if (!m_currentShaderParams.isEmpty() && !m_cachedShaderParameters.isEmpty()) {
-        m_currentShaderParams = stripStaleShaderParams(m_currentShaderParams);
-    }
-
     ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
@@ -911,9 +869,6 @@ bool EditorController::loadLayout(const QString& layoutId)
     Q_EMIT selectedZoneIdChanged();
     Q_EMIT selectedZoneIdsChanged();
     Q_EMIT hasUnsavedChangesChanged();
-    Q_EMIT currentShaderIdChanged();
-    Q_EMIT currentShaderParamsChanged();
-    Q_EMIT currentShaderParametersChanged();
 
     // Gap change signals were emitted inside EditorGapsModel::loadFromJson above.
     if (m_useFullScreenGeometry != oldUseFullScreen) {
@@ -1044,19 +999,6 @@ bool EditorController::saveLayout()
         zonesArray.append(zoneObj);
     }
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = zonesArray;
-
-    // Include shader settings (strip stale params from other shaders)
-    if (!ShaderRegistry::isNoneShader(m_currentShaderId)) {
-        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = m_currentShaderId;
-    }
-    if (!m_currentShaderParams.isEmpty()) {
-        // Only persist params that belong to the current shader
-        QVariantMap cleanParams = stripStaleShaderParams(m_currentShaderParams);
-        if (!cleanParams.isEmpty()) {
-            layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] =
-                QJsonObject::fromVariantMap(cleanParams);
-        }
-    }
 
     // Include per-layout gap overrides (only the ones actually set)
     m_gaps->writeToJson(layoutObj);

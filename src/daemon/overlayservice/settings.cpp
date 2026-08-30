@@ -145,6 +145,19 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
+            // Zone-overlay shader tree: an assignment edit in the settings
+            // app can flip a screen between rectangle and shader overlay
+            // modes (none↔shader), which refreshVisibleWindows alone cannot
+            // apply — same reasoning as the layoutModified coalesced-refresh
+            // hook (see observeLayout below). No coalescing needed here: tree
+            // writes arrive one per user action, not per drag frame.
+            connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
+                if (m_visible) {
+                    recreateOverlayWindowsOnTypeMismatch();
+                }
+                refreshVisibleWindows();
+            });
+
             // Global animations toggle: when off, SurfaceAnimator snaps
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.

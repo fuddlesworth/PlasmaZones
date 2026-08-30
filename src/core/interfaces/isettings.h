@@ -13,6 +13,10 @@
 
 #include "plasmazones_export.h"
 #include "core/types/enums.h"
+// Included rather than forward-declared: committedOverlayShaderTree()'s
+// inline default body returns the tree by value, which needs the complete
+// type here.
+#include "core/types/overlayshadertree.h"
 #include "settings_interfaces.h"
 
 // Explicit rather than transitive: the drop indicator's no-palette colour IS
@@ -192,6 +196,21 @@ public:
     virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
+
+    // Zone-overlay shader assignments — an OverlayShaderTree (global baseline
+    // + per-layout-UUID overrides) under Snapping.OverlayShaders. Flat
+    // counterpart of the two trees above; same typed-getter + JSON-facade
+    // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
+    // ride the facade. The committed getter mirrors
+    // committedDecorationProfileTree for per-page Discard compares.
+    virtual OverlayShaderTree overlayShaderTree() const = 0;
+    virtual void setOverlayShaderTree(const OverlayShaderTree& tree) = 0;
+    virtual OverlayShaderTree committedOverlayShaderTree() const
+    {
+        return overlayShaderTree();
+    }
+    virtual QString overlayShaderTreeJson() const = 0;
+    virtual void setOverlayShaderTreeJson(const QString& json) = 0;
 
     // Decorations.Performance — an animated pack repaints every window carrying
     // it on every vsync, and that alone keeps the GPU in its top performance
@@ -991,6 +1010,8 @@ Q_SIGNALS:
 
     // Surface decoration settings
     void decorationProfileTreeChanged();
+    // Zone-overlay shader assignments
+    void overlayShaderTreeChanged();
     void decorationAnimateFocusedOnlyChanged();
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();

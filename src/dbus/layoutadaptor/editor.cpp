@@ -199,8 +199,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         const std::array editorKeys{
             ::PhosphorZones::ZoneJsonKeys::ZonePadding,       ::PhosphorZones::ZoneJsonKeys::OuterGap,
             ::PhosphorZones::ZoneJsonKeys::AllowedScreens,    ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
-            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::ShaderId,
-            ::PhosphorZones::ZoneJsonKeys::ShaderParams,      ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
+            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
         };
         for (const QLatin1String key : editorKeys) {
             if (obj.contains(key)) {
@@ -286,12 +285,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         PhosphorLayout::ScreenClassification::fromJsonValue(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey])));
 
     // Update shader settings
-    layout->setShaderId(obj[::PhosphorZones::ZoneJsonKeys::ShaderId].toString());
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
-        layout->setShaderParams(obj[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap());
-    } else {
-        layout->setShaderParams(QVariantMap());
-    }
 
     // Update visibility allow-lists
     {

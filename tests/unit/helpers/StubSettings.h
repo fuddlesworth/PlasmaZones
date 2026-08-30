@@ -2123,6 +2123,32 @@ public:
         }
         setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
     }
+    OverlayShaderTree overlayShaderTree() const override
+    {
+        return m_overlayShaderTree;
+    }
+    void setOverlayShaderTree(const OverlayShaderTree& value) override
+    {
+        if (m_overlayShaderTree == value) {
+            return;
+        }
+        m_overlayShaderTree = value;
+        Q_EMIT overlayShaderTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString overlayShaderTreeJson() const override
+    {
+        // Same coherence contract as the decoration facade above.
+        return QString::fromUtf8(QJsonDocument(overlayShaderTree().toJson()).toJson(QJsonDocument::Compact));
+    }
+    void setOverlayShaderTreeJson(const QString& json) override
+    {
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
+    }
 
     // Decorations.Performance (ISettings). Real storage, not no-op setters: the
     // daemon arms its idle ladder off decorationPauseWhenIdleChanged /
@@ -2991,6 +3017,7 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
+    OverlayShaderTree m_overlayShaderTree;
     QColor m_borderColor = ConfigDefaults::borderFallbackColor();
     QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();
     QColor m_inactiveColor = ConfigDefaults::inactiveFallbackColor();

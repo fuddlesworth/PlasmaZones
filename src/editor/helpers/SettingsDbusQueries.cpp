@@ -46,8 +46,7 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         // (or a future extension to this method returning lists/maps) would
         // arrive as QDBusArgument wrappers that toInt()/toBool() can't
         // handle — the result would silently fall through to caller-side
-        // defaults. ShaderDbusQueries::queryShaderInfo does the same thing
-        // against the same daemon object for the same reason.
+        // defaults.
         QVariant converted = DBusVariantUtils::convertDbusArgument(reply.arguments().constFirst());
         return converted.toMap();
     }

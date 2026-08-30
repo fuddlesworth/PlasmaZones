@@ -153,6 +153,8 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                  QByteArrayLiteral("shaderProfileTreeJson")},
                 {QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree),
                  QByteArrayLiteral("decorationProfileTreeJson")},
+                {QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree),
+                 QByteArrayLiteral("overlayShaderTreeJson")},
                 // The three window *Raw companion keys have no Q_PROPERTY of
                 // their own (the raw surface IS the windowBorderColor* /
                 // windowTintColor ISettings property); alias each to its

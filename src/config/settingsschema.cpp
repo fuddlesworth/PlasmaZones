@@ -864,6 +864,13 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(OverlayDisplayMode::ZoneRectangles), "zoneRectangles"_L1},
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
+
+    // Zone-overlay shader assignments — one nested JSON blob (baseline +
+    // per-layout overrides), persisted as a QVariantMap like the animation
+    // ShaderProfileTree entry, with no sanitizer for the same reason.
+    schema.groups[CD::snappingOverlayShadersGroup()] = {
+        {CD::overlayShaderTreeKey(), CD::overlayShaderTree(), QMetaType::QVariantMap},
+    };
 }
 
 // ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────

@@ -25,7 +25,6 @@ ToolBar {
     required property var availableScreens
     required property var confirmCloseDialog
     required property var helpDialog
-    required property var shaderDialog
     required property var visibilityDialog
     required property var layoutSettingsDialog
     required property var importDialog
@@ -415,29 +414,6 @@ ToolBar {
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Visibility")
             Accessible.description: i18nc("@info", "Configure where this layout appears in the zone selector")
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // SHADER SETTINGS BUTTON
-        // ═══════════════════════════════════════════════════════════════
-        ToolButton {
-            id: shaderButton
-
-            icon.name: "adjustlevels"
-            enabled: editorController !== null && editorController.shadersEnabled
-            visible: !topBar.previewMode && !topBar.templateMode && editorController !== null && editorController.shadersEnabled
-            onClicked: topBar.shaderDialog.open()
-            ToolTip.text: i18nc("@tooltip", "Shader effect settings")
-            ToolTip.visible: hovered
-            Accessible.name: i18nc("@action", "Shader Settings")
-            Accessible.description: i18nc("@info", "Configure visual shader effects for zones")
-        }
-
-        // Visual separator (only show if shader button is visible)
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            visible: shaderButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════

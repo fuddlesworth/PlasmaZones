@@ -11,15 +11,16 @@ import QtQuick
  * the shared component; this file only provides the bridge (the
  * SnappingShadersPageController surface) and snapping-domain copy.
  *
- * Per-layout shader assignment lives in the editor (each layout's zone
- * shader picker); this page exists so users can survey what's installed,
+ * Shader assignment lives on the sibling Shaders page
+ * (SnappingShaderAssignmentsPage — global default + per-layout
+ * overrides); this page exists so users can survey what's installed,
  * see parameter metadata, and jump to the user shader directory to drop
  * in their own packs.
  */
 ShaderBrowserPage {
     bridge: settingsController.snappingShadersPage
     settingsCategory: "SnappingShadersFilterBar"
-    infoBannerText: i18n("Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor's appearance section.")
+    infoBannerText: i18n("Browse installed snapping overlay shaders. Assign a shader on the Shaders page, as a global default or per layout.")
     // Closures (not pre-evaluated strings) so `i18ncp` runs with the
     // LIVE usage count — required for locales with more than two plural
     // forms and so `%n` displays the actual count rather than a baked-in

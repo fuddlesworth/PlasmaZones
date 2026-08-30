@@ -3,46 +3,64 @@
 
 #include "snappingshaderspagecontroller.h"
 
-#include "core/platform/logging.h"
+#include "core/interfaces/isettings.h"
 #include "core/interfaces/shaderregistry.h"
-#include "shaderpreview/shaderpreviewcontroller.h"
+#include "core/platform/logging.h"
+#include "core/types/overlayshadertree.h"
+#include "phosphor_i18n.h"
 #include "settings/services/shaderpackinstaller.h"
+#include "shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
-#include <QDir>
-
 #include <algorithm>
 
 namespace PlasmaZones {
 
+namespace {
+
+QVariantMap profileToMap(const OverlayShaderProfile& profile)
+{
+    QVariantMap map;
+    map.insert(QLatin1String("shaderId"), profile.shaderId);
+    map.insert(QLatin1String("parameters"), profile.parameters);
+    return map;
+}
+
+} // namespace
+
 SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                                                             ISettings* settings,
                                                              ShaderPreviewController* previewController,
                                                              QObject* parent)
     : PhosphorControl::PageController(QStringLiteral("snapping-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
+    , m_settings(settings)
     , m_previewController(previewController)
 {
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
                 &SnappingShadersPageController::shaderEffectsChanged);
     }
-    if (m_layoutRegistry) {
-        // The registry's `contentsChanged` fires on add/remove/import as
-        // well as in-place layout edits. We blanket-emit a path-agnostic
-        // `shaderProfileChanged` so the QML browser refreshes its
-        // "Used in:" chips, then re-attach the per-layout signal hooks
-        // (the layout list may have grown / shrunk — wiring the new ones
-        // covers future shaderId edits).
-        connect(m_layoutRegistry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, this, [this]() {
-            connectLayoutSignals();
+    if (m_settings) {
+        // The assignment store is the config tree; every mutation (local
+        // setter, D-Bus write, global reload) funnels through this one
+        // NOTIFY. Always a full-refresh emit — the tree write does not
+        // say which node moved, and the cards are cheap to re-read.
+        connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
             Q_EMIT shaderProfileChanged(QString());
         });
-        connectLayoutSignals();
+    }
+    if (m_layoutRegistry) {
+        // Layout add / remove / rename changes the assignment card list
+        // and the labels the usage chips render.
+        connect(m_layoutRegistry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, this, [this]() {
+            Q_EMIT shaderProfileChanged(QString());
+        });
     }
 }
 
@@ -53,86 +71,119 @@ QObject* SnappingShadersPageController::previewController() const
     return m_previewController;
 }
 
-void SnappingShadersPageController::connectLayoutSignals()
+QString SnappingShadersPageController::layoutNameFor(const QString& layoutId) const
 {
     if (!m_layoutRegistry)
-        return;
-    // Track which layouts are already wired so the O(N) walk on every
-    // contentsChanged shrinks to O(new-layouts). Qt::UniqueConnection
-    // still guarantees idempotence at the QObject layer, but the
-    // membership check spares the per-call function-prologue cost and,
-    // more importantly, scales sublinearly when contentsChanged fires
-    // repeatedly during a bulk-edit (drag-reorder, import).
-    //
-    // Stale-entry eviction: `m_wiredLayouts` is drained by
-    // `onWiredLayoutDestroyed` (wired below) which assumes "removed from
-    // registry == destroyed". The registry's contract is that layouts
-    // are QObject-parented to it, so removal => destruction in the same
-    // tick. Belt-and-braces: also drop any tracked entry not present in
-    // the current registry snapshot, so a future registry refactor that
-    // detaches without destroying (e.g. cache-eviction) doesn't grow
-    // `m_wiredLayouts` unbounded.
+        return {};
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
-    // Build a live-pointer set keyed as QObject* so the membership
-    // test can be applied to the tracked QObject* entries directly,
-    // sidestepping a qobject_cast on what could theoretically be a
-    // dangling pointer (see the destroyed-eviction note below).
-    QSet<QObject*> live;
-    live.reserve(layouts.size());
     for (PhosphorZones::Layout* layout : layouts) {
-        if (layout)
-            live.insert(layout);
+        if (layout && layout->id().toString() == layoutId)
+            return layout->name();
     }
-    // Stale-entry eviction. onWiredLayoutDestroyed() drains entries
-    // synchronously from QObject::destroyed (wired below), so under
-    // the current registry contract m_wiredLayouts never carries a
-    // dangling pointer. The live-set guard here keeps disconnect()
-    // calls bounded to objects we KNOW are still alive — defence in
-    // depth against a future registry refactor that detaches without
-    // destroying (cache eviction etc.).
-    for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
-        QObject* tracked = *it;
-        if (live.contains(tracked)) {
-            ++it;
-            continue;
-        }
-        // Tracked entry no longer in the live registry snapshot. If
-        // it's also been destroyed, onWiredLayoutDestroyed already
-        // removed it earlier in this same event loop turn and this
-        // branch is unreachable. If it's been *detached* (hypothetical
-        // future case), tracked is still alive and we can safely
-        // disconnect — no UB.
-        disconnect(tracked, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
-        disconnect(tracked, nullptr, this, nullptr);
-        it = m_wiredLayouts.erase(it);
-    }
+    return {};
+}
+
+QVariantList SnappingShadersPageController::assignableLayouts() const
+{
+    if (!m_layoutRegistry)
+        return {};
+    QVariantList out;
+    const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)
             continue;
-        if (m_wiredLayouts.contains(layout))
-            continue;
-        connect(layout, &PhosphorZones::Layout::shaderIdChanged, this,
-                &SnappingShadersPageController::onLayoutShaderIdChanged, Qt::UniqueConnection);
-        // Track destruction so the set stays in sync — without this,
-        // a deleted-then-reused address would skip the connect path
-        // and the new layout's shaderIdChanged would never reach us.
-        connect(layout, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed,
-                Qt::UniqueConnection);
-        m_wiredLayouts.insert(layout);
+        QVariantMap entry;
+        entry.insert(QLatin1String("id"), layout->id().toString());
+        entry.insert(QLatin1String("name"), layout->name());
+        out.append(entry);
     }
+    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QLatin1String("name")).toString() < b.toMap().value(QLatin1String("name")).toString();
+    });
+    return out;
 }
 
-void SnappingShadersPageController::onWiredLayoutDestroyed(QObject* layout)
+bool SnappingShadersPageController::hasOverride(const QString& path) const
 {
-    m_wiredLayouts.remove(layout);
+    if (!m_settings || path.isEmpty())
+        return false;
+    return m_settings->overlayShaderTree().hasOverride(path);
 }
 
-void SnappingShadersPageController::onLayoutShaderIdChanged()
+QVariantMap SnappingShadersPageController::rawShaderProfile(const QString& path) const
 {
-    auto* layout = qobject_cast<PhosphorZones::Layout*>(sender());
-    if (!layout)
+    if (!m_settings)
+        return profileToMap({});
+    const OverlayShaderTree tree = m_settings->overlayShaderTree();
+    return profileToMap(path.isEmpty() ? tree.baseline() : tree.directOverride(path));
+}
+
+QVariantMap SnappingShadersPageController::resolvedShaderProfile(const QString& path) const
+{
+    if (!m_settings)
+        return profileToMap({});
+    const OverlayShaderTree tree = m_settings->overlayShaderTree();
+    return profileToMap(path.isEmpty() ? tree.baseline() : tree.resolve(path));
+}
+
+void SnappingShadersPageController::setShaderOverride(const QString& path, const QString& effectId,
+                                                      const QVariantMap& params)
+{
+    if (!m_settings)
         return;
-    Q_EMIT shaderProfileChanged(layout->id().toString());
+    OverlayShaderTree tree = m_settings->overlayShaderTree();
+    const OverlayShaderProfile node{effectId, params};
+    if (path.isEmpty())
+        tree.setBaseline(node);
+    else
+        tree.setOverride(path, node);
+    m_settings->setOverlayShaderTree(tree);
+}
+
+void SnappingShadersPageController::setShaderParameters(const QString& path, const QVariantMap& params)
+{
+    if (!m_settings)
+        return;
+    OverlayShaderTree tree = m_settings->overlayShaderTree();
+    if (path.isEmpty()) {
+        OverlayShaderProfile node = tree.baseline();
+        node.parameters = params;
+        tree.setBaseline(node);
+    } else {
+        if (!tree.hasOverride(path))
+            return;
+        OverlayShaderProfile node = tree.directOverride(path);
+        node.parameters = params;
+        tree.setOverride(path, node);
+    }
+    m_settings->setOverlayShaderTree(tree);
+}
+
+bool SnappingShadersPageController::clearOverride(const QString& path)
+{
+    if (!m_settings || path.isEmpty())
+        return false;
+    OverlayShaderTree tree = m_settings->overlayShaderTree();
+    if (!tree.clearOverride(path))
+        return false;
+    m_settings->setOverlayShaderTree(tree);
+    return true;
+}
+
+QVariantList SnappingShadersPageController::shaderParameters(const QString& effectId) const
+{
+    if (!m_shaderRegistry || effectId.isEmpty())
+        return {};
+    // The registry's flattened rows already carry each pack's
+    // ParameterInfo maps; pull the matching row's list rather than
+    // duplicating the effect→variant mapping here.
+    const QVariantList effects = m_shaderRegistry->availableShadersVariant();
+    for (const QVariant& v : effects) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QLatin1String("id")).toString() == effectId)
+            return m.value(QLatin1String("parameters")).toList();
+    }
+    return {};
 }
 
 QString SnappingShadersPageController::userShaderDirectoryPath() const
@@ -199,25 +250,35 @@ bool SnappingShadersPageController::installShaderPack(const QString& sourceUrl)
 
 QVariantList SnappingShadersPageController::shaderEffectUsages(const QString& effectId) const
 {
-    if (!m_layoutRegistry || effectId.isEmpty())
+    if (!m_settings || effectId.isEmpty())
         return {};
+    const OverlayShaderTree tree = m_settings->overlayShaderTree();
     QVariantList out;
-    const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
-    for (PhosphorZones::Layout* layout : layouts) {
-        if (!layout || layout->shaderId() != effectId)
+    if (tree.baseline().shaderId == effectId) {
+        QVariantMap entry;
+        entry.insert(QLatin1String("path"), QString());
+        entry.insert(QLatin1String("label"), PhosphorI18n::tr("Global default"));
+        out.append(entry);
+    }
+    QVariantList layoutRows;
+    const QStringList overridden = tree.overriddenLayouts();
+    for (const QString& layoutId : overridden) {
+        if (tree.directOverride(layoutId).shaderId != effectId)
             continue;
         QVariantMap entry;
         // `path` is the layout's UUID-with-braces (matches the rest of
         // the codebase's QUuid::toString convention); `label` is the
         // user-facing name. The browser renders `label` and falls back
-        // to `path` when `label` is empty.
-        entry.insert(QLatin1String("path"), layout->id().toString());
-        entry.insert(QLatin1String("label"), layout->name());
-        out.append(entry);
+        // to `path` when `label` is empty (e.g. a stale entry for a
+        // deleted layout).
+        entry.insert(QLatin1String("path"), layoutId);
+        entry.insert(QLatin1String("label"), layoutNameFor(layoutId));
+        layoutRows.append(entry);
     }
-    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+    std::sort(layoutRows.begin(), layoutRows.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });
+    out.append(layoutRows);
     return out;
 }
 

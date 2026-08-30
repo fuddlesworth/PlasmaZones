@@ -647,7 +647,10 @@ private Q_SLOTS:
     /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        QCOMPARE(ConfigSchemaVersion, 6);
+        // v7 qualifies: migrateV6ToV7 is stamp-only for the config root (the
+        // overlay-shader sidecar lift runs outside the chain and never touches
+        // a profile delta), so a v6-stamped profile migrates forward cleanly.
+        QCOMPARE(ConfigSchemaVersion, 7);
     }
 
     /// A profile file stamped v5 whose delta carries the old zone-colour
