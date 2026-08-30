@@ -912,6 +912,70 @@ void TilingHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapR
     const QString windowId = m_effect->getWindowId(window);
     m_pendingFreshWindows.insert(windowId);
     m_deferredWindowRoutes.insert(windowId, DeferredWindowRoute{QPointer<KWin::EffectWindow>(window), canSnapRestore});
+    // Zero-tick dispatch when no screen query is in flight: the defer is a
+    // flags-settle turn, not a wait (see the routing block in
+    // slotWindowAdded). When a query IS pending its finished handler owns
+    // the dispatch — every arm of it calls completeDeferredWindowRoutes —
+    // and a tick that was already armed before the query started finds an
+    // empty route map and no-ops. The re-check inside the tick covers the
+    // opposite race, a query starting between this schedule and the tick
+    // firing.
+    if (!m_initialScreenQueryPending && !m_deferredRouteDispatchScheduled) {
+        m_deferredRouteDispatchScheduled = true;
+        QTimer::singleShot(0, this, [this] {
+            m_deferredRouteDispatchScheduled = false;
+            if (m_initialScreenQueryPending) {
+                return;
+            }
+            completeDeferredWindowRoutes();
+        });
+    }
+}
+
+void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    // Only a window this handler actually announced is a candidate; for
+    // everything else a flag flip stays free. Snap-owned windows are
+    // deliberately out of scope: their capture window is closed by the
+    // routing defer (resolveWindowRestore now runs post-settle), and a LATE
+    // keep-above on a snapped window is dominated by the user raising it
+    // from the title-bar menu, where an unsnap would fight them.
+    if (!m_notifiedWindows.contains(windowId)) {
+        return;
+    }
+    // The STRUCTURAL pair only, NOT isEligibleForTilingNotify: its desktop /
+    // activity / minimized arms describe visibility, not eligibility, and
+    // testing them here would evict a healthy tile on a plain desktop
+    // switch. Both predicates consult the window's OWN keep-above
+    // (windowOwnKeepAbove), so a SetWindowLayer-raised window does not
+    // evict itself.
+    if (m_effect->shouldHandleWindow(w) && m_effect->isTileableWindow(w)) {
+        return;
+    }
+    const QString screenId = m_effect->getWindowScreenId(w);
+    // Spawn frame read BEFORE the release: cleanupAutotileTracking (inside
+    // releaseWindowTracking) clears the pre-tile bucket with the rest of
+    // the tracking.
+    const QRectF spawnGeo = findPreTileGeometry(windowId);
+    qCInfo(lcEffect) << "Flags-settle eviction:" << windowId << "no longer tileable, releasing from" << screenId;
+    releaseWindowTracking(windowId, screenId);
+    if (spawnGeo.isValid() && !w->isUserMove() && !w->isUserResize()) {
+        // Same VS-crossing suppression bracket as every other effect-made
+        // geometry write (save/restore, nesting-safe), and the same
+        // tracked-screen re-seed the daemon pre-tile restore does after a
+        // suppressed apply.
+        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+        m_effect->m_daemonGate.inGeometryApply = true;
+        const auto restoreGate = qScopeGuard([this, prevInApply] {
+            m_effect->m_daemonGate.inGeometryApply = prevInApply;
+        });
+        m_effect->applyWindowGeometry(w, spawnGeo.toRect(), /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+        m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
+    }
 }
 
 QSet<QString> TilingHandler::completeDeferredWindowRoutes()

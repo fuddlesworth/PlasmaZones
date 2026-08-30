@@ -76,6 +76,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
         // (not tracked by the autotile handler's m_notifiedWindowScreens).
         m_trackedScreenPerWindow[w] = getWindowScreenId(w);
+        // Flags-settle eviction backstop: a client can set keep-above or
+        // skip-switcher AFTER mapping (Yakuake queues both in its map-time
+        // request burst; another client may flip one seconds later). Either
+        // flag flips a structural placement filter, and without these the
+        // map-time tileability verdict was permanent — the pre-settle window
+        // got inserted, focused and column-sized. The one-tick routing defer
+        // in slotWindowAdded harvests the same-burst case before any insert;
+        // these catch the late case and release the window
+        // (reevaluateWindowEligibility gates itself on announced windows, so
+        // the connection is free for everything else).
+        connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;
