@@ -914,6 +914,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
         genByScreen.insert(it.key(), ++m_tileStaggerGenByScreen[it.key()]);
     }
+    // The STRIP this batch was built for, captured beside the generations and
+    // checked the same way. The generations alone cannot see a strip retire:
+    // retireStripScopedState drops the per-window relocations but bumps
+    // nothing, so a staggered apply still in flight from the OUTGOING strip's
+    // batch would land afterwards and re-insert the very entry the retire just
+    // dropped, putting a parked column back at the previous strip's position.
+    //
+    // Deliberately NOT a generation bump inside the retire, which is the
+    // obvious spelling and is wrong: a batch that RACED AHEAD of the
+    // announcement belongs to the INCOMING strip and is exactly what must
+    // survive, and a bump cancels it along with the stale one. The epoch
+    // discriminates correctly because slotStripContextChanged records the new
+    // value BEFORE it retires — so a batch built before the announcement
+    // carries the old epoch and is dropped, while one built after carries the
+    // new one and runs. A screen with no epoch yet reads empty on both sides
+    // and is unaffected.
+    QHash<QString, QString> stripEpochByScreen;
+    for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+        stripEpochByScreen.insert(it.key(), m_stripEpochByScreen.value(it.key()));
+    }
 
     const bool hasApplies = !toApply.isEmpty();
     // A batch that only touches scrolling screens never needs the stacking
@@ -1276,16 +1296,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen, startedViewScreens, immediateViewScreens, wireToLive](int i) {
+        [this, toApply, gen, genByScreen, stripEpochByScreen, startedViewScreens, immediateViewScreens,
+         wireToLive](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
             // Drop this apply if superseded by a desktop/screen switch (global
-            // epoch) OR by a newer retile of THIS window's screen (per-screen).
-            // A batch for a DIFFERENT screen no longer cancels us — that was the
+            // epoch), by a newer retile of THIS window's screen (per-screen),
+            // or by the screen's STRIP being replaced under it. A batch for a
+            // DIFFERENT screen no longer cancels us — that was the
             // cross-output "hole on the source monitor" bug.
             if (m_tileStaggerGeneration != gen
-                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
+                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)
+                || m_stripEpochByScreen.value(snap.screenId) != stripEpochByScreen.value(snap.screenId)) {
                 // A genuinely newer retile — of this window's screen, OR a
                 // global bump (desktop/screen switch) — has superseded this
                 // apply; normal during rapid ops. Both epochs are logged
@@ -1299,7 +1322,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
                                   << "| globalGen now" << m_tileStaggerGeneration << "captured" << gen
                                   << "| screenGen now" << m_tileStaggerGenByScreen.value(snap.screenId) << "captured"
-                                  << genByScreen.value(snap.screenId);
+                                  << genByScreen.value(snap.screenId) << "| stripEpoch now"
+                                  << m_stripEpochByScreen.value(snap.screenId) << "captured"
+                                  << stripEpochByScreen.value(snap.screenId);
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {
