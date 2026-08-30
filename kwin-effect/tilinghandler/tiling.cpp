@@ -102,8 +102,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 ++parkedEntries;
             }
         }
-        qCDebug(lcStripDiag) << "batch arrived:" << validatedRequests.size() << "entries" << parkedEntries
-                             << "parked screens=" << screens;
+        qCDebug(lcStripDiag) << "batch arrived:" << validatedRequests.size() << "entries," << parkedEntries
+                             << "with visualPos, screens=" << screens;
     }
 
     // A geometry batch on a scrolling screen slides columns under the

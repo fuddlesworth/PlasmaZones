@@ -146,7 +146,19 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // Ordered cheapest-first: the empty-map probe is the common-case exit on a
     // desktop with nothing parked, and the delta probe answers before the
     // predicate walk for every never-parked column.
-    if (!w || m_scrollVisualDelta.isEmpty()) {
+    //
+    // The empty-map exit is SKIPPED while the diagnostic category is on, and
+    // that is the whole point rather than an oversight. An empty map is
+    // precisely what a screen with no batch, or one whose entries the strip
+    // retire just dropped, looks like — so exiting here made the MISS trace
+    // below unreachable in one of the two states it exists to report, and the
+    // log read identically to "no strip windows here". The isEmpty() test
+    // stays FIRST so the disabled path pays an inlined size check and only
+    // then an atomic load, never a string hash.
+    if (!w) {
+        return false;
+    }
+    if (m_scrollVisualDelta.isEmpty() && !lcStripDiag().isDebugEnabled()) {
         return false;
     }
     const auto vit = m_scrollVisualDelta.constFind(windowId);
@@ -170,6 +182,21 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     }
     KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
     if (!managed) {
+        // Report and advance the gate. A window that HOLDS a relocation but
+        // resolves no managed output is a real transition — a strip retire, or
+        // a screen mid-change — and returning silently left the gate holding
+        // the pre-transition sample, so the eventual return to that same tuple
+        // was suppressed as unchanged and the whole excursion was invisible in
+        // the log.
+        if (lcStripDiag().isDebugEnabled()) {
+            const StripDiagSample sample{true, vit->stripPos, {}, false};
+            const auto lastIt = m_stripDiagLast.constFind(windowId);
+            if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+                m_stripDiagLast.insert(windowId, sample);
+                qCDebug(lcStripDiag) << "park resolve:" << windowId
+                                     << "placement=HIT but no managed output verdict= painted-at-commit";
+            }
+        }
         return false;
     }
     // The rect paintWindow actually draws: the window's expanded band moved
@@ -227,7 +254,8 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // it is actually drawn. This one gates the park reap, the setTransformed
     // flag and the strip-capture anchor election, so getting it wrong either
     // culls a visible column or keeps a parked one painting forever.
-    visual.translate(m_stripViewAnimator->offsetFor(managed));
+    const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+    visual.translate(viewOffset);
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);
@@ -245,8 +273,15 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // by default, and even enabled it only reports when the tuple changes. The
     // isDebugEnabled() check is not redundant with qCDebug — it keeps the
     // sample construction and the hash write off the hot path entirely.
+    //
+    // What it costs when the category IS on, since this instrument is read on
+    // the timing it perturbs: the empty-map exit above is skipped, so every
+    // strip-managed window resolves its output once per pass. That resolve is
+    // memoised for the pass, except at the park-reap caller, which runs
+    // outside a pass on purpose and therefore pays it uncached — though there
+    // it iterates the relocation map, so the empty case never reaches it.
     if (lcStripDiag().isDebugEnabled()) {
-        const StripDiagSample sample{true, vit->stripPos, m_stripViewAnimator->offsetFor(managed).toPoint(), parked};
+        const StripDiagSample sample{true, vit->stripPos, viewOffset.toPoint(), parked};
         const auto lastIt = m_stripDiagLast.constFind(windowId);
         if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
             m_stripDiagLast.insert(windowId, sample);

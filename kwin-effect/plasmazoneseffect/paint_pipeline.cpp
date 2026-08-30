@@ -1167,7 +1167,9 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // column parked off the viewport, or KWin keeps it in the paint set at
     // full decoration cost forever. No pre-gates here — the predicate's own
     // cheapest-first ordering (empty map, then the delta probe) already
-    // exits early for every non-strip window.
+    // exits early for every non-strip window, except while the strip
+    // diagnostic category is enabled, where it deliberately walks further to
+    // report the empty case.
     const bool parkedOffscreen = scrollParkedOffscreen(w, windowId);
 
     // A scroll-strip window on a FOREIGN output's pass: paintWindow will skip
@@ -1456,7 +1458,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // its viewport from the window's own rect. getWindowId here rather than
         // the shared derivation below, which sits after these early returns by
         // design; the predicate's own cheap gates keep the common case at one
-        // empty-map probe.
+        // empty-map probe, unless the strip diagnostic category is enabled.
         if (w && scrollParkedOffscreen(w, getWindowId(w))) {
             return;
         }

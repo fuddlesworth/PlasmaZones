@@ -138,6 +138,21 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // daemon's per-pass override push depends on it (scrolling.cpp's
         // LOAD-BEARING gate).
         if (!screens.isEmpty()) {
+            // Identity FIRST, before the set announcement, matching the
+            // changed-set branch below. Both signals ride one connection, so a
+            // consumer sees them in emission order, and this order is the one
+            // that reads correctly: a consumer retires the state belonging to
+            // the strip that just went away before it is asked to do anything
+            // about the mode or the set.
+            //
+            // Announced for EVERY screen in the set, not only on the switch
+            // branch: this is emit-on-change itself, so a push that moved no
+            // screen's context is silent anyway, and routing it through one
+            // place keeps identity from depending on which branch a caller
+            // happened to take.
+            for (const QString& screenId : screens) {
+                announceStripContextIfChanged(screenId);
+            }
             if (wasDesktopSwitch) {
                 QStringList sortedSame(screens.cbegin(), screens.cend());
                 sortedSame.sort();
@@ -154,12 +169,6 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 m_forceEmitScreens.unite(screens);
             }
             for (const QString& screenId : screens) {
-                // Announced for EVERY screen in the set, not only on the
-                // switch branch: this is emit-on-change itself, so a push that
-                // moved no screen's context is silent anyway, and routing it
-                // through one place keeps identity from depending on which
-                // branch a caller happened to take.
-                announceStripContextIfChanged(screenId);
                 scheduleRetileForScreen(screenId);
             }
         }
