@@ -87,6 +87,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         return;
     }
 
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The
+    // ARRIVAL of a batch is itself the evidence: the engine emits on change
+    // only (engine_apply.cpp:746), so returning to a desktop whose strip is
+    // unchanged emits nothing at all, and candidate A is diagnosed by this
+    // line NOT appearing after a desktop switch. Read against the
+    // desktopChanged line from the same category.
+    if (lcStripDiag().isDebugEnabled()) {
+        QSet<QString> screens;
+        int parkedEntries = 0;
+        for (const auto& req : validatedRequests) {
+            screens.insert(req.screenId);
+            if (req.hasVisualPos) {
+                ++parkedEntries;
+            }
+        }
+        qCDebug(lcStripDiag) << "batch arrived:" << validatedRequests.size() << "entries" << parkedEntries
+                             << "parked screens=" << screens;
+    }
+
     // A geometry batch on a scrolling screen slides columns under the
     // stationary pointer; pause FFM until the cursor moves deliberately
     // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot

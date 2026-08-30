@@ -9,6 +9,10 @@
 
 #include "plasmazoneseffect.h"
 
+// The lcStripDiag category for the stage 0 seam trace below. Included
+// explicitly rather than leaned on from a unity batch, same rule as the
+// windowanimator.h include below it.
+#include "compositor/effectlogging.h"
 #include "compositor/stripviewanimator.h"
 // plasmazoneseffect.h only forward-declares WindowAnimator; currentValue() below
 // needs the complete type, and unity batching must not be what supplies it.
@@ -214,7 +218,36 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         visual.adjust(-pad, -pad, pad, pad);
     }
     const KWin::Rect g = managed->geometry();
-    return !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
+    const bool parked = !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
+
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). This is the
+    // one place both halves of a parked column's drawn position are in hand at
+    // once: the m_scrollVisualDelta entry (candidate C) and the animator's view
+    // offset (candidate B). Reporting them anywhere else would re-derive them
+    // and could disagree with what the draw actually used.
+    //
+    // Runs per strip window per pass, so it is gated twice: the category is off
+    // by default, and even enabled it only reports when the tuple changes. The
+    // isDebugEnabled() check is not redundant with qCDebug — it keeps the
+    // sample construction and the hash write off the hot path entirely.
+    if (lcStripDiag().isDebugEnabled()) {
+        const StripDiagSample sample{true, vit->stripPos, m_stripViewAnimator->offsetFor(managed).toPoint(), parked};
+        const auto lastIt = m_stripDiagLast.constFind(windowId);
+        if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+            m_stripDiagLast.insert(windowId, sample);
+            // outerPadding is reported because it is the one input that differs
+            // systematically between the nested harness and a real session: the
+            // harness assigns no decoration packs, so the band is NARROWER there
+            // and columns cull EARLIER. A harness run that shows pad=0 cannot be
+            // used to reason about the cull boundary at all.
+            const auto padIt = m_windowDecorations.constFind(windowId);
+            const qreal pad = padIt != m_windowDecorations.constEnd() ? padIt->outerPadding : 0.0;
+            qCDebug(lcStripDiag) << "park resolve:" << windowId << "placement=HIT stripPos=" << sample.stripPos
+                                 << "viewOffset=" << sample.viewOffset << "pad=" << pad
+                                 << "verdict=" << (parked ? "CULLED" : "painted");
+        }
+    }
+    return parked;
 }
 
 } // namespace PlasmaZones

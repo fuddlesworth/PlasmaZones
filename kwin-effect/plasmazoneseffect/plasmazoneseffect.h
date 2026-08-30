@@ -2514,6 +2514,31 @@ private:
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
 
+    /// Change-gate for the lcStripDiag per-window trace in
+    /// scrollParkedOffscreen. Diagnostic only: nothing reads it but the log
+    /// site, and it is never written while the category is disabled.
+    ///
+    /// Mutable because the predicate is const and is the only place the inputs
+    /// it reports are assembled — same shape, and the same justification, as
+    /// the mutable m_scrollClipLossReported once-reporting set in the tiling
+    /// handler. Keyed by window id and never swept: entries are two ints and a
+    /// bool, bounded by the strip population, and a stale key for a closed
+    /// window is only ever compared, never dereferenced.
+    struct StripDiagSample
+    {
+        bool hadPlacement = false;
+        QPoint stripPos;
+        QPoint viewOffset;
+        bool parked = false;
+
+        bool operator==(const StripDiagSample& o) const
+        {
+            return hadPlacement == o.hadPlacement && stripPos == o.stripPos && viewOffset == o.viewOffset
+                && parked == o.parked;
+        }
+    };
+    mutable QHash<QString, StripDiagSample> m_stripDiagLast;
+
     /// Frozen strip displacement for a CLOSE-GRABBED corpse. A deleted window
     /// cannot re-derive its relocation or view offset in the paint path —
     /// scrollManagedOutputFor answers null on isDeleted, and the close slot's

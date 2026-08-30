@@ -36,6 +36,23 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 // mis-classification on request.
 Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
 
+// Opt-in scrolling-strip diagnostics, for the daemon/compositor identity seam
+// (docs/strip-identity-seam-plan.md). Defaults to QtWarningMsg; enable with
+// QT_LOGGING_RULES="plasmazones.effect.strip.debug=true".
+//
+// Three sites report under it, and they are meant to be read together on one
+// timeline: the desktop switch, the arrival (or non-arrival) of a tile batch,
+// and the per-window inputs scrollParkedOffscreen actually resolved. That
+// triple is what separates the plan's candidate A (no batch is emitted at all,
+// so nothing repairs the view) from B (the animator's offset belongs to the
+// previous strip) and C (the m_scrollVisualDelta entry is missing).
+//
+// The per-window site runs inside the paint pass for every strip window on
+// every frame, so it is change-gated as well as category-gated — see
+// m_stripDiagLast. Without that it is a ~60 Hz firehose that perturbs the
+// timing it is trying to measure.
+Q_LOGGING_CATEGORY(lcStripDiag, "plasmazones.effect.strip", QtWarningMsg)
+
 bool PlasmaZonesEffect::supported()
 {
     // OpenGL compositing is a hard requirement, not a preference: every render

@@ -396,6 +396,23 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         updateAllDecorations();
     });
 
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The zero
+    // point for the other two lcStripDiag sites: everything they report is read
+    // as "how long after the switch, if ever". Deliberately a separate
+    // connection rather than folded into a neighbouring lambda, so removing the
+    // instrumentation is a whole-block delete with no behaviour attached to it.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+               KWin::LogicalOutput* output) {
+                if (!lcStripDiag().isDebugEnabled()) {
+                    return;
+                }
+                qCDebug(lcStripDiag) << "desktop switch:"
+                                     << (oldDesktop ? static_cast<int>(oldDesktop->x11DesktopNumber()) : -1) << "->"
+                                     << (newDesktop ? static_cast<int>(newDesktop->x11DesktopNumber()) : -1)
+                                     << "output=" << (output ? output->name() : QStringLiteral("(all)"));
+            });
+
     // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
     // each screen"): report each output's current desktop so the daemon keys its
     // per-screen desktop map off real per-output switches instead of KWin's global
