@@ -1078,6 +1078,10 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
                                                                        : m_pendingSelfActivationQueuedAt.erase(stampIt);
         }
         if (!expired) {
+            // The swallow is silent to every other observer; without this
+            // line a report eaten here is indistinguishable in the journal
+            // from one that never arrived.
+            qCDebug(lcScrollEngine) << "windowFocused: swallowed self-activation echo for" << windowId;
             return;
         }
         // Fall through: adopt as genuine focus.
@@ -1164,9 +1168,26 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // The report must NAME the active window: a minimized tile in the active
     // column is refused by focusWindow without becoming the column's active
     // tile, and that report has no claim on the view.
-    const bool handBackView =
-        state->strip().viewDetached() && state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
-    if (!focusMoved && !handBackView) {
+    const bool activeReport = state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
+    const bool handBackView = state->strip().viewDetached() && activeReport;
+    // ATTACHED-view twin of the hand-back: the report names the active window,
+    // focusWindow refused it (same column), and there is no detach latch to
+    // clear — but the active column sits entirely OFF the viewport, so the
+    // user just activated a window they cannot see. That state is reachable
+    // without any pan: a desktop return renders from the stored per-context
+    // anchor, and when that anchor and the active column disagree the column
+    // renders parked off-screen while the view stays attached. Dropping the
+    // report here left every click on the parked window dead (the tester's
+    // "missing from the strip" windows). Let it through: applyLayout's own
+    // updateViewForFocus re-anchors an attached view whose active column is
+    // off-screen, under every anchor policy. Viewport INTERSECTION on
+    // purpose, not full visibility — a partially visible column stays put, so
+    // KWin's incidental re-activations (restacking, fullscreen exit, desktop
+    // switch) still cannot nudge a view the user can see their window in.
+    const int activeIdx = state->strip().activeColumnIndex();
+    const bool activeOffViewport = activeReport && !state->strip().viewDetached() && activeIdx >= 0
+        && !state->strip().visibleColumnIndices(params).contains(activeIdx);
+    if (!focusMoved && !handBackView && !activeOffViewport) {
         return;
     }
     if (handBackView) {
