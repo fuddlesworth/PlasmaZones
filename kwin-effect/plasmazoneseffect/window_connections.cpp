@@ -76,20 +76,48 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
         // (not tracked by the autotile handler's m_notifiedWindowScreens).
         m_trackedScreenPerWindow[w] = getWindowScreenId(w);
-        // Flags-settle eviction backstop: a client can set keep-above or
-        // skip-switcher AFTER mapping (Yakuake queues both in its map-time
-        // request burst; another client may flip one seconds later). Either
-        // flag flips a structural placement filter, and without these the
-        // map-time tileability verdict was permanent — the pre-settle window
-        // got inserted, focused and column-sized. The one-tick routing defer
-        // in slotWindowAdded harvests the same-burst case before any insert;
+        // Flags-settle eviction backstop: a client can set keep-above,
+        // skip-switcher or its transient parent AFTER mapping (Yakuake
+        // queues the first two in its map-time request burst; another client
+        // may flip one seconds later). Each of those flips a structural
+        // placement filter, and without these the map-time tileability
+        // verdict was permanent — the pre-settle window got inserted,
+        // focused and column-sized. The one-tick routing defer in
+        // slotWindowAdded harvests the same-burst case before any insert;
         // these catch the late case and release the window
         // (reevaluateWindowEligibility gates itself on announced windows, so
         // the connection is free for everything else).
+        //
+        // transientChanged / modalChanged are the arms the keep-above pair
+        // could not reach: on Wayland an xdg_toplevel's set_parent and
+        // set_modal arrive as their own requests after the initial commit,
+        // so a dialog can map as a parentless normal toplevel and only
+        // become transient a beat later. Both are structural rejects in
+        // shouldHandleWindow and isTileableWindow, and window TYPE has no
+        // signal of its own, so transientChanged is also the only handle on
+        // the isDialog() reject for clients whose dialog type KWin derives
+        // from the transient relationship.
+        //
+        // What this does NOT cover, so nobody re-derives it from the
+        // Yakuake bug report: a dialog whose parent toplevel is destroyed
+        // BEFORE the dialog maps. Measured live 2026-08-30 — Yakuake's
+        // dropdown closed 32 ms before its First Run dialog arrived, so
+        // transientFor() was null permanently rather than late, and the
+        // dialog presented as a plain normal toplevel (resizable,
+        // unbounded maxSize, not special, not modal) that KWin never
+        // revises. No signal fires because no state changes, so neither
+        // these arms nor a longer settle defer can catch it; an Exclude
+        // rule is the only lever.
         connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
             m_tilingHandler->reevaluateWindowEligibility(safeW.data());
         });
         connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::transientChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::modalChanged, this, [this, safeW]() {
             m_tilingHandler->reevaluateWindowEligibility(safeW.data());
         });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
