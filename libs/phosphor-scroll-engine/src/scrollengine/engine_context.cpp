@@ -395,10 +395,20 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     // "Vacant" means no STRUCTURE: a cursor-only carrier at
                     // the new key (an all-floating exit's stash) holds no
                     // windows to lose, so a structural stash moves over it and
-                    // absorbs its cursor with qMax rather than dropping it.
+                    // absorbs its cursor with qMax rather than dropping it —
+                    // and the blueprint IDENTITY that cursor was counting
+                    // against, when the moved entry hands none over of its own.
+                    // The two are only meaningful together (StashedStrip::
+                    // blueprintIdentity): keeping the displaced entry's cursor
+                    // while dropping its identity leaves the consumption site
+                    // unable to tell a resumed template from a swapped one.
                     if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
                         StashedStrip moved = m_stripStash.take(oldKey);
-                        moved.blueprintCursor = qMax(moved.blueprintCursor, m_stripStash.value(newKey).blueprintCursor);
+                        const StashedStrip displaced = m_stripStash.value(newKey);
+                        moved.blueprintCursor = qMax(moved.blueprintCursor, displaced.blueprintCursor);
+                        if (!moved.blueprintIdentity.isValid() && displaced.blueprintIdentity.isValid()) {
+                            moved.blueprintIdentity = displaced.blueprintIdentity;
+                        }
                         m_stripStash.insert(newKey, moved);
                         if (m_stripStashConsumed.contains(oldKey)) {
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));

@@ -524,9 +524,22 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     const int sourceColIdx = state->strip().columnOfWindow(windowId);
     ColumnWidth windowWidth = targetParams.defaultColumnWidth;
     ColumnDisplay windowDisplay = effectiveDefaultColumnDisplay(target);
+    // Maximize-to-edges is declared COLUMN state that nothing re-derives, so
+    // without the carry a maximized column crossing to another monitor
+    // silently un-maximizes — the width, display, height and windowed-fs
+    // carries above all exist for the same reason, and the float round trip
+    // and the stash both carry this flag already.
+    //
+    // Only when the mover is its column's LAST tile, floatWindowInternal's
+    // rationale verbatim: a shared column survives the crossing and keeps its
+    // own flag, and re-asserting from a departing sibling could maximize a
+    // column on the target that the user never asked to.
+    bool windowMaximizedToEdges = false;
     if (sourceColIdx >= 0) {
-        windowWidth = state->strip().columns().at(sourceColIdx).width;
-        windowDisplay = state->strip().columns().at(sourceColIdx).display;
+        const Column& sourceColumn = state->strip().columns().at(sourceColIdx);
+        windowWidth = sourceColumn.width;
+        windowDisplay = sourceColumn.display;
+        windowMaximizedToEdges = sourceColumn.tiles.size() == 1 && sourceColumn.maximizedToEdges;
     }
     state->strip().takeWindow(windowId, sourceParams);
 
@@ -547,6 +560,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     QSize partnerMinSize;
     WindowHeight partnerHeight;
     bool partnerWindowedFs = false;
+    bool partnerMaximizedToEdges = false;
     StackSlot moverLandingSlot;
     ColumnWidth partnerWidth = sourceParams.defaultColumnWidth;
     ColumnDisplay partnerDisplay = effectiveDefaultColumnDisplay(screenId);
@@ -561,6 +575,10 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             partnerDisplay = targetState->strip().columns().at(partnerColIdx).display;
         }
         partnerWindowedFs = targetState->strip().isWindowedFullscreen(partner);
+        // Same lone-tile capture and same reason as the mover's above.
+        partnerMaximizedToEdges = partnerColIdx >= 0
+            && targetState->strip().columns().at(partnerColIdx).tiles.size() == 1
+            && targetState->strip().columns().at(partnerColIdx).maximizedToEdges;
         targetState->strip().takeWindow(partner, targetParams);
     }
     // Shared stack-slot re-entry: try the vacated tile slot inside the
@@ -574,6 +592,10 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         return anchored >= 0 && strip.insertWindowIntoColumnAt(anchored, slot.tileIndex, id, stripParams);
     };
     bool moverInserted = insertCarryingStackSlot(targetState->strip(), moverLandingSlot, windowId, targetParams);
+    // A stack re-entry joins a HOST column, whose maximize-to-edges state is
+    // that column's own; only the positional insert below opens a column the
+    // mover owns, and only there may the carried flag be re-asserted.
+    const bool moverJoinedStack = moverInserted;
     if (!moverInserted) {
         moverInserted =
             targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay, targetParams);
@@ -600,6 +622,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         targetState->strip().setWindowHeightIntent(windowId, windowHeight);
         if (windowWindowedFs) {
             targetState->strip().setWindowedFullscreen(windowId, true);
+        }
+        if (windowMaximizedToEdges && !moverJoinedStack) {
+            targetState->strip().setMaximizedToEdgesForWindow(windowId, true);
         }
         targetState->strip().focusWindow(windowId, targetParams);
         m_states.setKeyForWindow(windowId, targetKey);
@@ -645,6 +670,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         const ScrollLayoutParams& homeParams = moverInserted ? sourceParams : targetParams;
         bool partnerInserted = insertCarryingStackSlot(
             home->strip(), moverInserted ? partnerLandingSlot : moverLandingSlot, partner, homeParams);
+        const bool partnerJoinedStack = partnerInserted; // same host-column rule as the mover's
         if (!partnerInserted) {
             partnerInserted = home->strip().insertWindowAt(moverInserted ? qMax(0, partnerLanding) : columnIdx, partner,
                                                            partnerWidth, partnerDisplay, homeParams);
@@ -654,6 +680,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             home->strip().setWindowHeightIntent(partner, partnerHeight);
             if (partnerWindowedFs) {
                 home->strip().setWindowedFullscreen(partner, true);
+            }
+            if (partnerMaximizedToEdges && !partnerJoinedStack) {
+                home->strip().setMaximizedToEdgesForWindow(partner, true);
             }
             if (moverInserted) {
                 Q_EMIT windowOutputMoveExpected(partner, screenId); // same marker rule as the mover's arm

@@ -30,10 +30,10 @@ namespace PlasmaZones {
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
  * (with the preset vocabulary beside it), the wheel-driven focusColumn and
  * scrollView verbs, the four absolute width/height setters for external
- * scripting, the toggleMaximizeColumn verb that answers a window's own
- * maximize request with the strip's full-work-area column (and reports back
- * whether it accepted, so the effect can fall through to a stock maximize
- * when it did not), the
+ * scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges
+ * verb that answers a window's own maximize request (and reports back whether
+ * it accepted, so the effect can fall through to a stock maximize when it did
+ * not), the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
@@ -270,29 +270,30 @@ public Q_SLOTS:
     void setWindowHeightPixels(const QString& screenId, int px);
 
     /**
-     * @brief Toggle a column's maximize (compositor-driven)
+     * @brief Toggle a column's maximized width
      *
-     * The KWin effect calls this when a scroll-managed window is asked to
-     * maximize (titlebar button, Meta+PgUp, a client-side request), so that
-     * request reaches the engine's own maximize-column verb instead of KWin's
-     * maximize. Identical in effect to the Scrolling maximize column
-     * shortcut, and deliberately routed to the SAME ScrollEngine entry point
-     * rather than a parallel one.
+     * A pure WIDTH verb (niri maximize-column): it swaps the column between
+     * the work area's full extent along the strip and its previous width, and
+     * touches neither KWin's maximize bit nor the maximizedToEdges state. The
+     * maximize interception is toggleMaximizeToEdges below.
      *
-     * Unlike the four setters above this one HAS an in-tree caller. Same
-     * ownership and per-context gates as focusColumn.
+     * Like the four setters above, this one has no in-tree wire caller: the
+     * Scrolling maximize column shortcut reaches the engine IN-PROCESS and
+     * never crosses this boundary, so both spellings here exist for external
+     * scripting. It is deliberately routed to the SAME ScrollEngine entry
+     * point the shortcut drives rather than a parallel one.
+     *
+     * It still reports acceptance, the way toggleMaximizeToEdges does: the two
+     * are wire twins and a caller must be able to tell a boundary refusal from
+     * a silent no-op on either. Same ownership and per-context gates as
+     * focusColumn.
      *
      * @param screenId Screen whose column to toggle; empty is ignored
      * @param windowId Window naming the column; empty targets the FOCUSED
      *        column. A named window targets the column holding it and is
      *        ignored when the strip does not hold it, so a maximize request
      *        from a window that never took focus cannot resize another column.
-     *
-     *        The empty spelling is accepted for completeness, not because
-     *        anything sends it here: the keyboard shortcut reaches the engine
-     *        IN-PROCESS and never crosses this boundary, and the only in-tree
-     *        wire caller is the KWin effect's maximize interception, which
-     *        always names the requesting window.
+     *        The engine raises the navigation OSD only for the empty spelling.
      */
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 
@@ -300,15 +301,25 @@ public Q_SLOTS:
      * @brief Toggle a column's maximize-to-edges state (the compositor's maximize)
      *
      * The maximize-to-edges twin of toggleMaximizeColumn above, with the same
-     * addressing, the same gates and the same acceptance-reporting contract —
-     * that method's doc carries the reasons. This is the verb the KWin
-     * effect's maximize interception dispatches, and the state it toggles is
-     * the one the effect mirrors onto KWin's maximize bit; the width verb
-     * above no longer has any wire mirror.
+     * addressing and the same gates. This is the verb the KWin effect's
+     * maximize interception dispatches when a scroll-managed window is asked
+     * to maximize (titlebar button, Meta+PgUp, a client-side request), and the
+     * state it toggles is the one the effect mirrors onto KWin's maximize bit.
+     * The width verb above no longer has any wire mirror.
+     *
+     * ACCEPTANCE IS REPORTED because this caller has already destroyed state
+     * on the strength of the call: the effect cancels KWin's own maximize
+     * BEFORE dispatching, so a silently refused call would leave the user with
+     * a maximize button that did nothing and un-maximized the window, on every
+     * click, with nothing recording the loss. A void method still replies
+     * success on a silent no-op, so only a real return value carries the
+     * refusal back. False means REFUSED HERE, at the boundary; it does not
+     * report what the engine did with an accepted call.
      *
      * @param screenId Screen whose column to toggle; empty is ignored
      * @param windowId Window naming the column; empty targets the FOCUSED
      *        column, and the interception always names the requesting window.
+     *        The engine raises the navigation OSD only for the empty spelling.
      */
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId);
 

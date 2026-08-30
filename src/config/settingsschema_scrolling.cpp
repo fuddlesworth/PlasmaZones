@@ -640,7 +640,7 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString,
          QStringLiteral("Toggles the focused column between filling the work area and a smaller size.")},
         {CD::maximizeToEdgesKey(), CD::scrollingMaximizeToEdgesShortcut(), QMetaType::QString,
-         QStringLiteral("Toggles the focused column between covering the whole screen area with no gaps and its "
+         QStringLiteral("Toggles the focused column between covering the whole work area with no gaps and its "
                         "normal size. This is the state the window's maximize button shows.")},
         {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString,
          QStringLiteral("Grows the focused column to fill the empty space visible on screen. Other columns keep their "

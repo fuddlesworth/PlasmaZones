@@ -375,6 +375,17 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
             // like unfloatWindowInternal/handoffRelease do.
             m_scrollFloatedWindows.remove(windowId);
             m_states.setKeyForWindow(windowId, currentKeyForScreen(targetScreen));
+            // Third unfloat route, same client-decided-height duty as
+            // unfloatWindowInternal's seeded arm: this insert always opens a
+            // FRESH column carrying the context default height, which under
+            // "the client decides" is the concrete Auto fallback the kind
+            // leaves behind. Without the commit an adopted window lands
+            // sharing its column, the one shape the setting exists to avoid.
+            // Post-insert column count for the smart-gaps reason the sibling
+            // call documents: the work area the bound is measured against
+            // changes as the strip crosses 0->1 or 1->2 columns.
+            commitClientDecidedHeight(target->strip(), windowId, targetScreen, overridesForScreen(targetScreen),
+                                      layoutParamsForScreen(targetScreen, target->strip().columnCount()));
             Q_EMIT windowFloatingStateSynced(windowId, false, targetScreen);
             applyLayout(targetScreen, false);
             Q_EMIT placementChanged(targetScreen);

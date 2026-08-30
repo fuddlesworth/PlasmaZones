@@ -109,6 +109,21 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
 // Column maximize (scrolling)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+bool TilingHandler::isScrollTiledWindow(const QString& windowId, KWin::EffectWindow* w) const
+{
+    if (windowId.isEmpty() || !isTiledWindow(windowId)) {
+        return false;
+    }
+    // The screen the strip placed it on, not wherever it sits this instant: a
+    // window mid-way through a cross-screen move has already been notified for
+    // its destination, and that is the strip that owns its column.
+    QString screenId = m_notifiedWindowScreens.value(windowId);
+    if (screenId.isEmpty() && w) {
+        screenId = m_effect->getWindowScreenId(w);
+    }
+    return isScrollingScreen(screenId);
+}
+
 void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode)
 {
     if (!kw) {
@@ -160,10 +175,28 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
         return;
     }
-    const bool owesColumn = m_maximizedToEdgesWindows.contains(windowId);
+    const bool owesMaximizedToEdges = m_maximizedToEdgesWindows.contains(windowId);
     const bool owesMonocle = m_monocleMaximizedWindows.contains(windowId);
-    if (!owesColumn && !owesMonocle) {
+    if (!owesMaximizedToEdges && !owesMonocle) {
         return;
+    }
+    // A maximize-to-edges claim is only owed while the window is still a tile
+    // on a scrolling screen, and a DRAG-TO-FLOAT gesture ends with membership
+    // held but the strip gone: applyFloatCleanup runs at the START of the drag,
+    // when releaseMaximizedToEdges takes its mid-gesture retain and keeps the
+    // entry, while the tiled record is dropped in the same pass. Re-applying
+    // MaximizeFull here would maximize the window the user just floated, and
+    // permanently — a floater gets no batch, so no Release arm can ever undo
+    // it. Pay the release the mid-drag skip owed instead: the gesture flags are
+    // clear by now, so it performs the real restore and sheds the entry.
+    //
+    // Monocle needs no such gate: unmaximizeMonocleWindow has no gesture
+    // retain, so a monocle member reaching here still holds a live claim.
+    if (owesMaximizedToEdges && !isScrollTiledWindow(windowId, w)) {
+        releaseMaximizedToEdges(windowId, w);
+        if (!owesMonocle) {
+            return;
+        }
     }
     if (kw->requestedMaximizeMode() == KWin::MaximizeFull) {
         return;
@@ -194,18 +227,21 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
-    if (windowId.isEmpty() || !isTiledWindow(windowId)) {
-        return;
-    }
-    QString screenId = m_notifiedWindowScreens.value(windowId);
-    if (screenId.isEmpty()) {
-        screenId = m_effect->getWindowScreenId(w);
-    }
-    if (!isScrollingScreen(screenId)) {
+    if (!isScrollTiledWindow(windowId, w)) {
         return;
     }
     KWin::Window* kw = w->window();
     if (!kw) {
+        return;
+    }
+    // Mid-gesture is a skip, the guard every sibling compositor-touching
+    // maximize write carries: maximize() moveResizes, and the geometry apply
+    // that would override it defers during a drag, so writing here snaps the
+    // window out from under the user's pointer. A MEMBER is re-driven at the
+    // gesture end by reconcileMaximizeAfterGesture; a non-member's stray
+    // half-maximize is left for the next batch, the same bounded staleness the
+    // batch Apply arm accepts for the same reason.
+    if (w->isUserMove() || w->isUserResize()) {
         return;
     }
     const KWin::MaximizeMode restored =
@@ -317,6 +353,25 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     return true;
 }
 
+void TilingHandler::consumeSuppressedMaximizePassThrough(KWin::EffectWindow* w)
+{
+    // X11 ONLY, and the platform test is what keeps this from stealing the
+    // Wayland marker. There the refusal replay's committed echo arrives after
+    // the suppression bracket has closed, so the interception is the consumer
+    // and the marker has to survive every bracketed write until then. On
+    // XWayland maximize() emits inside the bracket, the effect's skip arm
+    // returns before the interception runs, and this is the only edge the
+    // marker will ever be offered.
+    if (!w || w->isDeleted() || !w->isX11Client()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_maximizePassThrough.remove(windowId);
+}
+
 void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId)
 {
     // The reply IS consumed, unlike every other dispatch in this file.
@@ -355,8 +410,54 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         if (!kw) {
             return;
         }
-        m_maximizePassThrough.insert(windowId);
-        applyMaximizeSuppressed(kw, KWin::MaximizeFull);
+        // Window-id reuse guard, and the same predicate the interception
+        // itself gates on: ids are appId-derived and reusable, and this reply
+        // is asynchronous, so by now the id can resolve to a DIFFERENT
+        // same-app window — or to the same one after it left the strip. Either
+        // way the request this replays no longer belongs to it, and arming the
+        // marker would hand a genuine future edge straight through.
+        if (!isScrollTiledWindow(windowId, w)) {
+            return;
+        }
+        // The direction the USER asked for, derived the way the interception
+        // derives what it cancelled to: a member's click asked to un-maximize,
+        // so replaying MaximizeFull would hand back the very bit the click
+        // asked to drop.
+        const bool wasMember = m_maximizedToEdgesWindows.contains(windowId);
+        const KWin::MaximizeMode replayed = wasMember ? KWin::MaximizeRestore : KWin::MaximizeFull;
+        // The membership goes with it. A refusal means the daemon did not act,
+        // so the mirror can no longer answer for this window, and leaving the
+        // entry standing over a bit the replay just cleared is not merely
+        // stale — two arms re-drive the bit straight off membership, so
+        // cancelAxisOnlyMaximize and reconcileMaximizeAfterGesture would each
+        // silently re-maximize the window the user just restored. Shedding
+        // costs nothing the engine needs: its own belief is untouched by a
+        // refusal, so the next batch carrying this window re-arms the
+        // membership from flagOnWire. Until then the effect claims nothing it
+        // cannot answer for.
+        if (wasMember) {
+            m_maximizedToEdgesWindows.remove(windowId);
+        }
+        // Replayed only when it would WRITE, and that is a question about the
+        // REQUESTED mode, not the committed one: the value being raced here is
+        // the interception's own cancel, issued microseconds ago and
+        // pending-only until the client commits, which is the lag
+        // scrolldecisions.h documents for the batch arm. Reading the committed
+        // bit on Wayland can see the pre-cancel state, skip the replay, and
+        // let the cancel land — turning a refused un-maximize into a maximize
+        // with no ledger entry behind it. The two agree on X11.
+        if (kw->requestedMaximizeMode() != replayed) {
+            // The marker is a separate question with the OTHER term. It exists
+            // to be spent by the echo of this write, and an echo only comes
+            // when the COMMITTED mode actually changes. With the cancel still
+            // unacked the committed bit can already read as the replay's
+            // target, in which case nothing will echo and a marker armed here
+            // would sit until it swallowed the user's next genuine edge.
+            if (kw->maximizeMode() != replayed) {
+                m_maximizePassThrough.insert(windowId);
+            }
+            applyMaximizeSuppressed(kw, replayed);
+        }
     });
 }
 
@@ -365,8 +466,11 @@ void TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::Effec
     if (!m_maximizedToEdgesWindows.contains(windowId)) {
         return;
     }
-    KWin::Window* kw = w ? w->window() : nullptr;
-    if (!w || !kw) {
+    // isDeleted before window(), because callers now pass a pointer straight
+    // out of signal scope rather than one they re-resolved: a closing window
+    // answers a stale KWin::Window* that must not be moveResized.
+    KWin::Window* kw = (w && !w->isDeleted()) ? w->window() : nullptr;
+    if (!kw) {
         // Nothing left to hand the bit back to, so the entry is dead weight.
         m_maximizedToEdgesWindows.remove(windowId);
         return;
@@ -399,8 +503,16 @@ void TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::Effec
     // and for the reason the batch Apply arm spells out: maximize() moveResizes
     // to the restore rect, and the geometry apply that would override it defers
     // during a drag, so releasing here snaps the window out from under the
-    // user's pointer. Membership stands, so the next batch after the gesture
-    // pays it.
+    // user's pointer.
+    //
+    // WHEN the retained entry is paid depends on where the drag ends. A window
+    // still on its strip is paid by the next batch that carries it, and the
+    // engine emits on change, so a drag that leaves the strip alone schedules
+    // none — the same bounded staleness the Apply arm accepts in the other
+    // direction. A window the drag FLOATED off the strip gets no batch at all,
+    // and reconcileMaximizeAfterGesture pays that case at the gesture end: it
+    // re-tests strip membership and routes a claim with no strip left back
+    // here, with the gesture flags now clear.
     if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
         return;
     }
@@ -485,9 +597,9 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         result.monocle = hadMonocle && !m_monocleMaximizedWindows.contains(windowId);
     }
     if (claimReleasesOn(Claim::MaximizedToEdges, scope)) {
-        const bool hadColumn = m_maximizedToEdgesWindows.contains(windowId);
+        const bool hadMaximizedToEdges = m_maximizedToEdgesWindows.contains(windowId);
         releaseMaximizedToEdges(windowId, w);
-        result.column = hadColumn && !m_maximizedToEdgesWindows.contains(windowId);
+        result.maximizedToEdges = hadMaximizedToEdges && !m_maximizedToEdgesWindows.contains(windowId);
     }
     return result;
 }

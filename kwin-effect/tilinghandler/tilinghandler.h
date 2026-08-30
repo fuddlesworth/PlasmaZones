@@ -436,7 +436,7 @@ public:
     {
         bool windowedFullscreen = false;
         bool monocle = false;
-        bool column = false;
+        bool maximizedToEdges = false;
     };
 
     /// Release EVERY compositor-state claim this handler holds on @p windowId
@@ -475,6 +475,19 @@ public:
     {
         return m_suppressMaximizeChanged > 0;
     }
+
+    /// Consume the one-shot maximize pass-through from the SUPPRESSED echo of
+    /// the refusal replay, on the platform where that echo is the only one the
+    /// marker will ever see.
+    ///
+    /// On XWayland maximize() emits windowMaximizedStateChanged synchronously
+    /// with the suppression counter still held, so the handler's suppression
+    /// conjunct short-circuits interceptMaximizeRequest — the marker's only
+    /// consumer — and it would survive to swallow the user's next genuine
+    /// edge. On Wayland the committed echo arrives later with the counter back
+    /// at zero and the interception consumes it there, so the marker must
+    /// survive this arm.
+    void consumeSuppressedMaximizePassThrough(KWin::EffectWindow* w);
 
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker
@@ -1061,6 +1074,14 @@ private:
     /// in-flight marker — see resolveMaximizeToEdgesAction's contract note for
     /// why the round trip cannot be raced.
     void dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId);
+
+    /// Whether @p windowId is still a live tile on a SCROLLING screen, the
+    /// single predicate every maximize-to-edges write gates on. The screen is
+    /// the strip's notified one, falling back to the window's current output,
+    /// so a window mid-way through a cross-screen move answers for the strip
+    /// that placed it. @p w may be null, in which case only the notified
+    /// record can answer.
+    bool isScrollTiledWindow(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// Announce, once per window per episode, that a window on a tracked
     /// scrolling screen lost its clip because the screen's physical output is

@@ -166,6 +166,22 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // a survivor there silently downgrades a resize to a move.
                 m_tileTargetZones.remove(windowId);
                 m_centeredWaylandZones.remove(windowId);
+                // The maximize-to-edges claim is retained only when the
+                // DESTINATION is another strip. m_managedScreens is the
+                // autotile+scrolling union, so this arm also catches a
+                // scroll→autotile handoff, and there the "destination owns the
+                // bit" premise is false in both halves: the batch Release arm
+                // is scroll-gated, so no autotile batch can ever release the
+                // claim, while the autotile tile arm bare-clears the KWin
+                // maximize bit — leaving membership standing over a bit the
+                // window no longer holds, permanently. Release it here for
+                // that case. The scroll→scroll case keeps the retain: there
+                // the destination strip's next batch answers for the bit, and
+                // releasing would only produce an unmaximize/remaximize
+                // flicker.
+                if (!m_scrollingScreens.contains(positional)) {
+                    releaseMaximizedToEdges(windowId, w);
+                }
             } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
@@ -190,11 +206,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // land before either of them.
                 unmaximizeMonocleWindow(windowId);
                 // The column mirror is in the same position on this arm and
-                // must be released for the same reason. NOT on the scroll↔
-                // scroll arm above: there the destination strip owns the bit
-                // and its next batch answers for it, so releasing here would
-                // only produce an unmaximize/remaximize flicker.
-                releaseMaximizedToEdges(windowId, m_effect->findWindowByIdExact(windowId));
+                // must be released for the same reason. The managed arm above
+                // releases it too, except on a genuine scroll↔scroll handoff,
+                // where the destination strip owns the bit and its next batch
+                // answers for it.
+                releaseMaximizedToEdges(windowId, w);
                 // The per-session scroll companions go with the hold — the
                 // cross-mode branch clears the same set via
                 // cleanupAutotileTracking, and this branch is the same "no

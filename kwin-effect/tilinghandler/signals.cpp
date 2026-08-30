@@ -54,19 +54,28 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // setActiveScreens(QSet()) call in the engine) handles them via a
         // delayed defer so the resnap dispatch can land first. Doing it here
         // would race with that defer and block applyGeometriesBatch.
-        restoreAllMonocleMaximized();
-        // The exact analogue for windowed fullscreen, and deliberately the
-        // context-agnostic full-set drain: the slotScreensChanged sweep skips
-        // sticky and off-current-desktop windows (its per-context discipline
-        // protects setNoBorder), but setFullScreen and the keep flags are
-        // global per-window properties, and with the engine disabled no later
-        // batch or per-context pass exists to release a skipped window — it
-        // would stay KWin-fullscreen with keep-below held for the session.
+        // Windowed fullscreen FIRST, per claimReleaseOrder: both maximize
+        // restores skip a window that still holds fullscreen, so releasing it
+        // ahead of them is what lets a window holding both get a real restore
+        // rather than a skip. Deliberately the context-agnostic full-set
+        // drain: the slotScreensChanged sweep skips sticky and
+        // off-current-desktop windows (its per-context discipline protects
+        // setNoBorder), but setFullScreen and the keep flags are global
+        // per-window properties, and with the engine disabled no later batch
+        // or per-context pass exists to release a skipped window — it would
+        // stay KWin-fullscreen with keep-below held for the session.
         restoreAllWindowedFullscreen();
+        restoreAllMonocleMaximized();
         // Same reasoning for the column-maximize mirror: with the engine
         // disabled no later batch exists to release a window the mirror
         // still holds maximized.
         restoreAllMaximizedToEdges();
+        // A pass-through armed by a refused toggle must not outlive the engine
+        // that refused it: its only consumer is the interception, which no
+        // longer runs with scrolling disabled, so a surviving marker would be
+        // spent on the user's first genuine maximize after the engine came
+        // back.
+        m_maximizePassThrough.clear();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not

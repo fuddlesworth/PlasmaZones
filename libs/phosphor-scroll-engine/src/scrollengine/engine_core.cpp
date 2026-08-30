@@ -658,6 +658,19 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         inserted = state->strip().insertWindowAt(colAt, windowId, sc.width, sc.display, params);
         if (inserted) {
             state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
+            // The stashed maximize-to-edges state, applied on the arrival that
+            // CREATES the column and nowhere else — width and display above
+            // are creation-only for the same reason, and the setter stamps the
+            // whole column through any member, so whichever tile arrives first
+            // brings the flag with it. Re-asserting per arrival instead would
+            // replay it over a user who un-maximized (or resized, which clears
+            // it) between two sibling arrivals of one stashed column, the shape
+            // focusRestoredEarlier guards against below. Fuzzy claims included,
+            // on width's terms rather than windowed-fullscreen's: this is how
+            // the COLUMN presents, not a state pushed onto the arriving client.
+            if (sc.maximizedToEdges) {
+                state->strip().setMaximizedToEdgesForWindow(windowId, true);
+            }
         }
     }
     if (!inserted) {
@@ -692,16 +705,6 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (const QString owner = stash.at(colIdx).heightOwnerId;
         !owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
         state->strip().setTabbedHeightOwner(owner);
-    }
-    // The stashed maximize-to-edges state, column presentation like the width
-    // and display the inserts above already re-applied. Re-asserted per
-    // arrival (the setter is a no-op once it matches) rather than only on the
-    // column-creating one, so it survives whichever tile happened to arrive
-    // first. Fuzzy claims included, on width's terms rather than windowed-
-    // fullscreen's: this is how the COLUMN presents, not a state pushed onto
-    // the arriving client.
-    if (stash.at(colIdx).maximizedToEdges) {
-        state->strip().setMaximizedToEdgesForWindow(windowId, true);
     }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and

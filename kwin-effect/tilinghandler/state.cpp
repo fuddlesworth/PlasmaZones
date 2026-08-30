@@ -479,7 +479,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // synchronously into effect handlers, and a raw pointer collected before
     // that is not safe to test with isDeleted() afterwards — that check is
     // undefined on a dangling pointer rather than a guard.
-    QList<QPointer<KWin::EffectWindow>> maximizedToEdgesLeavingScrolling;
+    QList<QPointer<KWin::EffectWindow>> maximizeClaimsLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -524,8 +524,16 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // engine's first batch releases any window it TILES, but one it
             // floats (over maxWindows, excluded, minimize-floated) never gets
             // an entry — which is exactly the case this loop exists for.
-            if (m_maximizedToEdgesWindows.contains(wid)) {
-                maximizedToEdgesLeavingScrolling.append(it.key());
+            //
+            // Monocle membership qualifies on its own, not only alongside a
+            // maximize-to-edges claim. The claim table releases all three on a
+            // mode flip, and a monocle-only member here would otherwise not be
+            // collected at all — this loop is the payer for a mode flip that
+            // leaves the engine running (the bulk restoreAll* drains only run
+            // on disable or teardown), and both its release calls are no-ops
+            // for a non-member, so widening the predicate costs nothing.
+            if (m_maximizedToEdgesWindows.contains(wid) || m_monocleMaximizedWindows.contains(wid)) {
+                maximizeClaimsLeavingScrolling.append(it.key());
             }
         }
     }
@@ -534,7 +542,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
     }
-    for (const QPointer<KWin::EffectWindow>& w : std::as_const(maximizedToEdgesLeavingScrolling)) {
+    for (const QPointer<KWin::EffectWindow>& w : std::as_const(maximizeClaimsLeavingScrolling)) {
         if (w && !w->isDeleted()) {
             const QString wid = m_effect->getWindowId(w);
             // Monocle goes with it. The claim table says a mode flip releases

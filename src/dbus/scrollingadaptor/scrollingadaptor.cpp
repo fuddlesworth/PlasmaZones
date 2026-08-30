@@ -320,24 +320,28 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // Same gate chain as the width setters above: ownership, engine activity
     // on the screen, and the per-context gate. There is no value to range
     // check — the verb is a toggle. windowId is deliberately NOT rejected when
-    // empty: that spelling means "the focused column" and is what the keyboard
-    // shortcut sends. An unknown windowId is refused by the strip itself,
-    // which is the only place that knows which columns it holds.
+    // empty: that spelling means "the focused column", the same thing the
+    // keyboard shortcut asks for in-process. An unknown windowId is refused by
+    // the strip itself, which is the only place that knows which columns it
+    // holds.
     //
-    // ACCEPTANCE IS REPORTED, unlike every other verb on this interface,
-    // because this one is the only one whose caller has already destroyed
-    // state on the strength of it. The KWin effect cancels KWin's own maximize
-    // BEFORE dispatching, so a silently refused call left the user with a
-    // maximize button that did nothing and un-maximized the window, on every
-    // click, with nothing recording the loss. A void method still replies
-    // success on a silent no-op, so only a real return value can carry the
-    // refusal back.
+    // ACCEPTANCE IS REPORTED here only to keep the wire shape identical to
+    // toggleMaximizeToEdges below, which is the verb that actually needs it;
+    // that method carries the reason. False means REFUSED HERE, at the
+    // boundary, on both. It does not report what the engine did with an
+    // accepted call — a strip that does not hold the named window refuses
+    // inside the engine and still returns true.
     //
-    // False means REFUSED HERE, at the boundary. It does not report what the
-    // engine did with an accepted call — a strip that does not hold the named
-    // window refuses inside the engine and still returns true, because the
-    // effect's answer to that case is the same as to success (leave the bit
-    // where the cancel put it).
+    // GATED ON THE CALLER'S SCREEN, ACTED ON THE WINDOW'S. For a named window
+    // the engine re-resolves to that window's own tracked screen and acts
+    // there (ScrollEngine::toggleMaximizeColumn), while every term of the gate
+    // below reads the screenId the caller passed. So a request can clear
+    // screen A's gate and change a column on screen B, or be refused by A
+    // while B would have allowed it. This is NOT a guarantee this layer makes,
+    // and it is recorded rather than closed: resolving the window's screen
+    // needs ScrollEngine::stateForWindow, which is private, and the adaptor
+    // deliberately holds no view of engine state beyond isActiveOnScreen.
+    // Same on toggleMaximizeToEdges below.
     if (refusesScreenVerb(screenId)) {
         return false;
     }
@@ -348,9 +352,15 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
 bool ScrollingAdaptor::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
 {
     // toggleMaximizeColumn's contract, verbatim: same gate chain, same
-    // reported acceptance (the KWin effect cancels KWin's own maximize before
-    // dispatching THIS verb, so the refusal has to be visible), same
-    // boundary-only meaning of false.
+    // caller-screen gate against an engine that resolves the named window's
+    // own screen, same boundary-only meaning of false.
+    //
+    // This is the verb the acceptance report exists FOR. The KWin effect
+    // cancels KWin's own maximize before dispatching it, so a silently refused
+    // call would leave the maximize button doing nothing and un-maximizing the
+    // window, on every click, with nothing recording the loss. A void method
+    // still replies success on a silent no-op, so only a real return value can
+    // carry the refusal back.
     if (refusesScreenVerb(screenId)) {
         return false;
     }

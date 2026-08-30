@@ -1376,6 +1376,12 @@ void TilingHandler::clearPerSessionDaemonState()
     // cleared map (reading back 0) can never match, and its rollback would
     // otherwise undo the tracking this bring-up's own re-announce establishes.
     m_announceGen.clear();
+    // A maximize pass-through armed by a refusal from the DEAD daemon session
+    // describes a request the new one never saw. Its only consumer is the
+    // interception, and the replay whose echo would have spent it is long
+    // past, so a survivor is handed to the user's next genuine maximize
+    // instead — which is precisely the edge the interception exists to claim.
+    m_maximizePassThrough.clear();
 }
 
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via

@@ -838,6 +838,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // effect authored belongs to the strip's own transition, not
                 // to a maximize morph replayed over it.
                 if (m_tilingHandler && m_tilingHandler->isSuppressingMaximizeChanged()) {
+                    // The refusal replay's pass-through marker is consumed
+                    // HERE on X11, because this return is what stops its only
+                    // other consumer running: the replay's emission is
+                    // synchronous with the counter held, so the interception
+                    // above never sees it and the marker would survive to
+                    // swallow the user's next genuine edge. The call is a
+                    // no-op on Wayland, where the committed echo arrives with
+                    // the counter at 0 and the interception consumes it.
+                    m_tilingHandler->consumeSuppressedMaximizePassThrough(window);
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
                 }

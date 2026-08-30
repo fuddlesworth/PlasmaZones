@@ -69,6 +69,7 @@ private Q_SLOTS:
     void maximizeToEdgesResolvesTheRawAreaGapFree();
     void maximizeToEdgesRestoreIsJustTheStoredIntentAgain();
     void widthAndHeightVerbsClearMaximizeToEdges();
+    void equalizeClearsTheActiveColumnsMaximizeToEdges();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -818,38 +819,161 @@ void TestScrollStripSizing::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
 // D3: any width or height verb on a flagged column drops the flag first and
 // reports the drop as a change, so a verb that would otherwise refuse still
 // visibly un-maximizes.
+//
+// EVERY clearing site in this file is driven, not a representative sample: the
+// contract is spelled out per verb across a dozen sites, so a slot that drove
+// four of them left deleting the clear from the other eight green. The one
+// site this fixture cannot reach is the per-member drop inside
+// equalizeVisibleColumnWidths' write loop: the fixture sets a 20px outer gap,
+// so a flagged column renders at the RAW main extent, fills the viewport
+// alone, and the verb's two-fully-visible-columns gate refuses before the loop
+// runs. It IS reachable with zero outer gap, where the raw extent equals the
+// viewport (see scrollstrip_sizing.cpp's note on that loop). The
+// active-column drop above it is covered below.
+//
+// Each step asserts the GEOMETRY as well as the verdict, this file's rule: the
+// fixture gives the raw area a 20px outer gap on every side, so a column that
+// is still flagged renders WIDER than the gapped work area and a
+// verdict-only pass cannot hide a flag that was reported dropped and was not.
 void TestScrollStripSizing::widthAndHeightVerbsClearMaximizeToEdges()
 {
     ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+    const int gappedMain = Ax::mainLen(params.workArea);
+    const int rawMain = Ax::mainLen(params.rawWorkArea);
+    QVERIFY2(rawMain > gappedMain, "the fixture must be able to tell a flagged column from an un-flagged one");
+
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
 
     const auto flagged = [&strip] {
         return strip.columns().first().maximizedToEdges;
     };
+    const auto renderedMain = [&strip, &params] {
+        return Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    };
 
-    // Width adjust.
+    // The premise the geometry assertions rest on: while flagged the column
+    // renders at the RAW extent, so "back inside the gapped area" is a real
+    // statement about the flag and not a tautology.
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QVERIFY(flagged());
-    QVERIFY(strip.adjustActiveColumnWidth(10, params));
-    QVERIFY(!flagged());
+    QCOMPARE(renderedMain(), rawMain);
 
-    // The width-maximize toggle is a width verb too.
-    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
-    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    // -- Width verbs --------------------------------------------------
+    //
+    // Already flagged from the premise check above.
+    QVERIFY2(strip.cycleActiveColumnPresetWidth(1, params), "the preset cycle must report the drop");
     QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
 
-    // Height write.
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
-    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY2(strip.adjustActiveColumnWidth(10, params), "the width adjust must report the drop");
     QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
 
     // An explicit width SET that matches the stored intent still clears, and
     // the clear alone is the reported change.
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     const ColumnWidth stored = strip.columns().first().width;
-    QVERIFY(strip.setActiveColumnWidth(stored));
+    QVERIFY2(strip.setActiveColumnWidth(stored), "an equal-intent width set must still report the drop");
     QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.minimizeActiveColumnWidth(params), "the minimize verb must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // Expand: the sole column takes the whole viewport, which the verb routes
+    // through the width-maximize toggle. Either way the flag is gone and the
+    // column is back inside the gapped area.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.expandActiveColumnToAvailableWidth(params), "the expand verb must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // The width-maximize toggle is a width verb too. Entered from the full
+    // width the expand above left behind, so this press takes the un-maximize
+    // arm and the column ends narrower than the viewport either way.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.toggleMaximizeActiveColumn(params), "the width-maximize toggle must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // "Back to the layout's defaults" with a default width supplied.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.resetToDefaults(kHalf, std::nullopt, ColumnDisplay::Normal, params),
+             "a reset carrying a default width must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // -- Height verbs -------------------------------------------------
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)), "a height write must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.resetActiveColumnHeights(), "the height reset must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // Driven from the Auto the reset above left, so the cycle genuinely lands
+    // on a different intent and the clear is not riding a no-op.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.cycleActiveWindowPresetHeight(1, params), "the height preset cycle must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.adjustActiveWindowHeight(-25.0, params), "the height adjust must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // -- The interactive resize ack -----------------------------------
+    //
+    // The acked main extent EQUALS what the stored intent already resolves to,
+    // which is the case the drop used to be skipped in: the next relayout then
+    // snapped the column back to the raw extent and reverted the user's drag.
+    const QRect settled = rectOf(strip.relayout(params), QStringLiteral("a"));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.reconcileWindowSize(QStringLiteral("a"), Ax::t(QSize(Ax::mainLen(settled), Ax::crossLen(settled))),
+                                       /*mainChanged=*/true, /*crossChanged=*/false, params),
+             "an equal-extent resize ack must still report the drop");
+    QVERIFY(!flagged());
+    QCOMPARE(renderedMain(), Ax::mainLen(settled));
+}
+
+// The active column's drop inside equalizeVisibleColumnWidths, which is a
+// separate site from the loop's per-member one: without it a flagged column
+// measures at the raw extent, never appears among the fully visible columns,
+// and the verb refused outright instead of equalizing.
+void TestScrollStripSizing::equalizeClearsTheActiveColumnsMaximizeToEdges()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+
+    // Two columns narrow enough that both sit ENTIRELY inside the gapped
+    // viewport, which is what equalize measures over.
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+
+    QVERIFY2(strip.equalizeVisibleColumnWidths(params), "equalize must not refuse a maximized active column");
+    for (const Column& col : strip.columns()) {
+        QVERIFY2(!col.maximizedToEdges, "no column may still be maximized to edges after an equalize");
+    }
+    // And the verb did its own job as well as the drop: the two columns end at
+    // the same extent, both inside the gapped work area.
+    const ResolvedStrip resolved = strip.relayout(params);
+    const int aMain = Ax::mainLen(rectOf(resolved, QStringLiteral("a")));
+    const int bMain = Ax::mainLen(rectOf(resolved, QStringLiteral("b")));
+    QCOMPARE(aMain, bMain);
+    QVERIFY(aMain <= Ax::mainLen(params.workArea));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

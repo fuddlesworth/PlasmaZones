@@ -312,7 +312,11 @@ private Q_SLOTS:
             QCOMPARE(activeColumn().width, widthBeforeGate);
             // And its maximize-to-edges twin, which the interception now
             // dispatches: same gate, pinned on the flag it toggles.
-            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString());
+            // The returned bool is the wire answer the KWin effect's
+            // interception reads to decide whether to fall through to a stock
+            // maximize, so a refusal that answered true would be acted on even
+            // though nothing moved. Asserted here, not just the state.
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
             QVERIFY(!activeColumn().maximizedToEdges);
 
             // The NO-PROVIDER arm, which this block's own "per-method code"
@@ -335,7 +339,7 @@ private Q_SLOTS:
             m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.43);
             m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 301);
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
-            m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString());
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
             QCOMPARE(activeColumn().width, widthBeforeNoGate);
             QVERIFY(!activeColumn().maximizedToEdges);
             QCOMPARE(activeHeight(), heightBeforeNoGate);

@@ -56,6 +56,11 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     slot.width = column.width;
     slot.display = column.display;
     slot.ownedTabbedHeight = column.display == ColumnDisplay::Tabbed && column.heightOwnerId == windowId;
+    // Only when this window is the column's LAST tile, floatWindowInternal's
+    // rule: a shared column survives the drag and keeps its own flag, and
+    // re-asserting it from a returning sibling could re-maximize a column the
+    // user un-maximized mid-hold.
+    slot.maximizedToEdges = column.tiles.size() == 1 && column.maximizedToEdges;
     const QSize minSize = strip.windowMinimumSize(windowId);
     slot.minWidth = minSize.width();
     slot.minHeight = minSize.height();
@@ -110,6 +115,14 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
             }
             if (slot.windowedFullscreen) {
                 strip.setWindowedFullscreen(windowId, true);
+            }
+            // And the maximize-to-edges flag the lone-tile capture carried:
+            // declared column state nothing re-derives, so without this an
+            // Escape rebuilds the column un-maximized and the next apply
+            // clears the mirrored KWin bit. Captured false for a shared-column
+            // tile, so this cannot re-flag a column that survived the drag.
+            if (slot.maximizedToEdges) {
+                strip.setMaximizedToEdgesForWindow(windowId, true);
             }
         }
     }
@@ -291,10 +304,17 @@ void ScrollEngine::commitDragInsertPreview()
         strip.columnCount() + ((!p.lastTarget.isValid() || p.lastTarget.newSlot || strip.isEmpty()) ? 1 : 0);
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
     bool inserted = false;
+    // Whether the drop CREATED a column. The maximize-to-edges flag below
+    // rides only those arms: a join makes the window a tile of a host column
+    // that owns its own presentation, and stamping the carried flag there
+    // would maximize a column the user never asked to maximize (the same
+    // shared-column exclusion the capture makes).
+    bool createdColumn = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
             inserted = strip.insertWindowAt(std::clamp(p.lastTarget.primary, 0, strip.columnCount()), p.windowId,
                                             p.carried.width, p.carried.display, params);
+            createdColumn = inserted;
         } else {
             const int joinColumn = std::clamp(p.lastTarget.primary, 0, strip.columnCount() - 1);
             const int tileIndex = p.lastTarget.secondary >= 0
@@ -313,6 +333,7 @@ void ScrollEngine::commitDragInsertPreview()
     if (!inserted) {
         inserted = strip.insertWindow(p.windowId, p.carried.width, p.carried.display, params, p.carried.minWidth,
                                       p.carried.minHeight, ScrollInsertPosition::Last);
+        createdColumn = inserted;
     }
     if (!inserted) {
         // Never leave the window in the detached limbo (tracked, in neither
@@ -371,6 +392,12 @@ void ScrollEngine::commitDragInsertPreview()
         // above never reaches here, which is the exclusivity holding.
         if (p.carried.windowedFullscreen) {
             strip.setWindowedFullscreen(p.windowId, true);
+        }
+        // Maximize-to-edges, on the column-creating arms only. The zero-motion
+        // restore arm is NOT one of them here: dragPreviewRestoreSlot hands the
+        // flag back itself, on its own slot's terms.
+        if (createdColumn && p.carried.maximizedToEdges) {
+            strip.setMaximizedToEdgesForWindow(p.windowId, true);
         }
     }
     // The dropped window is the one the user is looking at.
@@ -513,6 +540,16 @@ void ScrollEngine::cancelDragInsertPreview()
                 targetState->strip().setWindowHeightIntent(p.windowId, p.carried.height);
                 if (p.carried.windowedFullscreen) {
                     targetState->strip().setWindowedFullscreen(p.windowId, true);
+                }
+                // And the maximize-to-edges flag, with the rest of the carry
+                // set. The insert above opens a column of this window's own,
+                // so the shared-column exclusion cannot be violated, and the
+                // flag names a presentation (the raw work area of whichever
+                // screen holds it) rather than a geometry tied to the prior
+                // one — a window that was maximized when the drag began comes
+                // out of a cancel maximized wherever it lands.
+                if (p.carried.maximizedToEdges) {
+                    targetState->strip().setMaximizedToEdgesForWindow(p.windowId, true);
                 }
             }
             m_states.setKeyForWindow(p.windowId, p.targetKey);

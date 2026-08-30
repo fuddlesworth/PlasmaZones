@@ -490,7 +490,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 // The dragged window gets NO entry at all for the whole
-                // gesture, columnMaximized included — and since absence is the
+                // gesture, maximizedToEdges included — and since absence is the
                 // only encoding of "not maximized", it is worth stating what
                 // the effect does with that.
                 //

@@ -192,102 +192,88 @@ void ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // own maximize, so the click does nothing at all. Empty in, empty out, so
     // the active-column spelling above is untouched.
     const QString canonicalId = canonicalizeForLookup(windowId);
-    // RESOLVE FROM THE WINDOW when one is named, not from the caller's screen.
+    // RESOLVE FROM THE WINDOW when one is named, not from the caller's screen,
+    // and resolve the whole CONTEXT rather than just the screen id.
     //
-    // P_SCROLL_RESOLVE keys on the screen's CURRENT desktop and activity, so a
-    // named window sitting on a background context of that screen resolves
-    // against a strip that does not hold it, columnOfWindow answers -1 and the
-    // verb refuses — silently, after the compositor has already cancelled
-    // KWin's maximize. The two sibling window-keyed verbs below both resolve
-    // through the window for exactly this reason. The empty spelling keeps the
-    // caller's screen, because "the active column" is a question about a
-    // screen and not about any window.
-    QString resolvedScreen = screenId;
-    if (!canonicalId.isEmpty()) {
-        PhosphorEngine::PlacementStateKey windowKey;
-        if (stateForWindow(canonicalId, &windowKey)) {
-            resolvedScreen = windowKey.screenId;
-        }
-    }
-    // Hand-expanded from P_SCROLL_VERB for the FEEDBACK alone, the way
-    // consumeOrExpelWindow above is hand-expanded for its action token.
+    // P_SCROLL_RESOLVE keys on the screen's CURRENT desktop and activity, so
+    // correcting only the screen still resolves a strip that does not hold a
+    // window tracked on a BACKGROUND context of it: columnOfWindow answers -1
+    // and the verb refuses — silently, after the compositor has already
+    // cancelled KWin's maximize. So the named path takes the state and the key
+    // straight from stateForWindow and mutates that state, exactly the shape
+    // clearWindowedFullscreen below uses, background-context guard included:
+    // the model write lands on the window's own strip, and only a strip that
+    // IS the screen's current context is relayouted. The flag still reaches
+    // the compositor on that context's next activation via applyLayout's
+    // emit-on-change gate, and placementChanged fires either way because the
+    // model did change.
     //
-    // The macro raises the navigation OSD unconditionally, which was right
-    // while the keyboard shortcut was this verb's only producer: the user
-    // pressed a key, so they get told what it did. The compositor's maximize
-    // interception is a second producer with the opposite requirement. That
-    // request arrives for a NAMED window from a titlebar click or from a
-    // client maximizing itself, and a background application doing so would
-    // pop "Resized" over whatever the user is actually working on.
-    //
-    // So the named spelling is quiet and the active-column spelling is not.
-    // The split is the same one the canonicalize and resolve steps above are
-    // written around: an empty id is the user's own key press about the
-    // column in front of them, a named id is somebody else's request about a
-    // window that may not even be on screen.
-    //
+    // The named path is also QUIET. The macro raises the navigation OSD
+    // unconditionally, which was right while the keyboard shortcut was this
+    // verb's only producer: the user pressed a key, so they get told what it
+    // did. The compositor's maximize interception is a second producer with
+    // the opposite requirement — that request arrives from a titlebar click or
+    // from a client maximizing itself, and a background application doing so
+    // would pop "Resized" over whatever the user is actually working on.
     // Suppressing the emit rather than passing a quiet flag into the OSD also
     // sidesteps the macro's source/target slots, which report the ACTIVE
-    // window. On the named path that is frequently the wrong window entirely.
-    const bool quiet = !canonicalId.isEmpty();
-    P_SCROLL_RESOLVE(resolvedScreen);
-    if (!state || state->strip().isEmpty()) {
-        if (!quiet) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
-                                      QString(), screen);
+    // window; on the named path that is frequently the wrong window entirely.
+    if (!canonicalId.isEmpty()) {
+        PhosphorEngine::PlacementStateKey key;
+        ScrollState* state = stateForWindow(canonicalId, &key);
+        if (!state || state->strip().isEmpty() || key.screenId.isEmpty()) {
+            return;
+        }
+        // Resolved from the window's SCREEN: layoutParamsForScreen has no
+        // context parameter and answers for that screen's current desktop and
+        // activity. The gaps and per-screen overrides of a background context
+        // can differ, and this is the same approximation every other
+        // window-keyed strip mutation on this engine lives with; the values
+        // that matter to the toggle (work area, axis) are per-screen.
+        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        if (state->strip().toggleMaximizeColumnForWindow(canonicalId, params)) {
+            if (key == currentKeyForScreen(key.screenId)) {
+                applyLayout(key.screenId, false);
+            }
+            Q_EMIT placementChanged(key.screenId);
         }
         return;
     }
-    const QString sourceWindow = state->strip().activeWindowId();
-    const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeActiveColumn(params)
-                                               : state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
-    if (changed) {
-        applyLayout(screen, false);
-        Q_EMIT placementChanged(screen);
-    }
-    if (!quiet) {
-        Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
-                                  sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
-    }
+    // The active-column spelling is the user's own key press about the column
+    // in front of them, so it is an ordinary screen-resolved verb and speaks.
+    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveColumn(params), "resize", false, QString());
 }
 
 void ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
 {
     // The maximize-to-edges twin of toggleMaximizeColumn above, and every
     // structural choice is inherited from it verbatim — the canonicalize, the
-    // resolve-from-the-window, and the quiet named path (this verb IS the
-    // compositor interception's dispatch target, so a background client
-    // maximizing itself must not pop an OSD over the user's work). The
-    // comments there carry the reasons; this copy only records that the two
-    // must stay in step.
+    // resolve-of-the-whole-CONTEXT from the window with its background guard,
+    // and the quiet named path (this verb IS the compositor interception's
+    // dispatch target, so a background client maximizing itself must not pop
+    // an OSD over the user's work). The comments there carry the reasons; the
+    // only difference below is which strip op runs. The two bodies were left
+    // separate rather than folded into one helper because the shared prologue
+    // would have to live on ScrollEngine's private interface to reach
+    // stateForWindow and applyLayout, and it earns less than it costs at two
+    // call sites. They must stay in step by hand.
     const QString canonicalId = canonicalizeForLookup(windowId);
-    QString resolvedScreen = screenId;
     if (!canonicalId.isEmpty()) {
-        PhosphorEngine::PlacementStateKey windowKey;
-        if (stateForWindow(canonicalId, &windowKey)) {
-            resolvedScreen = windowKey.screenId;
+        PhosphorEngine::PlacementStateKey key;
+        ScrollState* state = stateForWindow(canonicalId, &key);
+        if (!state || state->strip().isEmpty() || key.screenId.isEmpty()) {
+            return;
         }
-    }
-    const bool quiet = !canonicalId.isEmpty();
-    P_SCROLL_RESOLVE(resolvedScreen);
-    if (!state || state->strip().isEmpty()) {
-        if (!quiet) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("resize"), QStringLiteral("no_windows"), QString(),
-                                      QString(), screen);
+        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        if (state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params)) {
+            if (key == currentKeyForScreen(key.screenId)) {
+                applyLayout(key.screenId, false);
+            }
+            Q_EMIT placementChanged(key.screenId);
         }
         return;
     }
-    const QString sourceWindow = state->strip().activeWindowId();
-    const bool changed = canonicalId.isEmpty() ? state->strip().toggleMaximizeToEdgesActiveColumn(params)
-                                               : state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
-    if (changed) {
-        applyLayout(screen, false);
-        Q_EMIT placementChanged(screen);
-    }
-    if (!quiet) {
-        Q_EMIT navigationFeedback(changed, QStringLiteral("resize"), changed ? QString() : QStringLiteral("no_target"),
-                                  sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
-    }
+    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeToEdgesActiveColumn(params), "resize", false, QString());
 }
 
 void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)

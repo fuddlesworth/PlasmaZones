@@ -67,7 +67,13 @@ private Q_SLOTS:
         // the library's own suite.
         QCOMPARE(all.size(), DragBypassReasonCount);
         for (auto r : all) {
-            QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
+            const QString token = toWireString(r);
+            QCOMPARE(bypassReasonFromWireString(token), r);
+            // The empty token belongs to None ALONE. Without this the round
+            // trip passes for a value that fell out of toWireString's switch:
+            // it would answer the empty default and parse back to None, which
+            // is only correct for None itself.
+            QCOMPARE(token.isEmpty(), r == DragBypassReason::None);
         }
     }
 

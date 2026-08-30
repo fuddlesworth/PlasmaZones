@@ -13,6 +13,12 @@
 // is the ENGINE's half — the wire flag, the verb's targeting, and the
 // compositions no single-step test covers.
 //
+// The blob and float arms of the same concern live here too: the persisted
+// per-column key (round trip and the absent-key fallback), the cross-session
+// fuzzy appId claim's transfer, and what the FloatRestore slot carries out and
+// back. They belong with the concern rather than in test_scrollengine_persistence,
+// which owns the stash mechanics and is already past the file-size ceiling.
+//
 // The flag is deliberately published for tiles the user cannot see (parked
 // columns, hidden tabs). Suppressing it there cycled the client's maximize bit
 // on every scroll past a maximized column, so the "invisible tile" cases below
@@ -44,6 +50,36 @@ namespace {
 ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
 {
     return static_cast<ScrollState*>(engine->stateForScreen(screenId));
+}
+
+/// The stored width intent of the column holding @p windowId on S1.
+///
+/// Both guards, for stateFor's reason: a dropped state or a window the strip no
+/// longer holds must fail the comparison rather than index .at(-1). The
+/// sentinel is deliberately unreachable — a default-constructed ColumnWidth is
+/// Proportion(0.5), a value a REAL column can hold, so a genuine lookup miss
+/// would compare equal and pass.
+ColumnWidth widthOf(ScrollEngine* engine, const QString& windowId)
+{
+    const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+    if (!st) {
+        return ColumnWidth::makeFixed(-1);
+    }
+    const int idx = st->strip().columnOfWindow(windowId);
+    return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
+}
+
+/// Whether the column holding @p windowId on S1 carries the declared
+/// maximize-to-edges flag. False for a window the strip does not hold, which is
+/// never the passing answer at any call site below.
+bool columnFlagged(ScrollEngine* engine, const QString& windowId)
+{
+    const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+    if (!st) {
+        return false;
+    }
+    const int idx = st->strip().columnOfWindow(windowId);
+    return idx >= 0 && st->strip().columns().at(idx).maximizedToEdges;
 }
 
 /// Every windowId carrying maximizedToEdges in the last emitted batch.
@@ -96,6 +132,10 @@ private Q_SLOTS:
     void namedVerbTogglesBackOnASecondPress();
     void maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot();
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
+    void maximizedToEdgesRoundTripsThroughTheBlob();
+    void maximizedToEdgesTransfersOnAFuzzyAppIdClaim();
+    void floatingASoleTileCarriesTheFlagBothWays();
+    void floatingOneTileOfTwoLeavesTheFlagWithTheColumn();
 };
 
 // The maximize-to-edges flag lives on the COLUMN and must not travel with an
@@ -173,7 +213,7 @@ void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()
     QVERIFY2(windowsInBatch(tiled).contains(QStringLiteral("app|a")),
              "a parked column's tile must still appear in the batch");
     QVERIFY2(maximizedInBatch(tiled).contains(QStringLiteral("app|a")),
-             "a parked maximized column must still publish columnMaximized");
+             "a parked maximized column must still publish maximizedToEdges");
 
     // Now the tabbed half. Fold a neighbour into the first column and tab it,
     // so one of the two tabs is hidden.
@@ -211,7 +251,7 @@ void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()
     // EVERY tile of the column, shown or hidden.
     for (const QString& wid : std::as_const(tabIds)) {
         QVERIFY2(flagged.contains(wid),
-                 qPrintable(QStringLiteral("hidden tab %1 must still publish columnMaximized").arg(wid)));
+                 qPrintable(QStringLiteral("hidden tab %1 must still publish maximizedToEdges").arg(wid)));
     }
 }
 
@@ -230,14 +270,6 @@ void TestScrollEngineMaximize::twoColumnsCanBeMaximizedAtOnce()
 
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
-    const auto widthOf = [engine](const QString& windowId) {
-        const auto* st = stateFor(engine, QStringLiteral("S1"));
-        if (!st) {
-            return ColumnWidth::makeFixed(-1);
-        }
-        const int idx = st->strip().columnOfWindow(windowId);
-        return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
-    };
     QVERIFY2(state->strip().columnOfWindow(QStringLiteral("app|a"))
                  != state->strip().columnOfWindow(QStringLiteral("app|b")),
              "the two windows must sit in different columns");
@@ -251,7 +283,7 @@ void TestScrollEngineMaximize::twoColumnsCanBeMaximizedAtOnce()
     QCoreApplication::processEvents();
     engine->setColumnWidth(ColumnWidth::makeFixed(377), QStringLiteral("S1"));
     QCoreApplication::processEvents();
-    const ColumnWidth aOriginal = widthOf(QStringLiteral("app|a"));
+    const ColumnWidth aOriginal = widthOf(engine, QStringLiteral("app|a"));
     QCOMPARE(aOriginal, ColumnWidth::makeFixed(377));
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
@@ -259,20 +291,26 @@ void TestScrollEngineMaximize::twoColumnsCanBeMaximizedAtOnce()
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
 
-    // BOTH render full width at the same time — the flag is per column, and
-    // nothing un-maximizes the first on the second's behalf.
-    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-    engine->retile(QStringLiteral("S1"));
-    QCoreApplication::processEvents();
+    // BOTH columns are full width at the same time. The headline claim, and
+    // asserted on the stored WIDTH rather than on a batch: these are the width
+    // verb's presses, which have no wire flag of their own, and only one of two
+    // full-width columns fits the viewport so the other's emitted rect is a
+    // parked one. The maximize arm writes Proportion(1.0) verbatim, so an
+    // implementation that un-maximized a on b's behalf would leave a at the
+    // no-slot fallback width instead and fail here.
+    QCOMPARE(widthOf(engine, QStringLiteral("app|a")), ColumnWidth::makeProportion(1.0));
+    QCOMPARE(widthOf(engine, QStringLiteral("app|b")), ColumnWidth::makeProportion(1.0));
 
     // a's stored width is gone with the single slot, so its un-maximize takes
     // the no-slot fallback rather than restoring aOriginal.
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
-    const ColumnWidth aAfter = widthOf(QStringLiteral("app|a"));
+    const ColumnWidth aAfter = widthOf(engine, QStringLiteral("app|a"));
     QVERIFY2(aAfter != ColumnWidth::makeFixed(-1), "a must still be in the strip");
     QVERIFY2(aAfter != aOriginal,
              "the second maximize discarded the single slot, so a must NOT come back at its original width");
+    // And b is untouched by a's un-maximize, the mirror of the claim above.
+    QCOMPARE(widthOf(engine, QStringLiteral("app|b")), ColumnWidth::makeProportion(1.0));
 }
 
 void TestScrollEngineMaximize::namedVerbTogglesBackOnASecondPress()
@@ -287,29 +325,20 @@ void TestScrollEngineMaximize::namedVerbTogglesBackOnASecondPress()
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     QCoreApplication::processEvents();
 
-    const auto widthOf = [engine](const QString& windowId) {
-        const auto* st = stateFor(engine, QStringLiteral("S1"));
-        if (!st) {
-            return ColumnWidth::makeFixed(-1);
-        }
-        const int idx = st->strip().columnOfWindow(windowId);
-        return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
-    };
-
     // Focus a, act on b, so the two answers differ throughout.
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
     QCoreApplication::processEvents();
-    const ColumnWidth aBefore = widthOf(QStringLiteral("app|a"));
-    const ColumnWidth bBefore = widthOf(QStringLiteral("app|b"));
+    const ColumnWidth aBefore = widthOf(engine, QStringLiteral("app|a"));
+    const ColumnWidth bBefore = widthOf(engine, QStringLiteral("app|b"));
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBefore, "the first press must maximize b's column");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|b")) != bBefore, "the first press must maximize b's column");
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
-    QCOMPARE(widthOf(QStringLiteral("app|b")), bBefore);
-    QCOMPARE(widthOf(QStringLiteral("app|a")), aBefore);
+    QCOMPARE(widthOf(engine, QStringLiteral("app|b")), bBefore);
+    QCOMPARE(widthOf(engine, QStringLiteral("app|a")), aBefore);
 }
 
 void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot()
@@ -333,45 +362,234 @@ void TestScrollEngineMaximize::maximizeSurvivesAModeRoundTripWithoutItsRestoreSl
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     QCoreApplication::processEvents();
 
-    const auto widthOf = [engine](const QString& windowId) {
-        const auto* st = stateFor(engine, QStringLiteral("S1"));
-        if (!st) {
-            return ColumnWidth::makeFixed(-1);
-        }
-        const int idx = st->strip().columnOfWindow(windowId);
-        return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
-    };
-
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
     engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
-    const ColumnWidth maximized = widthOf(QStringLiteral("app|a"));
+    const ColumnWidth maximized = widthOf(engine, QStringLiteral("app|a"));
 
     // Mode reassignment of the same context — the engine-side proxy for a
     // placement-mode flip, which is arbitrated in the daemon and has no seam
-    // in this library.
+    // in this library. The re-adoption arrivals are spied, because THEY are
+    // the batches that carry a rect change: a later retile re-resolves the
+    // identical rects and identical flag membership, so the emit-on-change
+    // gate legitimately suppresses it and a spy installed afterwards would
+    // read empty.
     engine->setActiveScreens({});
     QCoreApplication::processEvents();
     engine->setActiveScreens({QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     QCoreApplication::processEvents();
 
-    QCOMPARE(widthOf(QStringLiteral("app|a")), maximized);
+    QCOMPARE(widthOf(engine, QStringLiteral("app|a")), maximized);
 
-    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-    engine->retile(QStringLiteral("S1"));
-    QCoreApplication::processEvents();
-    if (!tiled.isEmpty()) {
-        QVERIFY2(maximizedInBatch(tiled).contains(QStringLiteral("app|a")),
-                 "the re-adopted column must re-publish columnMaximized, since nothing else restores the KWin bit");
-    }
+    // The load-bearing half, asserted on the STRIP so it is unconditional: the
+    // rebuilt column carries the declared flag, which is the only thing the
+    // effect re-asserts the KWin maximize bit from.
+    ScrollState* readopted = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(readopted);
+    const int aCol = readopted->strip().columnOfWindow(QStringLiteral("app|a"));
+    QVERIFY2(aCol >= 0, "the re-adopted window must be back on the strip");
+    QVERIFY2(readopted->strip().columns().at(aCol).maximizedToEdges,
+             "the re-adopted column must come back maximized to edges");
+    // And the wire half, from the arrival batches themselves.
+    QVERIFY2(!tiled.isEmpty(), "the re-adoption arrivals must emit a batch");
+    QVERIFY2(maximizedInBatch(tiled).contains(QStringLiteral("app|a")),
+             "the re-adopted column must re-publish maximizedToEdges, since nothing else restores the KWin bit");
 
     // The slot did NOT survive, so this press takes the no-usable-slot arm.
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|a"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|a")) != maximized, "the press must leave the column narrower than full");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|a")) != maximized,
+             "the press must leave the column narrower than full");
+}
+
+void TestScrollEngineMaximize::maximizedToEdgesRoundTripsThroughTheBlob()
+{
+    // The persisted half of the maximize-to-edges flag: serializeStripState
+    // writes the per-column key only when set, restoreStripState reads it back
+    // with an absent-key false fallback, and the claim path re-asserts it on
+    // the rebuilt column. Deleting either the write or the read leaves the
+    // in-memory stash tests green, so this one drives the blob itself.
+    //
+    // Lives here rather than in test_scrollengine_persistence, which owns the
+    // stash and blob mechanics but is already past the file-size ceiling: the
+    // maximize concern is this file's, and the blob is one more surface of it.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
+    ScrollState* live = stateFor(engine1, QStringLiteral("S1"));
+    QVERIFY(live);
+    // A DISTINCTIVE width, so the legacy arm below can say something about the
+    // rest of the column rather than only about the flag. Written BEFORE the
+    // toggle: a width write is one of the verbs that clears the flag.
+    QVERIFY(live->strip().setActiveColumnWidth(ColumnWidth::makeFixed(377)));
+    engine1->toggleMaximizeToEdges(QStringLiteral("S1"));
+    QVERIFY(live->strip().columns().first().maximizedToEdges);
+
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
+    ScrollState* restored = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(restored);
+    QCOMPARE(restored->strip().columns().size(), 1);
+    QVERIFY(restored->strip().columns().first().maximizedToEdges);
+
+    // A blob from before the key existed reads false, and the rest of the
+    // column still restores — asserted on the stored WIDTH, so "still
+    // restores" is a claim the slot actually checks rather than prose beside a
+    // column count.
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
+    QJsonObject legacy = blob;
+    QJsonObject payload = legacy.value(key).toObject();
+    QJsonArray columns = payload.value(QLatin1String("columns")).toArray();
+    QVERIFY(!columns.isEmpty());
+    QJsonObject colObj = columns.first().toObject();
+    QVERIFY(colObj.contains(QLatin1String("maximizedToEdges")));
+    colObj.remove(QLatin1String("maximizedToEdges"));
+    columns.replace(0, colObj);
+    payload.insert(QLatin1String("columns"), columns);
+    legacy.insert(key, payload);
+
+    ScrollEngine* engine3 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine3->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine3->restoreStripState(legacy);
+    engine3->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
+    ScrollState* attached = stateFor(engine3, QStringLiteral("S1"));
+    QVERIFY(attached);
+    QCOMPARE(attached->strip().columns().size(), 1);
+    QVERIFY(!attached->strip().columns().first().maximizedToEdges);
+    QCOMPARE(attached->strip().columns().first().width, ColumnWidth::makeFixed(377));
+}
+
+void TestScrollEngineMaximize::maximizedToEdgesTransfersOnAFuzzyAppIdClaim()
+{
+    // The cross-session appId claim hands a NEW same-app window a dead
+    // sibling's slot, and the maximize-to-edges flag goes WITH it — the
+    // opposite call from windowedFullscreen, whose claim deliberately stops at
+    // the slot (windowedFullscreenFuzzyClaimDoesNotTransfer pins that side).
+    //
+    // The difference is what the two flags describe. Windowed fullscreen is a
+    // presentation pushed onto the client, so handing it to a window that never
+    // asked for it is a surprise. Maximize-to-edges says how the COLUMN
+    // presents, on the same terms as the width and display the claim already
+    // transfers, and the restore applies it from the arrival that CREATES the
+    // column (engine_core's creation-only arm), which for a claimed single-tile
+    // column is this arrival.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
+    engine1->toggleMaximizeToEdges(QStringLiteral("S1"));
+    ScrollState* live = stateFor(engine1, QStringLiteral("S1"));
+    QVERIFY(live);
+    QVERIFY(live->strip().columns().first().maximizedToEdges);
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Different uuid, same appId: the fuzzy claim fires.
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n1")), 0);
+    QVERIFY2(columnFlagged(engine2, QStringLiteral("app|n1")),
+             "a fuzzy appId claim must bring the column's maximize-to-edges state with the slot");
+}
+
+void TestScrollEngineMaximize::floatingASoleTileCarriesTheFlagBothWays()
+{
+    // The float/minimize round trip of a maximized column's ONLY window. The
+    // flag is declared column state and nothing re-derives it, so the
+    // FloatRestore slot carries it out and back; without that carry a minimize
+    // and restore silently un-maximizes the window.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    // A sibling column, so the float does not empty the strip and the restore
+    // has to find its way back into a populated one.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
+    QCoreApplication::processEvents();
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|a")));
+
+    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->isWindowFloatingInScroll(QStringLiteral("app|a")), "the window must actually have floated");
+    ScrollState* floated = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(floated);
+    QCOMPARE(floated->strip().columnOfWindow(QStringLiteral("app|a")), -1);
+    // The sibling never carried the flag and must not acquire it.
+    QVERIFY(!columnFlagged(engine, QStringLiteral("app|b")));
+
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(!engine->isWindowFloatingInScroll(QStringLiteral("app|a")), "the window must have come back to the strip");
+    QVERIFY2(columnFlagged(engine, QStringLiteral("app|a")), "the rebuilt column must come back maximized to edges");
+    QVERIFY2(!columnFlagged(engine, QStringLiteral("app|b")), "the returning tile must not flag the sibling column");
+}
+
+void TestScrollEngineMaximize::floatingOneTileOfTwoLeavesTheFlagWithTheColumn()
+{
+    // The other half of the lone-tile rule. A tile floating out of a SHARED
+    // column captures no flag, because the column survives and keeps its own,
+    // and re-asserting it from a returning sibling would re-maximize a column
+    // the user un-maximized in the meantime — which is exactly what this slot
+    // drives.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // Focus the FIRST column: consume pulls the NEXT column's window in, so
+    // running it on the last column would consume nothing.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 1);
+    QCOMPARE(state->strip().columns().first().tiles.size(), 2);
+
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
+    QCoreApplication::processEvents();
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|a")));
+
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(engine->isWindowFloatingInScroll(QStringLiteral("app|b")), "the tile must actually have floated");
+    // The column survived the float with its own flag, untouched.
+    QVERIFY2(columnFlagged(engine, QStringLiteral("app|a")),
+             "a column that survives one tile floating out keeps its own flag");
+
+    // The user un-maximizes while b is away. A returning tile that re-asserted
+    // a flag it should never have captured would undo this.
+    engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|a"));
+    QCoreApplication::processEvents();
+    QVERIFY(!columnFlagged(engine, QStringLiteral("app|a")));
+
+    engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* back = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(back);
+    const int aCol = back->strip().columnOfWindow(QStringLiteral("app|a"));
+    const int bCol = back->strip().columnOfWindow(QStringLiteral("app|b"));
+    QVERIFY2(aCol >= 0 && bCol >= 0, "both windows must be back on the strip");
+    // Rejoined the stack it left, so the flag assertion below is about that
+    // column rather than about a fresh one that trivially has no flag.
+    QCOMPARE(bCol, aCol);
+    QVERIFY2(!columnFlagged(engine, QStringLiteral("app|b")),
+             "a tile that floated out of a SHARED column must not re-maximize it on the way back");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineMaximize)

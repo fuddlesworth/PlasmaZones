@@ -370,8 +370,8 @@ CatalogMeta catalogMetaForId(const QString& id)
         // maximize button alone.
         add(kIdScrollMaximizeToEdges, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Toggles the focused column between covering the whole screen area with no gaps "
-                              "and its normal size."));
+                              "Toggles the focused column between covering the whole work area with no gaps "
+                              "and its normal size. This is the state the window's maximize button shows."));
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
             QT_TRANSLATE_NOOP("plasmazones",

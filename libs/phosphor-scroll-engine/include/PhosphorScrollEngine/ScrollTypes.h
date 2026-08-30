@@ -827,9 +827,16 @@ struct Column
     /// (ScrollLayoutParams::rawWorkArea) on BOTH axes, with inner gaps
     /// suppressed between its stacked tiles. Declared state, never inferred
     /// from rendered rects — the width intent below stays untouched while the
-    /// flag holds, so clearing it is a plain "stop overriding". Any width or
-    /// height mutation on the column clears it; display (tab/stack) toggles
-    /// do not. This is the one state the effect mirrors onto KWin's maximize
+    /// flag holds, so clearing it is a plain "stop overriding". The user-facing
+    /// width and height sizing verbs clear it (the width toggles and presets,
+    /// expand, equalize, minimize-width, the interactive resize reconcile, and
+    /// the height verbs when they actually change a height or move a tabbed
+    /// column's extent owner); display (tab/stack) toggles do not, and neither
+    /// do the restore paths that re-state a remembered height intent through
+    /// setWindowHeightIntent. resetToDefaults is the deliberate split: it
+    /// clears the flag when a default width is supplied and keeps it when the
+    /// context's width default is "the client decides". This is the one state
+    /// the effect mirrors onto KWin's maximize
     /// bit; toggleMaximizeColumn is a pure width verb with no mirror.
     bool maximizedToEdges = false;
 

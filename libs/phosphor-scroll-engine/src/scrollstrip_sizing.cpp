@@ -488,6 +488,33 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     if (workW <= 0) {
         return false; // degenerate area, the sibling width verbs' bail
     }
+    // Drop the ACTIVE column's maximize-to-edges override BEFORE measuring —
+    // expandActiveColumnToAvailableWidth's drop-then-measure order, and for
+    // the same reason. A maximized column measures at the RAW main extent,
+    // which exceeds the gapped viewport whenever any main-axis outer gap is
+    // set, so it never appears in fullyVisibleColumnIndices and the
+    // group-membership test below refused the whole verb instead of
+    // equalizing. The drop is itself the change, the rule setActiveColumnWidth
+    // states. Other members' overrides drop in the loop below, which stays
+    // reachable in the zero-outer-gap case where the raw extent IS the
+    // viewport and a maximized column can therefore be fully visible.
+    //
+    // It is PROVISIONAL until the verb commits, though, because the measure it
+    // enables can still land on a bail: a lone column or a straddling active
+    // one refuses, and refusing while having silently un-maximized the column
+    // would be a change the user asked equalize for and did not get. Both
+    // bails put it back.
+    Column* active = activeColumnMutable();
+    const bool clearedEdges = active && active->maximizedToEdges;
+    if (clearedEdges) {
+        active->maximizedToEdges = false;
+    }
+    const auto restoreEdges = [active, clearedEdges] {
+        if (clearedEdges) {
+            active->maximizedToEdges = true;
+        }
+        return false;
+    };
     // FULLY visible columns, the walk centerVisibleColumns performs and the
     // one expandActiveColumnToAvailableWidth shares: a column clipped by
     // either edge is exactly what must not be dragged into the split.
@@ -496,20 +523,20 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     // width", which is maximize's job.
     const int n = visible.size();
     if (n < 2) {
-        return false;
+        return restoreEdges();
     }
     // The active column must be IN the group: the anchor is re-derived
     // below to put the group's first column at the lead edge, and an active
     // column that straddles an edge (a pan leaves it there) would be pushed
     // fully off screen by that, where a detached view would then keep it.
     if (!visible.contains(m_activeColumnIdx)) {
-        return false;
+        return restoreEdges();
     }
     // Shares of the MAIN extent net of the gaps BETWEEN the group, so the
     // group still tiles the viewport edge to edge afterwards.
     const int usable = workW - (n - 1) * params.gap;
     if (usable < n) {
-        return false; // gaps alone outrun the viewport: no share is a pixel
+        return restoreEdges(); // gaps alone outrun the viewport: no share is a pixel
     }
     // A column whose tiles' minimum exceeds its share cannot take it: what
     // renders is columnExtentPx, which floors at that minimum, so writing the
@@ -540,14 +567,14 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
         }
     }
     if (pool < free) {
-        return false; // the floors alone outrun the viewport: nothing to share
+        return restoreEdges(); // the floors alone outrun the viewport: nothing to share
     }
     // The remainder of the division goes to the LAST free column rather
     // than being dropped: dropping it would leave a sliver of dead space that
     // expand-column would then report as reclaimable. With every column
     // floor-bound there is nothing to equalize.
     if (free == 0) {
-        return false;
+        return restoreEdges();
     }
     const int share = pool / free;
     int remainder = pool - share * free;
@@ -557,7 +584,7 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
             remainder = 0;
         }
     }
-    bool changed = false;
+    bool changed = clearedEdges;
     for (int k = 0; k < n; ++k) {
         Column& col = m_columns[visible.at(k)];
         // Equalize is a width verb over the whole group: a maximize-to-edges
@@ -1044,13 +1071,21 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     // work and then relayout into the wrong shape, with both intents pinned to
     // Fixed pixels on the wrong axes.
     if (mainChanged) {
+        // An interactive main-axis resize is a width write like any other, so
+        // a maximize-to-edges override drops with it — BEFORE the equality
+        // test, and the drop is itself the change, exactly the rule
+        // setActiveColumnWidth states. Inside the branch the drop was skipped
+        // whenever the acked extent resolved equal to the intent the override
+        // was hiding, and the next relayout then snapped the column back to
+        // the raw extent, reverting the user's drag.
+        if (col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
         const ColumnWidth acked = ColumnWidth::makeFixed(params.axis.mainSize(ackedSize));
         if (!(col.width == acked)) {
             col.width = acked;
             changed = true;
-            // An interactive main-axis resize is a width write like any
-            // other: a maximize-to-edges override drops with it.
-            col.maximizedToEdges = false;
             // Same invariant as every other width mutator in this file: a
             // width write invalidates a pending maximize-toggle restore for
             // this column. Unlike those mutators this one is keyed on the
@@ -1066,6 +1101,14 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     // an interactive cross-axis resize of a lone window sticks instead of
     // snapping back.
     if (crossChanged) {
+        // Dropped before the equality test for the main-axis arm's reason: an
+        // interactive cross-axis resize is a height write, and leaving the
+        // override standing on an equal-resolving ack lets the next relayout
+        // snap the column back to the raw extent.
+        if (col.maximizedToEdges) {
+            col.maximizedToEdges = false;
+            changed = true;
+        }
         const int ti = col.indexOfWindow(windowId);
         // Lifted into COLUMN space first, the conversion both height verbs
         // make: on a tabbed column the height intent sizes the column
@@ -1087,9 +1130,6 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         if (!(col.tiles.at(ti).height == ackedH)) {
             col.tiles[ti].height = ackedH;
             changed = true;
-            // An interactive cross-axis resize is a height write like any
-            // other: a maximize-to-edges override drops with it.
-            col.maximizedToEdges = false;
         }
     }
     return changed;

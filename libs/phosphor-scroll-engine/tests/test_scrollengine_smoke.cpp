@@ -143,6 +143,25 @@ private:
     {
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
     }
+
+    /// The stored width intent of the column holding @p windowId on S1.
+    ///
+    /// Both guards, matching columnDisplayOf and the null-guard rule this file
+    /// states at stateFor: a dropped state or a window the strip no longer
+    /// holds must fail the comparison, not index .at(-1), which is undefined
+    /// and takes the whole binary down with the remaining slots' results. The
+    /// sentinel is deliberately unreachable — a default-constructed ColumnWidth
+    /// is Proportion(0.5), a value a REAL column can hold, so a genuine lookup
+    /// miss would compare equal and pass.
+    static ColumnWidth widthOf(ScrollEngine* engine, const QString& windowId)
+    {
+        const ScrollState* st = stateFor(engine, QStringLiteral("S1"));
+        if (!st) {
+            return ColumnWidth::makeFixed(-1);
+        }
+        const int idx = st->strip().columnOfWindow(windowId);
+        return idx < 0 ? ColumnWidth::makeFixed(-1) : st->strip().columns().at(idx).width;
+    }
 };
 
 void TestScrollEngineSmoke::screensSetLifecycle()
@@ -635,10 +654,10 @@ void TestScrollEngineSmoke::columnMaximizeFlagRidesEveryTileOfTheColumn()
     QHash<QString, bool> flags = flagsByWindow(tiled);
     QVERIFY2(flags.contains(QStringLiteral("app|a")), "the batch must carry the maximized column's first tile");
     QVERIFY2(flags.contains(QStringLiteral("app|b")), "the batch must carry the maximized column's second tile");
-    QVERIFY2(flags.value(QStringLiteral("app|a")), "columnMaximized must ride the first tile");
-    QVERIFY2(flags.value(QStringLiteral("app|b")), "columnMaximized must ride the SECOND tile too");
+    QVERIFY2(flags.value(QStringLiteral("app|a")), "maximizedToEdges must ride the first tile");
+    QVERIFY2(flags.value(QStringLiteral("app|b")), "maximizedToEdges must ride the SECOND tile too");
     QVERIFY2(flags.contains(QStringLiteral("app|c")), "the batch must carry the sibling column's tile");
-    QVERIFY2(!flags.value(QStringLiteral("app|c")), "columnMaximized must NOT leak onto the sibling column");
+    QVERIFY2(!flags.value(QStringLiteral("app|c")), "maximizedToEdges must NOT leak onto the sibling column");
 
     // Toggle back: the flag is absent again, so the effect's Release arm has
     // something to fire on. Absence rather than an explicit false — the emit
@@ -696,39 +715,23 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     // maximizedToEdges flag (declared state on its own verb), and
     // test_scrollstrip_sizing.cpp asserts resolved pixels for the toggle's
     // own arms.
-    const auto widthOf = [engine](const QString& windowId) {
-        // Both guards, matching columnDisplayOf above and the null-guard rule
-        // this file states at stateFor: a dropped state or a window the strip
-        // no longer holds must fail the comparison, not index .at(-1), which
-        // is undefined and takes the whole binary down with the remaining
-        // slots' results. The sentinel is deliberately unreachable — a
-        // default-constructed ColumnWidth is Proportion(0.5), a value a REAL
-        // column can hold, so a genuine lookup miss would compare equal and
-        // pass.
-        const auto* st = stateFor(engine, QStringLiteral("S1"));
-        if (!st) {
-            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
-        }
-        const int idx = st->strip().columnOfWindow(windowId);
-        if (idx < 0) {
-            return PhosphorScrollEngine::ColumnWidth::makeFixed(-1);
-        }
-        return st->strip().columns().at(idx).width;
-    };
-    const PhosphorScrollEngine::ColumnWidth aBefore = widthOf(QStringLiteral("app|a"));
-    const PhosphorScrollEngine::ColumnWidth bBefore = widthOf(QStringLiteral("app|b"));
+    // widthOf is the file-local helper beside stateFor, whose doc carries the
+    // null-guard and unreachable-sentinel reasoning.
+    const PhosphorScrollEngine::ColumnWidth aBefore = widthOf(engine, QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBefore = widthOf(engine, QStringLiteral("app|b"));
 
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBefore, "the NAMED window's column must be the one that changed");
-    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBefore, "the ACTIVE column must be left alone");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|b")) != bBefore,
+             "the NAMED window's column must be the one that changed");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|a")) == aBefore, "the ACTIVE column must be left alone");
 
     // A window this strip does not hold refuses outright rather than falling
     // back to the active column — that fallback is exactly what made the
     // screen-scoped spelling wrong, so it must not creep back in via an
     // unknown id.
-    const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(QStringLiteral("app|a"));
-    const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(QStringLiteral("app|b"));
+    const PhosphorScrollEngine::ColumnWidth aBeforeMiss = widthOf(engine, QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeMiss = widthOf(engine, QStringLiteral("app|b"));
     // The VERDICT, not just the geometry. Asserting rects alone leaves the
     // refusal's return value unpinned, and that bool keys the relayout and
     // placementChanged. Flipping the out-of-range arm to return true leaves
@@ -744,8 +747,10 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     QSignalSpy refusalBatches(engine, &PhosphorScrollEngine::ScrollEngine::windowsTiled);
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|missing"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|a")) == aBeforeMiss, "an unknown window must not touch the active column");
-    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeMiss, "an unknown window must not touch any other column");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|a")) == aBeforeMiss,
+             "an unknown window must not touch the active column");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|b")) == bBeforeMiss,
+             "an unknown window must not touch any other column");
     QVERIFY2(namedFeedback.isEmpty(), "a named-window request must not raise the navigation OSD");
     QCOMPARE(refusalBatches.count(), 0);
 
@@ -755,23 +760,25 @@ void TestScrollEngineSmoke::columnMaximizeTargetsTheNamedWindowsColumn()
     engine->toggleMaximizeColumn(QStringLiteral("S1"), QStringLiteral("app|b"));
     QCoreApplication::processEvents();
     QVERIFY2(namedFeedback.isEmpty(), "a successful named-window request must not raise the navigation OSD either");
-    QVERIFY2(widthOf(QStringLiteral("app|b")) != bBeforeMiss, "the quiet path must still do the work");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|b")) != bBeforeMiss, "the quiet path must still do the work");
 
     // The EMPTY spelling still means the active column, which is what the
     // keyboard shortcut sends — and unlike the named spelling it DOES speak,
     // because the user pressed a key and is owed an answer. That contrast is
     // the whole point of the split; asserting the silence above without this
     // would pass just as well against a verb that had gone mute entirely.
-    const PhosphorScrollEngine::ColumnWidth aBeforeKey = widthOf(QStringLiteral("app|a"));
-    const PhosphorScrollEngine::ColumnWidth bBeforeKey = widthOf(QStringLiteral("app|b"));
+    const PhosphorScrollEngine::ColumnWidth aBeforeKey = widthOf(engine, QStringLiteral("app|a"));
+    const PhosphorScrollEngine::ColumnWidth bBeforeKey = widthOf(engine, QStringLiteral("app|b"));
     QSignalSpy keyFeedback(engine, &PhosphorScrollEngine::ScrollEngine::navigationFeedback);
     engine->toggleMaximizeColumn(QStringLiteral("S1"));
     QCoreApplication::processEvents();
-    QVERIFY2(widthOf(QStringLiteral("app|a")) != aBeforeKey, "an empty windowId must still target the active column");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|a")) != aBeforeKey,
+             "an empty windowId must still target the active column");
     // The sibling is checked here too, matching the two named arms above: on
     // its own, "the active column changed" passes for a verb that widened
     // BOTH columns.
-    QVERIFY2(widthOf(QStringLiteral("app|b")) == bBeforeKey, "the empty spelling must leave the other column alone");
+    QVERIFY2(widthOf(engine, QStringLiteral("app|b")) == bBeforeKey,
+             "the empty spelling must leave the other column alone");
     QCOMPARE(keyFeedback.count(), 1);
     QCOMPARE(keyFeedback.at(0).at(0).toBool(), true);
     QCOMPARE(keyFeedback.at(0).at(1).toString(), QStringLiteral("resize"));

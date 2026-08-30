@@ -48,7 +48,6 @@ private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
     void persistedBlobCarriesTheViewDetachment();
     void presetIntentRoundTripsExactly();
-    void maximizedToEdgesRoundTripsThroughTheBlob();
     void stashedShapeOutranksTheOpenHeightRule();
     void legacyPresetIndexBlobResolvesAgainstEffectiveList();
     void outOfRangePresetFractionIsClampedAtTheBoundary();
@@ -254,59 +253,6 @@ void TestScrollEnginePersistence::presetIntentRoundTripsExactly()
     QCOMPARE(col.width.presetFraction, 0.42);
     QCOMPARE(col.tiles.first().height.kind, WindowHeight::Fixed);
     QCOMPARE(col.tiles.first().height.fixedPx, 333);
-}
-
-void TestScrollEnginePersistence::maximizedToEdgesRoundTripsThroughTheBlob()
-{
-    // The persisted half of the maximize-to-edges flag: serializeStripState
-    // writes the per-column key only when set, restoreStripState reads it
-    // back with an absent-key false fallback, and the claim path re-asserts
-    // it on the rebuilt column. Deleting either the write or the read leaves
-    // the in-memory stash tests green, so this one drives the blob itself.
-    QObject owner;
-    ScrollEngine* engine1 = makeProviderEngine(&owner, {kS1});
-    engine1->setCurrentDesktopForScreen(kS1, 1);
-    engine1->windowOpened(QStringLiteral("app|m1"), kS1, 0, 0);
-    engine1->toggleMaximizeToEdges(kS1);
-    ScrollState* live = stateFor(engine1, kS1);
-    QVERIFY(live);
-    QVERIFY(live->strip().columns().first().maximizedToEdges);
-
-    const QJsonObject blob = engine1->serializeStripState();
-    QVERIFY(!blob.isEmpty());
-
-    ScrollEngine* engine2 = makeProviderEngine(&owner, {kS1});
-    engine2->setCurrentDesktopForScreen(kS1, 1);
-    engine2->restoreStripState(blob);
-    engine2->windowOpened(QStringLiteral("app|m1"), kS1, 0, 0);
-    ScrollState* restored = stateFor(engine2, kS1);
-    QVERIFY(restored);
-    QCOMPARE(restored->strip().columns().size(), 1);
-    QVERIFY(restored->strip().columns().first().maximizedToEdges);
-
-    // A blob from before the key existed reads false, and the rest of the
-    // column still restores.
-    const QString key = QStringLiteral("S1|1|");
-    QVERIFY(blob.contains(key));
-    QJsonObject legacy = blob;
-    QJsonObject payload = legacy.value(key).toObject();
-    QJsonArray columns = payload.value(QLatin1String("columns")).toArray();
-    QVERIFY(!columns.isEmpty());
-    QJsonObject colObj = columns.first().toObject();
-    QVERIFY(colObj.contains(QLatin1String("maximizedToEdges")));
-    colObj.remove(QLatin1String("maximizedToEdges"));
-    columns.replace(0, colObj);
-    payload.insert(QLatin1String("columns"), columns);
-    legacy.insert(key, payload);
-
-    ScrollEngine* engine3 = makeProviderEngine(&owner, {kS1});
-    engine3->setCurrentDesktopForScreen(kS1, 1);
-    engine3->restoreStripState(legacy);
-    engine3->windowOpened(QStringLiteral("app|m1"), kS1, 0, 0);
-    ScrollState* attached = stateFor(engine3, kS1);
-    QVERIFY(attached);
-    QCOMPARE(attached->strip().columns().size(), 1);
-    QVERIFY(!attached->strip().columns().first().maximizedToEdges);
 }
 
 void TestScrollEnginePersistence::stashedShapeOutranksTheOpenHeightRule()

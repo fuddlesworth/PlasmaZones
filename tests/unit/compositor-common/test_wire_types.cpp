@@ -152,6 +152,11 @@ private Q_SLOTS:
         QCOMPARE(dbusSignature(outcome), QStringLiteral("(issiiiisbba(siiiiiibsssdd))"));
     }
 
+    // bypassReason's token tables are the drag family's one TRANSFORMING
+    // marshaller; they are pinned in the library's own suite
+    // (test_phosphorprotocol.cpp testBypassReasonWireStringRoundTrip) rather
+    // than here, because the converters need no bus.
+
     void testPreTileGeometryEntryRoundtrip()
     {
         // Registered and marshalled like its neighbours but, until this case,

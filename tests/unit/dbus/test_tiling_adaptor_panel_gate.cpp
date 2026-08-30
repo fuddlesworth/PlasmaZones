@@ -159,22 +159,6 @@ class TestTilingAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // The deferral queue's DROP path. A window that opens behind the panel gate
-    // and closes before the gate lifts must never reach an engine.
-    //
-    // Untested until now, and the sibling close-sweep case covers the OTHER
-    // queue (the mid-flip park), so deleting removePendingOpen's call site left
-    // the whole suite green. What it guards is a phantom tile for the session:
-    // the flush would dispatch a dead window into the engine, and there is no
-    // later windowClosed to shed it, because the close already happened before
-    // the dispatch. A splash screen or a session-restore dialog that opens and
-    // closes inside the startup window is exactly this shape.
-    //
-    // The assertion is on ENGINE TRACKING, not on the queue count: every other
-    // deferral case here pins only that the queue drained, which cannot tell a
-    // dispatch from a drop.
-    // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
     // Replay ORDER out of the deferral queue, and the burst brackets around it.
     //
     // deferUntilPanelReady's comment calls replay order load-bearing: it
@@ -266,6 +250,22 @@ private Q_SLOTS:
         QCOMPARE(engine.dispatched.last(), QStringLiteral("overflow|new"));
     }
 
+    // -------------------------------------------------------------------------
+    // The deferral queue's DROP path. A window that opens behind the panel gate
+    // and closes before the gate lifts must never reach an engine.
+    //
+    // Untested until now, and the sibling close-sweep case covers the OTHER
+    // queue (the mid-flip park), so deleting removePendingOpen's call site left
+    // the whole suite green. What it guards is a phantom tile for the session:
+    // the flush would dispatch a dead window into the engine, and there is no
+    // later windowClosed to shed it, because the close already happened before
+    // the dispatch. A splash screen or a session-restore dialog that opens and
+    // closes inside the startup window is exactly this shape.
+    //
+    // The assertion is on ENGINE TRACKING, not on the queue count: every other
+    // deferral case here pins only that the queue drained, which cannot tell a
+    // dispatch from a drop.
+    // -------------------------------------------------------------------------
     void testDeferredOpenClosedBeforeReady_neverReachesTheEngine()
     {
         PhosphorScreens::ScreenManager mgr;

@@ -653,6 +653,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
     }
     bool migratedWindowedFs = false;
+    bool migratedMaximizedToEdges = false;
     std::optional<WindowHeight> migratedHeight;
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
@@ -666,6 +667,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // silently default false; read it off the old tile before takeWindow
         // destroys it (the boundary-crossing verb carries it the same way).
         migratedWindowedFs = oldState->strip().isWindowedFullscreen(windowId);
+        // Maximize-to-edges is declared COLUMN state nothing re-derives, carried
+        // the same way but only off a LONE tile (floatWindowInternal's rule): a
+        // shared column survives the migration and keeps its own flag.
+        const int oldColIdx = oldState->strip().columnOfWindow(windowId);
+        migratedMaximizedToEdges = oldColIdx >= 0 && oldState->strip().columns().at(oldColIdx).tiles.size() == 1
+            && oldState->strip().columns().at(oldColIdx).maximizedToEdges;
         // The tile's HEIGHT intent is carried the same way and for a sharper
         // reason: the insert below re-runs the whole open path, so a
         // ClientDecides screen would re-stamp the window with its recorded
@@ -791,6 +798,17 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             qCWarning(lcScrollEngine) << "windowOpened:" << windowId
                                       << "arrived floated — migrated windowed-fullscreen state dropped";
         }
+    }
+    // The same hand-over for the maximize-to-edges flag, onto a column the
+    // arrival has to ITSELF: a consume-open lands it in an existing column
+    // whose flag is that column's own, and a float exit leaves no tile at all.
+    // Both of those drop the carried flag, and quietly, unlike the
+    // windowed-fullscreen arm above: that state is the client's and losing it
+    // is worth a warning, while this one describes how a column the arrival
+    // no longer owns alone was presenting, which the new host answers for.
+    const int newColIdx = migratedMaximizedToEdges ? state->strip().columnOfWindow(windowId) : -1;
+    if (newColIdx >= 0 && state->strip().columns().at(newColIdx).tiles.size() == 1) {
+        state->strip().setMaximizedToEdgesForWindow(windowId, true);
     }
 
     // Three tiers, narrowest first: the per-window openFocused rule outranks

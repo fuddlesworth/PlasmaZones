@@ -357,12 +357,14 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // restore) instead of stranding it for the daemon-down interval.
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
-        m_tilingHandler->restoreAllMonocleMaximized();
-        // The daemon that owned the windowed-fullscreen flags is gone; its
-        // restart restores them from the strip blob and re-flags via the
+        // Windowed fullscreen FIRST, per claimReleaseOrder: both maximize
+        // restores below skip a window that still holds fullscreen. The daemon
+        // that owned the windowed-fullscreen flags is gone; its restart
+        // restores them from the strip blob and re-flags via the
         // adopt-on-batch arm, so releasing here is safe AND mandatory — a
         // crashed daemon must not strand clients fullscreen at column rects.
         m_tilingHandler->restoreAllWindowedFullscreen();
+        m_tilingHandler->restoreAllMonocleMaximized();
         // Same for the column-maximize mirror, and AFTER the fullscreen
         // release for the ordering reason the unload path documents: on X11
         // the flip above has already landed, so a window holding both states
