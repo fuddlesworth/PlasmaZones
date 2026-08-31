@@ -73,9 +73,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // would hand the force to whichever context runs next, which is the very
     // failure the key compare exists to prevent. Everything from here on
     // reaches the emit gate.
-    if (const auto pendIt = m_pendingFocusEmitByScreen.constFind(screenId);
-        pendIt != m_pendingFocusEmitByScreen.constEnd() && *pendIt == currentKey) {
-        m_pendingFocusEmitByScreen.remove(screenId);
+    if (m_pendingFocusEmitContexts.remove(currentKey)) {
         m_forceEmitScreens.insert(screenId);
     }
     // Live drag-insert preview on THIS screen: the view must not move for the

@@ -370,7 +370,9 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // Same asymmetry fix as the force flag above: a pending focus emit
         // for a screen leaving the set would otherwise survive to a later
         // stint and force a batch for a report from another era.
-        m_pendingFocusEmitByScreen.remove(screenId);
+        for (auto pit = m_pendingFocusEmitContexts.begin(); pit != m_pendingFocusEmitContexts.end();) {
+            pit = pit->screenId == screenId ? m_pendingFocusEmitContexts.erase(pit) : std::next(pit);
+        }
     }
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire

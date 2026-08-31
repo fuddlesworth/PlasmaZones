@@ -1069,7 +1069,7 @@ private:
     void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
     /// Drop the one-shot arms that are keyed by SCREEN but carry a CONTEXT as
     /// their value, for every entry whose context @p contextDied accepts:
-    /// m_pendingFocusEmitByScreen and m_burstPendingApplies.
+    /// m_pendingFocusEmitContexts and m_burstPendingApplies.
     ///
     /// Both are consumed by comparing the stored context against the current
     /// one, so an entry outliving its context is not inert — KWin hands a
@@ -1334,7 +1334,7 @@ private:
     /// and the sticky-pin release in updateStickyScreenPins.
     ///
     /// There is a FIFTH producer that is deliberately NOT announce-paired:
-    /// applyLayout promotes an m_pendingFocusEmitByScreen entry into this set
+    /// applyLayout promotes an m_pendingFocusEmitContexts entry into this set
     /// once the context that armed it is the one on screen. Nothing retired
     /// there — the arm exists because a background focus report moved the
     /// strip's focus and anchor with only placementChanged emitted, so the
@@ -1372,7 +1372,15 @@ private:
     /// return retile consumed the switch's arm on the old focus, or ran
     /// before the focus report existed, and nothing forced a later emit when
     /// every rect matched the stored baseline).
-    QHash<QString, PhosphorEngine::PlacementStateKey> m_pendingFocusEmitByScreen;
+    /// Keyed by the whole CONTEXT rather than by screen. One slot per screen
+    /// would be enough for the single-switch case, but two background reports
+    /// for two different off-current contexts of the same screen do happen
+    /// (activating windows on two parked desktops before returning to either),
+    /// and the second would overwrite the first — leaving the first context's
+    /// return with no forced repair, which is the exact failure this member
+    /// exists to prevent. A set of contexts arms each independently, and each
+    /// is consumed by the pass that runs with that context current.
+    QSet<PhosphorEngine::PlacementStateKey> m_pendingFocusEmitContexts;
     /// Last strip epoch announced per screen, so stripContextChanged is
     /// emit-on-change rather than a re-announcement on every set push.
     ///

@@ -1221,7 +1221,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // naming such a phantom would otherwise arm a forced full-place batch
         // for a context that never held it.
         if (key != currentKeyForScreen(key.screenId) && state->containsWindow(windowId)) {
-            m_pendingFocusEmitByScreen.insert(key.screenId, key);
+            m_pendingFocusEmitContexts.insert(key);
         }
         return;
     }
@@ -1254,7 +1254,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // emit only when it runs with this context current, so the centering
         // from this activation survives whatever ordering the desktop switch
         // and the focus report arrive in.
-        m_pendingFocusEmitByScreen.insert(key.screenId, key);
+        m_pendingFocusEmitContexts.insert(key);
     }
     // Focus and view anchor are persisted (serializeStripState), and
     // placementChanged is the only thing that marks DirtyScrollStrips.

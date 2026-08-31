@@ -369,7 +369,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                 // lost with it: the loop at the end of this function arms
                 // m_forceEmitScreens for every screen whose announce fires, and
                 // a migration that moved the key is exactly that case.
-                m_pendingFocusEmitByScreen.remove(screenId);
+                m_pendingFocusEmitContexts.remove(oldKey);
                 // A live preview's captured keys are plain copies that
                 // rekeyWindows cannot rewrite — migrating under it would
                 // strand the preview on the dead key and commit would then
@@ -629,8 +629,8 @@ void ScrollEngine::pruneContextKeyedScreenArms(
 {
     // Value-keyed, not key-keyed: the screen is still live and still scrolling,
     // it is the CONTEXT the entry names that has gone.
-    for (auto it = m_pendingFocusEmitByScreen.begin(); it != m_pendingFocusEmitByScreen.end();) {
-        it = contextDied(it.value()) ? m_pendingFocusEmitByScreen.erase(it) : std::next(it);
+    for (auto it = m_pendingFocusEmitContexts.begin(); it != m_pendingFocusEmitContexts.end();) {
+        it = contextDied(*it) ? m_pendingFocusEmitContexts.erase(it) : std::next(it);
     }
     // This one is context-keyed outright.
     for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
@@ -838,8 +838,8 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (auto it = m_forceEmitScreens.begin(); it != m_forceEmitScreens.end();) {
         it = matches(*it) ? m_forceEmitScreens.erase(it) : std::next(it);
     }
-    for (auto it = m_pendingFocusEmitByScreen.begin(); it != m_pendingFocusEmitByScreen.end();) {
-        it = matches(it.key()) ? m_pendingFocusEmitByScreen.erase(it) : std::next(it);
+    for (auto it = m_pendingFocusEmitContexts.begin(); it != m_pendingFocusEmitContexts.end();) {
+        it = matches(it->screenId) ? m_pendingFocusEmitContexts.erase(it) : std::next(it);
     }
     m_context.removeScreensIf(matches);
     // Drop the dead output from the active set and the deferred-apply queue
