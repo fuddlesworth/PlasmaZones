@@ -3719,27 +3719,27 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="86"/>
         <source>Text only</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="86"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="87"/>
         <source>Visual preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="90"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="91"/>
         <source>Full zone highlight</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="91"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="92"/>
         <source>Compact preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="100"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="101"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="677"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="682"/>
@@ -3747,7 +3747,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="101"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="438"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
@@ -3756,7 +3756,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="103"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="677"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="682"/>
@@ -3764,7 +3764,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="103"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="432"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
@@ -3775,7 +3775,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="662"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="667"/>
@@ -3783,7 +3783,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="105"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="435"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="53"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
@@ -3795,7 +3795,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="106"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="107"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="677"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="682"/>
@@ -3803,7 +3803,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="107"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="441"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
@@ -3812,7 +3812,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="108"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="44"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="677"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="682"/>
@@ -3820,7 +3820,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="120"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="121"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="676"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="681"/>
@@ -3830,7 +3830,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="121"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="122"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="651"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="656"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="661"/>
@@ -3839,41 +3839,41 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="122"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="671"/>
         <source>Vertical</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="144"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="145"/>
         <source>Meta + Shift</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="145"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="146"/>
         <source>Ctrl + Meta</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="195"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="487"/>
         <source>Match the screen shape</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Side to side</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Top to bottom</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="201"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="202"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="169"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="176"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="145"/>
@@ -3882,7 +3882,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="114"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="293"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="403"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
@@ -3890,142 +3890,142 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>None</source>
         <comment>@item:inlistbox OSD style, show no OSD at all</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="116"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="293"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="407"/>
         <source>Manual</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="134"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="38"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="32"/>
         <source>Shift</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="135"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="42"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="36"/>
         <source>Ctrl</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="136"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="46"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="40"/>
         <source>Alt</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="137"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="138"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="50"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="44"/>
         <source>Meta</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="138"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="139"/>
         <source>Ctrl + Alt</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="139"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="140"/>
         <source>Ctrl + Shift</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="140"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="141"/>
         <source>Alt + Shift</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="141"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="142"/>
         <source>Always active</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="142"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="143"/>
         <source>Alt + Meta</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="143"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="144"/>
         <source>Ctrl + Alt + Meta</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="154"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="155"/>
         <source>Treat as normal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="155"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="476"/>
         <source>Restore only</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="156"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="157"/>
         <source>Ignore all</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="166"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="167"/>
         <source>After existing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="167"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="168"/>
         <source>After focused</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="168"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="169"/>
         <source>As main window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="172"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="397"/>
         <source>Float on drag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="173"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="174"/>
         <source>Reorder on drag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="177"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="178"/>
         <source>Float excess</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="178"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="179"/>
         <source>Unlimited</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="189"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="405"/>
         <source>Never</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="190"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
         <source>Always</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="191"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="192"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
         <source>On overflow</source>
         <translation type="unfinished"></translation>
@@ -4037,7 +4037,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="202"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="203"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="678"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="70"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="197"/>
@@ -4046,13 +4046,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="203"/>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="211"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="204"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="212"/>
         <source>Window decides</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="204"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="205"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="680"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="72"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
@@ -4061,100 +4061,100 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="209"/>
         <source>Share the column evenly</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="209"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="210"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="691"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="295"/>
         <source>Fixed height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="210"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="211"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="215"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
         <source>Right of the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Left of the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
         <source>Start of the strip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
         <source>End of the strip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="219"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="220"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
         <source>Into the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="223"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="416"/>
         <source>Normal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="224"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="225"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="419"/>
         <source>Tabbed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="228"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
         <source>Titled chips</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="229"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="230"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Segment bar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="233"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="234"/>
         <source>Left of the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="234"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="235"/>
         <source>Right of the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="235"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="236"/>
         <source>Above the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="236"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="237"/>
         <source>Below the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="510"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="511"/>
         <source>%1 %2</source>
         <comment>a number followed by its unit</comment>
         <translation type="unfinished"></translation>
@@ -4275,7 +4275,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="495"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="496"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
@@ -4298,7 +4298,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="133"/>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="134"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="305"/>
         <source>Disabled</source>
         <translation type="unfinished"></translation>
