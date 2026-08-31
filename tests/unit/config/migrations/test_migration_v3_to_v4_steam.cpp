@@ -87,7 +87,7 @@ private Q_SLOTS:
         QJsonObject steam;
         for (const QJsonValue& v : rules) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam notifications")) {
+            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam notifications and dialogs")) {
                 steam = r;
             }
         }
@@ -115,7 +115,8 @@ private Q_SLOTS:
         // Match shape:
         //   All{ WindowClass endsWith "steam",
         //        Any{ Title contains "notificationtoasts",
-        //             WindowClass contains "notificationtoasts" } }
+        //             WindowClass contains "notificationtoasts",
+        //             IsResizable equals false } }
         const QJsonObject match = steam.value(QStringLiteral("match")).toObject();
         QVERIFY(match.contains(QStringLiteral("all")));
         const QJsonArray all = match.value(QStringLiteral("all")).toArray();
@@ -129,30 +130,46 @@ private Q_SLOTS:
         QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("endsWith")),
                  QStringLiteral("steam"));
 
-        // The toast-name half is an Any{} over the same token on two fields,
-        // because which field carries `notificationtoasts_<N>_desktop` is not
-        // established (classically the WM_CLASS resourceName half; the retired
-        // rule was written as though it were the caption). Pin both arms so a
-        // future edit cannot quietly drop the one that turns out to be load-
-        // bearing.
+        // The guarded half is an Any{} with three arms. Two carry the same
+        // toast token on different fields, because which field carries
+        // `notificationtoasts_<N>_desktop` is not established (classically the
+        // WM_CLASS resourceName half; the retired rule was written as though it
+        // were the caption). The third is the fixed-size arm, which is the only
+        // thing that names Steam's game-launch dialog — that window is
+        // property-for-property identical to the main client apart from its
+        // caption. Pin all three so a future edit cannot quietly drop the one
+        // that turns out to be load-bearing.
         QJsonObject anyGroup;
         for (const QJsonValue& v : all) {
             if (v.toObject().contains(QStringLiteral("any"))) {
                 anyGroup = v.toObject();
             }
         }
-        QVERIFY2(!anyGroup.isEmpty(), "the toast-name half must be an Any{} over title and class");
+        QVERIFY2(!anyGroup.isEmpty(), "the guarded half must be an Any{} group");
         const QJsonArray anyChildren = anyGroup.value(QStringLiteral("any")).toArray();
-        QCOMPARE(anyChildren.size(), 2);
-        QStringList anyFields;
+        QCOMPARE(anyChildren.size(), 3);
+        QStringList toastFields;
+        int fixedSizeArms = 0;
         for (const QJsonValue& v : anyChildren) {
             const QJsonObject leaf = v.toObject();
+            if (leaf.value(QStringLiteral("field")).toString() == QLatin1String("isResizable")) {
+                // Equals, and equals FALSE. `Equals true` would guard every
+                // ordinary Steam window and unmanage the whole client, which
+                // is the exact failure the retired shape had.
+                QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
+                QCOMPARE(leaf.value(QStringLiteral("value")).toBool(), false);
+                QVERIFY2(leaf.value(QStringLiteral("value")).isBool(),
+                         "the fixed-size arm must serialise as a JSON bool, not a string");
+                ++fixedSizeArms;
+                continue;
+            }
             QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("contains"));
             QCOMPARE(leaf.value(QStringLiteral("value")).toString(), QStringLiteral("notificationtoasts"));
-            anyFields.append(leaf.value(QStringLiteral("field")).toString());
+            toastFields.append(leaf.value(QStringLiteral("field")).toString());
         }
-        anyFields.sort();
-        QCOMPARE(anyFields, (QStringList{QStringLiteral("title"), QStringLiteral("windowClass")}));
+        QCOMPARE(fixedSizeArms, 1);
+        toastFields.sort();
+        QCOMPARE(toastFields, (QStringList{QStringLiteral("title"), QStringLiteral("windowClass")}));
 
         // No None{} guard any more: the rule names the windows it guards
         // rather than excluding everything that is not the library window.
@@ -221,6 +238,47 @@ private Q_SLOTS:
         // Steam's other ordinary windows place like anything else.
         QVERIFY2(!matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("Friends List")),
                  "the Friends List must place normally");
+
+        // ── The fixed-size arm ────────────────────────────────────────────
+        // Steam's game-launch dialog. Same class and same pid as the main
+        // client, Normal window type, no window role — the ONLY property that
+        // separates it is WM_NORMAL_HINTS min == max, which KWin reports as
+        // isResizable() == false. Probed from a live session as a 476x430
+        // fixed-size "steamwebhelper steam" top-level.
+        const auto matchesSized = [&match](const QString& windowClass, const QString& title, bool resizable) {
+            PhosphorRules::WindowQuery q;
+            q.windowClass = windowClass;
+            q.title = title;
+            q.isResizable = resizable;
+            return match.evaluate(q);
+        };
+
+        QVERIFY2(matchesSized(QStringLiteral("steamwebhelper steam"), QStringLiteral("Tokyo Xtreme Racer"), false),
+                 "Steam's fixed-size launch dialog must be kept out of placement");
+
+        // The same window when resizable is the ordinary library window, and
+        // it must place. This is the row that falsifies the arm's POLARITY:
+        // flip the leaf to `Equals true` and the whole Steam client goes
+        // unmanaged, which is the retired shape's bug wearing a new field.
+        QVERIFY2(!matchesSized(QStringLiteral("steamwebhelper steam"), QStringLiteral("Steam"), true),
+                 "an ordinary resizable Steam window must place normally");
+
+        // The row that keeps the arm from becoming the retired bug again. A
+        // GAME is very often fixed-size (windowed mode at a locked
+        // resolution), so the fixed-size arm on its own would unmanage it. The
+        // outer `WindowClass EndsWith "steam"` guard is what holds here, and
+        // dropping it turns this green test red.
+        QVERIFY2(!matchesSized(QStringLiteral("steam_app_2634950 steam_app_2634950"),
+                               QStringLiteral("TokyoXtremeRacer  "), false),
+                 "a fixed-size Steam-LAUNCHED GAME must still place normally");
+
+        // A disengaged isResizable (the daemon path, which never stamps the
+        // field) leaves the arm inert rather than matching. `matches` above
+        // already leaves it unset, so this pins the contract explicitly.
+        PhosphorRules::WindowQuery unstamped;
+        unstamped.windowClass = QStringLiteral("steamwebhelper steam");
+        unstamped.title = QStringLiteral("Steam");
+        QVERIFY2(!match.evaluate(unstamped), "an unstamped isResizable must fail the positive leaf, not match it");
 
         // The toast token on the CLASS side is guarded too. Which field
         // carries `notificationtoasts_<N>_desktop` is not established, so the
@@ -298,7 +356,7 @@ private Q_SLOTS:
         // rule in the Advanced band where a real pre-narrowing config has it.
         QCOMPARE(repairedRule->priority, 517);
         // The name is re-stamped, so the row says what it now guards.
-        QCOMPARE(repairedRule->name, QStringLiteral("Steam notifications"));
+        QCOMPARE(repairedRule->name, QStringLiteral("Steam notifications and dialogs"));
 
         const PhosphorRules::MatchExpression& match =
             PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*repairedSet).rules().first().match;
@@ -331,6 +389,97 @@ private Q_SLOTS:
         const QByteArray afterSecondRun = again.readAll();
         again.close();
         QCOMPARE(afterSecondRun, afterRepair);
+    }
+
+    /// The SECOND reclaimed generation. A config converted after the
+    /// `Contains "steam"` narrowing but before the fixed-size arm carries the
+    /// toasts-only shape, which `isRetiredSteamRuleShape` must also recognise
+    /// — otherwise every existing 3.4.x user keeps a rule that lets Steam's
+    /// game-launch dialog place as though it were an ordinary window, forever,
+    /// because the seeder only ever runs on the rebuild path.
+    void testSteamRuleToastsOnlyShapeIsUpgradedToTheFixedSizeArm()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(convertBareV3Config());
+
+        const QString rulesPath = ConfigDefaults::rulesFilePath();
+        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(setOpt.has_value());
+        PhosphorRules::RuleSet stale = *setOpt;
+        const auto seeded = seededSteamRule(stale);
+        QVERIFY(seeded.has_value());
+        const QUuid steamId = seeded->id;
+
+        // The gen-2 shape verbatim: toasts only, no fixed-size arm, already on
+        // the scoped action. Carries the gen-2 NAME too, so the re-stamp is
+        // observable.
+        PhosphorRules::Rule gen2 = *seeded;
+        gen2.name = QStringLiteral("Steam notifications");
+        gen2.priority = 542;
+        gen2.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
+                                                      PhosphorRules::Operator::EndsWith, QStringLiteral("steam")),
+             PhosphorRules::MatchExpression::makeAny(
+                 {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Title,
+                                                           PhosphorRules::Operator::Contains,
+                                                           QStringLiteral("notificationtoasts")),
+                  PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
+                                                           PhosphorRules::Operator::Contains,
+                                                           QStringLiteral("notificationtoasts"))})});
+        gen2.actions.clear();
+        PhosphorRules::RuleAction scoped;
+        scoped.type = QString(PhosphorRules::ActionType::ExcludePlacement);
+        gen2.actions.append(scoped);
+        QVERIFY(stale.updateRule(gen2));
+        QVERIFY(stale.saveToFile(rulesPath));
+
+        // Sanity: the fixture really is missing the arm before the repair, so
+        // the assertion below is not vacuous.
+        PhosphorRules::WindowQuery dialog;
+        dialog.windowClass = QStringLiteral("steamwebhelper steam");
+        dialog.title = QStringLiteral("Tokyo Xtreme Racer");
+        dialog.isResizable = false;
+        QVERIFY2(!gen2.match.evaluate(dialog), "the gen-2 fixture must NOT already guard the launch dialog");
+
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const auto after = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(after.has_value());
+        const auto upgraded = after->ruleById(steamId);
+        QVERIFY2(upgraded.has_value(), "the upgrade must rewrite the rule in place, not re-id it");
+
+        QVERIFY2(upgraded->match.evaluate(dialog), "the upgraded rule must guard Steam's fixed-size launch dialog");
+
+        // The toast guard is not lost in the process.
+        PhosphorRules::WindowQuery toast;
+        toast.windowClass = QStringLiteral("steamwebhelper steam");
+        toast.title = QStringLiteral("notificationtoasts_20993166_desktop");
+        QVERIFY2(upgraded->match.evaluate(toast), "the upgraded rule must still guard a toast");
+
+        // A Steam-launched game is still left alone, fixed-size or not.
+        PhosphorRules::WindowQuery game;
+        game.windowClass = QStringLiteral("steam_app_2634950 steam_app_2634950");
+        game.title = QStringLiteral("TokyoXtremeRacer  ");
+        game.isResizable = false;
+        QVERIFY2(!upgraded->match.evaluate(game), "a fixed-size game must still place normally after the upgrade");
+
+        // User-owned fields ride across exactly as they do for gen 1.
+        QCOMPARE(upgraded->priority, 542);
+        QCOMPARE(upgraded->name, QStringLiteral("Steam notifications and dialogs"));
+
+        // Idempotent on the bytes, like the gen-1 repair.
+        QFile firstPass(rulesPath);
+        QVERIFY(firstPass.open(QIODevice::ReadOnly));
+        const QByteArray afterUpgrade = firstPass.readAll();
+        firstPass.close();
+
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QFile secondPass(rulesPath);
+        QVERIFY(secondPass.open(QIODevice::ReadOnly));
+        QCOMPARE(secondPass.readAll(), afterUpgrade);
     }
 
     /// The repair carries the user's enabled flag and priority across. A user

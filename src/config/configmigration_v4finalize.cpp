@@ -1054,12 +1054,16 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
     // against KWin's `"resourceName resourceClass"` pair, and a Steam-launched
     // game reports its own app id in both halves ("steam_app_2342813033
     // steam_app_2342813033"), so every game matched — and the blanket
-    // `Exclude` action then stripped it from placement AND decorations. See
-    // `applySteamDefaultRuleShape` for the corrected shape.
+    // `Exclude` action then stripped it from placement AND decorations. The
+    // narrowing that replaced it then went one step too far the other way: it
+    // named the toasts and nothing else, so Steam's fixed-size game-launch
+    // dialog placed as though it were an ordinary window. See
+    // `applySteamDefaultRuleShape` for the current shape and
+    // `isRetiredSteamRuleShape` for both reclaimed generations.
     //
     // Rewritten in place rather than dropped and re-seeded: the seeder only
     // runs on the rebuild path, so a config that is already converted would
-    // otherwise keep the broken rule forever. Idempotent — once repaired,
+    // otherwise keep the stale rule forever. Idempotent — once repaired,
     // `isRetiredSteamRuleShape` stops recognising it and the re-run is a
     // no-op.
     bool failed = false;
