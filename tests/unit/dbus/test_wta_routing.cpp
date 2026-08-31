@@ -10,6 +10,9 @@
  */
 
 #include "wta_convenience_fixture.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "helpers/AutotileTestHelpers.h"
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 #include <QScopeGuard>
 
@@ -1093,6 +1096,93 @@ private Q_SLOTS:
                                             /*minHeight=*/0, x, y, width, height, shouldSnap);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(1).toInt(), 2);
+    }
+
+    void testTilingChannel_sendsTheWindowBackAndDispatchesNoFurther()
+    {
+        // The TILING production arm, the counterpart to the two snap-arm cases
+        // above. This channel serves the autotile AND scrolling engines, so
+        // without it the restore was untested for two of the three modes.
+        //
+        // Dispatching no further is the load-bearing half: the engines insert
+        // into the screen's CURRENT desktop context, so placing the window now
+        // would tile it into the wrong desktop's state and strand it off-screen.
+        // The effect re-announces it on arrival, when the two contexts agree.
+        //
+        // A null ScreenManager keeps the panel gate out of the picture — that
+        // gate has its own test — so this case is about the restore arm alone.
+        // A pipeline engine is required: windowOpened bails at ensurePipeline
+        // before it ever reaches the restore arm.
+        PhosphorTileEngine::AutotileEngine engine(nullptr, nullptr, nullptr, TestHelpers::testRegistry());
+        QObject adaptorParent;
+        TilingAdaptor tiling(nullptr, &adaptorParent);
+        tiling.setLifecycleEngines({&engine});
+        tiling.setWindowTrackingAdaptor(m_wta);
+
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        tiling.windowOpened(QStringLiteral("deskapp|newinst"), m_screenId, 0, 0);
+
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(0).toString(), QStringLiteral("deskapp|newinst"));
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+
+        // The record is left for the engine restore that runs on arrival, and
+        // the window is not parked as an unclaimed open — a park would
+        // resurrect it on the next screens announce, before it has reached its
+        // desktop.
+        const auto still =
+            m_wta->service()->placementStore().peek(QStringLiteral("deskapp|newinst"), QStringLiteral("deskapp"));
+        QVERIFY2(still.has_value(), "the desktop move must not consume the placement record");
+        QCOMPARE(still->virtualDesktop, 2);
+        QCOMPARE(tiling.pendingUnclaimedOpensCount(), 0);
+    }
+
+    void testTilingChannel_aScreenRuleDoesNotSuppressTheDesktopRestore()
+    {
+        // A bare RouteToScreen rule sets the channel's `ruleRouted` flag, which
+        // the restore used to be gated on. A rule that pins a window to a
+        // MONITOR says nothing about which virtual desktop it belongs on, so
+        // gating there silently disabled the remembered desktop on tiling
+        // screens while leaving it working on snapping ones.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("newinst"), QStringLiteral("deskapp"), QString(), QString(), QString(),
+                                 0, 1, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
+        RuleAction screenAction;
+        screenAction.type = QString(ActionType::RouteToScreen);
+        screenAction.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-9"));
+        rule.actions = {screenAction};
+
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+
+        PhosphorTileEngine::AutotileEngine engine(nullptr, nullptr, nullptr, TestHelpers::testRegistry());
+        QObject adaptorParent;
+        TilingAdaptor tiling(nullptr, &adaptorParent);
+        tiling.setLifecycleEngines({&engine});
+        tiling.setWindowTrackingAdaptor(m_wta);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        tiling.windowOpened(QStringLiteral("deskapp|newinst"), m_screenId, 0, 0);
+
+        QVERIFY2(desktopSpy.count() >= 1, "a screen rule must not suppress the remembered desktop");
+        QCOMPARE(desktopSpy.at(desktopSpy.count() - 1).at(1).toInt(), 2);
     }
 
     void testPersistedDesktopRestore_leavesStickyAndUnknownWindowsAlone()
