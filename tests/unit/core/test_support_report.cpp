@@ -184,6 +184,17 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("**Scrolling active screens:** LG Display:eDP-1")));
     }
 
+    void testGenerate_placementModes_routerWithoutScreens()
+    {
+        // Router present but no screens collected: the section must not claim
+        // the daemon is down.
+        SupportReport::Snapshot snap;
+        snap.hasModeRouter = true;
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+        QVERIFY(report.contains(QStringLiteral("nothing to resolve a mode for")));
+        QVERIFY(!report.contains(QStringLiteral("per-screen mode resolution unavailable")));
+    }
+
     void testGenerate_containsTimestamp()
     {
         const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);

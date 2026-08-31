@@ -28,8 +28,8 @@ class ScreenModeRouter;
 /**
  * @brief Generates a redacted support report for bug reports and discussions
  *
- * Collects config, screen topology, autotile state, layout info, and recent
- * journal logs into a Markdown-formatted report suitable for pasting into
+ * Collects config, screen topology, placement-mode state, layout info, and
+ * recent journal logs into a Markdown-formatted report suitable for pasting into
  * GitHub Discussions or Issues.
  *
  * Privacy:
@@ -131,6 +131,8 @@ public:
      * @param layoutManager PhosphorZones::LayoutRegistry instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
      * @param sinceMinutes How many minutes of journal logs to include (default 30, capped at 120)
+     * @param scrollEngine ScrollEngine instance (nullable)
+     * @param modeRouter ScreenModeRouter for the per-screen resolved mode (nullable)
      * @return Markdown-formatted support report
      */
     static QString generate(PhosphorScreens::ScreenManager* screenManager, PhosphorZones::LayoutRegistry* layoutManager,

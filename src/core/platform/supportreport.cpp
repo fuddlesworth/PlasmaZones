@@ -9,6 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "config/configdefaults.h"
+#include "config/configkeys.h"
 #include "core/resolve/screenmoderouter.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -296,6 +297,8 @@ QString SupportReport::sectionPlacementModes(const Snapshot& snapshot)
         for (const auto& mode : snapshot.screenModes)
             out += QStringLiteral("- **%1**: %2\n").arg(mode.screenId, mode.mode);
         out += QLatin1Char('\n');
+    } else if (snapshot.hasModeRouter) {
+        out += QStringLiteral("*(no screens detected — nothing to resolve a mode for)*\n\n");
     } else {
         out += QStringLiteral("*(daemon not running — per-screen mode resolution unavailable)*\n\n");
     }
@@ -400,15 +403,15 @@ QString SupportReport::sectionSession()
             + readAndRedactFile(path, QStringLiteral("session file"));
     }
 
-    const QJsonObject tracking = doc.object().value(QLatin1String("WindowTracking")).toObject();
-    const QJsonObject placements = tracking.value(QLatin1String("WindowPlacements")).toObject();
+    const QJsonObject tracking = doc.object().value(ConfigKeys::windowTrackingGroup()).toObject();
+    const QJsonObject placements = tracking.value(ConfigKeys::windowPlacementsKey()).toObject();
 
     QString out;
-    out += QStringLiteral("**Active layout:** %1\n").arg(tracking.value(QLatin1String("ActiveLayoutId")).toString());
-    const QString lastZone = tracking.value(QLatin1String("LastUsedZoneId")).toString();
+    out += QStringLiteral("**Active layout:** %1\n").arg(tracking.value(ConfigKeys::activeLayoutIdKey()).toString());
+    const QString lastZone = tracking.value(ConfigKeys::lastUsedZoneIdKey()).toString();
     out += QStringLiteral("**Last used zone:** %1\n").arg(lastZone.isEmpty() ? QStringLiteral("(none)") : lastZone);
     out += QStringLiteral("**User-snapped classes:** %1\n")
-               .arg(tracking.value(QLatin1String("UserSnappedClasses")).toArray().size());
+               .arg(tracking.value(ConfigKeys::userSnappedClassesKey()).toArray().size());
 
     int total = 0;
     QVector<QJsonObject> entries;
