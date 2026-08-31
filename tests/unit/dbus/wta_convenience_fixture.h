@@ -7,8 +7,10 @@
  * @file wta_convenience_fixture.h
  * @brief Shared fixture for the WindowTrackingAdaptor convenience-surface
  *        tests, split across test_wta_convenience.cpp (window-state and
- *        float-restore surface) and test_wta_routing.cpp (open routing and
- *        cross-mode handoff) to stay under the file-size ceiling. Plain
+ *        float-restore surface), test_wta_routing.cpp (open routing and
+ *        cross-mode handoff), test_wta_screen_changed.cpp (the screen-report
+ *        keep/unsnap arm) and test_compositor_bridge.cpp to stay under the
+ *        file-size ceiling. Plain
  *        (non-QObject) base so each test class keeps QObject first; the
  *        derived class forwards its init()/cleanup() slots here.
  */
