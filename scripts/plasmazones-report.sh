@@ -149,6 +149,19 @@ trap 'rm -rf "$STAGING"' EXIT
 # Use printf to avoid heredoc delimiter collision if the report contains the delimiter.
 printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
+# The daemon cannot know what this script packs around its report, so the
+# archive listing is appended here (outside the <details> block so it stays
+# visible when the report is pasted collapsed).
+cat >> "$STAGING/report.md" <<'EOF'
+
+## Archive Contents
+This report ships in an archive with the raw files behind the summaries above:
+- `config.json`, `session.json` (full window session state), `rules.json` and the remaining config-dir files (quick layouts, layout settings, settings profiles)
+- `data/` with user layouts, algorithms, shaders and animation profiles
+- `journal.log` and `kwin-effect.log` with the raw journal lines
+- `kglobalaccel.txt` with the effective shortcut bindings and `kwin-effects.txt` with the enabled/loaded KWin effects
+EOF
+
 # 2. Config directory (redact home paths in text files)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
 # Guard against empty or root HOME (e.g., running from a systemd service without User=,

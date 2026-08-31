@@ -23,11 +23,13 @@ class IPlacementEngine;
 
 namespace PlasmaZones {
 
+class ScreenModeRouter;
+
 /**
  * @brief Generates a redacted support report for bug reports and discussions
  *
- * Collects config, screen topology, autotile state, layout info, and recent
- * journal logs into a Markdown-formatted report suitable for pasting into
+ * Collects config, screen topology, placement-mode state, layout info, and
+ * recent journal logs into a Markdown-formatted report suitable for pasting into
  * GitHub Discussions or Issues.
  *
  * Privacy:
@@ -48,6 +50,9 @@ public:
         struct ScreenInfo
         {
             QString name;
+            /// Stable placement id ("Manuf:Model:Serial" form) used by the
+            /// engines and rules; falls back to the connector name.
+            QString id;
             QRect geometry;
             QRect available;
             qreal refreshRate = 0;
@@ -71,6 +76,20 @@ public:
         QStringList autotileScreens;
         bool hasAutotileEngine = false;
 
+        bool scrollingEnabled = false;
+        QStringList scrollingScreens;
+        bool hasScrollEngine = false;
+
+        /// Resolved placement mode per screen (ScreenModeRouter::modeFor),
+        /// keyed by the same stable id the engines use.
+        struct ScreenMode
+        {
+            QString screenId;
+            QString mode;
+        };
+        QVector<ScreenMode> screenModes;
+        bool hasModeRouter = false;
+
         // Compositor bridge (KWin effect) state. The bridge adaptor lives in
         // the dbus layer, which core/ must not depend on, so these fields are
         // populated by ControlAdaptor after collectSnapshot() returns rather
@@ -87,7 +106,9 @@ public:
      */
     static Snapshot collectSnapshot(PhosphorScreens::ScreenManager* screenManager,
                                     PhosphorZones::LayoutRegistry* layoutManager,
-                                    PhosphorEngine::IPlacementEngine* autotileEngine);
+                                    PhosphorEngine::IPlacementEngine* autotileEngine,
+                                    PhosphorEngine::IPlacementEngine* scrollEngine = nullptr,
+                                    const ScreenModeRouter* modeRouter = nullptr);
 
     /**
      * @brief Generate a report from a pre-collected snapshot (thread-safe)
@@ -110,10 +131,14 @@ public:
      * @param layoutManager PhosphorZones::LayoutRegistry instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
      * @param sinceMinutes How many minutes of journal logs to include (default 30, capped at 120)
+     * @param scrollEngine ScrollEngine instance (nullable)
+     * @param modeRouter ScreenModeRouter for the per-screen resolved mode (nullable)
      * @return Markdown-formatted support report
      */
     static QString generate(PhosphorScreens::ScreenManager* screenManager, PhosphorZones::LayoutRegistry* layoutManager,
-                            PhosphorEngine::IPlacementEngine* autotileEngine, int sinceMinutes = 30);
+                            PhosphorEngine::IPlacementEngine* autotileEngine, int sinceMinutes = 30,
+                            PhosphorEngine::IPlacementEngine* scrollEngine = nullptr,
+                            const ScreenModeRouter* modeRouter = nullptr);
 
     /**
      * @brief Redact home directory paths from a string
@@ -141,11 +166,11 @@ private:
     static QString sectionConfig();
     static QString sectionRules();
     static QString sectionLayouts(const Snapshot& snapshot);
-    static QString sectionAutotile(const Snapshot& snapshot);
+    static QString sectionPlacementModes(const Snapshot& snapshot);
     static QString sectionCompositorBridge(const Snapshot& snapshot);
     static QString sectionSession();
     static QString sectionLogs(int sinceMinutes);
-    static QString sectionEffectLogs(int sinceMinutes);
+    static QString sectionEffectLogs(int sinceMinutes, bool bridgeRegistered);
 };
 
 } // namespace PlasmaZones

@@ -23,6 +23,7 @@ class WindowTrackingAdaptor;
 class SnapAdaptor;
 class LayoutAdaptor;
 class CompositorBridgeAdaptor;
+class ScreenModeRouter;
 
 // PhosphorScreens::ScreenManager moved to libs/phosphor-screens (PhosphorScreens::ScreenManager).
 } // namespace PlasmaZones
@@ -53,7 +54,8 @@ public:
                             PhosphorZones::LayoutRegistry* layoutManager,
                             PhosphorEngine::IPlacementEngine* autotileEngine,
                             PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
-                            QObject* parent = nullptr);
+                            PhosphorEngine::IPlacementEngine* scrollEngine = nullptr,
+                            const ScreenModeRouter* modeRouter = nullptr, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
 
     /// Null every borrowed pointer. Called from Daemon::stop() before the
@@ -135,6 +137,8 @@ private:
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
     PhosphorScreens::ScreenManager* m_screenManager;
     CompositorBridgeAdaptor* m_compositorBridge;
+    PhosphorEngine::IPlacementEngine* m_scrollEngine;
+    const ScreenModeRouter* m_modeRouter;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;
 };
 

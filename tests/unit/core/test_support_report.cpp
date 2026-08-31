@@ -80,7 +80,7 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("## Screens")));
         QVERIFY(report.contains(QStringLiteral("## Config")));
         QVERIFY(report.contains(QStringLiteral("## Layouts")));
-        QVERIFY(report.contains(QStringLiteral("## Autotile")));
+        QVERIFY(report.contains(QStringLiteral("## Placement Modes")));
         QVERIFY(report.contains(QStringLiteral("## Compositor Bridge")));
         QVERIFY(report.contains(QStringLiteral("## Session State")));
         QVERIFY(report.contains(QStringLiteral("## Recent Logs")));
@@ -163,6 +163,42 @@ private Q_SLOTS:
     {
         const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
         QVERIFY(report.contains(QStringLiteral("autotile engine not available")));
+        QVERIFY(report.contains(QStringLiteral("scrolling engine not available")));
+        QVERIFY(report.contains(QStringLiteral("per-screen mode resolution unavailable")));
+    }
+
+    void testGenerate_placementModes_fromSnapshot()
+    {
+        SupportReport::Snapshot snap;
+        snap.hasModeRouter = true;
+        snap.screenModes.append({QStringLiteral("LG Display:eDP-1"), QStringLiteral("scrolling")});
+        snap.hasAutotileEngine = true;
+        snap.autotileEnabled = false;
+        snap.hasScrollEngine = true;
+        snap.scrollingEnabled = true;
+        snap.scrollingScreens = {QStringLiteral("LG Display:eDP-1")};
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+        QVERIFY(report.contains(QStringLiteral("**LG Display:eDP-1**: scrolling")));
+        QVERIFY(report.contains(QStringLiteral("**Tiling engine enabled:** no")));
+        QVERIFY(report.contains(QStringLiteral("**Scrolling engine enabled:** yes")));
+        QVERIFY(report.contains(QStringLiteral("**Scrolling active screens:** LG Display:eDP-1")));
+    }
+
+    void testGenerate_placementModes_routerWithoutScreens()
+    {
+        // Router present but no screens collected: the section must not claim
+        // the daemon is down.
+        SupportReport::Snapshot snap;
+        snap.hasModeRouter = true;
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+        QVERIFY(report.contains(QStringLiteral("nothing to resolve a mode for")));
+        QVERIFY(!report.contains(QStringLiteral("per-screen mode resolution unavailable")));
+    }
+
+    void testGenerate_containsTimestamp()
+    {
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        QVERIFY(report.contains(QStringLiteral("**Generated:**")));
     }
 
     void testGenerate_containsVersionInfo()
