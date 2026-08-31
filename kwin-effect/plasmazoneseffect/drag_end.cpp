@@ -167,6 +167,18 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (!safeWindow || safeWindow->isDeleted()) {
                         break;
                     }
+                    // Same rescue as ApplySnap / RestoreSize, but END rather
+                    // than cancel: a float drop keeps the window where it was
+                    // dropped, and cancelInteractiveMoveResize would revert it
+                    // to the drag-start rect. Without this, a drop where only
+                    // a non-left button is still held leaves KWin's move live,
+                    // and the window then follows every desktop switch until
+                    // the last button comes up somewhere KWin's filter can see.
+                    if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
+                        if (KWin::Window* kw = safeWindow->window()) {
+                            kw->endInteractiveMoveResize();
+                        }
+                    }
                     // Only run the float transition (which restores the
                     // pre-autotile size) when the window was TILED at drag
                     // start. A window that was already floating is merely being

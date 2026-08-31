@@ -842,10 +842,18 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     // sequence can begin with one held) yet must NOT keep re-evaluating
     // hover, which could light new pills and re-take the interception
     // against the drag.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging() && m_scrollTabPressHeld) {
+    // Gated on the COMPOSITOR's move state as well as the tracker's: the
+    // tracker's shadow opens early on purpose (forceEnd on LMB release while
+    // KWin holds the move for other buttons) and never opens at all for a
+    // window shouldHandleWindow rejected — in both spans KWin's move filter
+    // is live and taking the interception here would strand it (the window
+    // then follows every desktop switch, reading as stuck on all desktops).
+    const bool dragLive = m_effect->m_dragTracker
+        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive());
+    if (dragLive && m_scrollTabPressHeld) {
         return;
     }
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+    if (dragLive) {
         // Clear the PAINTER's hover too, not just the model's: a pill lit
         // when a non-pointer drag begins (a keyboard Move, a touch-initiated
         // move — a pointer drag cannot start under a lit pill, the
@@ -1074,7 +1082,16 @@ void TilingHandler::setScrollTabHoverCursor(bool overPill)
 {
     // While a pill press is held the interception stays regardless of hover
     // (see noteScrollTabPress); the release path re-evaluates.
-    const bool hold = overPill || m_scrollTabPressHeld;
+    //
+    // Defence in depth for every caller (rebuildScrollTabIndicators re-enters
+    // hover asynchronously off the daemon's tab-strip relay): never TAKE the
+    // interception while KWin's interactive move/resize is live — the
+    // interception outranks KWin's move filter, so the ending button release
+    // would land here instead and strand the move. A held pill press keeps
+    // its latch (the press/release pairing invariant; a pointer drag cannot
+    // start under one anyway).
+    const bool compositorMoveLive = m_effect->m_dragTracker && m_effect->m_dragTracker->compositorMoveResizeActive();
+    const bool hold = (overPill && !compositorMoveLive) || m_scrollTabPressHeld;
     if (!KWin::effects) {
         // No compositor to talk to (teardown): record the intent so the latch
         // does not claim an interception that was never taken.

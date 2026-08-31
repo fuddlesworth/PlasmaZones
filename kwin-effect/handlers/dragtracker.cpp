@@ -19,6 +19,13 @@ DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
 
 void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
 {
+    // Stamp the compositor's own move/resize state BEFORE any tracking
+    // filter: resizes and shouldHandleWindow-rejected windows are never
+    // tracked below, but they still hold KWin's move filter, and
+    // compositorMoveResizeActive() must answer for exactly that span.
+    if (w) {
+        m_interactiveWindow = w;
+    }
     // Only track moves, not resizes
     if (!w || !w->isUserMove() || w->isUserResize()) {
         return;
@@ -44,6 +51,12 @@ void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
 
 void DragTracker::handleWindowFinishMoveResize(KWin::EffectWindow* w)
 {
+    // The compositor's move is over — this signal is KWin's truth, unlike
+    // forceEnd(), which fires on LMB release while KWin can still be
+    // holding the move for other buttons.
+    if (w && w == m_interactiveWindow) {
+        m_interactiveWindow = nullptr;
+    }
     // Not our window — either already ended by forceEnd(), or was a resize we didn't track
     if (w != m_draggedWindow) {
         return;
@@ -100,6 +113,11 @@ void DragTracker::finishDrag(bool cancelled)
 
 void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
 {
+    // A closed window cannot hold KWin's move filter, but its EffectWindow
+    // outlives the close (Deleted), so the QPointer would not auto-null.
+    if (window && window == m_interactiveWindow) {
+        m_interactiveWindow = nullptr;
+    }
     if (m_draggedWindow == window) {
         qCInfo(lcEffect) << "Drag: window closed, cancelled";
         // Don't call finishDrag() — it would pass the mid-destruction window pointer
@@ -120,6 +138,7 @@ void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
 /// forceEnd() for that.
 void DragTracker::reset()
 {
+    m_interactiveWindow = nullptr;
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
     m_lastCursorPos = QPointF();

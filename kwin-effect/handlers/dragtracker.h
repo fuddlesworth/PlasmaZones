@@ -40,6 +40,17 @@ public:
     {
         return m_draggedWindow != nullptr;
     }
+    // The COMPOSITOR's interactive move/resize state, not this tracker's
+    // shadow of it. The two diverge on purpose: forceEnd() clears the tracked
+    // drag on LMB release while KWin keeps its move alive until ALL buttons
+    // are up, and a window shouldHandleWindow() rejected is never tracked at
+    // all yet still holds KWin's move filter. Consumers that must not steal
+    // input from KWin's move filter (the scroll tab pill interception) gate
+    // on this, not on isDragging().
+    bool compositorMoveResizeActive() const
+    {
+        return m_interactiveWindow != nullptr;
+    }
     KWin::EffectWindow* draggedWindow() const
     {
         return m_draggedWindow;
@@ -88,6 +99,11 @@ private:
 
     PlasmaZonesEffect* m_effect;
     QPointer<KWin::EffectWindow> m_draggedWindow;
+    // KWin's live interactive move/resize window, stamped from the start
+    // signal before any tracking filter and cleared only by the finish
+    // signal (or window death, via QPointer). Backs
+    // compositorMoveResizeActive().
+    QPointer<KWin::EffectWindow> m_interactiveWindow;
     QString m_draggedWindowId;
     QPointF m_lastCursorPos;
 

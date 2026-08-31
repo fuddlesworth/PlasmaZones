@@ -735,6 +735,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             notifyWindowResized(window, m_resizeStartGeometry);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
+        // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
+        // is when compositorMoveResizeActive() clears), re-drive the pill
+        // hover: the dragStopped re-drive fires on LMB release and is
+        // suppressed while KWin still holds the move for other buttons, so a
+        // multi-button drop onto the pill band would otherwise stay unlit
+        // until the next pointer twitch.
+        if (m_tilingHandler && KWin::effects) {
+            m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+        }
         // A maximize claim taken during the gesture was never paid: the batch
         // arms insert membership and then skip the compositor call while the
         // user is dragging, and nothing re-drives them — this lambda replays
