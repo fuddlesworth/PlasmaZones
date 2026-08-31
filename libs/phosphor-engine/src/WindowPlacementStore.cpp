@@ -647,25 +647,34 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
     }
     // Per-open reclaim-credit burn — see the header contract. Hit or miss,
     // and AFTER any consumption/re-record above (the bucket may have been
-    // erased and re-created by it, so the helper re-finds it).
-    //
-    // Excused for a MOVE RETURN: the daemon's live-release funnel untracked
-    // this window in its engine, so this announce reaches us looking exactly
-    // like a first observation while actually being the second half of a
-    // user's move. Spending a session-restore credit on it takes the credit
-    // from a sibling that has not reopened yet. One-shot, so the window's
-    // later genuine opens still burn (markInstanceMovedLive).
-    if (m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0) {
-        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "move return for" << windowId
-                                  << "— reclaim-credit burn excused";
-    } else {
-        burnReclaimCredit(windowId, appId);
-    }
+    // erased and re-created by it, so the helper re-finds it). The move-return
+    // excuse lives inside the helper rather than here, so BOTH burn channels
+    // honour it — see markInstanceMovedLive.
+    burnReclaimCredit(windowId, appId);
     return rec;
 }
 
 bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QString& appId)
 {
+    // MOVE RETURN excuse, consumed here rather than at either call site
+    // because there are TWO per-open burn channels and both must honour it:
+    // takeForReopen for tiling-screen arrivals, and the snap adaptor's
+    // open-path resolve for snap-mode ones (see the header). The daemon's
+    // live-release funnel untracked this window in its engine, so the
+    // announce that follows reaches whichever channel it lands in looking
+    // exactly like a first observation while actually being the second half
+    // of a user's move; spending a session-restore credit on it takes the
+    // credit from a sibling that has not reopened yet. One-shot, so the
+    // window's later genuine opens still burn (markInstanceMovedLive).
+    //
+    // AHEAD of the appId guard below: the one-shot answers "was this announce
+    // a move return", which is true whether or not the window has a bucket to
+    // burn from, and leaving it armed past a bucket-less announce would hand
+    // the excuse to some later genuine open instead.
+    if (m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0) {
+        qCDebug(lcPlacementStore) << "burnReclaimCredit: move return for" << windowId << "— burn excused";
+        return false;
+    }
     if (appId.isEmpty()) {
         return false;
     }
@@ -713,8 +722,12 @@ bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool grac
     }
     // A window that closed is not coming back to spend its move excuse, and
     // the instance id is unique so the entry could never fire again — but the
-    // set must not accumulate corpses (the sibling one-shot in TilingAdaptor
-    // is reaped on the same events for the same reason).
+    // set must not accumulate corpses. This and clear() are the store's only
+    // reap points, and between them they cover both of the daemon's close
+    // funnels: the observed close and the alive-set prune backstop, which
+    // calls this with graceEligible=false. (The TilingAdaptor sibling reaps on
+    // its own four events instead — it is armed from the same line, but the
+    // two sets live in different objects and see different signals.)
     m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     // An OBSERVED close is authoritative and stamps the time. An unobserved one
     // contributes no time at all and must not overwrite a stamp an earlier

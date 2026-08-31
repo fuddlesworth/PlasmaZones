@@ -235,11 +235,23 @@ public:
     /// belonging to a sibling that had not reopened yet, which is exactly the
     /// window the credit exists to bring home.
     ///
-    /// ONE-SHOT, consumed by the next takeForReopen for the instance, so a
-    /// window moved twice is excused twice and a move never disarms the
-    /// window's later genuine opens. Keyed by INSTANCE id, so a mid-session
-    /// class rename cannot lose it. Cleared when the instance closes
-    /// (markInstanceClosed / clear) and by deserialize's whole-store replace.
+    /// ONE-SHOT, consumed by the next reclaim-credit BURN for the instance —
+    /// burnReclaimCredit, which is where both open channels converge
+    /// (takeForReopen for tiling-screen arrivals, the snap adaptor's
+    /// open-path resolve for snap-mode ones). Consuming it inside
+    /// takeForReopen instead would leave the snap channel burning a sibling's
+    /// credit on a move return AND leave the excuse armed for some later
+    /// genuine open. A window moved twice is excused twice, and a move never
+    /// disarms the window's later genuine opens. Keyed by INSTANCE id, so a
+    /// mid-session class rename cannot lose it. Cleared when the instance
+    /// closes (markInstanceClosed / clear) and by deserialize's whole-store
+    /// replace.
+    ///
+    /// An announce that reaches NEITHER burn channel (an arrival on a screen
+    /// no engine claims, dropped by the tiling dispatch) leaves the excuse
+    /// standing, deliberately: that window is still live, still released, and
+    /// still unplaced, so the announce that eventually does land is the same
+    /// move's continuation.
     ///
     /// Sibling of TilingAdaptor::m_moveReleasedInstances, armed from the same
     /// line for the same reason. They are deliberately NOT one flag: that one

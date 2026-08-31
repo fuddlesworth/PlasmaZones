@@ -1680,6 +1680,39 @@ private Q_SLOTS:
         QVERIFY2(!holdsCredit(store, QStringLiteral("firefox|ghostA")), "the second open retires the second credit");
     }
 
+    void testMarkInstanceMovedLive_excusesTheSnapChannelsDirectBurn()
+    {
+        // There are TWO per-open burn channels, not one: takeForReopen for
+        // tiling-screen arrivals, and the snap adaptor's open-path resolve
+        // (SnapRestore) which calls burnReclaimCredit DIRECTLY and never
+        // reaches takeForReopen. A move return whose re-announce lands on a
+        // snap-mode screen goes through the second, so an excuse consumed
+        // inside takeForReopen alone would leave that channel spending a
+        // sibling's session-restore credit — the very bug — while leaving the
+        // one-shot armed to excuse a later genuine open.
+        //
+        // MUTATION NOTE: this fails with the excuse moved back into
+        // takeForReopen, which is the whole point; the sibling test above
+        // passes either way because it only ever drives the tiling channel.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("firefox|ghost"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::snapEngineId(),
+                                   QStringLiteral("DP-2")));
+        store.record(makePlacement(QStringLiteral("firefox|live"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
+                                   QStringLiteral("DP-1")));
+
+        store.markInstanceMovedLive(QStringLiteral("firefox|live"));
+        QVERIFY2(!store.burnReclaimCredit(QStringLiteral("firefox|live"), QStringLiteral("firefox")),
+                 "the snap channel's burn must report nothing retired for a move return");
+        QVERIFY2(holdsCredit(store, QStringLiteral("firefox|ghost")),
+                 "a move return must not spend a credit through the snap channel either");
+
+        // ONE shot here too: the window's next genuine snap-screen open burns.
+        QVERIFY(store.burnReclaimCredit(QStringLiteral("firefox|live"), QStringLiteral("firefox")));
+        QVERIFY(!holdsCredit(store, QStringLiteral("firefox|ghost")));
+    }
+
     void testMarkInstanceMovedLive_excuseDiesWithTheInstance()
     {
         // A window released for a move that then CLOSES instead of
