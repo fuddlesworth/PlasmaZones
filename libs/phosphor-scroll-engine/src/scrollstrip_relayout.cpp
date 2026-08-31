@@ -95,13 +95,7 @@ int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutPar
     if (isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal()) {
         return 0;
     }
-    int visibleTiles = 0;
-    for (const Tile& tile : c.tiles) {
-        if (!tile.minimized) {
-            ++visibleTiles;
-        }
-    }
-    return params.tabIndicator.reservedThickness(visibleTiles);
+    return params.tabIndicator.reservedThickness(c.visibleTileCount());
 }
 
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
@@ -280,13 +274,7 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         const bool indicatorEatsMainAxis =
             isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal();
         if (c.display == ColumnDisplay::Tabbed && indicatorEatsMainAxis) {
-            int visibleTiles = 0;
-            for (const Tile& tile : c.tiles) {
-                if (!tile.minimized) {
-                    ++visibleTiles;
-                }
-            }
-            reservationFloor = params.tabIndicator.reservedThickness(visibleTiles);
+            reservationFloor = params.tabIndicator.reservedThickness(c.visibleTileCount());
         }
         for (const Tile& tile : c.tiles) {
             // minMain, not minWidth: this is the column's floor ALONG the
@@ -818,6 +806,13 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         // on show and is not the only tab that may carry an intent.
         rc.rect = axis.makeRect(mainStart, axis.crossLow(colArea), colW, axis.crossSize(colArea));
 
+        // Same predicate as Column::visibleTileCount, which the two reservation
+        // sites use — visible.size() == col.visibleTileCount() by construction,
+        // and the indicator is sized from one while the tiles are laid out from
+        // the other, so the two must not drift. Spelled out here rather than
+        // routed through the accessor because this walk needs the INDICES; the
+        // accessor would allocate a vector for callers that only want the
+        // count.
         QVector<int> visible;
         visible.reserve(col.tiles.size());
         for (int ti = 0; ti < col.tiles.size(); ++ti) {

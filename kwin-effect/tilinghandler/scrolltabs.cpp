@@ -73,9 +73,11 @@ namespace {
 namespace ScrollTabKey = PhosphorProtocol::Service::ScrollTabKey;
 
 /// The payload the engine emits for "this screen has no indicators". Matched
-/// literally rather than parsed: every clear path emits exactly this string
-/// (ScrollEngine::clearTabStripsForScreen), and parsing it would cost a
-/// QJsonDocument for the commonest message on the channel.
+/// literally as a FAST PATH rather than parsed: every clear path emits exactly
+/// this string (ScrollEngine::clearTabStripsForScreen), and parsing it would
+/// cost a QJsonDocument for the commonest message on the channel. Any other
+/// spelling of an empty array still reaches the same teardown, from the parsed
+/// array's own isEmpty() — see slotScrollTabStripsChanged.
 constexpr QLatin1String kEmptyPayload("[]");
 
 /// Wire keys of one strip object, as the scroll engine emits them
@@ -295,6 +297,17 @@ void TilingHandler::slotScrollTabStripsChanged(const QString& screenId, const QS
         return;
     }
     const QJsonArray strips = doc.array();
+    // An array that PARSED empty is the clear path too, not just the exact
+    // bytes matched above. The fast path is a byte compare against the one
+    // spelling the engine emits, which is a producer coupling: any other
+    // spelling of an empty array (whitespace, a future producer) would
+    // otherwise take the intake path below and leave a payload entry and a
+    // stale hover behind instead of the full teardown. Same outcome either
+    // way, reached from the parsed shape rather than from the wire text.
+    if (strips.isEmpty()) {
+        dropScrollTabScreen(screenId);
+        return;
+    }
     // Reverse index: drop this screen from every window it used to name, so
     // a window that left a tabbed column stops triggering rebuilds here.
     const QList<QString> indexedBefore = m_scrollTabScreensByWindow.keys();

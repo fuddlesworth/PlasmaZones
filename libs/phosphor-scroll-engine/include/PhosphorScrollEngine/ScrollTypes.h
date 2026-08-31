@@ -864,6 +864,24 @@ struct Column
         }
         return nullptr;
     }
+    /// How many tiles are laid out, i.e. every tile that is not minimized.
+    ///
+    /// The tab indicator's reserved thickness scales with this (one segment per
+    /// visible tab), and the relayout's own visible-tile walk shares the
+    /// definition, so it lives beside isFullyMinimized rather than being
+    /// re-counted at each site — the two answers must agree, and a count that
+    /// drifted from the minimized predicate would size the reservation for
+    /// tabs the column does not draw.
+    int visibleTileCount() const
+    {
+        int visible = 0;
+        for (const Tile& t : tiles) {
+            if (!t.minimized) {
+                ++visible;
+            }
+        }
+        return visible;
+    }
     /// True when every tile is minimized — the column occupies no strip MAIN
     /// extent.
     bool isFullyMinimized() const
