@@ -229,11 +229,19 @@ bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
     // desktop, and letting the remembered-desktop restore step in behind a
     // malformed target would apply a desktop the user's rule overrode.
     //
-    // Defensive depth with no reachable path today, and so no test: RuleStore
-    // refuses to add a RouteToDesktop rule with a target below 1, so a target
-    // that fails the guard above cannot come from a rule the store accepted.
-    // Kept because this reads the parameter out of a QVariantMap, which a future
-    // producer or a hand-edited rules.json could populate differently.
+    // Defensive depth with no reachable path today, and so no test. BOTH ways
+    // into the store validate this parameter against the RouteToDesktop
+    // descriptor (ruleaction_builtins_engine.cpp), which requires an integral
+    // double in [1, MaxVirtualDesktopOrdinal]: addRule goes through
+    // Rule::isValid → ActionRegistry::validate, and a hand-edited rules.json
+    // goes through RuleAction::fromJson, which drops the action on the same
+    // check. So a target failing the >= 1 guard above cannot reach here from
+    // stored rules by either route.
+    //
+    // Kept because the read is untyped — a QVariant out of a QVariantMap — so
+    // it survives a descriptor whose bounds are later relaxed, and an
+    // in-process producer that builds ResolvedActions without going through
+    // either validating path.
     return true;
 }
 
