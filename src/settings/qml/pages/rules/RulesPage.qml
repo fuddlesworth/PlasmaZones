@@ -614,7 +614,6 @@ SettingsFlickable {
                     matchFieldOptions: page.matchFieldOptions
                     actionTypeOptions: page.actionTypeOptions
                     appSettings: page._editorAppSettings
-                    modelRevision: page.modelRevision
                     onToggleRequested: function (ruleId, enabled) {
                         page.controller.setRuleEnabled(ruleId, enabled);
                     }

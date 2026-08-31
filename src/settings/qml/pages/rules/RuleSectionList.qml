@@ -32,9 +32,6 @@ Item {
     property var appSettings: null
     property bool reorderingEnabled: true
     property bool showSectionBadge: false
-    /// Model-revision counter, threaded down to each row so an expanded row's
-    /// read-only preview re-reads its rule after an edit.
-    property int modelRevision: 0
 
     /// Resolve the `beforeId` to hand `moveRule` for moving `list[from]` to slot
     /// `to`. `moveRule` inserts immediately BEFORE `beforeId` (empty = end).
@@ -97,7 +94,12 @@ Item {
             matchFieldOptions: root.matchFieldOptions
             actionTypeOptions: root.actionTypeOptions
             appSettings: root.appSettings
-            ruleRevision: root.modelRevision
+            // Restore the expanded state the row had before the last model
+            // rebuild. Seeded imperatively, never bound: ExpandableRowDelegate
+            // toggles `expanded` by assignment, which severs a binding on the
+            // first click and would strand every later restore.
+            Component.onCompleted: expanded = parent.rowExpanded
+            onExpandedChanged: parent.setRowExpanded(expanded)
             onToggleRequested: function (en) {
                 root.toggleRequested(_rule.ruleId, en);
             }
