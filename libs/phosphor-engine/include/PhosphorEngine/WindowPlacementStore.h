@@ -116,6 +116,17 @@ public:
     ///
     /// Returns the consumed record (already re-recorded), or nullopt when no
     /// record passed.
+    ///
+    /// Side effect, hit or miss: BURNS ONE RECLAIM CREDIT in the @p appId
+    /// bucket (the newest reclaim-eligible record not bound to a live window
+    /// and not this instance's own). Each engine calls takeForReopen exactly
+    /// once per first-observed open, so this retires a session-restore
+    /// credit per open — a window restored onto its CORRECT screen (where
+    /// the reclaim's same-screen bail never consumes anything) spends its
+    /// credit here instead of leaving it for a later same-app open to be
+    /// teleported by. The exact-final early return burns nothing: it is a
+    /// live window's own context-rejected verdict, not an open that used up
+    /// a restore.
     std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
                                                  const QString& screenId);
 
@@ -146,6 +157,15 @@ public:
     ///    sibling's record); a reclaim through plain peek() teleported a
     ///    fresh second instance onto its open sibling's monitor on EVERY
     ///    open, mid-session, repeatedly.
+    ///  - The fallback additionally requires the record's reclaim CREDIT
+    ///    (WindowPlacement::reclaimEligible): only a record whose window was
+    ///    live at the last save — a session-restore candidate — may pull a
+    ///    fresh window across monitors. Without it, the immortal tiled record
+    ///    of the last-closed sibling homed every future same-app window (a
+    ///    detached browser tab landed on the OPPOSITE monitor, bug #1017).
+    ///    The same-instance branch ignores the credit: the window's own
+    ///    record is its history, and the daemon-restart reclaim must work
+    ///    regardless.
     ///  - It scans ONLY the @p appId bucket (the window's own record included
     ///    — a same-instance match wins outright, live or not, since the
     ///    window's own record IS its history). peek()'s same-instance branch
@@ -163,6 +183,26 @@ public:
     /// True if a record exists for the same live instance, or (if @p appId non-empty)
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;
+
+    /// The window CLOSED mid-session: revoke its records' reclaim credit
+    /// (WindowPlacement::reclaimEligible) and stamp closedAtMsecs. From here
+    /// on the records serve reopen restore only — never the cross-screen
+    /// reclaim's appId fallback. Called from the daemon's close funnel AFTER
+    /// the close-time captureWindowPlacement (record() preserves the stored
+    /// credit on merge, so order only matters for the stamp's accuracy).
+    /// Sweeps every matching record across buckets, the releaseEngineSlot
+    /// appId-drift rationale. Returns true when any credit was revoked.
+    bool markInstanceClosed(const QString& windowId);
+
+    /// Retire ONE reclaim credit in @p appId's bucket: the newest
+    /// reclaim-eligible record not bound to a live window and not
+    /// @p windowId's own instance. This is takeForReopen's per-open burn,
+    /// exposed for the one open channel that never calls takeForReopen —
+    /// the snap adaptor's open-path resolve on SNAP-mode screens — so a
+    /// window restored onto a snap screen also spends its session-restore
+    /// credit instead of leaving it dangling for a later same-app open.
+    /// Returns true when a credit was burned.
+    bool burnReclaimCredit(const QString& windowId, const QString& appId);
 
     /// Inject the live-window probe takeForReopen's appId fallback uses to
     /// skip records bound to a still-open window (see its doc). Answers per
@@ -260,6 +300,11 @@ public:
 
     /// JSON shape: { appId: [ record, ... ] }. @p keep filters out entries that
     /// should not persist (e.g. disabled-context). Empty buckets are dropped.
+    /// When the live-instance probe is wired, each record's persisted
+    /// "liveAtSave" is DERIVED here — live per the probe, or closed within
+    /// ShutdownCloseGraceMs — rather than copied from the in-memory credit,
+    /// so the cross-session graveyard is stripped of reclaim credit at every
+    /// save. Unwired (tests), the in-memory value round-trips as-is.
     QJsonObject serialize(const std::function<bool(const WindowPlacement&)>& keep = {}) const;
     void deserialize(const QJsonObject& obj);
 
@@ -274,6 +319,17 @@ private:
 public:
     /// Per-app record cap (public so tests can pin the eviction contract).
     static constexpr int MaxPerApp = 16;
+
+    /// serialize()'s shutdown-close grace: a window that closed within this
+    /// many msecs of the save still persists reclaimEligible=true. Logout
+    /// tears windows down moments before the daemon's final save, and
+    /// persisting those closes as credit-less would break exactly the login
+    /// reclaim the credit exists to serve. Mid-session closes are long past
+    /// the grace by the next unrelated save, so their persisted credit
+    /// converges to false. (Exposure: a daemon restart within the grace of a
+    /// close treats that one record as restore evidence — bounded to a
+    /// single reclaim by the per-open credit burn.)
+    static constexpr qint64 ShutdownCloseGraceMs = 30000;
 
 private:
     /// appId → list of records in positional FIFO order. The POSITION order

@@ -94,6 +94,29 @@ struct WindowPlacement
     // ── Recency (most-recent-wins ordering; stamped by the store) ──
     quint64 sequence = 0;
 
+    // ── Cross-screen reclaim credit ──
+    /// Whether this record may power the cross-screen reclaim's appId-sibling
+    /// fallback (WindowPlacementStore::peekForReclaim). The reclaim exists for
+    /// SESSION RESTORE — KWin reopening a logout-surviving window on a
+    /// nondeterministic output — so only a record whose window was live at the
+    /// last save is evidence of a misplaced restore. A record whose window
+    /// closed mid-session is reopen memory, not restore evidence: left
+    /// eligible, it teleports every later same-app window (a detached browser
+    /// tab, a Ctrl+N) to wherever the last sibling died. Defaults true (a
+    /// runtime capture describes a live window); cleared by
+    /// markInstanceClosed on close and by takeForReopen's per-open credit
+    /// burn; persisted as "liveAtSave" with serialize() re-deriving the value
+    /// from the live-instance probe (plus a shutdown-close grace) so the
+    /// graveyard dies across sessions while logout closes keep their credit.
+    /// Deliberately OUTSIDE sameContentAs (like sequence): credit flips must
+    /// not defeat the merge's content-identical short-circuit.
+    bool reclaimEligible = true;
+    /// When markInstanceClosed saw this window close (msecs since epoch), 0 if
+    /// never. In-memory only — serialize() reads it for the shutdown-close
+    /// grace (a close moments before the final logout save must still persist
+    /// as restore evidence); never written to JSON.
+    qint64 closedAtMsecs = 0;
+
     bool isValid() const
     {
         return !windowId.isEmpty() && !appId.isEmpty();
@@ -292,6 +315,7 @@ struct WindowPlacement
         }
 
         obj[QLatin1String("seq")] = static_cast<double>(sequence);
+        obj[QLatin1String("liveAtSave")] = reclaimEligible;
         return obj;
     }
 
@@ -333,6 +357,10 @@ struct WindowPlacement
         }
 
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
+        // Missing key (a record persisted by a pre-credit build) reads TRUE:
+        // one legacy session behaves exactly as before, and the next save
+        // stamps the derived value. Not migration code — a default.
+        p.reclaimEligible = obj.value(QLatin1String("liveAtSave")).toBool(true);
         return p;
     }
 };

@@ -629,6 +629,13 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
                               << "— resolved to" << closeScreen;
     }
     captureWindowPlacement(windowId, closeScreen);
+    // AFTER the capture (record() preserves the stored credit on merge):
+    // a mid-session close revokes the record's cross-screen reclaim credit,
+    // so it can never again home a future same-app window on this monitor —
+    // the detached-browser-tab teleport (#1017). Login restore is unaffected:
+    // serialize() re-derives the persisted credit from liveness plus the
+    // shutdown-close grace.
+    m_service->placementStore().markInstanceClosed(windowId);
 
     // Session-transient suspension-float classification dies with the window.
     m_service->clearSuspensionFloat(windowId);
