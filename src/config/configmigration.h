@@ -283,21 +283,24 @@ public:
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool pruneRetiredProviderDefaultRule(const QString& jsonPath);
 
-    /// Narrow the premade Steam rule in an already-converted rules.json to the
-    /// shape `appendSteamDefaultRule` seeds today.
+    /// Bring the premade Steam rule in an already-converted rules.json up to
+    /// the shape `appendSteamDefaultRule` seeds today.
     ///
-    /// The rule shipped matching `WindowClass Contains "steam"`, which is
-    /// compared against KWin's `"resourceName resourceClass"` pair — so a
-    /// Steam-launched game ("steam_app_2342813033 steam_app_2342813033")
-    /// matched, and the blanket `Exclude` action left every game unmanaged and
-    /// undecorated. Runs from the same cleanup path as
+    /// Two earlier generations are reclaimed. The rule first shipped matching
+    /// `WindowClass Contains "steam"`, which is compared against KWin's
+    /// `"resourceName resourceClass"` pair — so a Steam-launched game
+    /// ("steam_app_2342813033 steam_app_2342813033") matched, and the blanket
+    /// `Exclude` action left every game unmanaged and undecorated. The
+    /// narrowing that replaced it guarded Steam's notification toasts only,
+    /// which left its fixed-size game-launch dialog placing as though it were
+    /// an ordinary window. Runs from the same cleanup path as
     /// `pruneRetiredProviderDefaultRule` because the seeder itself only runs on
     /// the rebuild path, so an already-converted config would never otherwise
     /// see the correction.
     ///
-    /// Only rewrites a rule whose match and action are both still the retired
-    /// shape verbatim (see `isRetiredSteamRuleShape`); a rule with either half
-    /// edited is left untouched, as is an already-corrected or deleted one. A
+    /// Only rewrites a rule whose match and action are both still one of those
+    /// generations verbatim (see `isRetiredSteamRuleShape`); a rule with either
+    /// half edited is left untouched, as is an already-current or deleted one. A
     /// rule that was only RENAMED is still repaired, and its name is re-stamped
     /// along with the match and action. The enabled flag and priority are
     /// carried across. Idempotent: after the rewrite the shape check no longer

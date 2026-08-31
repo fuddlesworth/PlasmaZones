@@ -436,12 +436,34 @@ QUuid steamDefaultRuleId()
 /// caption exists and stay pinned that way for the window's life. The class is
 /// stamped at first resolve, so the class arm has no such window.
 ///
-/// Both halves are POSITIVE WindowClass/Title predicates, and WindowClass sits
-/// in the daemon's `unanswerableWindowFields()`, so this rule only ever bites
-/// on the EFFECT path, where window_query.cpp stamps both fields. That was
-/// equally true of the retired shape, whose class leaf was positive too, so it
-/// is not a change — but it is where to look when checking the rule against a
-/// live session.
+/// The Any group carries a third arm, `IsResizable Equals false`, and it is
+/// there for a window the toast arms cannot name. Steam draws its game-launch
+/// dialog as another `steamwebhelper steam` top-level, property-for-property
+/// identical to the main client window apart from its caption — no role, no
+/// distinguishing class, Normal window type, same pid (the whole CEF family
+/// shares one process). The one thing that does separate it is
+/// `WM_NORMAL_HINTS` with min == max, which KWin surfaces as
+/// `EffectWindow::isResizable() == false` and window_query.cpp stamps into the
+/// query. Keying on the caption instead would mean matching a localised,
+/// per-game string, which is not a contract worth depending on.
+///
+/// The arm is deliberately broader than that one dialog: it takes ANY
+/// fixed-size Steam window out of placement, which also covers the small
+/// confirmation popups and mini friends-list windows. That is the right
+/// default for a window the user cannot resize anyway — there is nothing for a
+/// zone or a tile to do with it. It stays inside the Any, so it never widens
+/// the rule past Steam itself, and it stays scoped to `ExcludePlacement`, so a
+/// fixed-size Steam window keeps its decorations and animations.
+///
+/// Every arm is a POSITIVE predicate, and WindowClass sits in the daemon's
+/// `unanswerableWindowFields()`, so this rule only ever bites on the EFFECT
+/// path, where window_query.cpp stamps all three fields. That was equally true
+/// of the retired shape, whose class leaf was positive too, so it is not a
+/// change — but it is where to look when checking the rule against a live
+/// session. IsResizable is NOT in `unanswerableWindowFields()` and does not
+/// need to be: it is Window-sourced and left disengaged daemon-side, and an
+/// unresolved field fails a positive leaf, so the arm is simply inert there
+/// rather than wrong.
 ///
 /// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
 /// business being placed, but stripping its decorations too, and cancelling its
@@ -449,20 +471,21 @@ QUuid steamDefaultRuleId()
 /// this rule was written; the scoped one landed later.
 ///
 /// Everything else Steam opens — the library window, Friends List, chat, Big
-/// Picture, Settings — is an ordinary resizable window that places like any
-/// other. The rule used to exclude all of them via a `Title Equals "Steam"`
-/// negative guard (the Hyprland `title:^(?!Steam$).*` idiom), which decided on
-/// the user's behalf that no Steam window except the library was worth tiling.
+/// Picture, Settings — is an ordinary RESIZABLE window that places like any
+/// other, and the fixed-size arm above is what keeps that true. The rule used
+/// to exclude all of them via a `Title Equals "Steam"` negative guard (the
+/// Hyprland `title:^(?!Steam$).*` idiom), which decided on the user's behalf
+/// that no Steam window except the library was worth tiling.
 void applySteamDefaultRuleShape(PhosphorRules::Rule& rule)
 {
     using namespace PhosphorRules;
-    rule.name = QStringLiteral("Steam notifications");
+    rule.name = QStringLiteral("Steam notifications and dialogs");
     rule.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("steam")),
          MatchExpression::makeAny(
              {MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts")),
-              MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains,
-                                        QStringLiteral("notificationtoasts"))})});
+              MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("notificationtoasts")),
+              MatchExpression::makeLeaf(Field::IsResizable, Operator::Equals, false)})});
     rule.actions.clear();
     RuleAction action;
     action.type = QString(ActionType::ExcludePlacement);
@@ -472,20 +495,52 @@ void applySteamDefaultRuleShape(PhosphorRules::Rule& rule)
 bool isRetiredSteamRuleShape(const PhosphorRules::Rule& rule)
 {
     using namespace PhosphorRules;
-    // The exact shape seeded between the rule's introduction and this repair:
-    // All{ WindowClass Contains "steam", None{ Title Equals "Steam" } } with a
-    // single blanket Exclude action. Compared structurally rather than by a
-    // stored version stamp, so a user who edited either half keeps their
-    // edit — the repair only reclaims rules that are still verbatim ours.
-    if (rule.actions.size() != 1 || rule.actions.first().type != ActionType::Exclude) {
+    // Every shape this code has ever seeded EXCEPT the current one. Compared
+    // structurally rather than by a stored version stamp, so a user who edited
+    // either half keeps their edit — the repair only reclaims rules that are
+    // still verbatim ours.
+    //
+    // A generation is (match, action) as a PAIR, never either alone. Keeping
+    // them paired is what lets `testSteamRuleRepairLeavesAnActionOnlyEditAlone`
+    // stay meaningful: a user who kept a stock match but swapped the action has
+    // edited the rule, and matching on the match alone would silently reclaim
+    // it.
+    if (rule.actions.size() != 1) {
         return false;
     }
-    Rule retired;
-    retired.match = MatchExpression::makeAll(
-        {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
-         MatchExpression::makeNone(
-             {MatchExpression::makeLeaf(Field::Title, Operator::Equals, QStringLiteral("Steam"))})});
-    return rule.match.toJson() == retired.match.toJson();
+    const QString& action = rule.actions.first().type;
+
+    // Gen 1, the rule as introduced. All{ WindowClass Contains "steam",
+    // None{ Title Equals "Steam" } } with a single blanket Exclude action.
+    // Retired because `Contains "steam"` swept up every Steam-launched game.
+    if (action == ActionType::Exclude) {
+        Rule gen1;
+        gen1.match = MatchExpression::makeAll(
+            {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
+             MatchExpression::makeNone(
+                 {MatchExpression::makeLeaf(Field::Title, Operator::Equals, QStringLiteral("Steam"))})});
+        return rule.match.toJson() == gen1.match.toJson();
+    }
+
+    // Gen 2, the toasts-only narrowing. Correct as far as it went, but it had
+    // no arm for Steam's fixed-size game-launch dialog, which carries neither
+    // the toast token nor any other distinguishing property (see
+    // applySteamDefaultRuleShape). Reclaimed so a config converted between the
+    // narrowing and the fixed-size arm picks the arm up — the seeder only runs
+    // on the rebuild path and would never otherwise reach an already-converted
+    // config.
+    if (action == ActionType::ExcludePlacement) {
+        Rule gen2;
+        gen2.match = MatchExpression::makeAll(
+            {MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("steam")),
+             MatchExpression::makeAny(
+                 {MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts")),
+                  MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains,
+                                            QStringLiteral("notificationtoasts"))})});
+        return rule.match.toJson() == gen2.match.toJson();
+    }
+
+    return false;
 }
 
 /// Seed the premade Steam Rule into a freshly-built v4 rule set. See
