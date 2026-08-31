@@ -14,7 +14,7 @@ import QtQuick
 // DecorationProfileTree walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Window decoration surfaces")
-    headerText: i18n("Decoration for windows. \"All Windows\" is the default. Each placement state can override it.")
+    headerText: i18n("Decoration for windows. “All Windows” is the default. Each placement state can override it.")
     surfaceModel: [
         {
             "surfacePath": "window",

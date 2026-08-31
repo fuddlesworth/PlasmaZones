@@ -198,7 +198,7 @@ SettingsCard {
                             Layout.fillWidth: true
                             Layout.minimumWidth: Kirigami.Units.gridUnit * 10
                             appSettings: root._comboBridge
-                            noneText: i18n("None")
+                            noneText: i18nc("the explicit no-layout choice", "None")
                             showPreview: true
                             layoutFilter: root.viewMode === 2 ? 2 : (root.viewMode === 1 ? 1 : 0)
                             resolvedDefaultId: ""

@@ -76,9 +76,9 @@ RowLayout {
     readonly property int groupTilingVisibility: 2
     readonly property int groupTilingNone: 3
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
-    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
-    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
-    readonly property var templateGroupModel: [i18n("Source"), i18n("None")]
+    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18nc("@item:inlistbox group-by option, do not group at all", "None")]
+    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18nc("@item:inlistbox group-by option, do not group at all", "None")]
+    readonly property var templateGroupModel: [i18n("Source"), i18nc("@item:inlistbox group-by option, do not group at all", "None")]
     // "Priority" sorts by the order set on the Configuration → Priority page
     // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
     // no priority has been set yet.

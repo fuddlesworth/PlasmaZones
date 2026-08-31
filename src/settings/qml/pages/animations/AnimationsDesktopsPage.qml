@@ -22,7 +22,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Virtual desktop animation events")
-    headerText: i18n("Animations for virtual desktops. \"All Desktop Events\" is the default. Each event can override it.")
+    headerText: i18n("Animations for virtual desktops. “All Desktop Events” is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "desktop",

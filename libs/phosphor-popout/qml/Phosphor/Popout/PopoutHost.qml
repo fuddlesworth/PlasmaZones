@@ -270,7 +270,13 @@ Item {
             // restore, transport callback, telemetry) applies to the
             // click-outside path too.
             onClicked: root.dismiss()
-            Accessible.name: i18nc("@action:button", "Dismiss popout")
+            // qsTr, not i18nc: phosphor-popout is in no lupdate glob in
+            // cmake/PhosphorTranslations.cmake, and nothing on the path to
+            // this component installs a PhosphorLocalizedContext, so i18nc
+            // resolved to nothing and left Accessible.name undefined. qsTr is
+            // built into QML, so it always resolves, and it matches the
+            // convention the other library QML follows.
+            Accessible.name: qsTr("Dismiss popout")
         }
 
         Behavior on opacity {

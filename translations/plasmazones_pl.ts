@@ -551,7 +551,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="364"/>
         <source>Toggle Tabbed Column</source>
-        <translation>Przełącz karty w kolumnie</translation>
+        <translation>Przełącz tryb kart w kolumnie</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
@@ -819,7 +819,7 @@
         <translation>Wypchnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="406"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="407"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
         <translation>Przewija widok tak, aby aktywna kolumna znalazła się na środku ekranu.</translation>
     </message>
@@ -829,7 +829,7 @@
         <translation>Przełącza aktywną kolumnę między oknami ułożonymi w stos a kartami.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="420"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="421"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
         <translation>Przełącza aktywne okno w tryb pełnoekranowy, ale zachowuje jego miejsce w kolumnie, więc nie zakrywa ekranu. Naciśnij ponownie, aby wyjść.</translation>
     </message>
@@ -869,42 +869,42 @@
         <translation>Przełącza aktywną kolumnę między wypełnieniem obszaru roboczego a mniejszym rozmiarem.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="394"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
         <translation>Przełącza aktywne okno przez nastawy rozmiaru ustawione dla ekranu w obrębie jego kolumny.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
         <translation>Przełącza aktywne okno przez nastawy rozmiaru ustawione dla ekranu w obrębie jego kolumny, w odwrotnej kolejności.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="388"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Grows the focused window within its column by the configured step.</source>
         <translation>Powiększa aktywne okno w obrębie jego kolumny o ustawiony krok.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="391"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
         <translation>Zmniejsza aktywne okno w obrębie jego kolumny o ustawiony krok.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
         <source>Clears manual window sizes in the focused column so its windows share the column&apos;s space evenly.</source>
         <translation>Czyści ręcznie ustawione rozmiary okien w aktywnej kolumnie, aby jej okna dzieliły jej przestrzeń po równo.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="376"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="377"/>
         <source>Grow into Empty Space</source>
         <translation>Powiększ na wolną przestrzeń</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="377"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="378"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
         <translation>Powiększa aktywną kolumnę tak, aby wypełniła wolną przestrzeń widoczną na ekranie. Pozostałe kolumny zachowują rozmiar.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="408"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
         <translation>Przewija widok tak, aby w pełni widoczne kolumny znalazły się na środku jako grupa.</translation>
     </message>
@@ -919,53 +919,48 @@
         <translation>Przenosi uaktywnienie na ostatnie okno aktywnej kolumny.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="372"/>
-        <source>Toggles the focused column between covering the whole work area with no gaps and its normal size. This is the state the window&apos;s maximize button shows.</source>
-        <translation>Przełącza aktywną kolumnę między zakryciem całego obszaru roboczego bez odstępów a jej zwykłym rozmiarem. To ten stan pokazuje przycisk maksymalizacji okna.</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="426"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="427"/>
         <source>Move to Floating</source>
         <translation>Przenieś do pływających</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="427"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
         <translation>Sprawia, że aktywne okno staje się pływające. W odróżnieniu od przełącznika pływania nigdy nie kafelkuje z powrotem.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="430"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="431"/>
         <source>Move to Tiled</source>
         <translation>Przenieś do kafelkowanych</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="431"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
         <translation>Zwraca aktywne pływające okno do jego kolumny. W odróżnieniu od przełącznika pływania nigdy nie sprawia, że okno pływa.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="454"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="455"/>
         <source>Applies the numbered layout to this screen.</source>
         <translation>Stosuje ponumerowany układ na tym ekranie.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="455"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="456"/>
         <source>Applies the numbered column template to this screen.</source>
         <translation>Stosuje ponumerowany szablon kolumn na tym ekranie.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="470"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
         <translation>Wysyła aktywne okno do ponumerowanego miejsca na tym ekranie.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="610"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="611"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation>Zastosuj układ %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="392"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
         <source>Cycle Window Height</source>
         <translation>Przełączaj wysokość okna</translation>
     </message>
@@ -1005,7 +1000,7 @@
         <translation>Wydziela aktywne okno ze wspólnej kolumny w stronę końca pasa. Okno samo w swojej kolumnie zostaje zamiast tego scalone z następną kolumną.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="396"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
         <source>Cycle Window Height Back</source>
         <translation>Przełączaj wysokość okna wstecz</translation>
     </message>
@@ -1050,52 +1045,57 @@
         <translation>Przenosi uaktywnienie o jedną kolumnę w stronę końca pasa, a na krawędzi zawija na pierwszą kolumnę.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="412"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="372"/>
+        <source>Toggles the focused column between covering the whole work area with no gaps and its normal size. The covering state is the one the window&apos;s maximize button shows.</source>
+        <translation>Przełącza aktywną kolumnę między zakryciem całego obszaru roboczego bez odstępów a jej zwykłym rozmiarem. Stan zakrycia to ten, który pokazuje przycisk maksymalizacji okna.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Przewija widok o cały ekran w stronę początku pasa. Uaktywnienie pozostaje na miejscu.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="416"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Przewija widok o cały ekran w stronę końca pasa. Uaktywnienie pozostaje na miejscu.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="383"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="384"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
         <translation>Przydziela każdej w pełni widocznej kolumnie równą część ekranu. Kolumny przycięte przy krawędzi pozostają bez zmian.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
         <translation>Zmniejsza aktywną kolumnę do najmniejszej nastawy rozmiaru.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="576"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="577"/>
         <source>Arrows</source>
         <translation>Strzałki</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="619"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="620"/>
         <source>Move Window</source>
         <translation>Przenieś okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="626"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="627"/>
         <source>Move Focus</source>
         <translation>Przenieś uaktywnienie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="631"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="632"/>
         <source>Swap Window</source>
         <translation>Zamień okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="636"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="637"/>
         <source>Span Window</source>
         <translation>Rozciągnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="642"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="643"/>
         <source>Swap Screens</source>
         <translation>Zamień ekrany</translation>
     </message>
@@ -2009,7 +2009,7 @@
         <translation>Kontekst</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="477"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="478"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
@@ -2265,19 +2265,19 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="212"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="465"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="466"/>
         <source>Zones</source>
         <translation>Strefy</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="268"/>
         <source>Hide title bars (off = force visible)</source>
-        <translation>Ukryj paski tytułu (wyłączone = wymuś widoczność)</translation>
+        <translation>Ukryj paski tytułu (wył. = wymuś widoczność)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="271"/>
         <source>Show border (off = hide)</source>
-        <translation>Pokaż obramowanie (wyłączone = ukryj)</translation>
+        <translation>Pokaż obramowanie (wył. = ukryj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="214"/>
@@ -2336,17 +2336,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="302"/>
         <source>Use per-side outer gaps (off = one uniform gap)</source>
-        <translation>Osobne odstępy zewnętrzne dla każdej strony (wyłączone = jeden jednolity odstęp)</translation>
+        <translation>Osobne odstępy zewnętrzne dla każdej strony (wył. = jeden jednolity odstęp)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="309"/>
         <source>Lock the layout (off = don&apos;t lock)</source>
-        <translation>Zablokuj układ (wyłączone = nie blokuj)</translation>
+        <translation>Zablokuj układ (wył. = nie blokuj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="316"/>
         <source>Assign a default layout (off = leave unassigned)</source>
-        <translation>Przypisz domyślny układ (wyłączone = pozostaw nieprzypisany)</translation>
+        <translation>Przypisz domyślny układ (wył. = pozostaw nieprzypisany)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="319"/>
@@ -2536,7 +2536,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="96"/>
         <source>Open in a tabbed column (off = a normal column)</source>
-        <translation>Otwieraj w kolumnie z kartami (wyłączone = zwykła kolumna)</translation>
+        <translation>Otwieraj w kolumnie z kartami (wył. = zwykła kolumna)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="102"/>
@@ -2691,7 +2691,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="242"/>
         <source>Restore size on unsnap (off = keep zone size)</source>
-        <translation>Przywróć rozmiar przy odczepieniu (wyłączone = zachowaj rozmiar strefy)</translation>
+        <translation>Przywróć rozmiar przy odczepieniu (wył. = zachowaj rozmiar strefy)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="245"/>
@@ -2716,7 +2716,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="286"/>
         <source>Show opacity and tint (off = hide)</source>
-        <translation>Pokaż nieprzezroczystość i zabarwienie (wyłączone = ukryj)</translation>
+        <translation>Pokaż nieprzezroczystość i zabarwienie (wył. = ukryj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="289"/>
@@ -2748,7 +2748,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="361"/>
         <source>Show zone numbers (off = hide)</source>
-        <translation>Pokaż numery stref (wyłączone = ukryj)</translation>
+        <translation>Pokaż numery stref (wył. = ukryj)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="373"/>
@@ -3729,17 +3729,6 @@
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="34"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="79"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="80"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="81"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="56"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="70"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="133"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="148"/>
         <source>None</source>
         <translation>Brak</translation>
     </message>
@@ -6551,7 +6540,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
-        <translation>Łączenie stref</translation>
+        <translation>Rozciąganie stref</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="85"/>
@@ -7813,14 +7802,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="35"/>
         <source>Span modifier</source>
-        <translation>Modyfikator rozpiętości</translation>
+        <translation>Modyfikator rozciągania</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="196"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
         <source>zone span</source>
-        <translation>rozpiętość stref</translation>
+        <translation>rozciąganie stref</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -7831,7 +7820,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
         <source>span</source>
-        <translation>rozpiętość</translation>
+        <translation>rozciąganie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
@@ -8504,7 +8493,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="34"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="44"/>
         <source>Snapped Out of Zone</source>
-        <translation>Przyciągnięte poza strefę</translation>
+        <translation>Odczepione od strefy</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="36"/>
@@ -9215,7 +9204,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="198"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
-        <translation>Czas tolerancji po zwolnieniu przy łączeniu stref</translation>
+        <translation>Czas tolerancji po zwolnieniu przy rozciąganiu stref</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
@@ -9840,7 +9829,7 @@
         <translation>Zmiana rozmiaru przyciągania (podgląd przeciągania)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="615"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="616"/>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="447"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="486"/>
@@ -10097,7 +10086,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="449"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="450"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="214"/>
         <source>Layouts</source>
         <translation>Układy</translation>
@@ -10289,21 +10278,6 @@
         <translation>Nieznany błąd instalatora paczki shaderów.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="449"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="545"/>
-        <source>A set named &quot;%1&quot; already exists.</source>
-        <translation>Zestaw o nazwie &quot;%1&quot; już istnieje.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="355"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="540"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="551"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="617"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="622"/>
-        <source>Could not read the set &quot;%1&quot;.</source>
-        <translation>Nie udało się odczytać zestawu &quot;%1&quot;.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
         <source>Could not back up the existing set, so it was left untouched.</source>
         <translation>Nie udało się utworzyć kopii zapasowej istniejącego zestawu, więc pozostał nietknięty.</translation>
@@ -10312,21 +10286,6 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="234"/>
         <source>Could not write the set to disk.</source>
         <translation>Nie udało się zapisać zestawu na dysku.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="359"/>
-        <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
-        <translation>&quot;%1&quot; został zapisany przez nowszą wersję PlasmaZones.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="367"/>
-        <source>&quot;%1&quot; does not match this page.</source>
-        <translation>&quot;%1&quot; nie pasuje do tej strony.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="371"/>
-        <source>Could not apply &quot;%1&quot;.</source>
-        <translation>Nie udało się zastosować &quot;%1&quot;.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="439"/>
@@ -10338,12 +10297,6 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="459"/>
         <source>There is nothing to capture yet.</source>
         <translation>Nie ma jeszcze niczego do przechwycenia.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
-        <source>Could not delete &quot;%1&quot;.</source>
-        <translation>Nie udało się usunąć &quot;%1&quot;.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="432"/>
@@ -10458,6 +10411,42 @@
         <translation>Nie udało się utworzyć katalogu zestawów.</translation>
     </message>
     <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="355"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="540"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="551"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="617"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="622"/>
+        <source>Could not read the set “%1”.</source>
+        <translation>Nie udało się odczytać zestawu „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="359"/>
+        <source>“%1” was written by a newer version of PlasmaZones.</source>
+        <translation>„%1” został zapisany przez nowszą wersję PlasmaZones.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="367"/>
+        <source>“%1” does not match this page.</source>
+        <translation>„%1” nie pasuje do tej strony.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="371"/>
+        <source>Could not apply “%1”.</source>
+        <translation>Nie udało się zastosować „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="449"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="545"/>
+        <source>A set named “%1” already exists.</source>
+        <translation>Zestaw o nazwie „%1” już istnieje.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
+        <source>Could not delete “%1”.</source>
+        <translation>Nie udało się usunąć „%1”.</translation>
+    </message>
+    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="715"/>
         <source>Could not open the sets folder.</source>
         <translation>Nie udało się otworzyć katalogu zestawów.</translation>
@@ -10477,19 +10466,19 @@
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="150"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="159"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="178"/>
-        <source>Could not save the preset &quot;%1&quot;.</source>
-        <translation>Nie udało się zapisać nastawy &quot;%1&quot;.</translation>
+        <source>Could not save the preset “%1”.</source>
+        <translation>Nie udało się zapisać nastawy „%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="261"/>
-        <source>Could not find the preset &quot;%1&quot;.</source>
-        <translation>Nie udało się odnaleźć nastawy &quot;%1&quot;.</translation>
+        <source>Could not find the preset “%1”.</source>
+        <translation>Nie udało się odnaleźć nastawy „%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="269"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="279"/>
-        <source>Could not delete the preset &quot;%1&quot;.</source>
-        <translation>Nie udało się usunąć nastawy &quot;%1&quot;.</translation>
+        <source>Could not delete the preset “%1”.</source>
+        <translation>Nie udało się usunąć nastawy „%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
@@ -14826,7 +14815,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="25"/>
-        <source>Animations for virtual desktops. &quot;All Desktop Events&quot; is the default. Each event can override it.</source>
+        <source>Animations for virtual desktops. “All Desktop Events” is the default. Each event can override it.</source>
+        <oldsource>Animations for virtual desktops. &quot;All Desktop Events&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje dla wirtualnych pulpitów. „Wszystkie zdarzenia pulpitu” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -14841,7 +14831,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="13"/>
-        <source>Animations inside the layout editor. &quot;All Editor Events&quot; is the default. Each event can override it.</source>
+        <source>Animations inside the layout editor. “All Editor Events” is the default. Each event can override it.</source>
+        <oldsource>Animations inside the layout editor. &quot;All Editor Events&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje wewnątrz edytora układów. „Wszystkie zdarzenia edytora” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -14948,7 +14939,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="49"/>
         <source>Popups</source>
         <comment>@label motion event group</comment>
-        <translation>Wyskakujące okna</translation>
+        <translation>Okna wyskakujące</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="51"/>
@@ -15001,7 +14992,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="16"/>
-        <source>Animations for on-screen displays. &quot;All OSDs&quot; is the default. Each event can override it.</source>
+        <source>Animations for on-screen displays. “All OSDs” is the default. Each event can override it.</source>
+        <oldsource>Animations for on-screen displays. &quot;All OSDs&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje dla komunikatów ekranowych. „Wszystkie OSD” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15016,7 +15008,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="13"/>
-        <source>Animations for overlays like the zone selector and snap assist. &quot;All Overlays&quot; is the default. Each event can override it.</source>
+        <source>Animations for overlays like the zone selector and snap assist. “All Overlays” is the default. Each event can override it.</source>
+        <oldsource>Animations for overlays like the zone selector and snap assist. &quot;All Overlays&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje dla nakładek, takich jak wybór strefy i asystent przyciągania. „Wszystkie nakładki” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15061,12 +15054,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
-        <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <source>No custom easing presets yet. Use “Save as preset…” in the curve editor to create one.</source>
+        <oldsource>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Nie ma jeszcze żadnych własnych nastaw wygładzania. Użyj „Zapisz jako nastawę…” w edytorze krzywej, aby ją utworzyć.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="401"/>
-        <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
+        <source>No custom spring presets yet. Use “Save as preset…” in the curve editor to create one.</source>
+        <oldsource>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</oldsource>
         <translation>Nie ma jeszcze żadnych własnych nastaw sprężystości. Użyj „Zapisz jako nastawę…” w edytorze krzywej, aby ją utworzyć.</translation>
     </message>
     <message>
@@ -15088,8 +15083,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="123"/>
-        <source>&quot;%1&quot; will be permanently removed.</source>
-        <translation>„%1” zostanie trwale usunięta.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="258"/>
+        <source>“%1” will be permanently removed.</source>
+        <oldsource>&quot;%1&quot; will be permanently removed.</oldsource>
+        <translation>„%1” zostanie trwale usunięty.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="308"/>
@@ -15129,7 +15126,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="16"/>
-        <source>Animations for side panels that slide in from an edge. &quot;All Side Panels&quot; is the default. Each event can override it.</source>
+        <source>Animations for side panels that slide in from an edge. “All Side Panels” is the default. Each event can override it.</source>
+        <oldsource>Animations for side panels that slide in from an edge. &quot;All Side Panels&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje dla paneli bocznych wsuwających się z krawędzi. „Wszystkie panele boczne” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15159,7 +15157,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="9"/>
-        <source>Animations for widget interactions. &quot;All Widget Events&quot; is the default. Each event can override it.</source>
+        <source>Animations for widget interactions. “All Widget Events” is the default. Each event can override it.</source>
+        <oldsource>Animations for widget interactions. &quot;All Widget Events&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje dla interakcji z widżetami. „Wszystkie zdarzenia widżetów” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15199,7 +15198,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="25"/>
-        <source>Animations for windows moving and snapping. &quot;All Windows&quot; is the default. Each event can override it.</source>
+        <source>Animations for windows moving and snapping. “All Windows” is the default. Each event can override it.</source>
+        <oldsource>Animations for windows moving and snapping. &quot;All Windows&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje przenoszenia i przyciągania okien. „Wszystkie okna” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15216,7 +15216,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="17"/>
-        <source>Animations for windows opening and closing. &quot;All Windows&quot; is the default. Each event can override it.</source>
+        <source>Animations for windows opening and closing. “All Windows” is the default. Each event can override it.</source>
+        <oldsource>Animations for windows opening and closing. &quot;All Windows&quot; is the default. Each event can override it.</oldsource>
         <translation>Animacje otwierania i zamykania okien. „Wszystkie okna” to wartość domyślna. Każde zdarzenie może ją zastąpić.</translation>
     </message>
     <message>
@@ -15595,7 +15596,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="16"/>
-        <source>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</source>
+        <source>Decoration for the transient popups. “All Popups” is the default. Each popup can override it.</source>
+        <oldsource>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</oldsource>
         <translation>Dekoracja dla tymczasowych okien wyskakujących. „Wszystkie okna wyskakujące” to wartość domyślna. Każde okno wyskakujące może ją zastąpić.</translation>
     </message>
     <message>
@@ -15649,7 +15651,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="41"/>
         <source>Popups</source>
         <comment>@label decoration surface group</comment>
-        <translation>Wyskakujące okna</translation>
+        <translation>Okna wyskakujące</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="43"/>
@@ -15674,7 +15676,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="21"/>
         <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, and Popups pages.</source>
-        <translation>Przeglądaj zainstalowane paczki dekoracji. Nakładaj paczki na łańcuch powierzchni ze stron Okna, OSD i Wyskakujące okna.</translation>
+        <translation>Przeglądaj zainstalowane paczki dekoracji. Nakładaj paczki na łańcuch powierzchni ze stron Okna, OSD i Okna wyskakujące.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="25"/>
@@ -15727,7 +15729,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="17"/>
-        <source>Decoration for windows. &quot;All Windows&quot; is the default. Each placement state can override it.</source>
+        <source>Decoration for windows. “All Windows” is the default. Each placement state can override it.</source>
+        <oldsource>Decoration for windows. &quot;All Windows&quot; is the default. Each placement state can override it.</oldsource>
         <translation>Dekoracja okien. „Wszystkie okna” to wartość domyślna. Każdy stan rozmieszczenia może ją nadpisać.</translation>
     </message>
     <message>
@@ -16193,6 +16196,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="80"/>
         <source>Visibility</source>
         <translation>Widoczność</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="79"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="80"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="81"/>
+        <source>None</source>
+        <comment>@item:inlistbox group-by option, do not group at all</comment>
+        <translation>Brak</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="80"/>
@@ -16770,7 +16781,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
-        <source>Are you sure you want to delete &quot;%1&quot;?</source>
+        <source>Are you sure you want to delete “%1”?</source>
+        <oldsource>Are you sure you want to delete &quot;%1&quot;?</oldsource>
         <translation>Czy na pewno chcesz usunąć „%1”?</translation>
     </message>
     <message>
@@ -17122,7 +17134,11 @@
         <translation>Wyłączone</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="70"/>
         <source>None</source>
         <comment>the explicit no-layout choice</comment>
         <translation>Brak</translation>
@@ -18564,7 +18580,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="558"/>
         <source>%1-Way Split</source>
-        <translation>Podział na %1</translation>
+        <translation>Podział na %1 części</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="560"/>
@@ -19230,11 +19246,6 @@
         <translation>Usunąć zestaw?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="258"/>
-        <source>“%1” will be permanently removed.</source>
-        <translation>„%1” zostanie trwale usunięty.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="321"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="158"/>
         <source>Set name…</source>
@@ -19686,7 +19697,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>Jak długo łączenie pozostaje aktywne po zwolnieniu klawisza łączenia, aby okno upuszczone tuż po zwolnieniu nadal zajęło zaznaczone strefy. Pomaga, gdy klawiszem jest przycisk myszy zwalniany razem z upuszczeniem. Ustaw 0, aby wyłączyć.</translation>
+        <translation>Jak długo rozciąganie pozostaje aktywne po zwolnieniu modyfikatora rozciągania, aby okno upuszczone tuż po zwolnieniu nadal zajęło zaznaczone strefy. Pomaga, gdy klawiszem jest przycisk myszy zwalniany razem z upuszczeniem. Ustaw 0, aby wyłączyć.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
@@ -20075,8 +20086,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="78"/>
-        <source>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.</source>
-        <translation>Gdy to jest włączone, kolumna przy krawędzi ekranu zachowuje pełny rozmiar i zostaje przycięta na krawędzi. Gdy jest wyłączone, kolumna kurczy się, aby się zmieścić, albo odsuwa się, gdy zostaje jej zbyt mało. Przycinanie kosztuje nieco wydajności przy pełnoekranowym wideo i grach, dopóki jakikolwiek ekran korzysta z przewijania.</translation>
+        <source>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping stops fullscreen video and games from being sent straight to the screen, so they use more power while any screen uses scrolling.</source>
+        <oldsource>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.</oldsource>
+        <translation>Gdy to jest włączone, kolumna przy krawędzi ekranu zachowuje pełny rozmiar i zostaje przycięta na krawędzi. Gdy jest wyłączone, kolumna kurczy się, aby się zmieścić, albo odsuwa się, gdy zostaje jej zbyt mało. Przycinanie uniemożliwia wysyłanie pełnoekranowego wideo i gier prosto na ekran, więc zużywają one więcej energii, dopóki jakikolwiek ekran korzysta z przewijania.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="94"/>
@@ -20106,8 +20118,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="170"/>
-        <source>Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.</source>
-        <translation>Oba klawisze przewijania używają tej samej kombinacji, więc ten dla widoku nigdy nie działa. Nadaj im różne kombinacje, aby korzystać z obu.</translation>
+        <source>Both scroll keys use the same chord, so the view scroll key never runs. Give them different chords to use both.</source>
+        <oldsource>Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.</oldsource>
+        <translation>Oba klawisze przewijania używają tej samej kombinacji, więc klawisz przewijania widoku nigdy nie działa. Nadaj im różne kombinacje, aby korzystać z obu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="187"/>
@@ -20330,7 +20343,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CapabilityBadgeRow.qml.cpp" line="75"/>
-        <source>Reflows neighbouring windows when you resize a tiled window</source>
+        <source>Reflows neighboring windows when you resize a tiled window</source>
+        <oldsource>Reflows neighbouring windows when you resize a tiled window</oldsource>
         <translation>Przekształca sąsiednie okna po zmianie rozmiaru kafelkowanego okna</translation>
     </message>
     <message>
@@ -20871,7 +20885,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="137"/>
         <source>Spanning is not available in this mode</source>
-        <translation>Łączenie nie jest dostępne w tym trybie</translation>
+        <translation>Rozciąganie nie jest dostępne w tym trybie</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="151"/>
@@ -22283,6 +22297,7 @@
         <translation>Brak</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="142"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="251"/>
         <source>None</source>
         <comment>@item no decoration packs in the chain</comment>
@@ -22688,7 +22703,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
-        <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
+        <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. “All Shell Surfaces” is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
+        <oldsource>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</oldsource>
         <translation>Animacje powierzchni należących do powłoki Plasmy, takich jak program uruchamiający i wyskakujące okna zasobnika systemowego. Żaden shader wybrany dla Twoich własnych okien ich nie dosięga, więc każdy wiersz zaczyna bez shadera, a wybranie go jest jedynym sposobem, by je włączyć. Dopóki nie wybierzesz, powierzchnie te animują się tak, jak animuje je Plasma. „Wszystkie powierzchnie powłoki” to domyślna opcja dla obu zdarzeń, a każde z nich może ją nadpisać. Panele nie mają tu wierszy, bo panel pozostaje na ekranie przez całą sesję zamiast się otwierać i zamykać.</translation>
     </message>
     <message>
@@ -23111,7 +23127,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="56"/>
-        <source>How close to the edge of the working area the pointer has to be before the strip can start scrolling.</source>
+        <source>How close to the edge of the work area the pointer has to be before the strip can start scrolling.</source>
+        <oldsource>How close to the edge of the working area the pointer has to be before the strip can start scrolling.</oldsource>
         <translation>Jak blisko krawędzi obszaru roboczego musi być wskaźnik, zanim pas zacznie się przewijać.</translation>
     </message>
     <message>
@@ -23171,6 +23188,8 @@
         <translation>Kafelkowanie (brak algorytmu)</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="170"/>
         <source>None</source>
         <comment>no tiling algorithm is set</comment>
@@ -23190,6 +23209,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
         <translation>Reguły dopasowują się do okien, a to zdarzenie nie należy do okna, więc to działanie nigdy nie zadziała. To zdarzenie nigdzie nie przyjmuje shaderów, więc działanie można usunąć.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="34"/>
+        <source>None</source>
+        <comment>@item:inlistbox no modifier key selected</comment>
+        <translation>Brak</translation>
     </message>
 </context>
 </TS>
