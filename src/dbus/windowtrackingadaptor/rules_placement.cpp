@@ -228,6 +228,12 @@ bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
     // as MATCHED for the caller's suppression: the rule owns this window's
     // desktop, and letting the remembered-desktop restore step in behind a
     // malformed target would apply a desktop the user's rule overrode.
+    //
+    // Defensive depth with no reachable path today, and so no test: RuleStore
+    // refuses to add a RouteToDesktop rule with a target below 1, so a target
+    // that fails the guard above cannot come from a rule the store accepted.
+    // Kept because this reads the parameter out of a QVariantMap, which a future
+    // producer or a hand-edited rules.json could populate differently.
     return true;
 }
 

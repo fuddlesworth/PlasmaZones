@@ -277,16 +277,39 @@ private Q_SLOTS:
         });
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
+        // The RETURN is load-bearing, not just the signal: both open channels
+        // use it to suppress the cross-desktop session restore, so a rule that
+        // names a desktop is not fought by a remembered one. Asserting only the
+        // spy would leave that half untested.
+        QVERIFY2(m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1")),
+                 "a matched RouteToDesktop must report the match to its caller");
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 4);
 
-        // A window with no matching rule emits nothing.
+        // A window with no matching rule emits nothing and reports no match.
         m_wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("nomatch"), QString(), QString(), QString(), 0,
                                  0, QString(), 0, QVariantMap());
         QSignalSpy quietSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
+        QVERIFY(!m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1")));
         QCOMPARE(quietSpy.count(), 0);
+    }
+
+    void testApplyOpenDesktopRouting_reportsNoMatchWithoutARuleStore()
+    {
+        // The defensive guard. false is the permissive answer here, so an
+        // inverted sense would silently suppress every persisted restore on
+        // both channels rather than failing loudly.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst10"), QStringLiteral("deskapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst10"), QStringLiteral("DP-1")));
+        QCOMPARE(desktopSpy.count(), 0);
     }
 
     // A BARE RouteToScreen rule (no SnapToZone) must move the opening window to the
@@ -943,6 +966,55 @@ private Q_SLOTS:
                  "the record is filed under the registry's current appId, not the id's embedded one");
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+    }
+
+    void testResolveWindowRestore_sendsTheWindowBackAndDeclinesToSnapIt()
+    {
+        // The SNAP production arm, end to end. Every other case in this block
+        // calls applyPersistedDesktopRestore directly, so the wiring in
+        // SnapAdaptor::resolveWindowRestore — the isOpenPath gate, and the early
+        // return that must skip the engine resolve — had no coverage at all.
+        //
+        // Declining to snap is the load-bearing half: the window is on its way
+        // to a desktop this screen is not showing, so snapping it into the
+        // CURRENT desktop's layout would place it where the user cannot see it
+        // and record a zone against the wrong desktop.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = true;
+        m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
+                                            /*windowKind=*/0, /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x,
+                                            y, width, height, shouldSnap);
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+        QVERIFY2(!shouldSnap, "the window must not be snapped into the desktop it is leaving");
+
+        // And the record is still there for the engine restore that runs when
+        // the window actually lands.
+        const auto still =
+            m_wta->service()->placementStore().peek(QStringLiteral("deskapp|newinst"), QStringLiteral("deskapp"));
+        QVERIFY2(still.has_value(), "the desktop move must not consume the placement record");
+        QCOMPARE(still->virtualDesktop, 2);
+    }
+
+    void testResolveWindowRestore_leavesTheDesktopAloneOffTheOpenPath()
+    {
+        // The arrival re-drive comes back through this same slot with
+        // isOpenPath=false, and must NOT re-emit the move — that would bounce
+        // the window straight off the desktop it just reached.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = true;
+        m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
+                                            /*windowKind=*/0, /*isOpenPath=*/false, /*minWidth=*/0, /*minHeight=*/0, x,
+                                            y, width, height, shouldSnap);
+        QCOMPARE(desktopSpy.count(), 0);
     }
 
     void testPersistedDesktopRestore_leavesStickyAndUnknownWindowsAlone()
