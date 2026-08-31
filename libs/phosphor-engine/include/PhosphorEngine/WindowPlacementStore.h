@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
+#include <QSet>
 #include <QString>
 
 #include <functional>
@@ -221,6 +222,33 @@ public:
     /// next save.
     bool markInstanceClosed(const QString& windowId, bool graceEligible = true);
 
+    /// The window was RELEASED WHILE LIVE (a move, not a close): its next
+    /// takeForReopen is a move return, not a session-restore open, so it must
+    /// consume its record WITHOUT spending a reclaim credit.
+    ///
+    /// WHY THIS EXISTS. The daemon's live-release funnel
+    /// (Tiling.releaseWindowTracking) untracks the window in its engine, so
+    /// the re-announce that follows arrives as a FIRST OBSERVATION — the
+    /// engine no longer holds it, and nothing downstream can tell that
+    /// announce apart from a genuine open. Verified live: a desktop move of a
+    /// floating scrolling window reached takeForReopen and retired a credit
+    /// belonging to a sibling that had not reopened yet, which is exactly the
+    /// window the credit exists to bring home.
+    ///
+    /// ONE-SHOT, consumed by the next takeForReopen for the instance, so a
+    /// window moved twice is excused twice and a move never disarms the
+    /// window's later genuine opens. Keyed by INSTANCE id, so a mid-session
+    /// class rename cannot lose it. Cleared when the instance closes
+    /// (markInstanceClosed / clear) and by deserialize's whole-store replace.
+    ///
+    /// Sibling of TilingAdaptor::m_moveReleasedInstances, armed from the same
+    /// line for the same reason. They are deliberately NOT one flag: that one
+    /// is consumed by the adaptor BEFORE engine dispatch (to suppress the
+    /// cross-screen reclaim), this one during the engine's open path (to
+    /// suppress the burn), so a single flag consumed at the first moment
+    /// would already be gone by the second.
+    void markInstanceMovedLive(const QString& windowId);
+
     /// Retire ONE reclaim credit in @p appId's bucket: the newest
     /// reclaim-eligible record not bound to a live window and not
     /// @p windowId's own instance. This is takeForReopen's per-open burn,
@@ -429,6 +457,12 @@ private:
     /// every record is worse than the disagreement the claim exists to fix.
     QHash<QString, QString> m_openPairing;
     QHash<QString, QString> m_claimedBy;
+
+    /// Instance ids released while LIVE, each excusing exactly one
+    /// takeForReopen from the reclaim-credit burn — see
+    /// markInstanceMovedLive. TRANSIENT and never serialized: it describes
+    /// moves in flight and means nothing across a restart.
+    QSet<QString> m_movedLiveInstances;
 };
 
 } // namespace PhosphorEngine

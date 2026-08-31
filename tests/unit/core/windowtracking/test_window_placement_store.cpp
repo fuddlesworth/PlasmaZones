@@ -21,6 +21,23 @@ class TestWindowPlacementStore : public QObject
 {
     Q_OBJECT
 
+    /// Whether the record for @p windowId still holds its cross-screen reclaim
+    /// credit. Read straight off the record rather than inferred from
+    /// peekForReclaim: that lookup also excludes live siblings and prefers the
+    /// newest, so using it as a credit proxy makes an assertion depend on the
+    /// probe and on which record happens to be newest — which is how an
+    /// earlier version of the move-excuse tests below ended up asserting
+    /// something other than what it claimed.
+    static bool holdsCredit(const WindowPlacementStore& store, const QString& windowId)
+    {
+        for (const WindowPlacement& p : store.records()) {
+            if (p.windowId == windowId) {
+                return p.reclaimEligible;
+            }
+        }
+        return false;
+    }
+
 private Q_SLOTS:
     void testRecordAndTake_exact()
     {
@@ -1607,6 +1624,92 @@ private Q_SLOTS:
         // hand-back rather than a permanent exemption.
         QVERIFY(store.markInstanceClosed(QStringLiteral("app|new")));
         QVERIFY(!store.peekForReclaim(QStringLiteral("app|third"), QStringLiteral("app")).has_value());
+    }
+
+    void testMarkInstanceMovedLive_excusesExactlyOneBurn()
+    {
+        // A live release (a move) untracks the window in its engine, so the
+        // re-announce that follows reaches takeForReopen looking exactly like
+        // a first observation. Burning there spends a session-restore credit
+        // belonging to a sibling that has not reopened yet — verified live in
+        // the nested harness, where a desktop move retired a ghost's credit.
+        //
+        // Assertions read each sibling's credit off its record (holdsCredit)
+        // rather than through peekForReclaim, so they say exactly which credit
+        // was spent instead of depending on the probe and record recency.
+        WindowPlacementStore store;
+        // Two credit-bearing siblings that have not reopened, so two burns are
+        // distinguishable from one. The burn takes the NEWEST first, so ghostB
+        // goes before ghostA.
+        store.record(makePlacement(QStringLiteral("firefox|ghostA"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-2")));
+        store.record(makePlacement(QStringLiteral("firefox|ghostB"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-2")));
+        // The moving window: a floating slot on the screen it re-announces on,
+        // so the accept passes and the call REACHES the burn rather than
+        // stopping at the exact-final return.
+        store.record(makePlacement(QStringLiteral("firefox|live"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-1")));
+
+        const auto reopen = [&]() {
+            return store
+                .takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("firefox|live"),
+                               QStringLiteral("firefox"), QStringLiteral("DP-1"))
+                .has_value();
+        };
+        QVERIFY(holdsCredit(store, QStringLiteral("firefox|ghostA")));
+        QVERIFY(holdsCredit(store, QStringLiteral("firefox|ghostB")));
+
+        // The move return: the record is still consumed, but no credit spent.
+        store.markInstanceMovedLive(QStringLiteral("firefox|live"));
+        QVERIFY(reopen());
+        QVERIFY2(holdsCredit(store, QStringLiteral("firefox|ghostB")),
+                 "a move return must not spend a session-restore credit");
+        QVERIFY(holdsCredit(store, QStringLiteral("firefox|ghostA")));
+
+        // ONE shot. The window's next genuine open burns normally, or a single
+        // move would excuse that window's opens for the rest of the session.
+        QVERIFY(reopen());
+        QVERIFY2(!holdsCredit(store, QStringLiteral("firefox|ghostB")), "a genuine open must retire a credit");
+        QVERIFY2(holdsCredit(store, QStringLiteral("firefox|ghostA")), "and only ONE credit");
+
+        QVERIFY(reopen());
+        QVERIFY2(!holdsCredit(store, QStringLiteral("firefox|ghostA")), "the second open retires the second credit");
+    }
+
+    void testMarkInstanceMovedLive_excuseDiesWithTheInstance()
+    {
+        // A window released for a move that then CLOSES instead of
+        // re-announcing must not leave its excuse behind.
+        //
+        // CONTRACT PIN, not a reachable scenario: instance ids are unique to a
+        // window, so a closed instance can never re-announce and a leaked
+        // excuse could never actually fire — the reap is leak hygiene. That
+        // makes it unobservable except by re-announcing the SAME instance,
+        // which is what this drives. An earlier version of this test closed
+        // one instance and opened a DIFFERENT one; it passed with the reap
+        // deleted, because the excuse was never consulted either way.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("kate|ghost"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::scrollingEngineId(), QStringLiteral("DP-2")));
+        store.record(makePlacement(QStringLiteral("kate|gone"), QStringLiteral("kate"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-1")));
+
+        store.markInstanceMovedLive(QStringLiteral("kate|gone"));
+        store.markInstanceClosed(QStringLiteral("kate|gone"));
+
+        // The excuse went with the close, so this take burns like any other.
+        QVERIFY(holdsCredit(store, QStringLiteral("kate|ghost")));
+        QVERIFY(store
+                    .takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("kate|gone"),
+                                   QStringLiteral("kate"), QStringLiteral("DP-1"))
+                    .has_value());
+        QVERIFY2(!holdsCredit(store, QStringLiteral("kate|ghost")),
+                 "a closed instance's move excuse must not survive its close");
     }
 
     void testMarkInstanceClosed_unobservedCloseEarnsNoShutdownGrace()

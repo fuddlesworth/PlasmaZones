@@ -1117,11 +1117,21 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
-    // Arm the move-release one-shot BEFORE the pipeline gate, mirroring the
+    // Arm the move-release one-shots BEFORE the pipeline gate, mirroring the
     // bookkeeping above: the window is live and being moved, and its next
     // announce must not be mistaken for a session restore (see
     // m_moveReleasedInstances).
+    //
+    // TWO of them, armed together because the same announce is misread in two
+    // independent places and each excuse is consumed at a different moment:
+    // this one by the dispatch below (suppressing the cross-screen reclaim),
+    // the store's by the engine's takeForReopen (suppressing the
+    // reclaim-credit burn). A single flag consumed at the first moment would
+    // already be gone by the second — see markInstanceMovedLive.
     m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        m_windowTrackingAdaptor->service()->placementStore().markInstanceMovedLive(windowId);
+    }
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }
