@@ -355,6 +355,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
         ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — animation gating + blur density
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
+        ConfigDefaults::windowRestoreGroup(), // "WindowRestore" — mode-neutral cross-desktop session restore
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
     };

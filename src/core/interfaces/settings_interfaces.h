@@ -503,6 +503,23 @@ public:
     virtual void setSnappingStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
+    /// When true, a window that reopens on a different virtual desktop than the
+    /// one its persisted placement record names is sent back to the recorded
+    /// desktop before any engine places it. A Wayland session restores no desktop
+    /// membership of its own, so without this every window returns to whichever
+    /// desktop is current at login and a multi-desktop layout collapses onto one.
+    ///
+    /// MODE-NEUTRAL, unlike the per-engine restore toggles around it: the desktop
+    /// is a property of the window rather than of the engine that places it, and
+    /// all three engines consult this one value. Distinct from
+    /// @ref restoreWindowsToZonesOnLogin, which governs whether a snapped window
+    /// returns to its ZONE.
+    ///
+    /// Fires only for a record this daemon read back from disk at startup and has
+    /// not yet re-captured live (WindowPlacement::fromPersistedSession), so it is
+    /// a login-time behaviour and never relocates a window mid-session.
+    virtual bool restoreWindowsToDesktopOnLogin() const = 0;
+    virtual void setRestoreWindowsToDesktopOnLogin(bool restore) = 0;
     /// When true, the daemon restores a FLOATED window to its previous global
     /// position on reopen/login — including back to the monitor it was on at
     /// logout, whereas KWin's own session restore may otherwise place it on a

@@ -513,6 +513,36 @@ SettingsFlickable {
         }
 
         // =====================================================================
+        // SESSION RESTORE CARD
+        // =====================================================================
+        // Mode-neutral for the same reason as the layout-assignment card above:
+        // the virtual desktop a window returns to is a property of the window,
+        // and all three engines read the one setting.
+        SettingsCard {
+            headerText: i18n("Session restore")
+            collapsible: true
+            searchAnchor: "sessionRestore"
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Put windows back on their virtual desktop")
+                    searchAnchor: "restoreWindowsToDesktopOnLogin"
+                    description: i18n("After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.")
+
+                    SettingsSwitch {
+                        checked: appSettings.restoreWindowsToDesktopOnLogin
+                        accessibleName: i18n("Put windows back on their virtual desktop")
+                        onToggled: function (newValue) {
+                            appSettings.restoreWindowsToDesktopOnLogin = newValue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
         // WINDOW FILTERING CARD
         // =====================================================================
         // The three global filters previously hosted on the standalone

@@ -253,6 +253,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::shadersAudioGroup(), CD::inputMethodKey()},
              {CD::shadersAudioGroup(), CD::inputSourceKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
+             // Cross-desktop session restore. Owned by General rather than any
+             // one mode's page because all three engines read it — the same
+             // reason its config group is top-level rather than under
+             // Snapping.* / Tiling.* / Scrolling.*.
+             {CD::windowRestoreGroup(), CD::restoreOnLoginKey()},
              // The OSD card also lives on General; its five settings share the
              // snappingEffectsGroup with the appearance page's showNumbers/
              // flashOnSwitch keys but are distinct keys, so the one-owner

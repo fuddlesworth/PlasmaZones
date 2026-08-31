@@ -77,21 +77,80 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
         return;
     }
+    // Refusing the move is not the end of it. The daemon spends its one-shot
+    // BEFORE emitting and places nothing, expecting this window to be
+    // re-announced when it lands. If the move never happens, nothing re-announces
+    // it and the window stays unplaced for the rest of the session with the
+    // record already burnt. So each refusal below hands the window straight to
+    // the arrival restore instead, which places it on the desktop it is already
+    // on. The out-of-range case is the concrete one: a user who removed a
+    // virtual desktop between sessions has records naming a desktop that no
+    // longer exists.
+    const auto placeWhereItIs = [this, w]() {
+        if (m_snapHandler) {
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+            m_snapHandler->slotDesktopChangedRestoreArrivals();
+        }
+    };
+
     const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
     if (desktop > all.size()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size()
+                          << "— placing" << windowId << "where it is instead";
+        placeWhereItIs();
         return;
     }
     // A sticky (on-all-desktops) window is already present on the target; pinning
     // it to a single desktop here would silently un-sticky it. Directional
     // cross-desktop move is meaningless for an everywhere window — leave it.
     if (w->isOnAllDesktops()) {
+        // No recovery call here, unlike the out-of-range branch above. A sticky
+        // window is present on every desktop, so it was never displaced and is
+        // not waiting to be placed — driving a restore at it would re-place a
+        // window that went nowhere, which is the same unsolicited re-placement
+        // the arrival arm in window_desktop_connections.cpp goes to some length
+        // to avoid for the grew / un-stuck cases.
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
         return;
     }
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
     // (not on-all-desktops) so the window genuinely moves to the target.
-    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+    KWin::VirtualDesktop* target = all.at(desktop - 1);
+    KWin::effects->windowToDesktops(w, {target});
+
+    // The window has just left the desktop on screen, so nothing will place it
+    // until the user goes to where it went. On a tiling or scrolling screen that
+    // handler's desktop-return catch-scan re-announces it; snapping has no such
+    // sweep, so park it for SnapHandler to re-drive on arrival.
+    //
+    // Keyed on the target not being in view rather than on WHY the move
+    // happened: the daemon's cross-desktop login restore and a RouteToDesktop
+    // rule both land here and both leave the window equally unplaced. Parking is
+    // a no-op for a window that turns out to need nothing (the resolve answers
+    // no-snap), so covering both is cheaper than distinguishing them.
+    //
+    // That breadth is safe for the move-to-next/prev-desktop shortcut too, which
+    // is the other producer of this signal. Its re-snap branch emits
+    // applyGeometryRequested with a zone immediately after this move, and that
+    // slot calls markWindowSnapped, which cancels the park — signals on one
+    // D-Bus connection keep their order, so the cancel always follows this arm.
+    // Its no-equivalent-zone fallback branch emits no geometry and leaves the
+    // window genuinely unplaced, which is precisely the case the park is for.
+    //
+    // Measured against the window's OWN output, not the global current desktop.
+    // Under per-output virtual desktops (Plasma 6.7) those differ, and the
+    // global reading both over-parks (the target is current somewhere else, so
+    // the window really is out of view on its own output) and under-parks (the
+    // target is globally current while this output shows something else).
+    // Falls back to the global reading when the window has no output.
+    if (m_snapHandler) {
+        KWin::LogicalOutput* const out = w->screen();
+        KWin::VirtualDesktop* const shownHere =
+            out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
+        if (shownHere != target) {
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+        }
+    }
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
