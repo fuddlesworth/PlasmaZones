@@ -297,6 +297,41 @@ private Q_SLOTS:
         QCOMPARE(quietSpy.count(), 0);
     }
 
+    void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
+    {
+        // A matched RouteToDesktop owns this window's desktop whether or not its
+        // target is usable, so both open channels must suppress the remembered
+        // desktop either way. Reporting no-match here would let the rule and the
+        // recorded desktop fight over one window on one open.
+        //
+        // Stored rules cannot produce such a target — the descriptor validator
+        // rejects it on both routes into the store — so the slot is filled
+        // DIRECTLY here. That is the in-process producer the guard exists for,
+        // and it is why this branch is testable even though it is unreachable
+        // from a rules.json.
+        PhosphorRules::RuleAction desk;
+        desk.type = QString(PhosphorRules::ActionType::RouteToDesktop);
+        desk.params.insert(QString(PhosphorRules::ActionParam::TargetDesktop), 0);
+
+        PhosphorRules::ResolvedActions resolved;
+        QVERIFY(resolved.fillSlot(QString(PhosphorRules::ActionSlot::RouteDesktop), desk));
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(m_wta->emitRouteToDesktopIfMatched(resolved, QStringLiteral("deskapp|inst")),
+                 "a matched rule with an unusable target still owns this window's desktop");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testEmitRouteToDesktop_noRouteSlotReportsNoMatch()
+    {
+        // The complementary half: an empty verdict must report no match, or
+        // every window would have its remembered desktop suppressed.
+        PhosphorRules::ResolvedActions resolved;
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->emitRouteToDesktopIfMatched(resolved, QStringLiteral("deskapp|inst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
     void testApplyOpenDesktopRouting_reportsNoMatchWithoutARuleStore()
     {
         // The defensive guard. false is the permissive answer here, so an

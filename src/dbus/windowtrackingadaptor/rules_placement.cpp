@@ -215,33 +215,37 @@ bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
     if (!route) {
         return false;
     }
-    // The descriptor validator already guaranteed a 1-based desktop in range; the
-    // effect-side slot re-guards (rejects < 1, out-of-range, and sticky windows),
-    // so moving to the desktop the window already occupies is a harmless no-op.
+    // MATCHED is the answer this function gives, and it does not depend on the
+    // target being usable. A matched RouteToDesktop owns this window's desktop,
+    // so both callers must suppress their remembered-desktop restore either way
+    // — letting it step in behind a malformed target would apply a desktop the
+    // user's rule overrode. Hence one return, with the emit conditional inside.
+    //
+    // The read is deliberately defensive even though stored rules cannot reach
+    // the else. Both routes into the store validate this parameter against the
+    // RouteToDesktop descriptor (ruleaction_builtins_engine.cpp), which requires
+    // an integral double in [1, MaxVirtualDesktopOrdinal): addRule goes through
+    // Rule::isValid -> ActionRegistry::validate, and a hand-edited rules.json
+    // goes through RuleAction::fromJson, which drops the action on the same
+    // check. What the guard survives is a later relaxation of those bounds, and
+    // an in-process producer that fills the slot directly.
+    //
+    // No upper bound here on purpose: the descriptor owns that, and the effect
+    // re-guards the target against the LIVE desktop list before moving anything,
+    // which is the only bound that is authoritative at that moment.
     const int desktop = route->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
     if (desktop >= 1) {
         qCInfo(lcDbusWindow) << "open-routing: routing" << windowId << "to virtual desktop" << desktop;
         Q_EMIT windowDesktopMoveRequested(windowId, desktop);
-        return true;
+    } else {
+        // Logged rather than passed over: the validators above make this
+        // unreachable from a stored rule, so seeing it means one of them has
+        // been relaxed or bypassed, and the window silently keeps whatever
+        // desktop it opened on while still suppressing its remembered one.
+        qCWarning(lcDbusWindow) << "open-routing: matched RouteToDesktop for" << windowId
+                                << "carries an unusable target" << desktop
+                                << "— suppressing the remembered desktop without moving the window";
     }
-    // A matched RouteToDesktop whose target failed the >= 1 guard still counts
-    // as MATCHED for the caller's suppression: the rule owns this window's
-    // desktop, and letting the remembered-desktop restore step in behind a
-    // malformed target would apply a desktop the user's rule overrode.
-    //
-    // Defensive depth with no reachable path today, and so no test. BOTH ways
-    // into the store validate this parameter against the RouteToDesktop
-    // descriptor (ruleaction_builtins_engine.cpp), which requires an integral
-    // double in [1, MaxVirtualDesktopOrdinal]: addRule goes through
-    // Rule::isValid → ActionRegistry::validate, and a hand-edited rules.json
-    // goes through RuleAction::fromJson, which drops the action on the same
-    // check. So a target failing the >= 1 guard above cannot reach here from
-    // stored rules by either route.
-    //
-    // Kept because the read is untyped — a QVariant out of a QVariantMap — so
-    // it survives a descriptor whose bounds are later relaxed, and an
-    // in-process producer that builds ResolvedActions without going through
-    // either validating path.
     return true;
 }
 
