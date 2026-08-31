@@ -147,9 +147,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // mis-classifies (Steam / CEF child surfaces) without journal noise.
     logWindowDiagnostics(w, "windowAdded");
 
-    // Wired exactly once per window: setupWindowConnections carries no
-    // idempotency guard, and this slot is the only caller that sees windows
-    // opened after the effect loaded. See the ordering invariant on the
+    // Wired exactly once per window: this slot is the only caller that sees
+    // windows opened after the effect loaded, and setupWindowConnections
+    // carries an m_wiredWindows guard behind that. See the ordering invariant on the
     // constructor's existing-window sweep (lifecycle_wiring_daemon.cpp) for
     // why that sweep and this slot can never both wire the same window.
     setupWindowConnections(w);

@@ -1067,6 +1067,18 @@ private:
     /// in @p screenIds that no longer has ANY context state. Overrides
     /// survive by design; see the definition.
     void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
+    /// Drop the one-shot arms that are keyed by SCREEN but carry a CONTEXT as
+    /// their value, for every entry whose context @p contextDied accepts:
+    /// m_pendingFocusEmitContexts and m_burstPendingApplies.
+    ///
+    /// Both are consumed by comparing the stored context against the current
+    /// one, so an entry outliving its context is not inert — KWin hands a
+    /// removed desktop's index back out, and the reborn context compares equal
+    /// to the dead one. The state prunes take the same predicate; this exists
+    /// because those two maps cannot be swept by the screen-keyed sweep that
+    /// serves a REMOVED screen (here the screen survives, only its context
+    /// died).
+    void pruneContextKeyedScreenArms(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied);
     // engine_core.cpp
     /// Capture @p state's strip STRUCTURE (column groupings, widths,
     /// display, per-tile height intents) before a mode reassignment tears
@@ -1167,6 +1179,12 @@ private:
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
     void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
+    /// Emit geometryRestoreRequested for @p record's remembered free rect, if
+    /// the restore gate allows it and the rect belongs to the screen the window
+    /// is opening on. Shared by the two float-restore entry points; see the
+    /// definition for the gate and the screen-local rule.
+    void emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                       const QString& screenId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -1316,10 +1334,18 @@ private:
     /// describing the strip it had been showing.
     ///
     /// Armed wherever announceStripContextIfChanged actually fires, which is
-    /// what pairs the two: a screen is forced when, and only when, its
-    /// consumer was just told to retire. Four sites do it — the identical-set
-    /// branch of setActiveScreens, its added and stayer loops, and the
-    /// sticky-pin release in updateStickyScreenPins.
+    /// what pairs the two: on those paths a screen is forced when, and only
+    /// when, its consumer was just told to retire. Four sites do it — the
+    /// identical-set branch of setActiveScreens, its added and stayer loops,
+    /// and the sticky-pin release in updateStickyScreenPins.
+    ///
+    /// There is a FIFTH producer that is deliberately NOT announce-paired:
+    /// applyLayout promotes an m_pendingFocusEmitContexts entry into this set
+    /// once the context that armed it is the one on screen. Nothing retired
+    /// there — the arm exists because a background focus report moved the
+    /// strip's focus and anchor with only placementChanged emitted, so the
+    /// return owes a geometry batch the change gate would otherwise suppress.
+    /// See that member for the full contract.
     ///
     /// A screen ADDED to the set is armed too, and the reason is worth stating
     /// because the obvious argument for leaving it unarmed is wrong. That
@@ -1341,6 +1367,26 @@ private:
     /// memory is still true; it is the inference drawn from it that does not
     /// survive the switch.
     QSet<QString> m_forceEmitScreens;
+    /// A focus report absorbed while its context was in the BACKGROUND
+    /// (windowFocused's off-current-key arm): the strip's focus and anchor
+    /// moved, but only placementChanged was emitted, so the compositor never
+    /// heard the centering. Keyed by screen, valued with the CONTEXT the
+    /// report belonged to, and promoted into m_forceEmitScreens by the first
+    /// applyLayout pass that runs with that context current — unlike the bare
+    /// force flag it cannot be spent by a pass for a different context, which
+    /// is exactly how the desktop-return centering was getting lost (the
+    /// return retile consumed the switch's arm on the old focus, or ran
+    /// before the focus report existed, and nothing forced a later emit when
+    /// every rect matched the stored baseline).
+    /// Keyed by the whole CONTEXT rather than by screen. One slot per screen
+    /// would be enough for the single-switch case, but two background reports
+    /// for two different off-current contexts of the same screen do happen
+    /// (activating windows on two parked desktops before returning to either),
+    /// and the second would overwrite the first — leaving the first context's
+    /// return with no forced repair, which is the exact failure this member
+    /// exists to prevent. A set of contexts arms each independently, and each
+    /// is consumed by the pass that runs with that context current.
+    QSet<PhosphorEngine::PlacementStateKey> m_pendingFocusEmitContexts;
     /// Last strip epoch announced per screen, so stripContextChanged is
     /// emit-on-change rather than a re-announcement on every set push.
     ///

@@ -125,6 +125,10 @@ pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 # suite. Every slot builds its own strip and asserts geometry, not just the
 # verb's bool.
 pse_add_test(test_scrollstrip_sizing test_scrollstrip_sizing.cpp)
+# The maximize-to-edges flag's resolution and clearing contract, split out of
+# the sizing suite once that file passed the size ceiling. Same fixture shape,
+# one concern: what a flagged column resolves to, and what turns it back off.
+pse_add_test(test_scrollstrip_maximize test_scrollstrip_maximize.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)

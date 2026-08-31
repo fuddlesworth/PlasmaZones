@@ -762,9 +762,16 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
     // report "nothing happened" for a relayout that does.
     const bool claimed = claimTabbedHeightOwnership(*col, ti, height);
     // A height verb on the column drops a maximize-to-edges override (the
-    // user is sizing the stack the flag was overriding). Dropped on the claim
-    // too: moving a tabbed column's extent owner changes its resolved extent.
-    const bool clearedEdges = col->maximizedToEdges && (claimed || !(col->tiles.at(ti).height == height));
+    // user is sizing the stack the flag was overriding).
+    //
+    // Unconditional while the flag is set, with no equality test against the
+    // stored intent. Under the override the column does not RENDER its stored
+    // intents at all — relayout resolves every tile as a weighted Auto share of
+    // the raw cross extent — so a request that happens to equal the stored
+    // value is still a real change: clearing the flag re-renders the intent.
+    // Testing equality here made exactly that request a silent no-op, on the
+    // one verb whose job is to take the stack back out of the override.
+    const bool clearedEdges = col->maximizedToEdges;
     if (clearedEdges) {
         col->maximizedToEdges = false;
     }

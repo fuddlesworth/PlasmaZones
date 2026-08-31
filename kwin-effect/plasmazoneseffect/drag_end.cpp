@@ -26,6 +26,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -54,6 +55,35 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // wrong drag's state. Capturing a local is the same staleness guard the
     // beginDrag reply gets from m_dragActivation.generation.
     const bool startedFloating = m_dragActivation.startedFloating;
+
+    // Identity of the interactive move/resize this drag belongs to, captured
+    // synchronously at dispatch. The three rescue sites in the reply lambda
+    // below (ApplyFloat's end, ApplySnap's and RestoreSize's cancel) all read
+    // isUserMove() at reply time, up to EndDragTimeoutMs later. By then the
+    // user may have released the remaining button and begun a NEW gesture on
+    // the same window (a Meta+RMB resize, say) — the predicate cannot tell the
+    // two apart, so the rescue would kill a move the user just started. KWin
+    // bumps this counter for every interactive move/resize (it is the same
+    // handle PlacementTracker uses to tell "the user has interacted since my
+    // snapshot"), so requiring it to still match scopes each rescue to the
+    // gesture the drag actually owned.
+    //
+    // Empty unless a move was ALREADY live at dispatch, and that condition is
+    // what makes the compare sound without depending on whether KWin bumps the
+    // counter at the start or the end of a gesture: captured mid-move, any
+    // later gesture reads a different value under either convention. Captured
+    // while no move was running, an end-of-gesture bump would leave the next
+    // move reading the same value and the guard would pass wrongly.
+    const std::optional<uint32_t> dragMoveGeneration = [window]() -> std::optional<uint32_t> {
+        if (!window || !window->isUserMove()) {
+            return std::nullopt;
+        }
+        KWin::Window* kw = window->window();
+        if (!kw) {
+            return std::nullopt;
+        }
+        return kw->interactiveMoveResizeCount();
+    }();
 
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the
@@ -99,7 +129,27 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     timeoutTimer->start(EndDragTimeoutMs);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, handled, timeoutTimer, startedFloating](QDBusPendingCallWatcher* w) {
+            [this, safeWindow, windowId, handled, timeoutTimer, startedFloating,
+             dragMoveGeneration](QDBusPendingCallWatcher* w) {
+                // True only while THIS drag's interactive move is still the one
+                // KWin is running, and only when the left button is already up
+                // (the case the rescues exist for: KWin waits for the last
+                // button, so the move outlives the drop). Any gesture the user
+                // began after dispatch reads a different generation and is left
+                // alone. See dragMoveGeneration's capture above.
+                auto rescuableMove = [&safeWindow, &dragMoveGeneration, this]() -> KWin::Window* {
+                    if (!dragMoveGeneration || !safeWindow || !safeWindow->isUserMove()) {
+                        return nullptr;
+                    }
+                    if (m_currentMouseButtons & Qt::LeftButton) {
+                        return nullptr;
+                    }
+                    KWin::Window* kw = safeWindow->window();
+                    if (!kw || kw->interactiveMoveResizeCount() != *dragMoveGeneration) {
+                        return nullptr;
+                    }
+                    return kw;
+                };
                 w->deleteLater();
                 if (*handled) {
                     // Timeout already fired; this is a late reply — discard.
@@ -138,6 +188,16 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Daemon handled any internal cleanup. CancelSnap returns
                     // the window to its pre-drag state, so its snap-managed
                     // status is unchanged — nothing for the effect to retrack.
+                    //
+                    // Deliberately NO interactive-move rescue here, and none in
+                    // NotifyDragOutUnsnap either. Only ApplyFloat, ApplySnap and
+                    // RestoreSize carry one, because only those three write
+                    // geometry, which a live KWin move would fight — the move
+                    // has to end first. These write none: if a non-left button is still down
+                    // the user is simply still dragging, and KWin keeping the
+                    // move alive until the last button comes up is the correct
+                    // behaviour for any window. Ending it here would cut a
+                    // gesture short mid-drag.
                     break;
 
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
@@ -166,6 +226,16 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // float for a dead id.
                     if (!safeWindow || safeWindow->isDeleted()) {
                         break;
+                    }
+                    // Same rescue as ApplySnap / RestoreSize, but END rather
+                    // than cancel: a float drop keeps the window where it was
+                    // dropped, and cancelInteractiveMoveResize would revert it
+                    // to the drag-start rect. Without this, a drop where only
+                    // a non-left button is still held leaves KWin's move live,
+                    // and the window then follows every desktop switch until
+                    // the last button comes up somewhere KWin's filter can see.
+                    if (KWin::Window* kw = rescuableMove()) {
+                        kw->endInteractiveMoveResize();
                     }
                     // Only run the float transition (which restores the
                     // pre-autotile size) when the window was TILED at drag
@@ -201,8 +271,30 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // engine override and would pin a cross-monitor drag-out
                     // to the SOURCE strip's screen instead of where the user
                     // actually dropped it.
-                    const QString dropScreenId = getWindowScreenId(safeWindow);
+                    //
+                    // Fall back to the RELEASE CURSOR when the window-based
+                    // resolve comes back empty (a window fully off-screen
+                    // mid-reconfigure). Not outcome.targetScreenId: the daemon
+                    // clears that field on this branch by construction and
+                    // passes the cursor instead, precisely because "the release
+                    // screen is resolved plugin-side from the cursor position"
+                    // (drag_protocol.cpp's bypass arm, the sole ApplyFloat
+                    // producer). Everything above has already committed the
+                    // float effect-side, so bailing without a screen leaves the
+                    // daemon's per-screen float slot unwritten and its float
+                    // readers answering "not floating" for a window this side
+                    // has floated.
+                    QString dropScreenId = getWindowScreenId(safeWindow);
                     if (dropScreenId.isEmpty()) {
+                        const QPoint releaseCursor(outcome.x, outcome.y);
+                        if (const KWin::LogicalOutput* output =
+                                KWin::effects ? KWin::effects->screenAt(releaseCursor) : nullptr) {
+                            dropScreenId = resolveEffectiveScreenId(releaseCursor, output);
+                        }
+                    }
+                    if (dropScreenId.isEmpty()) {
+                        qCWarning(lcEffect) << "endDrag ApplyFloat: no drop screen resolved for" << windowId
+                                            << "— float committed in the effect but not recorded in the daemon.";
                         break;
                     }
                     // Keep the tiling handler's notified-screen record on the
@@ -240,10 +332,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // defers (100ms retry) until ALL buttons are released —
                     // noticeable delay when using a mouse button (RMB) for
                     // zone activation.
-                    if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
-                        if (KWin::Window* kw = safeWindow->window()) {
-                            kw->cancelInteractiveMoveResize();
-                        }
+                    if (KWin::Window* kw = rescuableMove()) {
+                        kw->cancelInteractiveMoveResize();
                     }
                     applyWindowGeometry(safeWindow, snapGeometry);
                     // Drag-drop snap committed — record in snapping's border set,
@@ -288,25 +378,35 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         break;
                     }
                     // Drag-to-unsnap: apply pre-snap width/height at current
-                    // position. Skip if slotRestoreSizeDuringDrag already
-                    // applied during the drag (size within 1px).
+                    // position. The GEOMETRY is skipped if
+                    // slotRestoreSizeDuringDrag already applied it during the
+                    // drag (size within 1px) — but only the geometry. That slot
+                    // resizes and nothing else (drag_snap.cpp: a single
+                    // applyWindowGeometry), and the daemon emits only
+                    // restoreSizeDuringDragChanged alongside it, so nothing has
+                    // cleared the snap tracking or the rule cache by the time we
+                    // get here. Breaking out early left the window in the snap
+                    // handler's border set with its rules still resolved as
+                    // snapped, on exactly the common path where the mid-drag
+                    // restore landed first. Both calls below are idempotent, so
+                    // they run whether or not the resize was still owed.
                     QRectF frame = safeWindow->frameGeometry();
-                    if (qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1) {
-                        qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
-                        break;
-                    }
-                    // qRound, not truncation: fractional-scale outputs leave
-                    // sub-pixel residue in frameGeometry() (same convention as
-                    // the toRect() sites).
-                    const QRect geo(qRound(frame.x()), qRound(frame.y()), outcome.width, outcome.height);
-                    if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
-                        if (KWin::Window* kw = safeWindow->window()) {
+                    const bool sizeAlreadyRestored =
+                        qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1;
+                    if (sizeAlreadyRestored) {
+                        qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping the resize";
+                    } else {
+                        // qRound, not truncation: fractional-scale outputs leave
+                        // sub-pixel residue in frameGeometry() (same convention as
+                        // the toRect() sites).
+                        const QRect geo(qRound(frame.x()), qRound(frame.y()), outcome.width, outcome.height);
+                        if (KWin::Window* kw = rescuableMove()) {
                             kw->cancelInteractiveMoveResize();
                         }
+                        // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
+                        applyWindowGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                            PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     }
-                    // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
-                    applyWindowGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                        PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     // Drag-to-unsnap: window left zone-managed sizing.
                     m_snapHandler->clearWindowSnapped(windowId);
                     // Unsnapped — flips the Mode / IsSnapped rule fields; re-resolve.
@@ -333,11 +433,21 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // zone and wasn't floated, try the first empty zone on the
                 // release screen. Daemon-provided targetScreenId wins over
                 // window's current screen (cross-screen drags).
-                const bool applied = outcome.action == PhosphorProtocol::DragOutcome::ApplySnap
-                    || outcome.action == PhosphorProtocol::DragOutcome::ApplyFloat;
+                // RestoreSize and NotifyDragOutUnsnap are counted here too, and
+                // not because they placed the window: they are the daemon
+                // saying the user deliberately dragged it OUT of its zone. The
+                // daemon stamps targetScreenId before the shouldApply split
+                // (drag_protocol.cpp), so it is populated for those outcomes as
+                // well, and on an auto-assign layout the fill below would find
+                // the zone the drag just vacated empty and snap the window
+                // straight back into it. Drag-out would be impossible there.
+                const bool autoFillSuppressed = outcome.action == PhosphorProtocol::DragOutcome::ApplySnap
+                    || outcome.action == PhosphorProtocol::DragOutcome::ApplyFloat
+                    || outcome.action == PhosphorProtocol::DragOutcome::RestoreSize
+                    || outcome.action == PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap;
                 // isDeleted: don't auto-fill a zone for a close-grabbed dying
                 // window — the daemon would commit an assignment for a dead id.
-                if (!applied && safeWindow && !safeWindow->isDeleted() && !outcome.targetScreenId.isEmpty()
+                if (!autoFillSuppressed && safeWindow && !safeWindow->isDeleted() && !outcome.targetScreenId.isEmpty()
                     && isDaemonReady("auto-fill on drop")) {
                     const bool sticky = isWindowSticky(safeWindow);
                     auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
@@ -350,11 +460,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
                 // Snap Assist: show the window picker if the daemon requested
                 // it. asyncShow is non-blocking. This fires alongside an
-                // ApplySnap outcome (applied==true) BY DESIGN: the daemon only
+                // ApplySnap outcome (autoFillSuppressed==true) BY DESIGN: the daemon only
                 // sets requestSnapAssist when the window actually snapped
                 // (drop.cpp: `actuallySnapped && ...`) — snap-assist's purpose
                 // is to offer filling the REMAINING empty zones after a snap,
-                // so it must not be gated on !applied.
+                // so it must not be gated on !autoFillSuppressed.
                 if (outcome.requestSnapAssist && !outcome.emptyZones.isEmpty() && !outcome.targetScreenId.isEmpty()) {
                     m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
                 }

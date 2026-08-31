@@ -95,13 +95,7 @@ int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutPar
     if (isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal()) {
         return 0;
     }
-    int visibleTiles = 0;
-    for (const Tile& tile : c.tiles) {
-        if (!tile.minimized) {
-            ++visibleTiles;
-        }
-    }
-    return params.tabIndicator.reservedThickness(visibleTiles);
+    return params.tabIndicator.reservedThickness(c.visibleTileCount());
 }
 
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
@@ -280,13 +274,7 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         const bool indicatorEatsMainAxis =
             isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal();
         if (c.display == ColumnDisplay::Tabbed && indicatorEatsMainAxis) {
-            int visibleTiles = 0;
-            for (const Tile& tile : c.tiles) {
-                if (!tile.minimized) {
-                    ++visibleTiles;
-                }
-            }
-            reservationFloor = params.tabIndicator.reservedThickness(visibleTiles);
+            reservationFloor = params.tabIndicator.reservedThickness(c.visibleTileCount());
         }
         for (const Tile& tile : c.tiles) {
             // minMain, not minWidth: this is the column's floor ALONG the
@@ -799,6 +787,15 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         // from "this column cannot be any narrower" — columnExtentPx takes the
         // max of the two and the answer is indistinguishable afterwards. A
         // maximized-to-edges extent is declared, never minimum-pinned.
+        //
+        // This re-resolves the pair columnExtentPx just took a max of, which
+        // reads like the kind of duplicate per-tick walk the note at the end of
+        // this function says to remove. It stays because the only way to share
+        // the work is to fold the flag out of columnExtentPx and into its four
+        // callers, and that resolver owns the toEdges arm and the work-area cap
+        // the other three depend on. The toEdges short-circuit below keeps the
+        // extra pair off the maximized path, which is the one whose column
+        // spans the whole output.
         rc.extentPinnedByMinimum =
             !toEdges && columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
         rc.maximizedToEdges = toEdges;
@@ -809,6 +806,13 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         // on show and is not the only tab that may carry an intent.
         rc.rect = axis.makeRect(mainStart, axis.crossLow(colArea), colW, axis.crossSize(colArea));
 
+        // Same predicate as Column::visibleTileCount, which the two reservation
+        // sites use — visible.size() == col.visibleTileCount() by construction,
+        // and the indicator is sized from one while the tiles are laid out from
+        // the other, so the two must not drift. Spelled out here rather than
+        // routed through the accessor because this walk needs the INDICES; the
+        // accessor would allocate a vector for callers that only want the
+        // count.
         QVector<int> visible;
         visible.reserve(col.tiles.size());
         for (int ti = 0; ti < col.tiles.size(); ++ti) {
@@ -837,7 +841,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // the start edge comes from crossStartFor rather than the area.
             if (!toEdges) {
                 const int tabbedCross = tabbedColumnCrossPx(col, params);
-                rc.rect = axis.makeRect(mainCursor, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
+                // mainStart, matching the default rect above and the stack
+                // tiles below. It equals mainCursor on this branch today (the
+                // outer-gap shift is zero whenever !toEdges), but spelling the
+                // main-axis origin two ways in one function is how that stops
+                // being true silently.
+                rc.rect = axis.makeRect(mainStart, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
             }
             // Only the active tile is laid out, at the column's content rect;
             // the others share its rect but are reported hidden.
@@ -879,6 +888,19 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             int fixedTotal = 0;
             for (int vi = 0; vi < n; ++vi) {
                 const Tile& t = col.tiles.at(visible.at(vi));
+                // Maximize-to-edges wins over the tiles' height intents, the
+                // same override the tabbed branch applies to its owner's
+                // intent: the flag declares the full raw cross extent, so a
+                // Fixed/Preset tile is resolved as Auto (sharing by weight)
+                // and its stored intent survives untouched for the restore.
+                // Without this a lone Fixed/Preset tile kept its short height
+                // and the centre policy floated it mid-screen while the
+                // column's main extent — and the compositor's maximize state —
+                // said full, which is the "maximize only widens" report.
+                if (toEdges) {
+                    autoWeightTotal += qMax<qreal>(0.01, t.height.weight);
+                    continue;
+                }
                 switch (t.height.kind) {
                 case WindowHeight::Fixed:
                     heights[vi] = qBound(1, t.height.fixedPx, availH);
@@ -896,14 +918,17 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     break;
                 }
             }
-            // A lone tile fills the column height on Auto intent only; an
-            // explicit Fixed/Preset height is honored (niri parity — a solo
-            // window can be shorter than the column, leaving empty space
-            // below it). The explicit heights were already resolved and
-            // clamped to the work area in the switch above, and the
-            // min-height clamp below still applies.
+            // A lone tile fills the column height on Auto intent, or whenever
+            // the column is maximized to edges — that flag overrides the stored
+            // intent for as long as it is set, exactly as it does for the stack
+            // below and for the tabbed branch. Otherwise an explicit
+            // Fixed/Preset height is honored (niri parity — a solo window can
+            // be shorter than the column, leaving empty space below it). The
+            // explicit heights were already resolved and clamped to the work
+            // area in the switch above, and the min-height clamp below still
+            // applies.
             if (n == 1) {
-                if (col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
+                if (toEdges || col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
                     heights[0] = availH;
                 }
             } else {
@@ -936,7 +961,9 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 qreal weightLeft = autoWeightTotal;
                 for (int vi = 0; vi < n; ++vi) {
                     const Tile& t = col.tiles.at(visible.at(vi));
-                    if (t.height.kind != WindowHeight::Auto) {
+                    // toEdges: every tile was accumulated as Auto above, so
+                    // every tile takes its weight share here too.
+                    if (!toEdges && t.height.kind != WindowHeight::Auto) {
                         continue;
                     }
                     const qreal w = qMax<qreal>(0.01, t.height.weight);

@@ -439,8 +439,14 @@ void PlasmaZonesEffect::connectDragTracker()
                 // hover is otherwise motion-driven: a drop that lands the
                 // pointer over a pill with no further motion would leave it
                 // unlit and uninterceptable until the next twitch. DragTracker
-                // clears its drag state before emitting, so the guard is
-                // already open here.
+                // clears its drag state before emitting, so isDragging() is
+                // already false here. That is not the whole guard: on a drop
+                // with another button still held, KWin's move is still live and
+                // updateScrollTabHover declines on compositorMoveResizeActive()
+                // instead, deliberately. The re-drive for that case runs from
+                // the finish signal (window_connections.cpp), once the
+                // compositor's move genuinely ends — so this call doing nothing
+                // on a multi-button drop is the design, not a dead call.
                 m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
             });
 }
