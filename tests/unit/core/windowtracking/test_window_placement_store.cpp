@@ -257,6 +257,42 @@ private Q_SLOTS:
         QCOMPARE(taken2->virtualDesktop, claim2->virtualDesktop);
     }
 
+    void testClaimSurvivesAnAppIdRename()
+    {
+        // windowId is the composite appId|uuid, so a mid-session class change
+        // (the Electron/CEF WM_CLASS rebroadcast) rewrites the id STRING while
+        // the record itself survives, re-bucketed under the new appId. The claim
+        // is keyed by that id, so it has to be re-keyed with the record.
+        //
+        // The harm if it is not: the renamed record looks UNCLAIMED to the
+        // reverse index, so a sibling opening afterwards can take it away from
+        // the window that owns it — the exact record-stealing this mechanism
+        // exists to prevent, reintroduced by a rename.
+        WindowPlacementStore store;
+        WindowPlacement own = makePlacement(QStringLiteral("oldclass|u1"), QStringLiteral("oldclass"),
+                                            WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        own.virtualDesktop = 2;
+        store.record(own);
+
+        QVERIFY(store.claimForOpen(QStringLiteral("oldclass|u1"), QStringLiteral("oldclass")).has_value());
+
+        // The rename: same instance uuid, new class. The record moves buckets.
+        WindowPlacement renamed = makePlacement(QStringLiteral("newclass|u1"), QStringLiteral("newclass"),
+                                                WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        renamed.virtualDesktop = 2;
+        QVERIFY(store.record(renamed));
+
+        // A sibling of the RENAMED app opens. The record belongs to u1, so the
+        // sibling must not be handed it.
+        const auto stolen = store.claimForOpen(QStringLiteral("newclass|u2"), QStringLiteral("newclass"));
+        QVERIFY2(!stolen.has_value(), "a renamed record must stay claimed by the instance that owns it");
+
+        // And the owner still reaches it under its new id.
+        const auto mine = store.claimForOpen(QStringLiteral("newclass|u1"), QStringLiteral("newclass"));
+        QVERIFY(mine.has_value());
+        QCOMPARE(mine->windowId, QStringLiteral("newclass|u1"));
+    }
+
     void testClaimForOpenFailsOpenWhenItsRecordIsEvicted()
     {
         // A claim naming a record that has since been removed must not lock the

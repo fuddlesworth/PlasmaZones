@@ -119,6 +119,20 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             }
             // appId changed (mid-session rename): drop the stale entry here and
             // re-insert under the new appId bucket below.
+            //
+            // RE-KEY the open claim rather than dropping it: the record is not
+            // going away, it is moving, and windowId is the composite
+            // `appId|uuid`, so a rename changes the STRING while the record
+            // survives. Dropping would lose a live claim; leaving it would be
+            // worse still — m_claimedBy would keep the old id, so pairingAllows
+            // still finds the key, does NOT take its fail-open branch, and locks
+            // the instance out of every record for the rest of the open.
+            if (const auto owner = m_claimedBy.constFind(stored.windowId); owner != m_claimedBy.constEnd()) {
+                const QString instance = *owner;
+                m_claimedBy.remove(stored.windowId);
+                m_claimedBy.insert(merged.windowId, instance);
+                m_openPairing.insert(instance, merged.windowId);
+            }
             bucket.removeAt(i);
             if (bucket.isEmpty()) {
                 m_byApp.erase(it); // iterator consumed — do not ++it
@@ -762,6 +776,7 @@ bool WindowPlacementStore::clear(const QString& windowId)
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (sameWindowInstance(bucket.at(i).windowId, windowId)) {
+                dropClaimsNaming(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 removed = true;
             }

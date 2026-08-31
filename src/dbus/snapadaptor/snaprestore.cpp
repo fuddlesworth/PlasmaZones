@@ -196,10 +196,10 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // multi-window app got one record's desktop paired with another's zone, and
     // an already-home window could consume a sibling's record outright.
     //
-    // Open AND PendingSweep. PendingSweep is a genuine FIRST touch, not a
-    // re-entry: a window whose open resolve arrived before the daemon was ready
-    // never got past the readiness gate above, so it never claimed, and the
-    // effect re-drives it under that reason. Without this the pairing guard was
+    // Open AND PendingSweep. The sweep re-resolves windows that are already
+    // OPEN, but for the placement store it is still a first touch: a window
+    // whose open resolve arrived before the daemon was ready never got past the
+    // readiness gate above, so it never claimed anything. Without this the pairing guard was
     // absent in exactly the slow-daemon login the feature exists for.
     //
     // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
