@@ -143,6 +143,17 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         }
         const QString windowId = getWindowId(window);
         const QString screenId = getWindowScreenId(window);
+        // A window parked for a desktop-arrival restore can reach its desktop by
+        // this route instead of a desktop switch: the user drags it there in the
+        // pager, or picks "Move to Desktop" aimed at the one in view. The drain
+        // is only wired to the desktop and activity signals, so without this the
+        // park would survive, and the NEXT unrelated desktop switch would spend
+        // it — re-placing a window the user has since positioned by hand.
+        // Draining here restores it at the moment it arrives, which is what the
+        // park was for, and spends the entry so nothing fires later.
+        if (m_snapHandler) {
+            m_snapHandler->slotDesktopChangedRestoreArrivals();
+        }
         if (!m_tilingHandler->isManagedScreen(screenId)) {
             // Snapping screen. There is no stack to join and snapping places
             // nothing on its own, so an arrival floats — unless the context's

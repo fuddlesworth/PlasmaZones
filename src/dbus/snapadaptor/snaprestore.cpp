@@ -210,7 +210,17 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // pending-restores sweep, the daemon-restart stacking sweep, and the
     // desktop-arrival re-drive itself) must not teleport a window across
     // desktops.
-    if (isOpenPath && !desktopRuleMatched && m_adaptor->applyPersistedDesktopRestore(windowId)) {
+    //
+    // Behind the disabled-context gate, like every other placement this file
+    // performs. A user who turned PlasmaZones off for this monitor, desktop or
+    // activity expects it to leave their windows alone there, and moving one to
+    // another desktop is the most visible thing it could do. Checked against the
+    // screen the window OPENED on, since that is the context being acted in —
+    // applySnapResult's gate below cannot cover this path, because it keys on a
+    // placement result that does not exist yet here.
+    const bool contextDisabled =
+        m_contextResolver != nullptr && m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
+    if (isOpenPath && !desktopRuleMatched && !contextDisabled && m_adaptor->applyPersistedDesktopRestore(windowId)) {
         return;
     }
 
