@@ -609,6 +609,15 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
+    // Release this instance's open claim on a placement record. Consumption
+    // through take() / takeForReopen() already releases it, so this covers the
+    // window that closed without any engine having restored it — otherwise the
+    // claim would sit in the map holding a record hostage from every sibling
+    // that opens later.
+    if (m_service) {
+        m_service->placementStore().releaseOpenClaim(windowId);
+    }
+
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below. For a FLOATING window this
     // records a floated WindowPlacement at its live geometry (the single source

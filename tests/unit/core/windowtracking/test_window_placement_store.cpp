@@ -201,6 +201,110 @@ private Q_SLOTS:
                  "a real engine capture must disarm the one-shot");
     }
 
+    void testClaimForOpenPairsEachInstanceWithItsOwnRecord()
+    {
+        // Two windows of one app, remembered on DIFFERENT desktops. Before the
+        // open claim, peek (newest-first) and take (oldest-first) each chose a
+        // record independently, so one window got the other's desktop; and a
+        // window that needed no move could consume its sibling's record, leaving
+        // the sibling with nothing to restore from.
+        //
+        // MUTATION NOTE: asserting only that both instances got A record passes
+        // even with the pairing removed — they always did. The assertion that
+        // matters is that the two records are DIFFERENT and that each instance's
+        // peek and take agree with each other.
+        WindowPlacementStore store;
+        WindowPlacement a = makePlacement(QStringLiteral("app|old-a"), QStringLiteral("app"),
+                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        a.virtualDesktop = 2;
+        WindowPlacement b = makePlacement(QStringLiteral("app|old-b"), QStringLiteral("app"),
+                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        b.virtualDesktop = 3;
+        store.record(a);
+        store.record(b);
+
+        // Fresh uuids, as after a logout: neither live id matches a record, so
+        // both fall to the appId bucket.
+        const QString w1 = QStringLiteral("app|live-1");
+        const QString w2 = QStringLiteral("app|live-2");
+
+        const auto claim1 = store.claimForOpen(w1, QStringLiteral("app"));
+        const auto claim2 = store.claimForOpen(w2, QStringLiteral("app"));
+        QVERIFY(claim1.has_value());
+        QVERIFY(claim2.has_value());
+        QVERIFY2(claim1->windowId != claim2->windowId, "two instances of one app must not claim the same record");
+        QVERIFY2(claim1->virtualDesktop != claim2->virtualDesktop,
+                 "each instance must carry away its own remembered desktop");
+
+        // The claim is idempotent, so a second reader in the same open sees the
+        // same record rather than re-choosing.
+        QCOMPARE(store.claimForOpen(w1, QStringLiteral("app"))->windowId, claim1->windowId);
+
+        // peek — what the cross-desktop restore reads — agrees with the claim.
+        QCOMPARE(store.peek(w1, QStringLiteral("app"))->windowId, claim1->windowId);
+        QCOMPARE(store.peek(w2, QStringLiteral("app"))->windowId, claim2->windowId);
+
+        // take — what the engine restore consumes — agrees with it too, which is
+        // the half that stops one window eating the other's record.
+        const auto taken1 = store.take(w1, QStringLiteral("app"));
+        QVERIFY(taken1.has_value());
+        QCOMPARE(taken1->windowId, claim1->windowId);
+        QCOMPARE(taken1->virtualDesktop, claim1->virtualDesktop);
+
+        const auto taken2 = store.take(w2, QStringLiteral("app"));
+        QVERIFY2(taken2.has_value(), "the sibling's record must still be there");
+        QCOMPARE(taken2->windowId, claim2->windowId);
+        QCOMPARE(taken2->virtualDesktop, claim2->virtualDesktop);
+    }
+
+    void testClaimForOpenFailsOpenWhenItsRecordIsEvicted()
+    {
+        // A claim naming a record that has since been removed must not lock the
+        // instance out of everything else. Failing closed here would restore
+        // NOTHING, which is worse than the disagreement the claim exists to fix.
+        WindowPlacementStore store;
+        WindowPlacement a = makePlacement(QStringLiteral("app|old-a"), QStringLiteral("app"),
+                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        a.virtualDesktop = 2;
+        store.record(a);
+
+        const QString w1 = QStringLiteral("app|live-1");
+        QVERIFY(store.claimForOpen(w1, QStringLiteral("app")).has_value());
+
+        // Something else consumes the claimed record out from under it.
+        QVERIFY(store.take(QStringLiteral("app|old-a"), QString()).has_value());
+
+        WindowPlacement other = makePlacement(QStringLiteral("app|old-b"), QStringLiteral("app"),
+                                              WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        other.virtualDesktop = 5;
+        store.record(other);
+
+        const auto again = store.peek(w1, QStringLiteral("app"));
+        QVERIFY2(again.has_value(), "a stale claim must not hide the remaining records");
+        QCOMPARE(again->virtualDesktop, 5);
+    }
+
+    void testReleaseOpenClaimFreesTheRecordForASibling()
+    {
+        // A window that closes without any engine having restored it must not
+        // hold its record hostage from the next instance.
+        WindowPlacementStore store;
+        WindowPlacement a = makePlacement(QStringLiteral("app|old-a"), QStringLiteral("app"),
+                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        a.virtualDesktop = 2;
+        store.record(a);
+
+        const QString w1 = QStringLiteral("app|live-1");
+        const QString w2 = QStringLiteral("app|live-2");
+        QVERIFY(store.claimForOpen(w1, QStringLiteral("app")).has_value());
+        QVERIFY2(!store.claimForOpen(w2, QStringLiteral("app")).has_value(),
+                 "the only record is already claimed by a live sibling");
+
+        store.releaseOpenClaim(w1);
+        QVERIFY2(store.claimForOpen(w2, QStringLiteral("app")).has_value(),
+                 "releasing the claim must hand the record back");
+    }
+
     void testFromPersistedSessionIsSetByLoadAndNeverSerialized()
     {
         // The cross-desktop login restore is armed by this transient flag, and

@@ -185,6 +185,19 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
+    // Claim this instance's placement record BEFORE anything reads one. The
+    // desktop restore below and the engine resolve after it are two independent
+    // selectors over the same appId bucket, and at login every uuid is fresh so
+    // both fall to that bucket. Claiming once makes them agree: without it a
+    // multi-window app got one record's desktop paired with another's zone, and
+    // an already-home window could consume a sibling's record outright.
+    //
+    // Open path only. The non-open drivers re-enter this slot for a window that
+    // already went through it, so its claim (or its consumption) is settled.
+    if (isOpenPath && m_adaptor->service()) {
+        m_adaptor->service()->placementStore().claimForOpen(windowId, m_adaptor->service()->currentAppIdFor(windowId));
+    }
+
     // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
     // be routed to a desktop whether or not it snaps (and even when it doesn't
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
