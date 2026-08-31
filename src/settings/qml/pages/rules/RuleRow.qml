@@ -72,6 +72,12 @@ ExpandableRowDelegate {
     /// translate wire strings back to user-facing labels. Threaded down by
     /// RulesPage so each row doesn't re-invoke the Q_INVOKABLE.
     property var matchFieldOptions: []
+    /// Bumped by the host whenever the underlying rule model changes. The
+    /// expansion body resolves its rule through `controller.ruleJson()`, a
+    /// plain Q_INVOKABLE with no change notification, so an open expansion
+    /// would keep showing the pre-edit WHEN/THEN tree until it was collapsed
+    /// and reopened. Touching this in the body's binding re-reads the rule.
+    property int ruleRevision: 0
     /// Cached `controller.actionTypes()` — same threading pattern as
     /// matchFieldOptions. Used by ActionListView to resolve action-type
     /// wire strings and per-param labels in the read-only THEN section.
@@ -364,7 +370,10 @@ ExpandableRowDelegate {
         id: expansionComponent
 
         ColumnLayout {
-            readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({})
+            readonly property var _ruleJson: {
+                void (row.ruleRevision); // touch to re-read after a rule edit
+                return row.controller ? row.controller.ruleJson(row.ruleId) : ({});
+            }
 
             spacing: Kirigami.Units.smallSpacing
 

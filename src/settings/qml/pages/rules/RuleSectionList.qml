@@ -32,6 +32,9 @@ Item {
     property var appSettings: null
     property bool reorderingEnabled: true
     property bool showSectionBadge: false
+    /// Model-revision counter, threaded down to each row so an expanded row's
+    /// read-only preview re-reads its rule after an edit.
+    property int modelRevision: 0
 
     /// Resolve the `beforeId` to hand `moveRule` for moving `list[from]` to slot
     /// `to`. `moveRule` inserts immediately BEFORE `beforeId` (empty = end).
@@ -94,6 +97,7 @@ Item {
             matchFieldOptions: root.matchFieldOptions
             actionTypeOptions: root.actionTypeOptions
             appSettings: root.appSettings
+            ruleRevision: root.modelRevision
             onToggleRequested: function (en) {
                 root.toggleRequested(_rule.ruleId, en);
             }
