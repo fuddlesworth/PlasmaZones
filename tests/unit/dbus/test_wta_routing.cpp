@@ -912,7 +912,7 @@ private Q_SLOTS:
         QCOMPARE(neg->virtualDesktop, 0);
 
         seedPersistedDesktopRecord(QStringLiteral("bigapp"), QStringLiteral("big"),
-                                   PhosphorEngine::MaxPlausibleVirtualDesktop + 1);
+                                   PhosphorEngine::MAX_PLAUSIBLE_VIRTUAL_DESKTOP + 1);
         const auto big =
             m_wta->service()->placementStore().peek(QStringLiteral("bigapp|big"), QStringLiteral("bigapp"));
         QVERIFY(big.has_value());

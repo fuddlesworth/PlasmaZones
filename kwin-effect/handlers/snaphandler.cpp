@@ -1271,60 +1271,58 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     if (!window || !m_awaitingDesktopArrivalRestore.contains(windowId)) {
         return false;
     }
-    {
-        // Measured against the window's OWN output, matching the arm in
-        // slotWindowDesktopMoveRequested. isOnCurrentDesktop() reads the global
-        // current desktop, which under per-output virtual desktops both
-        // over-fires (some other output switched to this window's desktop, so
-        // it is still not visible where it lives) and under-fires (its own
-        // output switched to it while the global current is elsewhere, so the
-        // park would sit unspent until an unrelated switch). Falls back to the
-        // global reading when the window has no output.
-        KWin::LogicalOutput* const out = window->screen();
-        KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
-        const bool desktopInView = shownHere ? window->isOnDesktop(shownHere) : window->isOnCurrentDesktop();
-        if (!desktopInView || !window->isOnCurrentActivity()) {
-            return false; // Still waiting for its desktop.
-        }
-        if (window->isMinimized()) {
-            // KWin can bring a session's windows back minimized, and nothing
-            // re-drives the restore on unminimize (that path drives the unfloat
-            // retries, not this one). So the park is KEPT rather than spent: a
-            // later desktop switch is the only remaining chance to place this
-            // window, and onWindowClosed drops the entry if it never comes.
-            return false;
-        }
-        if (!m_effect->shouldHandleWindow(window)) {
-            // Never going to be placed by this handler, so the park is spent
-            // rather than carried for a restore that cannot happen.
-            m_awaitingDesktopArrivalRestore.remove(windowId);
-            return false;
-        }
-        // Snap-mode screens only. A window that landed on a tiling or scrolling
-        // screen is re-announced by that handler's own desktop-return catch-scan
-        // (TilingHandler::slotScreensChanged), and driving the snap resolve at it
-        // as well risks the no-match float default landing on a window the tiling
-        // engine is about to adopt. Spent, because that handler now owns it.
-        const QString screenId = m_effect->getWindowScreenId(window);
-        if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
-            m_awaitingDesktopArrivalRestore.remove(windowId);
-            return false;
-        }
-
-        // Spend the park BEFORE dispatching: the restore is a one-shot, and an
-        // entry left behind would re-drive on every later desktop switch — the
-        // repeated-float-restore failure the member's comment describes, just
-        // reached by a different route.
-        m_awaitingDesktopArrivalRestore.remove(windowId);
-
-        // isOpenPath=false: this is not an open. It also keeps the daemon's
-        // cross-desktop restore arm (gated on isOpenPath) from firing a second
-        // time and bouncing the window straight back off the desktop it just
-        // reached.
-        qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
-        callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
-        return true;
+    // Measured against the window's OWN output, matching the arm in
+    // slotWindowDesktopMoveRequested. isOnCurrentDesktop() reads the global
+    // current desktop, which under per-output virtual desktops both
+    // over-fires (some other output switched to this window's desktop, so
+    // it is still not visible where it lives) and under-fires (its own
+    // output switched to it while the global current is elsewhere, so the
+    // park would sit unspent until an unrelated switch). Falls back to the
+    // global reading when the window has no output.
+    KWin::LogicalOutput* const out = window->screen();
+    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
+    const bool desktopInView = shownHere ? window->isOnDesktop(shownHere) : window->isOnCurrentDesktop();
+    if (!desktopInView || !window->isOnCurrentActivity()) {
+        return false; // Still waiting for its desktop.
     }
+    if (window->isMinimized()) {
+        // KWin can bring a session's windows back minimized, and nothing
+        // re-drives the restore on unminimize (that path drives the unfloat
+        // retries, not this one). So the park is KEPT rather than spent: a
+        // later desktop switch is the only remaining chance to place this
+        // window, and onWindowClosed drops the entry if it never comes.
+        return false;
+    }
+    if (!m_effect->shouldHandleWindow(window)) {
+        // Never going to be placed by this handler, so the park is spent
+        // rather than carried for a restore that cannot happen.
+        m_awaitingDesktopArrivalRestore.remove(windowId);
+        return false;
+    }
+    // Snap-mode screens only. A window that landed on a tiling or scrolling
+    // screen is re-announced by that handler's own desktop-return catch-scan
+    // (TilingHandler::slotScreensChanged), and driving the snap resolve at it
+    // as well risks the no-match float default landing on a window the tiling
+    // engine is about to adopt. Spent, because that handler now owns it.
+    const QString screenId = m_effect->getWindowScreenId(window);
+    if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
+        m_awaitingDesktopArrivalRestore.remove(windowId);
+        return false;
+    }
+
+    // Spend the park BEFORE dispatching: the restore is a one-shot, and an
+    // entry left behind would re-drive on every later desktop switch — the
+    // repeated-float-restore failure the member's comment describes, just
+    // reached by a different route.
+    m_awaitingDesktopArrivalRestore.remove(windowId);
+
+    // isOpenPath=false: this is not an open. It also keeps the daemon's
+    // cross-desktop restore arm (gated on isOpenPath) from firing a second
+    // time and bouncing the window straight back off the desktop it just
+    // reached.
+    qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
+    callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
+    return true;
 }
 
 } // namespace PlasmaZones

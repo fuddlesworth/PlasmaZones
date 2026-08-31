@@ -22,7 +22,7 @@ namespace PhosphorEngine {
 /// the effect re-checks the target against the live list before moving anything.
 /// This exists so a corrupt or foreign session.json cannot put an arbitrary
 /// integer into a placement record.
-inline constexpr int MaxPlausibleVirtualDesktop = 1024;
+inline constexpr int MAX_PLAUSIBLE_VIRTUAL_DESKTOP = 1024;
 
 /// One engine's view of a window: which managed slot it occupies (or that it is
 /// floating / unmanaged) in THAT engine's mode. State is PER ENGINE — a window
@@ -328,7 +328,7 @@ struct WindowPlacement
         // leaves the window wherever it opens — the same outcome as a record
         // that never carried one.
         const int rawDesktop = obj.value(QLatin1String("desktop")).toInt();
-        p.virtualDesktop = (rawDesktop > 0 && rawDesktop <= MaxPlausibleVirtualDesktop) ? rawDesktop : 0;
+        p.virtualDesktop = (rawDesktop > 0 && rawDesktop <= MAX_PLAUSIBLE_VIRTUAL_DESKTOP) ? rawDesktop : 0;
         p.activity = obj.value(QLatin1String("activity")).toString();
         p.kind = clampWindowKindFromWire(obj.value(QLatin1String("kind")).toInt());
 
