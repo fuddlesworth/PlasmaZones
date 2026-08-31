@@ -132,6 +132,45 @@ private Q_SLOTS:
         QCOMPARE(m_wta->service()->screenForWindow(windowId), assigned);
     }
 
+    // ── The virtual-screen arm ───────────────────────────────────────────
+    //
+    // KWin reports PHYSICAL output names, so on a subdivided monitor the
+    // assigned screen ("HDMI-1/vs:0") never equals the reported one
+    // ("HDMI-1") and a naive compare unsnaps every window on every report.
+    // The physical-parent check is what stops that, and it is the arm the
+    // cross-screen drop lands on for any user running virtual screens — the
+    // same configuration the effect-side guard was written for.
+    void testWindowScreenChanged_physicalReportForAVirtualAssignedScreenKeepsTheSnap()
+    {
+        const QString windowId = QStringLiteral("brave-browser|screen-virtual");
+        const QString assigned = QStringLiteral("HDMI-1/vs:0");
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], assigned);
+        QCOMPARE(m_wta->service()->screenForWindow(windowId), assigned);
+
+        m_wta->windowScreenChanged(windowId, QStringLiteral("HDMI-1"));
+
+        QCOMPARE(m_wta->service()->zoneForWindow(windowId), m_zoneIds[0]);
+        QCOMPARE(m_wta->service()->screenForWindow(windowId), assigned);
+    }
+
+    // The other half of that arm: a physical report naming a DIFFERENT
+    // monitor than the virtual screen's parent is a genuine move and must
+    // still unsnap, so the check above cannot be read as "virtual assignments
+    // never unsnap".
+    void testWindowScreenChanged_physicalReportForAnotherMonitorUnsnapsAVirtualAssignment()
+    {
+        const QString windowId = QStringLiteral("brave-browser|screen-virtual-move");
+
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], QStringLiteral("HDMI-1/vs:0"));
+        QVERIFY(!m_wta->service()->zoneForWindow(windowId).isEmpty());
+
+        m_wta->windowScreenChanged(windowId, QStringLiteral("DP-1"));
+
+        QVERIFY2(m_wta->service()->zoneForWindow(windowId).isEmpty(),
+                 "a report from a different physical monitor must drop a virtual-screen assignment");
+    }
+
     // Repeated reports for the assigned screen stay inert. The effect can
     // legitimately emit more than one per apply (the synchronous frame change
     // and an async follow-up from an X11 size constraint), so idempotence

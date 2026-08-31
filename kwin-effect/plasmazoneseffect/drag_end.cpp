@@ -58,8 +58,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     const bool startedFloating = m_dragActivation.startedFloating;
 
     // Identity of the interactive move/resize this drag belongs to, captured
-    // synchronously at dispatch. The three rescue sites in the reply lambda
-    // below (ApplyFloat's end, ApplySnap's and RestoreSize's cancel) all read
+    // synchronously at dispatch. The four rescue sites in the reply lambda
+    // below (ApplyFloat's end, ApplySnap's cancel, and RestoreSize's cancel
+    // when the resize is still owed / end when it is not) all read
     // isUserMove() at reply time, up to EndDragTimeoutMs later. By then the
     // user may have released the remaining button and begun a NEW gesture on
     // the same window (a Meta+RMB resize, say) — the predicate cannot tell the
@@ -432,6 +433,19 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1;
                     if (sizeAlreadyRestored) {
                         qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping the resize";
+                        // The resize is owed no longer, but the rescue still is.
+                        // Skipping it here left KWin's interactive move alive on
+                        // the COMMON drag-out path (slotRestoreSizeDuringDrag
+                        // lands mid-drag, so this branch is the usual one), and a
+                        // live move makes the window follow every desktop switch
+                        // until the last button comes up somewhere KWin's filter
+                        // can see. END rather than cancel, for ApplyFloat's
+                        // reason: no apply follows to undo a revert, so
+                        // cancelInteractiveMoveResize would throw the window back
+                        // to the drag-start rect and undo the drag-out itself.
+                        if (KWin::Window* kw = rescuableMove()) {
+                            kw->endInteractiveMoveResize();
+                        }
                     } else {
                         // qRound, not truncation: fractional-scale outputs leave
                         // sub-pixel residue in frameGeometry() (same convention as
