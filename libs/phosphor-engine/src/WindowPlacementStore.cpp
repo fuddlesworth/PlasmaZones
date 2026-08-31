@@ -647,13 +647,34 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
     }
     // Per-open reclaim-credit burn — see the header contract. Hit or miss,
     // and AFTER any consumption/re-record above (the bucket may have been
-    // erased and re-created by it, so the helper re-finds it).
+    // erased and re-created by it, so the helper re-finds it). The move-return
+    // excuse lives inside the helper rather than here, so BOTH burn channels
+    // honour it — see markInstanceMovedLive.
     burnReclaimCredit(windowId, appId);
     return rec;
 }
 
 bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QString& appId)
 {
+    // MOVE RETURN excuse, consumed here rather than at either call site
+    // because there are TWO per-open burn channels and both must honour it:
+    // takeForReopen for tiling-screen arrivals, and the snap adaptor's
+    // open-path resolve for snap-mode ones (see the header). The daemon's
+    // live-release funnel untracked this window in its engine, so the
+    // announce that follows reaches whichever channel it lands in looking
+    // exactly like a first observation while actually being the second half
+    // of a user's move; spending a session-restore credit on it takes the
+    // credit from a sibling that has not reopened yet. One-shot, so the
+    // window's later genuine opens still burn (markInstanceMovedLive).
+    //
+    // AHEAD of the appId guard below: the one-shot answers "was this announce
+    // a move return", which is true whether or not the window has a bucket to
+    // burn from, and leaving it armed past a bucket-less announce would hand
+    // the excuse to some later genuine open instead.
+    if (m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0) {
+        qCDebug(lcPlacementStore) << "burnReclaimCredit: move return for" << windowId << "— burn excused";
+        return false;
+    }
     if (appId.isEmpty()) {
         return false;
     }
@@ -686,11 +707,28 @@ bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QStr
     return true;
 }
 
+void WindowPlacementStore::markInstanceMovedLive(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_movedLiveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+}
+
 bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool graceEligible)
 {
     if (windowId.isEmpty()) {
         return false;
     }
+    // A window that closed is not coming back to spend its move excuse, and
+    // the instance id is unique so the entry could never fire again — but the
+    // set must not accumulate corpses. This and clear() are the store's only
+    // reap points, and between them they cover both of the daemon's close
+    // funnels: the observed close and the alive-set prune backstop, which
+    // calls this with graceEligible=false. (The TilingAdaptor sibling reaps on
+    // its own four events instead — it is armed from the same line, but the
+    // two sets live in different objects and see different signals.)
+    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     // An OBSERVED close is authoritative and stamps the time. An unobserved one
     // contributes no time at all and must not overwrite a stamp an earlier
     // observed close already wrote: logout tears windows down and can push an
@@ -862,6 +900,9 @@ bool WindowPlacementStore::clear(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
+    // The move excuse names a record that is going away — same reaping
+    // rationale as markInstanceClosed's.
+    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     bool removed = false;
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
@@ -1023,6 +1064,9 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     // Every claim named a record in the store being replaced.
     m_openPairing.clear();
     m_claimedBy.clear();
+    // Likewise the in-flight move excuses: they describe this session's moves,
+    // and both deserialize callers are startup-time (see the note above).
+    m_movedLiveInstances.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an
