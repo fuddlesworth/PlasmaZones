@@ -8880,19 +8880,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="374"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="522"/>
         <source>Session restore</source>
-        <translation type="unfinished"></translation>
+        <translation>Sitzungswiederherstellung</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="376"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Fenster auf ihrer virtuellen Arbeitsfläche wiederherstellen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
         <source>logout</source>
-        <translation type="unfinished"></translation>
+        <translation>abmelden</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="538"/>
@@ -13635,7 +13635,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nach der erneuten Anmeldung kehrt jedes Fenster auf die Arbeitsfläche zurück, auf der es war. Ohne diese Einstellung öffnet sich jedes Fenster auf der Arbeitsfläche, die bei der Anmeldung angezeigt wird.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>
@@ -21550,7 +21550,7 @@
         <translation>Der Reiter eines Fensters, das Aufmerksamkeit erbittet.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="696"/>
         <source>Untitled window</source>
         <translation>Unbenanntes Fenster</translation>
     </message>

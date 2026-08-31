@@ -7660,19 +7660,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="374"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="522"/>
         <source>Session restore</source>
-        <translation type="unfinished"></translation>
+        <translation>Restauração de sessão</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="376"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Devolver as janelas à sua área de trabalho virtual</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
         <source>logout</source>
-        <translation type="unfinished"></translation>
+        <translation>encerrar sessão</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="524"/>
@@ -13635,7 +13635,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation type="unfinished"></translation>
+        <translation>Depois que você entrar novamente, cada janela volta para a área de trabalho em que estava. Sem isso, todas as janelas reabrem na área de trabalho que estiver visível quando você entrar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>
@@ -21550,7 +21550,7 @@
         <translation>A aba de uma janela que está pedindo atenção.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="696"/>
         <source>Untitled window</source>
         <translation>Janela sem título</translation>
     </message>
