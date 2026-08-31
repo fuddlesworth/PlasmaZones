@@ -1341,6 +1341,18 @@ private:
     /// memory is still true; it is the inference drawn from it that does not
     /// survive the switch.
     QSet<QString> m_forceEmitScreens;
+    /// A focus report absorbed while its context was in the BACKGROUND
+    /// (windowFocused's off-current-key arm): the strip's focus and anchor
+    /// moved, but only placementChanged was emitted, so the compositor never
+    /// heard the centering. Keyed by screen, valued with the CONTEXT the
+    /// report belonged to, and promoted into m_forceEmitScreens by the first
+    /// applyLayout pass that runs with that context current — unlike the bare
+    /// force flag it cannot be spent by a pass for a different context, which
+    /// is exactly how the desktop-return centering was getting lost (the
+    /// return retile consumed the switch's arm on the old focus, or ran
+    /// before the focus report existed, and nothing forced a later emit when
+    /// every rect matched the stored baseline).
+    QHash<QString, PhosphorEngine::PlacementStateKey> m_pendingFocusEmitByScreen;
     /// Last strip epoch announced per screen, so stripContextChanged is
     /// emit-on-change rather than a re-announcement on every set push.
     ///

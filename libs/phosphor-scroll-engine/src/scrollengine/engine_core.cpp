@@ -367,6 +367,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     for (const QString& screenId : removed) {
         m_announcedStripEpoch.remove(screenId);
         m_forceEmitScreens.remove(screenId);
+        // Same asymmetry fix as the force flag above: a pending focus emit
+        // for a screen leaving the set would otherwise survive to a later
+        // stint and force a batch for a report from another era.
+        m_pendingFocusEmitByScreen.remove(screenId);
     }
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire

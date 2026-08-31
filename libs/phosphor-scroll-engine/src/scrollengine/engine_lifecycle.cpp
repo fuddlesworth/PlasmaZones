@@ -1206,6 +1206,17 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     const bool activeOffViewport = activeReport && !state->strip().viewDetached() && activeIdx >= 0
         && !state->strip().visibleColumnIndices(params).contains(activeIdx);
     if (!focusMoved && !handBackView && !activeOffViewport) {
+        // A refused report for a BACKGROUND context is not the no-op it is
+        // for the current one. All three refusal tests above measured the
+        // STORED strip state, but the compositor's own scroll view is keyed
+        // per output, not per desktop, so what it is actually showing for
+        // this strip can disagree with everything the tests trusted. Arm the
+        // pending emit anyway: the desktop return then re-asserts this
+        // strip's geometry unconditionally, which is exactly the repair a
+        // report the model could not classify still deserves.
+        if (key != currentKeyForScreen(key.screenId)) {
+            m_pendingFocusEmitByScreen.insert(key.screenId, key);
+        }
         return;
     }
     if (handBackView) {
@@ -1226,6 +1237,18 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         if (!deferForCloseReflowHold(key.screenId)) {
             applyLayout(key.screenId, false);
         }
+    } else {
+        // Background context: the strip's focus and anchor moved above, but
+        // no geometry batch carries it — and the desktop return that brings
+        // this context on screen cannot be trusted to emit one on its own.
+        // Its retile's rects can all match the stored baseline (the strip is
+        // returning to where it was), and the context switch's own force arm
+        // is a screen-keyed flag any interleaved pass can spend. Record the
+        // KEY this report belongs to; applyLayout promotes it to a forced
+        // emit only when it runs with this context current, so the centering
+        // from this activation survives whatever ordering the desktop switch
+        // and the focus report arrive in.
+        m_pendingFocusEmitByScreen.insert(key.screenId, key);
     }
     // Focus and view anchor are persisted (serializeStripState), and
     // placementChanged is the only thing that marks DirtyScrollStrips.

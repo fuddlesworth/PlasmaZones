@@ -800,6 +800,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (auto it = m_forceEmitScreens.begin(); it != m_forceEmitScreens.end();) {
         it = matches(*it) ? m_forceEmitScreens.erase(it) : std::next(it);
     }
+    for (auto it = m_pendingFocusEmitByScreen.begin(); it != m_pendingFocusEmitByScreen.end();) {
+        it = matches(it.key()) ? m_pendingFocusEmitByScreen.erase(it) : std::next(it);
+    }
     m_context.removeScreensIf(matches);
     // Drop the dead output from the active set and the deferred-apply queue
     // too: until the daemon's next setActiveScreens, isActiveOnScreen would

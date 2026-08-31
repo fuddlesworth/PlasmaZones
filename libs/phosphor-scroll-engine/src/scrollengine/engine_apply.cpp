@@ -49,6 +49,18 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         clearTabStripsForScreen(screenId);
         return;
     }
+    // Promote a pending background-focus emit (windowFocused's off-current-key
+    // arm) now that its context is provably the one on screen. Promotion
+    // rather than a second flag at the emit gate: m_forceEmitScreens already
+    // breaks the view-delta basis at the sameBasis read below and is consumed
+    // at the gate, so folding in here inherits both behaviours. The key
+    // compare is what the bare flag lacks — a pass for a DIFFERENT context
+    // leaves the entry armed for the return that actually shows this strip.
+    if (const auto pendIt = m_pendingFocusEmitByScreen.constFind(screenId);
+        pendIt != m_pendingFocusEmitByScreen.constEnd() && *pendIt == currentKeyForScreen(screenId)) {
+        m_pendingFocusEmitByScreen.remove(screenId);
+        m_forceEmitScreens.insert(screenId);
+    }
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (!params.workArea.isValid()) {
         // Screen went away or gaps swallowed it: the indicator must not

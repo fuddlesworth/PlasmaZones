@@ -41,6 +41,7 @@ private Q_SLOTS:
     }
 
     void desktopSwitchBackEmitsEvenWhenNoRectMoved();
+    void backgroundFocusReportForcesTheReturnBatch();
     void identicalSetRePushWithoutASwitchStaysSuppressed();
     void stripContextIsAnnouncedOnDesktopSwitch();
     void changedSetSwitchStillAnnouncesTheStayingScreen();
@@ -98,6 +99,69 @@ void TestScrollEngineStripContext::desktopSwitchBackEmitsEvenWhenNoRectMoved()
         }
     }
     QVERIFY2(sawWindow, "the switch-back batch must name the strip's windows");
+}
+void TestScrollEngineStripContext::backgroundFocusReportForcesTheReturnBatch()
+{
+    // Activating a window that lives on another desktop (a taskbar click)
+    // can land the focus report while the engine's context for the screen
+    // still resolves the desktop being LEFT. The strip's focus and anchor
+    // move in the background state, but no geometry batch may be emitted for
+    // a context that is not on screen — so the report's centering has to
+    // ride the desktop return. The screen-keyed force flag is not a safe
+    // carrier for that (any interleaved pass can spend it); the pending
+    // focus emit is keyed to the context and is consumed only by a pass that
+    // runs with that context current.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Away, with the destination populated so the return leg cannot lean on
+    // the empty-resolve bail resetting the baseline (same reasoning as the
+    // changed-set test below).
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // The activation report for desktop 1's window arrives BEFORE the
+    // engine hears about the switch back — the ordering a taskbar click
+    // produces when KWin activates first and switches second. app|a is the
+    // window the strip already calls active, so the report is refused by
+    // every focus test; the pending emit is what it must still arm.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    QVERIFY2(tiledSpy.count() > 0, "the return after a background focus report must emit a batch");
+    bool sawWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QString id = v.toObject().value(QLatin1String("windowId")).toString();
+            if (id == QStringLiteral("app|a")) {
+                sawWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawWindow, "the return batch must re-assert the focused window's geometry");
+
+    // The pending arm must be spent by that return, not linger: an identical
+    // re-push with nothing new to say stays suppressed, exactly like the
+    // negative-control test below.
+    QSignalSpy afterSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(afterSpy.count(), 0);
 }
 void TestScrollEngineStripContext::identicalSetRePushWithoutASwitchStaysSuppressed()
 {
