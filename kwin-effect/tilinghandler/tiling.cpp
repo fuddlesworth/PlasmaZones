@@ -87,6 +87,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         return;
     }
 
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The
+    // ARRIVAL of a batch is itself the evidence: the engine emits on change
+    // only (engine_apply.cpp:746), so returning to a desktop whose strip is
+    // unchanged emits nothing at all, and candidate A is diagnosed by this
+    // line NOT appearing after a desktop switch. Read against the
+    // desktopChanged line from the same category.
+    if (lcStripDiag().isDebugEnabled()) {
+        QSet<QString> screens;
+        int parkedEntries = 0;
+        for (const auto& req : validatedRequests) {
+            screens.insert(req.screenId);
+            if (req.hasVisualPos) {
+                ++parkedEntries;
+            }
+        }
+        qCDebug(lcStripDiag) << "batch arrived:" << validatedRequests.size() << "entries," << parkedEntries
+                             << "with visualPos, screens=" << screens;
+    }
+
     // A geometry batch on a scrolling screen slides columns under the
     // stationary pointer; pause FFM until the cursor moves deliberately
     // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
@@ -895,6 +914,33 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
         genByScreen.insert(it.key(), ++m_tileStaggerGenByScreen[it.key()]);
     }
+    // The STRIP this batch was built for, captured beside the generations and
+    // checked the same way. The generations alone cannot see a strip retire:
+    // retireStripScopedState drops the per-window relocations but bumps
+    // nothing, so a staggered apply still in flight from the OUTGOING strip's
+    // batch would land afterwards and re-insert the very entry the retire just
+    // dropped, putting a parked column back at the previous strip's position.
+    //
+    // The batch carries no epoch of its own. The value is READ OUT of
+    // m_stripEpochByScreen here, while this batch is being processed, and what
+    // makes that read mean "the strip this batch is for" is signal ordering:
+    // the daemon announces BEFORE it schedules the forced retile, and both
+    // travel one D-Bus connection, so a batch whose processing precedes the
+    // announcement necessarily predates the switch and belongs to the OUTGOING
+    // strip. slotStripContextChanged then records the new epoch before it
+    // retires, so those pending applies fail this compare and are dropped,
+    // while a batch processed after it captures the new value and runs.
+    //
+    // The genuinely raced-ahead case — a batch that established strip state
+    // before the effect had ever heard an epoch for the screen — is not
+    // handled here at all. slotStripContextChanged's first-epoch branch
+    // handles it by declining to retire, so no apply is ever cancelled on its
+    // behalf. A screen with no epoch yet reads empty on both sides and is
+    // unaffected.
+    QHash<QString, QString> stripEpochByScreen;
+    for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+        stripEpochByScreen.insert(it.key(), m_stripEpochByScreen.value(it.key()));
+    }
 
     const bool hasApplies = !toApply.isEmpty();
     // A batch that only touches scrolling screens never needs the stacking
@@ -1257,16 +1303,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen, startedViewScreens, immediateViewScreens, wireToLive](int i) {
+        [this, toApply, gen, genByScreen, stripEpochByScreen, startedViewScreens, immediateViewScreens,
+         wireToLive](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
             // Drop this apply if superseded by a desktop/screen switch (global
-            // epoch) OR by a newer retile of THIS window's screen (per-screen).
-            // A batch for a DIFFERENT screen no longer cancels us — that was the
+            // epoch), by a newer retile of THIS window's screen (per-screen),
+            // or by the screen's STRIP being replaced under it. A batch for a
+            // DIFFERENT screen no longer cancels us — that was the
             // cross-output "hole on the source monitor" bug.
             if (m_tileStaggerGeneration != gen
-                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
+                || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)
+                || m_stripEpochByScreen.value(snap.screenId) != stripEpochByScreen.value(snap.screenId)) {
                 // A genuinely newer retile — of this window's screen, OR a
                 // global bump (desktop/screen switch) — has superseded this
                 // apply; normal during rapid ops. Both epochs are logged
@@ -1280,7 +1329,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
                                   << "| globalGen now" << m_tileStaggerGeneration << "captured" << gen
                                   << "| screenGen now" << m_tileStaggerGenByScreen.value(snap.screenId) << "captured"
-                                  << genByScreen.value(snap.screenId);
+                                  << genByScreen.value(snap.screenId) << "| stripEpoch now"
+                                  << m_stripEpochByScreen.value(snap.screenId) << "captured"
+                                  << stripEpochByScreen.value(snap.screenId);
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {

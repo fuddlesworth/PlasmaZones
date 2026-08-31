@@ -1184,6 +1184,16 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
+    // The announced-epoch memo is per-session for the same reason as its
+    // neighbours: it records what a PARTICULAR daemon said. Note this is
+    // symmetry and bookkeeping, not a repair — the epoch is derived from a
+    // seeded-at-zero hash of the context key, so a restarted daemon announces
+    // the SAME value for the same strip and a retained entry would compare
+    // equal rather than firing a spurious retire. Cleared because every other
+    // daemon-published map here is, and because a screen whose context moved
+    // while the daemon was down should be treated as a first epoch rather than
+    // compared against a memo from a session that is gone.
+    m_stripEpochByScreen.clear();
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep
     // blitting pills for columns the new daemon never laid out: the replay

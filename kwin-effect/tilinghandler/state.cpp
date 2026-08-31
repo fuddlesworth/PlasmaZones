@@ -384,6 +384,110 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
     setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
 }
 
+void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
+{
+    if (screenId.isEmpty()) {
+        // Boundary validation, like every sibling slot in this file. An empty
+        // id is not merely useless here, it is destructive: the retire selects
+        // windows by comparing a screen id against a QHash::value lookup that
+        // answers an empty QString for anything unrecorded, so "" would match
+        // every untracked window and drop its relocation.
+        qCWarning(lcEffect) << "stripContext: dropping announcement with an empty screen id";
+        return;
+    }
+    const auto it = m_stripEpochByScreen.constFind(screenId);
+    const bool known = it != m_stripEpochByScreen.constEnd();
+    if (known && *it == epoch) {
+        return;
+    }
+    m_stripEpochByScreen.insert(screenId, epoch);
+    if (!known) {
+        // FIRST epoch for this screen. Nothing was retained under a previous
+        // strip, so there is nothing to retire — and retiring here would throw
+        // away the state a batch that raced ahead of this announcement just
+        // established. Record and return.
+        qCDebug(lcStripDiag) << "strip context: first epoch for" << screenId << debugLabel;
+        return;
+    }
+    qCDebug(lcStripDiag) << "strip context: retiring strip state for" << screenId << "->" << debugLabel;
+    retireStripScopedState(screenId);
+}
+
+void TilingHandler::retireStripScopedState(const QString& screenId)
+{
+    // THE RETIRE-SET RULE IS ON THIS FUNCTION'S DECLARATION. Read it before
+    // adding or removing anything here. The short form: retire an entry when
+    // what invalidates it is the STRIP changing; keep it when what invalidates
+    // it is the CLIENT responding or the window dying.
+    bool droppedAny = false;
+    for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
+        // The recorded screen answers first, and tiled membership answers ONLY
+        // for a window it has nothing to say about. m_notifiedWindowScreens is
+        // written under a narrower condition than the relocation itself: the
+        // apply loop inserts a visual delta for any entry carrying a visual
+        // position, but records the window's screen only when the window is in
+        // m_notifiedWindows, so a window demoted or rolled back between the two
+        // ends up holding a relocation with no recorded screen at all. That
+        // window is the whole reason for the second term, and selecting on the
+        // recorded map alone left it wearing the OUTGOING strip's position for
+        // good.
+        //
+        // The fallback is deliberately NOT ORed in for windows that DO have a
+        // recorded screen, which is the tempting spelling and is wrong in a way
+        // that does not heal. screenForTiledWindow returns the first matching
+        // bucket in hash order, and those buckets go stale — outputchange.cpp
+        // says so at its own recorded-screen fallback, which exists for exactly
+        // that case. A window that has moved to another screen but still sits
+        // in this one's bucket would lose its relocation here, and nothing
+        // would put it back: the only writer of that map is the tile-batch
+        // apply, the other screen's strip did not change so no batch is coming,
+        // and the damage this function issues is scoped to THIS output, so the
+        // window would not even be repainted where it actually is.
+        //
+        // Also not scrollTrackedScreenFor, which looks like the right helper
+        // and is not: it is impure (it reports clip loss as a side effect) and
+        // both of its answer arms are gated on the screen being in
+        // m_scrollingScreens, so for a screen that has already left the
+        // scrolling set it answers empty for every window and this loop would
+        // drop nothing at all.
+        const QString& windowId = wit.key();
+        const auto recordedIt = m_notifiedWindowScreens.constFind(windowId);
+        const bool onThisScreen = recordedIt != m_notifiedWindowScreens.constEnd()
+            ? *recordedIt == screenId
+            : TilingStateHelpers::screenForTiledWindow(m_border, windowId) == screenId;
+        if (onThisScreen) {
+            wit = m_effect->m_scrollVisualDelta.erase(wit);
+            droppedAny = true;
+        } else {
+            ++wit;
+        }
+    }
+    // The per-output view spring is strip-scoped for the same reason and is the
+    // other half of a parked column's drawn position: its offset accumulated
+    // from the OUTGOING strip's travel, and a parked column on the incoming one
+    // would be painted at its own strip position plus a stranger's offset.
+    if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
+        // Both halves, as at every other site that drops an output's strip
+        // motion. forgetOutput alone clears the spring but leaves any armed
+        // transition leg running, and that leg was armed with the OUTGOING
+        // strip's parameters, so the pass would keep capturing and decorating
+        // a strip that is no longer on screen.
+        m_effect->m_stripTransition.outputRemoved(out);
+        m_effect->m_stripViewAnimator->forgetOutput(out);
+        if (KWin::effects) {
+            KWin::effects->addRepaint(KWin::Rect(out->geometry()));
+        }
+    } else if (droppedAny && KWin::effects) {
+        // No output resolves for this id. Screen removal is not the case that
+        // lands here — the effect's own screenRemoved handler has already
+        // dropped this output's transition and spring by then — it is an id
+        // that never named a connected output at all. The relocations just
+        // dropped were paint inputs, so something has to repaint, and full is
+        // the honest fallback rather than skipping it.
+        KWin::effects->addRepaintFull();
+    }
+}
+
 void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped)
 {
     // Any authoritative write voids in-flight property replies, identical

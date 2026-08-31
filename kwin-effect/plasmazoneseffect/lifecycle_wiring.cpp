@@ -396,6 +396,31 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         updateAllDecorations();
     });
 
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The zero
+    // point for the other lcStripDiag sites: everything they report is read as
+    // "how long after the switch, if ever". Deliberately a separate connection
+    // rather than folded into a neighbouring lambda, so removing the
+    // instrumentation is a whole-block delete with no behaviour attached to it.
+    //
+    // Registered AFTER two other desktopChanged handlers, and Qt delivers
+    // direct connections in registration order, so this line printing first is
+    // a property of those two not logging under this category rather than
+    // something the ordering guarantees. Both are effect-internal and neither
+    // reaches an lcStripDiag site synchronously today. If a future handler
+    // ahead of this one ever does, move this connect above them rather than
+    // reasoning about the interleaving.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+               KWin::LogicalOutput* output) {
+                if (!lcStripDiag().isDebugEnabled()) {
+                    return;
+                }
+                qCDebug(lcStripDiag) << "desktop switch:"
+                                     << (oldDesktop ? static_cast<int>(oldDesktop->x11DesktopNumber()) : -1) << "->"
+                                     << (newDesktop ? static_cast<int>(newDesktop->x11DesktopNumber()) : -1)
+                                     << "output=" << (output ? output->name() : QStringLiteral("(all)"));
+            });
+
     // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
     // each screen"): report each output's current desktop so the daemon keys its
     // per-screen desktop map off real per-output switches instead of KWin's global
@@ -648,6 +673,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
             m_scrollVisualDelta.remove(cachedId);
+            // The lcStripDiag change-gate shadows that map, so it is bounded
+            // here for the same reason. This is its ONLY sweep anywhere, which
+            // is why its declaration states the looser bound.
+            m_stripDiagLast.remove(cachedId);
             // Windowed-fullscreen membership keeps the same backstop pairing
             // (slotWindowClosed removes it first in every ordering KWin
             // provides; this bounds the map if that ever changes). The

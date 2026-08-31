@@ -295,6 +295,12 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
     // m_scrollingScreens iteration would invalidate the live iterator.
     QStringList displacedWindows;
     QSet<QString> displacedScreens;
+    // Screens whose resolved context key MOVED because a pin was released.
+    // Collected here and announced after the loop for the same reason the
+    // releases are: announceStripContextIfChanged emits synchronously, and a
+    // consumer that re-entered the engine from inside this iteration would
+    // invalidate the snapshot's premise.
+    QSet<QString> contextChangedScreens;
     // Iterate a SNAPSHOT, not the member: the unpin-migration arm cancels a
     // live drag-insert preview, whose synchronous placementChanged reaches
     // the daemon's tiled-count gate and can re-enter setActiveScreens, which
@@ -339,6 +345,21 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             // the target key by a transient lookup is discarded.
             const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(screenId);
             if (pinnedDesktop != newKey.desktop) {
+                // The strip under this screen has just been replaced, and
+                // nothing else will say so: this path does not go through
+                // setActiveScreens, which is where the only other announce
+                // lives. Gated on the KEY moving rather than on the migration
+                // below finding a state, because the epoch is derived from the
+                // key — a screen whose old-key state was absent has still
+                // changed strips and its consumer still has to be told.
+                //
+                // The acquire arm above deliberately does NOT announce: it
+                // pins the screen to the desktop currentKeyForScreen already
+                // resolves, so the key does not move and the announcement
+                // would be a guaranteed no-op. A pin only changes what the key
+                // resolves to LATER, on a switch, and the announce there
+                // correctly stays silent for a pinned screen.
+                contextChangedScreens.insert(screenId);
                 const PhosphorEngine::PlacementStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
                 // A live preview's captured keys are plain copies that
                 // rekeyWindows cannot rewrite — migrating under it would
@@ -469,6 +490,26 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             m_lastAppliedMaximizedToEdges.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
+        }
+    }
+    // Strip identity last, AFTER the release above, so a consumer sees the
+    // windows leave before it is told the screen is showing a different strip.
+    // Re-check membership: a re-entrant setActiveScreens may have taken the
+    // screen out of the set since the loop collected it, and the announce is
+    // emit-on-change anyway, so a key that ended up where it started is free.
+    for (const QString& screenId : std::as_const(contextChangedScreens)) {
+        if (!m_scrollingScreens.contains(screenId)) {
+            continue;
+        }
+        // Arm and retile with the announcement, the same pairing
+        // setActiveScreens makes: the consumer has just been told to retire
+        // this screen's strip-scoped state, so something has to carry the
+        // batch that repopulates it. The migration moved the strip to a
+        // context whose rects may already match what was last applied, which
+        // is precisely the case the emit-on-change gate would suppress.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+            scheduleRetileForScreen(screenId);
         }
     }
 }
@@ -747,6 +788,17 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // names; sweep those too so nothing keyed on the dead output survives.
     for (auto it = m_lastTabStripPayload.begin(); it != m_lastTabStripPayload.end();) {
         it = matches(it.key()) ? m_lastTabStripPayload.erase(it) : std::next(it);
+    }
+    // Strip identity goes with the output. setActiveScreens drops both of
+    // these for a screen leaving the scrolling SET; an output being removed
+    // outright bypasses that path entirely, so without this sweep a monitor
+    // unplugged and plugged back in returns with its epoch still recorded as
+    // announced, and the re-entry announcement is suppressed as unchanged.
+    for (auto it = m_announcedStripEpoch.begin(); it != m_announcedStripEpoch.end();) {
+        it = matches(it.key()) ? m_announcedStripEpoch.erase(it) : std::next(it);
+    }
+    for (auto it = m_forceEmitScreens.begin(); it != m_forceEmitScreens.end();) {
+        it = matches(*it) ? m_forceEmitScreens.erase(it) : std::next(it);
     }
     m_context.removeScreensIf(matches);
     // Drop the dead output from the active set and the deferred-apply queue

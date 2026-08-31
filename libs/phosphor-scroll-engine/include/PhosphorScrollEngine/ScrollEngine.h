@@ -907,6 +907,42 @@ Q_SIGNALS:
     /// Scrolling twin of autotileScreensChanged, with the same
     /// identical-set re-emit contract on desktop/activity switches.
     void scrollingScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// The identity of the strip @p screenId is now showing has changed.
+    ///
+    /// @p epoch is OPAQUE. It is derived from the same context key that keys
+    /// strip storage, and a consumer may only compare it for equality with the
+    /// last one it saw. It must never be parsed, ordered, or reconciled against
+    /// the compositor's own notion of the current desktop or activity: a screen
+    /// under a sticky pin resolves to the PINNED desktop, deliberately not the
+    /// live one, so anything derived from KWin's current desktop disagrees with
+    /// this engine forever on exactly those screens.
+    ///
+    /// @p debugLabel is for logging and nothing else. Branching on it is the
+    /// same mistake as parsing the epoch, wearing a different hat.
+    ///
+    /// Announced INDEPENDENTLY of any geometry batch, which is the whole point:
+    /// applyLayout emits on change only, so a switch onto a strip nobody
+    /// touched produces no batch, and identity carried as a batch field would
+    /// be silent in precisely the case a consumer most needs it.
+    ///
+    /// Announced from setActiveScreens, for every screen in the resulting set,
+    /// and from the sticky-pin RELEASE path, which moves a screen's key without
+    /// going through that push. A pin ACQUIRE announces nothing because it
+    /// pins to the desktop the key already resolves to. Desktop and activity
+    /// switches therefore reach a consumer by way of the daemon's screen push
+    /// rather than by the setters themselves: a key change with no such push
+    /// behind it is not announced.
+    ///
+    /// There is no bring-up seed. The epoch is announce-only, with nothing to
+    /// read it from, so a consumer that attaches after a screen was announced
+    /// holds no epoch for it and must treat its first announcement as a record
+    /// rather than a comparison.
+    ///
+    /// The value is deterministic across processes — the one-argument qHash
+    /// seeds at 0 and never consults Qt's per-process hash seed — so a
+    /// restarted daemon announces the same epoch for the same context. A
+    /// consumer must not read a change out of a restart, nor assume one.
+    void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
     void enabledChanged(bool enabled);
     /// Tab-indicator model for @p screenId, emitted when the resolved model
     /// changes (a relayout that produces an identical payload stays silent): a
@@ -946,6 +982,20 @@ private:
     {
         return m_perScreenOverrides.value(currentKeyForScreen(screenId));
     }
+    /// Emit stripContextChanged for @p screenId when its context key resolves
+    /// to a different strip than the one last announced.
+    ///
+    /// Derived from currentKeyForScreen — the SAME call that keys strip
+    /// storage — so identity can never drift from the storage it names. That
+    /// is what lets the epoch stay opaque: pins, activities and any future
+    /// context dimension come along without a consumer learning about them.
+    ///
+    /// Returns whether it actually announced. Callers use that to decide
+    /// whether to arm the force-emit, which pairs the two correctly: the batch
+    /// is forced exactly when a consumer was told to retire, so a retire is
+    /// never left without the batch that repopulates it, and a push that moved
+    /// no screen's context forces nothing.
+    bool announceStripContextIfChanged(const QString& screenId);
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
@@ -1251,6 +1301,53 @@ private:
     /// isDesktopSwitch=true for a REAL switch — same contract as
     /// AutotileEngine::m_isDesktopContextSwitch.
     bool m_isDesktopContextSwitch = false;
+    /// Screens whose next applyLayout must emit even when every resolved rect
+    /// equals the one already applied.
+    ///
+    /// applyLayout's emit-on-change gate rests on an assumption that a context
+    /// switch breaks: that an unchanged rect means the compositor is already
+    /// showing this batch's answer. The baseline it compares against
+    /// (m_lastAppliedRect, and the state's lastAppliedViewOffset) describes
+    /// what the compositor was told about a DIFFERENT strip — the one that was
+    /// current before the switch — so "nothing moved" says nothing about what
+    /// is on screen now. Returning to a desktop whose strip is untouched
+    /// therefore emitted no batch at all, and the compositor's per-window strip
+    /// state (its visual-delta entries and the per-output view spring) kept
+    /// describing the strip it had been showing.
+    ///
+    /// Armed wherever announceStripContextIfChanged actually fires, which is
+    /// what pairs the two: a screen is forced when, and only when, its
+    /// consumer was just told to retire. Four sites do it — the identical-set
+    /// branch of setActiveScreens, its added and stayer loops, and the
+    /// sticky-pin release in updateStickyScreenPins.
+    ///
+    /// A screen ADDED to the set is armed too, and the reason is worth stating
+    /// because the obvious argument for leaving it unarmed is wrong. That
+    /// argument runs: an added screen gets fresh state and no baseline, so it
+    /// emits on its own. But releaseScreenState deliberately does NOT drop
+    /// m_lastAppliedRect (see its own contract above), and the removal loop
+    /// prunes only the leaving screen's CURRENT context, so a screen
+    /// re-entering on a context whose state survived resolves against a full
+    /// live baseline. Every rect can then match and the batch is suppressed —
+    /// the same hole this flag exists to close, reached by a different door.
+    ///
+    /// Deliberately a forced EMIT rather than dropping m_lastAppliedRect for
+    /// the screen's windows, which is the tempting spelling because the header
+    /// above notes that dropping the rect memory forces an emit. That memory
+    /// is also the park/unpark discriminator (applyLayout's wasParked and
+    /// wasOnScreen read it), so
+    /// clearing it would make every parked column read as ARRIVING and hand
+    /// each one an edge-anchored origin it never departed from. The rect
+    /// memory is still true; it is the inference drawn from it that does not
+    /// survive the switch.
+    QSet<QString> m_forceEmitScreens;
+    /// Last strip epoch announced per screen, so stripContextChanged is
+    /// emit-on-change rather than a re-announcement on every set push.
+    ///
+    /// A screen leaving the scrolling set drops its entry, so re-entering
+    /// re-announces: the consumer retired the screen's strip state when it
+    /// left, and would otherwise never be told to rebuild it.
+    QHash<QString, QString> m_announcedStripEpoch;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};

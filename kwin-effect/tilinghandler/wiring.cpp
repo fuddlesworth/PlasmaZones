@@ -62,6 +62,9 @@ void TilingHandler::connectSignals()
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                    SLOT(slotScrollingScreensChanged(QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
+                   SLOT(slotStripContextChanged(QString, QString, QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"),
                    this, SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -104,6 +107,10 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                 SLOT(slotScrollingScreensChanged(QStringList)));
+
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
+                SLOT(slotStripContextChanged(QString, QString, QString)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,

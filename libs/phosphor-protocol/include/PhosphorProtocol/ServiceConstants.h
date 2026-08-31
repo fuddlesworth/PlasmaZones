@@ -416,8 +416,28 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       and then mirrors the wrong state — the handshake, not the signature,
 //       is what refuses that pairing. Both verbs answer the same boolean under
 //       the same name on the wire, `changed`.
-inline constexpr int ApiVersion = 7;
-inline constexpr int MinPeerApiVersion = 7;
+//
+//   v8: Scrolling gains stripContextChanged (sss), the strip-identity
+//       announcement for the daemon/compositor seam
+//       (docs/strip-identity-seam-plan.md).
+//
+//       A NEW REQUIRED SIGNAL, which is the case the bump rule at the head of
+//       this ledger names, and it takes a step of its own rather than folding
+//       into v7 because v7 SHIPPED in 3.4.3 — the fold-in rule above applies
+//       only within an unreleased cycle, and v7's own text says a change to it
+//       after it ships needs v8.
+//
+//       Required in the sense that matters here: the effect retires the
+//       per-window strip state it holds for a screen when that screen's strip
+//       identity changes, and a daemon that does not announce it leaves that
+//       state describing a strip nobody is looking at. Nothing about the
+//       pairing fails loudly — the signature still matches, no call errors,
+//       no marshalling breaks — so a parked column simply paints at the
+//       previous strip's position and keeps doing it. A silent wrong answer is
+//       exactly what the handshake exists to refuse, and it is the reason a
+//       signal-only addition is not treated as harmlessly additive here.
+inline constexpr int ApiVersion = 8;
+inline constexpr int MinPeerApiVersion = 8;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

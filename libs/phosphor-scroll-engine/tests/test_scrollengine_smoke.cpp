@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 2300 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 2400 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Ten siblings carry the rest of the suite (enumerated below),
+// been done. Eleven siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -24,7 +24,7 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Ten siblings carry the rest of the suite, split off at this file's size
+// Eleven siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
@@ -40,7 +40,9 @@
 // blueprint progress, and test_scrollengine_maximize.cpp owns the
 // maximize-column claim (the flag riding tiles the user cannot see, two
 // columns maximized at once, the named verb's second press, and survival
-// across a mode round trip).
+// across a mode round trip), and test_scrollengine_stripcontext.cpp owns
+// strip IDENTITY across the seam (the announced epoch, its lifecycle drops,
+// and the context-switch force-emit that rides the same transitions).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>

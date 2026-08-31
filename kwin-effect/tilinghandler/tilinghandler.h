@@ -1036,6 +1036,15 @@ public Q_SLOTS:
     /// the private section below with the other screenschanged.cpp helpers, so
     /// the slots block does not advertise as connectable something that is not.
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    /// The strip @p screenId is showing has been replaced (desktop or activity
+    /// switch, sticky-pin change). Retires the strip-scoped paint state this
+    /// process holds for that screen, which is not keyed by desktop and would
+    /// otherwise go on describing the strip that was current before.
+    ///
+    /// @p epoch is compared and nothing else — never parsed, never checked
+    /// against KWin's own current desktop. @p debugLabel is logged only.
+    void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
+
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
     /// The scroll cap's blocked-window list changed. Its own signal rather
@@ -1082,6 +1091,65 @@ private:
     // ═══════════════════════════════════════════════════════════════════
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
+
+    /// NOT a slot, despite the signal that drives it: its only caller is a
+    /// plain call from slotStripContextChanged, and nothing connects to it.
+    /// It sits here with the other state.cpp helpers so the slots block does
+    /// not advertise as connectable something that is not.
+    /// Drop the state this process holds that belonged to the strip @p screenId
+    /// was showing until now. Called when its strip epoch changes.
+    ///
+    /// @par The retire-set rule
+    /// **Retire an entry when what invalidates it is the STRIP changing. Keep
+    /// it when what invalidates it is the CLIENT responding, or the window
+    /// dying.** The operational test for a map you are about to add: if this
+    /// window were on a DIFFERENT strip, would the entry still be true?
+    ///
+    /// | map | entry means | still true elsewhere? | |
+    /// |---|---|---|---|
+    /// | `m_scrollVisualDelta` | where the window sits ON the strip | no | retire |
+    /// | `StripViewAnimator` motion | how far THIS strip's view travelled | no | retire |
+    /// | `m_scrollCommandedRects` | we commanded R and the client is arguing | yes | keep |
+    /// | `m_scrollOfferedColumn` | the client was offered size S and answered | yes | keep |
+    /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
+    /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
+    ///
+    /// The tab-indicator pair is the one place the rule's answer is overridden
+    /// on purpose, so it is in the table rather than absent from it. Both fail
+    /// the test — they describe the outgoing strip's columns — but retiring
+    /// them would be a REGRESSION, not a fix. The daemon's tab emit is
+    /// change-gated per screen id with no context term, so a switch onto a
+    /// strip whose pills happen to serialise identically re-pushes nothing,
+    /// and a consumer that had cleared them would show an empty band instead
+    /// of a stale one. Retiring them only becomes correct once the engine's
+    /// payload gate is keyed by context, or drops the screen's entry when the
+    /// epoch changes; do that first, then move these two rows.
+    ///
+    /// The rule is DIRECTIONAL and both directions fail, which is why it is
+    /// stated rather than left implicit in the loop body:
+    ///  - retire too little and a stale strip position survives the switch, so
+    ///    a parked column paints at its own strip position plus a stranger's
+    ///    view offset — the bug this whole mechanism exists to stop;
+    ///  - retire too much and the rate-limited counter-assert against a client
+    ///    refusing its geometry is disarmed, and a settled window is re-offered
+    ///    a size it already answered. That shows up as resize churn on a
+    ///    desktop switch and nothing points back to here.
+    ///
+    /// So "sweep everything scroll-related, to be safe" is NOT the safe
+    /// choice; it is the second bug.
+    ///
+    /// The subtle case, and why the test is about an entry's MEANING rather
+    /// than a naming convention: a map can be about a client and still be
+    /// strip-scoped. Something recording "the column rect we offered, on strip
+    /// X" would carry the strip in its meaning and would need retiring.
+    /// `m_scrollOfferedColumn` escapes only because what it stores is the
+    /// client's settled answer, not a strip coordinate.
+    ///
+    /// NOT covered by a test: the effect has no unit-test harness in this tree,
+    /// so nothing turns red if this set is later "tidied" into sweeping all
+    /// four. That is precisely why the rule is written here rather than
+    /// inferred from which maps the loop below happens to skip.
+    void retireStripScopedState(const QString& screenId);
 
     /// Bracketed maximize-mode write, the maximize twin of
     /// applyFullScreenSuppressed: a counter rather than a bool because the
@@ -1564,6 +1632,15 @@ private:
     /// stamp — which is why the teardown clear here needs no repaint bookend.
     /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;
+    /// Last strip epoch seen per screen, from Scrolling.stripContextChanged.
+    ///
+    /// The cache KEY this process never had. Every strip-scoped map here is
+    /// keyed by screen name or window id, so nothing distinguished one screen's
+    /// desktop-1 strip from its desktop-2 strip, and state simply carried
+    /// across. Compared for equality only: the value is opaque by contract, and
+    /// re-deriving identity from KWin's current desktop is wrong on any
+    /// sticky-pinned screen.
+    QHash<QString, QString> m_stripEpochByScreen;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a

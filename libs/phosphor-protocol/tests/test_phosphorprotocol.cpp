@@ -293,8 +293,16 @@ private Q_SLOTS:
         // demarshals perfectly and then misbehaves. The handshake is the only
         // thing refusing it, which is why this must not be "optimized away"
         // later.
-        QCOMPARE(Service::ApiVersion, 7);
-        QCOMPARE(Service::MinPeerApiVersion, 7);
+        //
+        // v8 adds Scrolling.stripContextChanged, a new REQUIRED signal, and it
+        // takes its own step because v7 had already shipped in 3.4.3 — the
+        // fold-into-the-unreleased-cycle rule the ledger uses does not reach
+        // across a release. Its failure mode is the silent kind above: a
+        // daemon that never announces strip identity leaves the effect holding
+        // per-window state for a strip that is no longer on screen, with
+        // nothing about the pairing erroring.
+        QCOMPARE(Service::ApiVersion, 8);
+        QCOMPARE(Service::MinPeerApiVersion, 8);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

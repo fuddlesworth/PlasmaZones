@@ -2514,6 +2514,40 @@ private:
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
 
+    /// Change-gate for the lcStripDiag per-window trace in
+    /// scrollParkedOffscreen. Diagnostic only: nothing reads it but the log
+    /// site, and it is never written while the category is disabled.
+    ///
+    /// Mutable because the predicate is const and is the only place the inputs
+    /// it reports are assembled — same shape, and the same justification, as
+    /// the mutable m_scrollClipLossReported once-reporting set in the tiling
+    /// handler. Keyed by window id and swept only on windowDeleted, so within a
+    /// session it is bounded by the number of distinct windows traced while the
+    /// category was enabled rather than by the live strip population: the
+    /// relocation map it shadows is torn down on unfloat, screen change, engine
+    /// flip and daemon loss, and none of those reach this gate. Entries are two
+    /// points and three bools, and a stale key is only ever compared, never
+    /// dereferenced, so the cost of the looser bound is bytes in a debugging
+    /// session.
+    struct StripDiagSample
+    {
+        bool hadPlacement = false;
+        QPoint stripPos;
+        QPoint viewOffset;
+        bool parked = false;
+        /// Whether the window resolved a managed output. Its own field rather
+        /// than an implied zero offset, because without it the no-output
+        /// sample is byte-identical to an ordinary hit on a window sitting at
+        /// offset (0,0) and unparked — so the two report sites would mask each
+        /// other through the shared change gate, and an excursion into and out
+        /// of the no-output state would be invisible for exactly those
+        /// windows.
+        bool hadOutput = true;
+
+        bool operator==(const StripDiagSample& o) const = default;
+    };
+    mutable QHash<QString, StripDiagSample> m_stripDiagLast;
+
     /// Frozen strip displacement for a CLOSE-GRABBED corpse. A deleted window
     /// cannot re-derive its relocation or view offset in the paint path —
     /// scrollManagedOutputFor answers null on isDeleted, and the close slot's

@@ -297,8 +297,22 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // applyPerScreenConfig with a byte-identical work area. Without this term
     // such a flip springs a delta measured along the old axis and the whole
     // strip lurches.
+    // The CONTEXT is the third basis term, and it breaks the same way. A
+    // forced batch is one the compositor is being sent precisely because the
+    // strip under this screen was swapped, so the baseline was stamped while a
+    // DIFFERENT strip was on screen. Subtracting against it describes a slide
+    // on a strip nobody is looking at, and because the compositor's view
+    // spring is keyed by output rather than by strip, it would take that delta
+    // and fly the incoming strip in from the outgoing one's offset. Same
+    // remedy as the other two breaks: place outright.
+    //
+    // Read with contains() and NOT consumed here. The flag is spent at the
+    // emit gate far below, deliberately, because applyLayout has several early
+    // returns between here and there and a force spent on a pass that emitted
+    // nothing would leave the compositor holding the old strip's state with
+    // the arming gone.
     const bool sameBasis = state->hasLastAppliedViewOffset() && state->lastAppliedWorkArea() == params.workArea
-        && state->lastAppliedAxis() == params.axis;
+        && state->lastAppliedAxis() == params.axis && !m_forceEmitScreens.contains(screenId);
     const int rawViewDelta = sameBasis ? resolved.viewOffset - state->lastAppliedViewOffset() : 0;
     // Zero also when the viewOffset moved WITHOUT carrying anything — a width
     // change to a column LEFT of the active one shifts strip coordinates and
@@ -743,7 +757,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Emit-on-change: a relayout that resolved every window to the exact
     // rect already applied (focus move under Never-centering, redundant
     // scheduled retile) must not re-feed the compositor's apply path.
-    if (anyEntryChanged) {
+    // Consumed HERE rather than at the top of this function: applyLayout has
+    // several early returns above (no state, degenerate area, a live drag), and
+    // a flag consumed before one of them would be spent on a pass that emitted
+    // nothing — leaving the compositor holding the previous strip's state with
+    // the arming already gone. Reaching this line means a batch was actually
+    // resolved, so this is the first point where consuming it is honest.
+    const bool forceEmit = m_forceEmitScreens.remove(screenId);
+    if (forceEmit && !anyEntryChanged) {
+        // Logged only when the force is what carried the batch. A switch onto a
+        // strip that DID change would have emitted anyway, and reporting those
+        // would make the line useless for confirming this arm ever fires.
+        qCDebug(lcScrollEngine) << "applyLayout: emitting on context switch for" << screenId
+                                << "— every rect matched the previous strip's baseline";
+    }
+    if (anyEntryChanged || forceEmit) {
         state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea, params.axis);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     } else if (anyEmittedUnparked) {

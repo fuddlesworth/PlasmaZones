@@ -126,6 +126,7 @@ pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 # verb's bool.
 pse_add_test(test_scrollstrip_sizing test_scrollstrip_sizing.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
+pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)
