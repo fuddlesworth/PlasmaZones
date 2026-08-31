@@ -595,6 +595,15 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
+    // Claim this instance's placement record before any selector reads one —
+    // the same reason the snap channel does it at the head of
+    // resolveWindowRestore. The cross-desktop restore below and the engine
+    // dispatch after it must agree on WHICH record belongs to this window.
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        auto* svc = m_windowTrackingAdaptor->service();
+        svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
+    }
+
     // Window-rule open routing (RouteToScreen / RouteToDesktop). The WTA owns the
     // rule store + evaluator and the desktop/output-move relay signals. It emits a
     // RouteToDesktop move and, for a RouteToScreen pin onto a DIFFERENT engine-managed
@@ -605,15 +614,6 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // effects (RouteToDesktop move request, expected-output-move arming),
     // so a parked entry must not re-run it on retry — the routed screen is
     // baked into the parked entry instead.
-    // Claim this instance's placement record before any selector reads one —
-    // the same reason the snap channel does it at the head of
-    // resolveWindowRestore. The cross-desktop restore below and the engine
-    // dispatch after it must agree on WHICH record belongs to this window.
-    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-        auto* svc = m_windowTrackingAdaptor->service();
-        svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
-    }
-
     PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
     bool ruleRouted = false;
     bool desktopRuleMatched = false;

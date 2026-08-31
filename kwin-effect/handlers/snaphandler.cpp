@@ -1322,9 +1322,9 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     m_awaitingDesktopArrivalRestore.remove(windowId);
 
     // DesktopArrival: not an open, so the daemon's cross-desktop restore arm
-    // does not fire a second
-    // time and bouncing the window straight back off the desktop it just
-    // reached.
+    // does not fire a second time and bounce the window straight back off the
+    // desktop it just reached. It IS still eligible for the cross-screen
+    // reclaim, which is the distinction the old bool could not make.
     qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
     callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
                              PhosphorEngine::RestoreReason::DesktopArrival);

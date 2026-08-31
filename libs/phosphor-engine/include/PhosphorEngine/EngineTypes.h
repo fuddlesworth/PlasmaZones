@@ -117,10 +117,15 @@ enum class RestoreReason : int {
 };
 
 /// Clamp an integer wire value to a valid RestoreReason. Mirrors
-/// clampWindowKindFromWire: an out-of-range value (a newer effect talking to an
-/// older daemon) collapses to `Open`, which is the conservative reading — it
-/// keeps the gates that matter closed rather than silently granting a
-/// non-open driver the reclaim.
+/// clampWindowKindFromWire: an out-of-range value collapses to `Open`.
+///
+/// Note that Open is the most PERMISSIVE value, not the safest one — it is the
+/// only reason that grants both gates. It is chosen anyway because it is the
+/// default the effect's own signature carries, so an unrecognised value behaves
+/// like a caller that named nothing, which is what every pre-existing call site
+/// meant. Treating a garbled value as a non-open driver would instead silently
+/// suppress a genuine restore, and a silently skipped restore is far harder to
+/// notice than one that ran.
 inline RestoreReason clampRestoreReasonFromWire(int wire)
 {
     switch (wire) {

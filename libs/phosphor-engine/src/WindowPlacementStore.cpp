@@ -333,39 +333,31 @@ bool WindowPlacementStore::pairingAllows(const QString& windowId, const WindowPl
     const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
     const auto mine = m_openPairing.constFind(instance);
     if (mine != m_openPairing.constEnd()) {
-        // This instance holds a claim. Honour it ONLY while the claimed record
-        // is still present; a claim on a record that has since been evicted or
-        // collapsed must not lock the instance out of every other record.
-        for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
-            for (const WindowPlacement& p : b.value()) {
-                if (p.windowId == *mine) {
-                    return candidate.windowId == *mine;
-                }
-            }
+        // Fail open on an inconsistent pair. Every record removal drops the
+        // claim naming it, so this should be unreachable; if it ever is not,
+        // locking the instance out of every record would restore NOTHING, which
+        // is strictly worse than the disagreement the claim exists to fix.
+        if (!m_claimedBy.contains(*mine)) {
+            return true;
         }
-        return true; // stale claim — fail open
+        return candidate.windowId == *mine;
     }
     // No claim of its own: it may read anything no OTHER instance has claimed.
-    for (auto it = m_openPairing.constBegin(); it != m_openPairing.constEnd(); ++it) {
-        if (it.value() == candidate.windowId && it.key() != instance) {
-            return false;
-        }
-    }
-    return true;
+    const auto owner = m_claimedBy.constFind(candidate.windowId);
+    return owner == m_claimedBy.constEnd() || *owner == instance;
 }
 
 void WindowPlacementStore::dropClaimsNaming(const QString& recordWindowId)
 {
-    if (m_openPairing.isEmpty() || recordWindowId.isEmpty()) {
+    if (m_claimedBy.isEmpty() || recordWindowId.isEmpty()) {
         return;
     }
-    for (auto it = m_openPairing.begin(); it != m_openPairing.end();) {
-        if (it.value() == recordWindowId) {
-            it = m_openPairing.erase(it);
-        } else {
-            ++it;
-        }
+    const auto owner = m_claimedBy.constFind(recordWindowId);
+    if (owner == m_claimedBy.constEnd()) {
+        return;
     }
+    m_openPairing.remove(*owner);
+    m_claimedBy.remove(recordWindowId);
 }
 
 void WindowPlacementStore::releaseOpenClaim(const QString& windowId)
@@ -373,7 +365,13 @@ void WindowPlacementStore::releaseOpenClaim(const QString& windowId)
     if (windowId.isEmpty() || m_openPairing.isEmpty()) {
         return;
     }
-    m_openPairing.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto claimed = m_openPairing.constFind(instance);
+    if (claimed == m_openPairing.constEnd()) {
+        return;
+    }
+    m_claimedBy.remove(*claimed);
+    m_openPairing.remove(instance);
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString& windowId, const QString& appId)
@@ -394,7 +392,9 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
                 }
             }
         }
-        m_openPairing.remove(instance); // stale — fall through and re-claim
+        // Unreachable while the removal hooks hold; re-claim rather than trust it.
+        m_claimedBy.remove(*existing);
+        m_openPairing.remove(instance);
     }
 
     // 1. The window's own record, when it carries something worth restoring.
@@ -404,6 +404,7 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
         for (const WindowPlacement& p : b.value()) {
             if (sameWindowInstance(p.windowId, windowId) && p.hasRestorableContent()) {
                 m_openPairing.insert(instance, p.windowId);
+                m_claimedBy.insert(p.windowId, instance);
                 return p;
             }
         }
@@ -425,15 +426,9 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
         if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId) && !sameWindowInstance(p.windowId, windowId)) {
             continue; // belongs to a sibling that is still open
         }
-        bool claimedElsewhere = false;
-        for (auto it = m_openPairing.constBegin(); it != m_openPairing.constEnd(); ++it) {
-            if (it.value() == p.windowId) {
-                claimedElsewhere = true;
-                break;
-            }
-        }
-        if (claimedElsewhere) {
-            continue;
+        const auto owner = m_claimedBy.constFind(p.windowId);
+        if (owner != m_claimedBy.constEnd() && *owner != instance) {
+            continue; // already claimed by a sibling
         }
         if (!best || p.sequence > best->sequence) {
             best = &p;
@@ -443,6 +438,7 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
         return std::nullopt;
     }
     m_openPairing.insert(instance, best->windowId);
+    m_claimedBy.insert(best->windowId, instance);
     return *best;
 }
 
@@ -468,6 +464,14 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
                     if (bucket.isEmpty()) {
                         m_byApp.erase(it);
                     }
+                    // Same release as the appId branch below. Missing it here
+                    // left a permanent claim on a record that no longer exists
+                    // after the commonest shape of all (a daemon restart, where
+                    // the uuid is stable and this branch always wins), and — if
+                    // the claim named a DIFFERENT record than the one consumed —
+                    // held that other record away from every sibling.
+                    dropClaimsNaming(p.windowId);
+                    releaseOpenClaim(windowId);
                     return p;
                 }
             }
@@ -840,6 +844,7 @@ int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacemen
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (pred(bucket.at(i))) {
+                dropClaimsNaming(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 ++removed;
             }
@@ -896,6 +901,9 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     // had already been placed.
     m_byApp.clear();
     m_sequence = 0;
+    // Every claim named a record in the store being replaced.
+    m_openPairing.clear();
+    m_claimedBy.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an

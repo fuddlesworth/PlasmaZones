@@ -187,6 +187,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
 
     const PhosphorEngine::RestoreReason reason = PhosphorEngine::clampRestoreReasonFromWire(restoreReason);
     const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;
+    auto* const svc = m_adaptor->service(); // non-null: guarded above
 
     // Claim this instance's placement record BEFORE anything reads one. The
     // desktop restore below and the engine resolve after it are two independent
@@ -195,10 +196,17 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // multi-window app got one record's desktop paired with another's zone, and
     // an already-home window could consume a sibling's record outright.
     //
-    // Open path only. The non-open drivers re-enter this slot for a window that
-    // already went through it, so its claim (or its consumption) is settled.
-    if (isOpen && m_adaptor->service()) {
-        m_adaptor->service()->placementStore().claimForOpen(windowId, m_adaptor->service()->currentAppIdFor(windowId));
+    // Open AND PendingSweep. PendingSweep is a genuine FIRST touch, not a
+    // re-entry: a window whose open resolve arrived before the daemon was ready
+    // never got past the readiness gate above, so it never claimed, and the
+    // effect re-drives it under that reason. Without this the pairing guard was
+    // absent in exactly the slow-daemon login the feature exists for.
+    //
+    // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
+    // with stable uuids that route to the store's same-instance branch
+    // (DaemonRestartSweep), so their claim or consumption is already settled.
+    if (isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep) {
+        svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
     }
 
     // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
@@ -278,6 +286,15 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // record was tiled on another screen: it lost the reclaim on the open
         // path (the desktop restore returned early) and again on arrival, and
         // fell to the no-match float default instead.
+        //
+        // This DOES relax the never-move-a-visible-window rule, deliberately.
+        // The effect only drains an arrival once the window's own output is
+        // showing its desktop, so a reclaimed window is on screen at that
+        // moment. At login that is the user meeting the window for the first
+        // time, which is the intent. The cost is the delayed case: a park held
+        // until the user first visits that desktop much later, where the
+        // reclaim lands as a visible jump. That is the better trade against
+        // stranding the window on the wrong monitor for the whole session.
         const bool mayReclaim = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
         if (result.deferredToTilingEngine && !routed) {
             const bool reclaimed = mayReclaim && m_crossScreenTileReclaim

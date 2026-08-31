@@ -333,10 +333,19 @@ private:
     quint64 m_sequence = 0;
     std::function<bool(const QString&)> m_liveInstanceProbe;
 
-    /// instanceId → the windowId of the record that instance claimed at open.
-    /// TRANSIENT and never serialized: it describes which live window owns which
-    /// record for the duration of one open, and means nothing across a restart.
+    /// instanceId → the windowId of the record that instance claimed at open,
+    /// and its inverse. TRANSIENT and never serialized: they describe which live
+    /// window owns which record for the duration of one open, and mean nothing
+    /// across a restart.
+    ///
+    /// Kept in lockstep, and kept TRUE: every path that removes a record drops
+    /// the claim naming it, so a claim in these maps always names a record that
+    /// is still in the store. That invariant is what lets the lookups be hash
+    /// hits instead of a full-store scan on a per-open hot path. The lookup
+    /// still fails open if the two ever disagree, because refusing an instance
+    /// every record is worse than the disagreement the claim exists to fix.
     QHash<QString, QString> m_openPairing;
+    QHash<QString, QString> m_claimedBy;
 };
 
 } // namespace PhosphorEngine
