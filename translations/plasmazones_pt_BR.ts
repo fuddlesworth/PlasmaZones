@@ -7667,7 +7667,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation>Devolver as janelas à sua área de trabalho virtual</translation>
+        <translation>Devolver as janelas à área de trabalho virtual delas</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
@@ -13635,7 +13635,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation>Depois que você entrar novamente, cada janela volta para a área de trabalho em que estava. Sem isso, todas as janelas reabrem na área de trabalho que estiver visível quando você entrar.</translation>
+        <translation>Depois que você entrar na sessão novamente, cada janela volta para a área de trabalho em que estava. Sem isso, todas as janelas reabrem na área de trabalho que estiver visível quando você entrar na sessão.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>

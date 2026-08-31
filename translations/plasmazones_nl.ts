@@ -13635,7 +13635,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation>Nadat u opnieuw hebt ingelogd, keert elk venster terug naar het bureaublad waarop het stond. Zonder dit wordt elk venster geopend op het bureaublad dat te zien is wanneer u inlogt.</translation>
+        <translation>Nadat u zich opnieuw hebt aangemeld, keert elk venster terug naar het bureaublad waarop het stond. Zonder dit wordt elk venster geopend op het bureaublad dat te zien is wanneer u zich aanmeldt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>

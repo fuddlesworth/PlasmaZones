@@ -8887,7 +8887,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation>Fenster auf ihrer virtuellen Arbeitsfläche wiederherstellen</translation>
+        <translation>Fenster auf ihre virtuelle Arbeitsfläche zurückbringen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
