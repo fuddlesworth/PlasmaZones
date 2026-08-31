@@ -6,6 +6,7 @@
 #include "compositor/deferredwindowcommits.h"
 
 #include <PhosphorCompositor/TilingState.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QHash>
@@ -148,14 +149,18 @@ public:
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
-    /// isOpenPath: whether this resolve is driven by a window OPEN (session
-    /// restore, bring-up re-announce, deferred-routing flush) as opposed to
-    /// the unminimize-orphan and pending-restores-sweep drivers. Threaded to
-    /// the daemon, which gates the cross-screen tile reclaim on it — an
-    /// unminimize must never teleport a window across monitors.
+    /// @p reason says WHY this resolve is running. It is threaded to the daemon,
+    /// which gates the cross-desktop session restore and the cross-screen tile
+    /// reclaim on it: an unminimize must never teleport a window across
+    /// monitors, while the desktop-arrival re-drive DOES want the reclaim, which
+    /// is the distinction the old isOpenPath bool could not make.
+    /// It defaults to Open so the deferred-routing flush call sites, which
+    /// pass neither trailing argument, keep the open-path semantics they rely on
+    /// — including the frame-geometry shadow seed that RouteToScreen needs.
     void callResolveWindowRestore(KWin::EffectWindow* window,
                                   std::function<void(bool snapApplied)> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true, bool isOpenPath = true);
+                                  bool releaseSuppressionOnMiss = true,
+                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,

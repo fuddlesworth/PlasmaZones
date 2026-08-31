@@ -185,8 +185,12 @@ void SnapHandler::setFocusFollowsMouse(bool enabled)
 }
 
 void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void(bool)> onComplete,
-                                           bool releaseSuppressionOnMiss, bool isOpenPath)
+                                           bool releaseSuppressionOnMiss, PhosphorEngine::RestoreReason reason)
 {
+    // The shadow seed and the daemon's two gates all ask the same question of
+    // the reason, and they must keep asking exactly it: widening any of them
+    // beyond Open changes which windows get seeded or reclaimed.
+    const bool isOpenPath = reason == PhosphorEngine::RestoreReason::Open;
     if (!window) {
         if (onComplete) {
             onComplete(false);
@@ -286,8 +290,8 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     const QSize declaredMin = TilingHandler::declaredMinSize(window);
     m_effect->tryAsyncSnapCall(
         PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-        {windowId, screenId, sticky, kindInt, isOpenPath, declaredMin.width(), declaredMin.height()}, safeWindow,
-        windowId, false, onMiss, markApplied,
+        {windowId, screenId, sticky, kindInt, static_cast<int>(reason), declaredMin.width(), declaredMin.height()},
+        safeWindow, windowId, false, onMiss, markApplied,
         /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
@@ -714,11 +718,11 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                 return;
             }
             qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
-            // isOpenPath=false: an unminimize is not an open. Without the
-            // flag, the daemon's cross-screen tile reclaim could TELEPORT
-            // the just-unminimized window to its recorded home monitor.
+            // Unminimize, not an open. Without the distinction the daemon's
+            // cross-screen tile reclaim could TELEPORT the just-unminimized
+            // window to its recorded home monitor.
             callResolveWindowRestore(safeWindow.data(), nullptr, /*releaseSuppressionOnMiss=*/true,
-                                     /*isOpenPath=*/false);
+                                     PhosphorEngine::RestoreReason::Unminimize);
         };
         auto* snappedWatcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
@@ -1204,11 +1208,12 @@ void SnapHandler::slotPendingRestoresAvailable()
             }
 
             // Window is not tracked - try to restore it.
-            // isOpenPath=false: the pending-restores sweep re-resolves
+            // PendingSweep: the pending-restores sweep re-resolves
             // already-open windows; it must not drive the cross-screen tile
             // reclaim and move windows the user is looking at.
             qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
-            callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
+            callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
+                                     PhosphorEngine::RestoreReason::PendingSweep);
         }
     });
 }
@@ -1316,12 +1321,13 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     // reached by a different route.
     m_awaitingDesktopArrivalRestore.remove(windowId);
 
-    // isOpenPath=false: this is not an open. It also keeps the daemon's
-    // cross-desktop restore arm (gated on isOpenPath) from firing a second
+    // DesktopArrival: not an open, so the daemon's cross-desktop restore arm
+    // does not fire a second
     // time and bouncing the window straight back off the desktop it just
     // reached.
     qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
-    callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
+    callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
+                             PhosphorEngine::RestoreReason::DesktopArrival);
     return true;
 }
 

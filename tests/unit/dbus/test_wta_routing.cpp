@@ -991,7 +991,7 @@ private Q_SLOTS:
     {
         // The SNAP production arm, end to end. Every other case in this block
         // calls applyPersistedDesktopRestore directly, so the wiring in
-        // SnapAdaptor::resolveWindowRestore — the isOpenPath gate, and the early
+        // SnapAdaptor::resolveWindowRestore — the restore-reason gate, and the early
         // return that must skip the engine resolve — had no coverage at all.
         //
         // Declining to snap is the load-bearing half: the window is on its way
@@ -1005,8 +1005,8 @@ private Q_SLOTS:
         int x = 0, y = 0, width = 0, height = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
-                                            /*windowKind=*/0, /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x,
-                                            y, width, height, shouldSnap);
+                                            /*windowKind=*/0, static_cast<int>(PhosphorEngine::RestoreReason::Open),
+                                            /*minWidth=*/0, /*minHeight=*/0, x, y, width, height, shouldSnap);
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
         // NOTE this assertion is weak on its own: resolveWindowRestore clears
@@ -1026,7 +1026,7 @@ private Q_SLOTS:
     void testResolveWindowRestore_leavesTheDesktopAloneOffTheOpenPath()
     {
         // The arrival re-drive comes back through this same slot with
-        // isOpenPath=false, and must NOT re-emit the move — that would bounce
+        // RestoreReason::DesktopArrival, and must NOT re-emit the move — that would bounce
         // the window straight off the desktop it just reached.
         seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
         seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
@@ -1035,9 +1035,64 @@ private Q_SLOTS:
         int x = 0, y = 0, width = 0, height = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
-                                            /*windowKind=*/0, /*isOpenPath=*/false, /*minWidth=*/0, /*minHeight=*/0, x,
-                                            y, width, height, shouldSnap);
+                                            /*windowKind=*/0,
+                                            static_cast<int>(PhosphorEngine::RestoreReason::DesktopArrival),
+                                            /*minWidth=*/0, /*minHeight=*/0, x, y, width, height, shouldSnap);
         QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testResolveWindowRestore_desktopArrivalDoesNotReEmitTheMove()
+    {
+        // The arrival re-drive comes back through this slot after the daemon
+        // moved the window. It must NOT emit the move again — that would bounce
+        // the window straight off the desktop it just reached.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = true;
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
+                                            /*windowKind=*/0,
+                                            static_cast<int>(PhosphorEngine::RestoreReason::DesktopArrival),
+                                            /*minWidth=*/0, /*minHeight=*/0, x, y, width, height, shouldSnap);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testResolveWindowRestore_unminimizeDoesNotMoveTheWindow()
+    {
+        // An unminimize is not a restore opportunity: the window is already on
+        // screen where the user left it.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = true;
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
+                                            /*windowKind=*/0,
+                                            static_cast<int>(PhosphorEngine::RestoreReason::Unminimize),
+                                            /*minWidth=*/0, /*minHeight=*/0, x, y, width, height, shouldSnap);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testResolveWindowRestore_unknownReasonReadsAsOpen()
+    {
+        // A newer effect talking to an older daemon, or a garbled wire value,
+        // must collapse to Open rather than silently inheriting a non-open
+        // driver's permissions. Open is the conservative reading here: it is
+        // the only reason that runs the full restore.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = true;
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|newinst"), m_screenId, /*sticky=*/false,
+                                            /*windowKind=*/0, /*restoreReason=*/9999, /*minWidth=*/0,
+                                            /*minHeight=*/0, x, y, width, height, shouldSnap);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toInt(), 2);
     }
 
     void testPersistedDesktopRestore_leavesStickyAndUnknownWindowsAlone()
