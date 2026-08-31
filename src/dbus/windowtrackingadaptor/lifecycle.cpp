@@ -646,6 +646,13 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
                               << "— resolved to" << closeScreen;
     }
     captureWindowPlacement(windowId, closeScreen);
+    // AFTER the capture (record() preserves the stored credit on merge):
+    // a mid-session close revokes the record's cross-screen reclaim credit,
+    // so it can never again home a future same-app window on this monitor —
+    // the detached-browser-tab teleport (#1017). Login restore is unaffected:
+    // serialize() re-derives the persisted credit from liveness plus the
+    // shutdown-close grace.
+    m_service->placementStore().markInstanceClosed(windowId);
 
     // Session-transient suspension-float classification dies with the window.
     m_service->clearSuspensionFloat(windowId);
@@ -1101,6 +1108,16 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     for (const QString& shadowId : shadowIds) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(shadowId))) {
             captureWindowPlacement(shadowId);
+            // The second close funnel, and it needs windowClosed's credit
+            // revoke for the same reason it needs the capture above: this is
+            // the backstop for a window that died with no close signal, and
+            // without the revoke its record keeps a cross-screen reclaim
+            // credit that homes every later same-app window on the dead
+            // window's monitor for the rest of the session (#1017). AFTER the
+            // capture, matching windowClosed's ordering. graceEligible=false:
+            // the death happened at some unobserved earlier moment, so dating
+            // it "now" would grant a shutdown grace it never earned.
+            m_service->placementStore().markInstanceClosed(shadowId, /*graceEligible=*/false);
         }
     }
     int persistedPruned = m_service->pruneStaleAssignments(alive);

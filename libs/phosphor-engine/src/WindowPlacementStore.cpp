@@ -4,6 +4,7 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QLatin1Char>
 #include <QLoggingCategory>
@@ -628,12 +629,96 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
         // that branch is the one this call always takes, since the take above
         // just removed the only record for this instance.
         rec->fromPersistedSession = false;
+        // The consumed record's DEATH metadata belongs to the instance that
+        // died, not to the live one adopting its placement — and the append
+        // branch would copy both across. Left alone, a dead sibling's revoked
+        // credit and its close timestamp became the live window's, so this
+        // window's own close later found the credit already false (harmless)
+        // while every save in between read a stale close time for the grace
+        // arm. Reset to the defaults a live window is entitled to; its close
+        // re-revokes through markInstanceClosed. Same hazard, same fix as the
+        // fromPersistedSession clear above.
+        rec->reclaimEligible = true;
+        rec->closedAtMsecs = 0;
         record(*rec);
     } else {
         qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
                                   << appId << "on" << screenId;
     }
+    // Per-open reclaim-credit burn — see the header contract. Hit or miss,
+    // and AFTER any consumption/re-record above (the bucket may have been
+    // erased and re-created by it, so the helper re-finds it).
+    burnReclaimCredit(windowId, appId);
     return rec;
+}
+
+bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QString& appId)
+{
+    if (appId.isEmpty()) {
+        return false;
+    }
+    const auto bit = m_byApp.find(appId);
+    if (bit == m_byApp.end()) {
+        return false;
+    }
+    // Own-instance and live records are skipped: a live window's credit is
+    // revoked by its close (markInstanceClosed), never by an open.
+    int newest = -1;
+    QList<WindowPlacement>& bucket = bit.value();
+    for (int i = 0; i < bucket.size(); ++i) {
+        const WindowPlacement& p = bucket.at(i);
+        if (!p.reclaimEligible || sameWindowInstance(p.windowId, windowId)) {
+            continue;
+        }
+        if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
+            continue;
+        }
+        if (newest < 0 || p.sequence > bucket.at(newest).sequence) {
+            newest = i;
+        }
+    }
+    if (newest < 0) {
+        return false;
+    }
+    bucket[newest].reclaimEligible = false;
+    qCDebug(lcPlacementStore) << "burnReclaimCredit: retired credit of" << bucket.at(newest).windowId << "for open of"
+                              << windowId;
+    return true;
+}
+
+bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool graceEligible)
+{
+    if (windowId.isEmpty()) {
+        return false;
+    }
+    // An OBSERVED close is authoritative and stamps the time. An unobserved one
+    // contributes no time at all and must not overwrite a stamp an earlier
+    // observed close already wrote: logout tears windows down and can push an
+    // alive report through the prune backstop before the final save, and
+    // clearing the stamp there would strip the shutdown grace from exactly the
+    // windows that legitimately earned it — the login reclaim the grace exists
+    // for. Leaving it at its default 0 for a never-stamped record is the
+    // "closed at an unknown earlier moment, no grace" answer serialize() wants.
+    const qint64 now = graceEligible ? QDateTime::currentMSecsSinceEpoch() : 0;
+    bool revoked = false;
+    // Sweep every bucket — appId drift can file one instance's records under
+    // two keys (the releaseEngineSlot rationale), and a surviving credit in
+    // the missed bucket is exactly the teleport this method exists to end.
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (!sameWindowInstance(p.windowId, windowId)) {
+                continue;
+            }
+            if (now > 0) {
+                p.closedAtMsecs = now;
+            }
+            if (p.reclaimEligible) {
+                p.reclaimEligible = false;
+                revoked = true;
+            }
+        }
+    }
+    return revoked;
 }
 
 std::optional<WindowPlacement>
@@ -705,6 +790,12 @@ WindowPlacementStore::peekForReclaim(const QString& windowId, const QString& app
         }
         if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
             continue; // an open sibling's record is not evidence about THIS window
+        }
+        if (!p.reclaimEligible) {
+            // No reclaim credit: the record's window closed mid-session (or
+            // its credit was burned by an earlier open). Reopen memory, not
+            // session-restore evidence — see the header's credit bullet.
+            continue;
         }
         if (!best || p.sequence > best->sequence) {
             best = &p;
@@ -894,6 +985,19 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
         QJsonArray arr;
         for (const WindowPlacement& p : it.value()) {
             if (keep && !keep(p)) {
+                continue;
+            }
+            // Reclaim credit is DERIVED at save time when the probe is wired
+            // (header contract): live windows persist as restore evidence, a
+            // close within the shutdown grace still counts (the logout save),
+            // and everything else — the cross-session graveyard included,
+            // whatever its in-memory credit says — persists credit-less.
+            if (m_liveInstanceProbe) {
+                WindowPlacement stamped = p;
+                stamped.reclaimEligible = m_liveInstanceProbe(p.windowId)
+                    || (p.closedAtMsecs > 0
+                        && QDateTime::currentMSecsSinceEpoch() - p.closedAtMsecs <= ShutdownCloseGraceMs);
+                arr.append(stamped.toJson());
                 continue;
             }
             arr.append(p.toJson());

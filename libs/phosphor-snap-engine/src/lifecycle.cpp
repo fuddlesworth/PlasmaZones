@@ -192,9 +192,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // cross-screen snapped record. Everything downstream must then stay scoped
     // to that record — see the two uses below.
     bool deferredByMode = false;
-    if (m_layoutManager
-        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+    if (!isSnapModeScreen(screenId)) {
         bool crossScreenSnapRestorePending = false;
         if (m_windowTracker) {
             const QString appId = m_windowTracker->currentAppIdFor(windowId);
@@ -737,6 +735,15 @@ int SnapEngine::currentVirtualDesktopForScreen(const QString& screenId) const
 QString SnapEngine::currentActivity() const
 {
     return m_layoutManager ? m_layoutManager->currentActivity() : QString();
+}
+
+bool SnapEngine::isSnapModeScreen(const QString& screenId) const
+{
+    // Permissive without a layout manager, matching resolveWindowRestore's
+    // ownership gate (the unit-test path).
+    return !m_layoutManager
+        || m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
+        == PhosphorZones::AssignmentEntry::Mode::Snapping;
 }
 
 bool SnapEngine::isEnabled() const noexcept
