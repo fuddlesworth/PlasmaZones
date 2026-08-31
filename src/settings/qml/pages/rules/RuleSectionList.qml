@@ -94,6 +94,12 @@ Item {
             matchFieldOptions: root.matchFieldOptions
             actionTypeOptions: root.actionTypeOptions
             appSettings: root.appSettings
+            // Restore the expanded state the row had before the last model
+            // rebuild. Seeded imperatively, never bound: ExpandableRowDelegate
+            // toggles `expanded` by assignment, which severs a binding on the
+            // first click and would strand every later restore.
+            Component.onCompleted: expanded = parent.rowExpanded
+            onExpandedChanged: parent.setRowExpanded(expanded)
             onToggleRequested: function (en) {
                 root.toggleRequested(_rule.ruleId, en);
             }

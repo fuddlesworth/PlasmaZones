@@ -80,16 +80,28 @@ Item {
     // invalidate the map; reassigned whole on each publish so bindings re-run.
     property var delegateHeights: ({})
 
-    // Prune cache entries whose id no longer appears in `items`, so the map
-    // doesn't grow across deletions (every publish copies the whole map).
+    // Per-id expansion state, for consumers whose row content expands. Keyed by
+    // id and held HERE rather than on the row for the same reason the height
+    // cache is: an `items` reassignment is a full model reset, so per-delegate
+    // expansion state would be lost on every unrelated model change (another
+    // row toggled, renamed, reordered). A row seeds itself from this map on
+    // creation and writes back on toggle, so an expanded row stays expanded —
+    // and, because the recreated body re-reads its source data, it also comes
+    // back showing the post-edit content rather than a stale snapshot.
+    property var expandedIds: ({})
+
+    // Prune cache entries whose id no longer appears in `items`, so the maps
+    // don't grow across deletions (every publish copies the whole map).
     // Rebuilding here rather than deleting in Component.onDestruction is
     // deliberate: the Repeater treats an `items` reassignment as a full model
     // reset (destroy all, recreate all), so a destruction-time delete would
-    // also drop heights of rows that are merely being recreated, collapsing
+    // also drop the state of rows that are merely being recreated, collapsing
     // expanded rows to the fallback height until they republish.
     onItemsChanged: {
         var next = {};
+        var nextExpanded = {};
         var kept = 0;
+        var keptExpanded = 0;
         for (var i = 0; i < items.length; ++i) {
             var item = items[i];
             if (item === undefined || item === null)
@@ -100,9 +112,30 @@ Item {
                 next[itemId] = h;
                 kept++;
             }
+            if (expandedIds[itemId] === true) {
+                nextExpanded[itemId] = true;
+                keptExpanded++;
+            }
         }
         if (kept !== Object.keys(delegateHeights).length)
             delegateHeights = next;
+        if (keptExpanded !== Object.keys(expandedIds).length)
+            expandedIds = nextExpanded;
+    }
+
+    function isRowExpanded(itemId) {
+        return !!itemId && expandedIds[itemId] === true;
+    }
+
+    function setRowExpanded(itemId, on) {
+        if (!itemId || root.isRowExpanded(itemId) === on)
+            return;
+        var copy = Object.assign({}, expandedIds);
+        if (on)
+            copy[itemId] = true;
+        else
+            delete copy[itemId];
+        expandedIds = copy;
     }
 
     function setDelegateHeight(itemId, h) {
@@ -350,6 +383,16 @@ Item {
                     property var rowModelData: delegateRoot.modelData
                     property int rowIndex: delegateRoot.index
                     property bool rowReorderable: delegateRoot.reorderable
+                    // Expansion state for row content that expands. Deliberately
+                    // NOT bound into the row's `expanded`: the shell toggles that
+                    // by assignment, which would sever an incoming binding. The
+                    // row seeds from `rowExpanded` once on creation and reports
+                    // every later toggle back through `setRowExpanded`.
+                    readonly property bool rowExpanded: root.isRowExpanded(delegateRoot._itemId)
+
+                    function setRowExpanded(on) {
+                        root.setRowExpanded(delegateRoot._itemId, on);
+                    }
 
                     sourceComponent: root.rowDelegate
                 }

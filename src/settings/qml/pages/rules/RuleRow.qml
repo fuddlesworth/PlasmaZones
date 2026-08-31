@@ -364,6 +364,11 @@ ExpandableRowDelegate {
         id: expansionComponent
 
         ColumnLayout {
+            // Read once per body instantiation. Any rule edit resets the host
+            // model, which recreates this delegate (and with it this body), so
+            // the read always lands on post-edit data — no revision counter is
+            // needed here. RuleSectionList restores the row's expanded state
+            // across that rebuild.
             readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({})
 
             spacing: Kirigami.Units.smallSpacing
