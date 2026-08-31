@@ -17,23 +17,11 @@ namespace PhosphorEngine {
 namespace {
 Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
 
-// Instance-identity match for STORE keys. Contract note: ids without a '|'
-// separator only match EXACTLY here — unlike the registry's
-// extractInstanceId, which treats a bare string AS the instance id. The store
-// is only ever keyed with full appId|uuid composites (capture and restore
-// both build them), so a bare id reaching this predicate is foreign input
-// that must not fuzzy-match a composite's uuid component.
-bool sameWindowInstance(const QString& lhs, const QString& rhs)
-{
-    if (lhs == rhs) {
-        return true;
-    }
-    if (!lhs.contains(QLatin1Char('|')) || !rhs.contains(QLatin1Char('|'))) {
-        return false;
-    }
-    const QString lhsInstance = PhosphorIdentity::WindowId::extractInstanceId(lhs);
-    return !lhsInstance.isEmpty() && lhsInstance == PhosphorIdentity::WindowId::extractInstanceId(rhs);
-}
+// Instance-identity match for STORE keys. The predicate — including its refusal
+// to fuzzy-match a separator-less id — now lives in PhosphorIdentity so the
+// daemon's cross-desktop restore matches records the same way rather than
+// hand-copying the contract into another library.
+using PhosphorIdentity::WindowId::sameWindowInstance;
 } // namespace
 
 bool WindowPlacementStore::record(WindowPlacement incoming)

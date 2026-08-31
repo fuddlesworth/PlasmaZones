@@ -98,6 +98,14 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         if (!preserved) {
             return;
         }
+        // peekExact hands back a COPY of the stored record, transient fields
+        // included, and this branch re-records it with a synthesised engine slot
+        // below. That is a live capture, so the cross-desktop one-shot must not
+        // ride along: record()'s merge takes the flag from the incoming record,
+        // and every other live producer builds a fresh WindowPlacement with the
+        // flag already false. This is the one path that carries a stored value
+        // back in, so it clears it here rather than relying on the merge.
+        preserved->fromPersistedSession = false;
 
         preserved->windowId = shadowWindowId(windowId);
         preserved->appId = m_service->currentAppIdFor(windowId);

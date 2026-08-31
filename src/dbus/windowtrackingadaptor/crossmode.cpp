@@ -627,10 +627,11 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     // activity-independent in KDE, so a record from another activity still names
     // a valid desktop, and the recorded screen may legitimately be gone.
     //
-    // hasRestorableContent, so a persisted free-geometry-only stub does not
-    // drive the move on its own: no engine will adopt such a record, so the
-    // window would land on the remembered desktop and simply float there, which
-    // is a worse outcome than leaving it where it opened.
+    // hasRestorableContent rejects contentless residue — a record with neither
+    // geometry nor a managed slot, which no restore could act on. Note it does
+    // NOT exclude a free-geometry-only record: that counts as restorable, and
+    // rightly so, since a floated window's remembered position is worth
+    // returning to its desktop for.
     const auto record = m_service->placementStore().peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
         return p.fromPersistedSession && p.virtualDesktop > 0 && p.hasRestorableContent();
     });
@@ -660,33 +661,25 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     // transform, not record(): the flag is not persisted content, so this must
     // not restamp a sequence or mark the store dirty.
     // Instance identity, not an exact compare on the full composite: the store
-    // matches records that way everywhere else (the contract note at the top of
-    // WindowPlacementStore.cpp), and an appId that drifted mid-session makes the
-    // composite ids differ for what is one window. Mirrors that predicate's
-    // contract, including its refusal to fuzzy-match a separator-less id — the
-    // helper itself is file-local to the store, so it cannot be called here.
+    // matches records that way everywhere else, and an appId that drifted
+    // mid-session makes the composite ids differ for what is one window. Shared
+    // predicate rather than a local copy — including its refusal to fuzzy-match
+    // a separator-less id, which is a trap worth having in exactly one place.
     const QString recordWindowId = record->windowId;
-    const QString recordInstance = recordWindowId.contains(QLatin1Char('|'))
-        ? PhosphorIdentity::WindowId::extractInstanceId(recordWindowId)
-        : QString();
-    const int spent = m_service->placementStore().transform([&](PhosphorEngine::WindowPlacement& p) {
-        if (!p.fromPersistedSession) {
-            return false;
-        }
-        const bool sameInstance = p.windowId == recordWindowId
-            || (!recordInstance.isEmpty() && p.windowId.contains(QLatin1Char('|'))
-                && PhosphorIdentity::WindowId::extractInstanceId(p.windowId) == recordInstance);
-        if (!sameInstance) {
+    const int spent = m_service->placementStore().transform([&recordWindowId](PhosphorEngine::WindowPlacement& p) {
+        if (!p.fromPersistedSession || !PhosphorIdentity::WindowId::sameWindowInstance(p.windowId, recordWindowId)) {
             return false;
         }
         p.fromPersistedSession = false;
         return true;
     });
     if (spent <= 0) {
-        // The record went away between the peek and the spend. Emitting now
-        // would move the window with the one-shot unspent, so it could fire
-        // again later; declining costs this window its restore for the session,
-        // which is the safer of the two.
+        // Unreachable today: transform runs synchronously against the same store
+        // the peek just read, with nothing in between, so the record it found is
+        // still there. Kept because emitting a move whose one-shot was not spent
+        // is the one failure this function must never produce — it would let the
+        // restore fire again later against a stale desktop — and a future store
+        // that is not synchronous would reintroduce exactly that window.
         qCWarning(lcDbusWindow) << "applyPersistedDesktopRestore: record for" << windowId
                                 << "vanished before the one-shot could be spent — declining the move";
         return false;

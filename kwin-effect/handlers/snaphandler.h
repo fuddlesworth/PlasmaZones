@@ -303,6 +303,13 @@ public:
         m_awaitingDesktopArrivalRestore.remove(windowId);
     }
 
+    /// Drain ONE window's desktop-arrival park, if it has one and has arrived.
+    /// Returns true when the restore was actually dispatched, so a caller that
+    /// has its own placement to run for the same window can stand down rather
+    /// than racing this one — two placement answers for a single window resolve
+    /// in D-Bus reply order, which is nobody's intent.
+    bool drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window);
+
 private:
     void cancelPendingMinimizeFloat(const QString& windowId)
     {

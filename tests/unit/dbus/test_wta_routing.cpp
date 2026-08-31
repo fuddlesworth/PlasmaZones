@@ -867,11 +867,16 @@ private Q_SLOTS:
         // Every other case here exercises the FIFO branch, so without this one
         // the same-instance branch has no test that expects a MOVE — only the
         // merge-clear case, which expects a decline.
-        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("sameinst"), 2);
+        // Filed under a DIFFERENT bucket from the live appId on purpose. With
+        // both under "deskapp" the appId FIFO would find the same record and
+        // this case could not tell branch 1 from branch 2 — it would silently
+        // duplicate the primary happy-path case above.
+        seedPersistedDesktopRecord(QStringLiteral("otherbucket"), QStringLiteral("sameinst"), 2);
         seedLiveWindow(QStringLiteral("sameinst"), QStringLiteral("deskapp"), 1);
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        QVERIFY(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|sameinst")));
+        QVERIFY2(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|sameinst")),
+                 "the same-instance branch must find a record filed under another appId");
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(0).toString(), QStringLiteral("deskapp|sameinst"));
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
@@ -890,14 +895,28 @@ private Q_SLOTS:
         QCOMPARE(desktopSpy.count(), 0);
     }
 
-    void testPersistedDesktopRestore_ignoresNegativeRecordedDesktop()
+    void testPersistedDesktopRestore_clampsOutOfRangeRecordedDesktopsOnLoad()
     {
-        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), -1);
-        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+        // fromJson clamps anything outside a plausible range to 0, so a corrupt
+        // or foreign session.json cannot put an arbitrary integer into a record
+        // and ride it to the compositor. Asserted on the STORED value rather
+        // than on the decline, because the decline alone is already produced by
+        // the 0 case above and would not tell the clamp from the guard.
+        // One seed at a time: seedPersistedDesktopRecord goes through
+        // deserialize(), which replaces the whole store, so seeding twice would
+        // silently drop the first record and assert against nothing.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("neg"), -1);
+        const auto neg =
+            m_wta->service()->placementStore().peek(QStringLiteral("deskapp|neg"), QStringLiteral("deskapp"));
+        QVERIFY(neg.has_value());
+        QCOMPARE(neg->virtualDesktop, 0);
 
-        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
-        QCOMPARE(desktopSpy.count(), 0);
+        seedPersistedDesktopRecord(QStringLiteral("bigapp"), QStringLiteral("big"),
+                                   PhosphorEngine::MaxPlausibleVirtualDesktop + 1);
+        const auto big =
+            m_wta->service()->placementStore().peek(QStringLiteral("bigapp|big"), QStringLiteral("bigapp"));
+        QVERIFY(big.has_value());
+        QCOMPARE(big->virtualDesktop, 0);
     }
 
     void testPersistedDesktopRestore_geometryOnlyWriteLeavesTheRecordArmed()
@@ -990,6 +1009,10 @@ private Q_SLOTS:
                                             y, width, height, shouldSnap);
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+        // NOTE this assertion is weak on its own: resolveWindowRestore clears
+        // shouldSnap at entry, and the seeded record carries no zoneIds, so the
+        // engine resolve would not snap either. The desktopSpy count above is
+        // what proves the arm ran; this only documents the intended outcome.
         QVERIFY2(!shouldSnap, "the window must not be snapped into the desktop it is leaving");
 
         // And the record is still there for the engine restore that runs when

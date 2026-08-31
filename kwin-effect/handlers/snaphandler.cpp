@@ -1262,6 +1262,16 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
             m_awaitingDesktopArrivalRestore.remove(windowId);
             continue;
         }
+        drainDesktopArrivalFor(windowId, window);
+    }
+}
+
+bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window)
+{
+    if (!window || !m_awaitingDesktopArrivalRestore.contains(windowId)) {
+        return false;
+    }
+    {
         // Measured against the window's OWN output, matching the arm in
         // slotWindowDesktopMoveRequested. isOnCurrentDesktop() reads the global
         // current desktop, which under per-output virtual desktops both
@@ -1274,7 +1284,7 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
         KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
         const bool desktopInView = shownHere ? window->isOnDesktop(shownHere) : window->isOnCurrentDesktop();
         if (!desktopInView || !window->isOnCurrentActivity()) {
-            continue; // Still waiting for its desktop.
+            return false; // Still waiting for its desktop.
         }
         if (window->isMinimized()) {
             // KWin can bring a session's windows back minimized, and nothing
@@ -1282,13 +1292,13 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
             // retries, not this one). So the park is KEPT rather than spent: a
             // later desktop switch is the only remaining chance to place this
             // window, and onWindowClosed drops the entry if it never comes.
-            continue;
+            return false;
         }
         if (!m_effect->shouldHandleWindow(window)) {
             // Never going to be placed by this handler, so the park is spent
             // rather than carried for a restore that cannot happen.
             m_awaitingDesktopArrivalRestore.remove(windowId);
-            continue;
+            return false;
         }
         // Snap-mode screens only. A window that landed on a tiling or scrolling
         // screen is re-announced by that handler's own desktop-return catch-scan
@@ -1298,7 +1308,7 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
         const QString screenId = m_effect->getWindowScreenId(window);
         if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
             m_awaitingDesktopArrivalRestore.remove(windowId);
-            continue;
+            return false;
         }
 
         // Spend the park BEFORE dispatching: the restore is a one-shot, and an
@@ -1313,6 +1323,7 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
         // reached.
         qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
         callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
+        return true;
     }
 }
 

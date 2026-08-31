@@ -104,8 +104,13 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // it to a single desktop here would silently un-sticky it. Directional
     // cross-desktop move is meaningless for an everywhere window — leave it.
     if (w->isOnAllDesktops()) {
+        // No recovery call here, unlike the out-of-range branch above. A sticky
+        // window is present on every desktop, so it was never displaced and is
+        // not waiting to be placed — driving a restore at it would re-place a
+        // window that went nowhere, which is the same unsolicited re-placement
+        // the arrival arm in window_desktop_connections.cpp goes to some length
+        // to avoid for the grew / un-stuck cases.
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
-        placeWhereItIs();
         return;
     }
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
