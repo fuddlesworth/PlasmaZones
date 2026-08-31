@@ -42,6 +42,28 @@ void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth
     m_floatRestore.insert(windowId, restore);
 }
 
+void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                                 const QString& screenId)
+{
+    // SCREEN-LOCAL recorded position only, for autotile's documented reason: a
+    // rect captured on a different screen would teleport the window while the
+    // float tracking points elsewhere. The move itself is gated (daemon-wired
+    // scrollingRestoreFloatedWindowsOnLogin setting + per-window
+    // RestorePosition rule) while the floating MARK is not — the callers mark
+    // unconditionally and only the geometry comes through here.
+    //
+    // Shared by the two restore paths (insertOpenedWindow's record-float branch
+    // and restoreFloatRecordForOpen) because they are one rule with two entry
+    // points, and a change to the gate that reached only one of them would
+    // restore the position on one open path and not the other.
+    const QString restoreScreen = record.screenId.isEmpty() ? screenId : record.screenId;
+    const QRect freeGeo = record.freeGeometryFor(restoreScreen);
+    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+    if (freeGeo.isValid() && restorePosition) {
+        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+    }
+}
+
 void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
 {
     // Registry answer, not a parse: a canonical id frozen before KWin resolved
@@ -59,14 +81,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     if (!record) {
         return;
     }
-    // Same gate and screen-local rule as the record-float branch of
-    // insertOpenedWindow (which documents both).
-    const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
-    const QRect freeGeo = record->freeGeometryFor(restoreScreen);
-    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-    if (freeGeo.isValid() && restorePosition) {
-        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-    }
+    emitGatedFloatGeometryRestore(windowId, *record, screenId);
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -158,19 +173,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 m_scrollFloatedWindows.insert(windowId);
                 consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
                 // The window is marked floating unconditionally above; only
-                // the geometry MOVE onto the recorded free spot is gated
-                // (daemon-wired scrollingRestoreFloatedWindowsOnLogin
-                // setting + per-window RestorePosition rule) — the autotile
-                // shape, insert.cpp. SCREEN-LOCAL recorded position only,
-                // for autotile's documented reason: a rect captured on a
-                // different screen would teleport the window while the
-                // float tracking points elsewhere.
-                const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
-                const QRect freeGeo = record->freeGeometryFor(restoreScreen);
-                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-                if (freeGeo.isValid() && restorePosition) {
-                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-                }
+                // the geometry MOVE onto the recorded free spot is gated. That
+                // gate and its screen-local rule live in the shared helper.
+                emitGatedFloatGeometryRestore(windowId, *record, screenId);
                 Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
                 return true;
             }

@@ -44,6 +44,7 @@ private Q_SLOTS:
     void backgroundFocusReportForcesTheReturnBatch();
     void backgroundFocusThatMovesTheFocusForcesTheReturnBatch();
     void backgroundFocusArmIsDroppedWhenTheScreenLeavesTheSet();
+    void backgroundFocusArmIsScopedToItsOwnScreen();
     void identicalSetRePushWithoutASwitchStaysSuppressed();
     void stripContextIsAnnouncedOnDesktopSwitch();
     void changedSetSwitchStillAnnouncesTheStayingScreen();
@@ -299,6 +300,52 @@ void TestScrollEngineStripContext::backgroundFocusArmIsDroppedWhenTheScreenLeave
                      "a pending arm for a screen that left the set must not describe its old desktop's strip");
         }
     }
+}
+
+void TestScrollEngineStripContext::backgroundFocusArmIsScopedToItsOwnScreen()
+{
+    // The arm is keyed by the whole context, screen included, so a report on S1
+    // must not force a batch out of S2's pass. With a screen-only key — or with
+    // two screens whose keys collided on the desktop number alone — S2's retile
+    // would spend an arm it never earned and re-assert its strip for no reason.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")}, geometry, geometry);
+    // Both screens on the SAME desktop number, so a key that dropped the screen
+    // dimension would compare equal across them.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S2"), 1);
+    engine->windowOpened(QStringLiteral("app|a1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|a2"), QStringLiteral("S2"), 0, 0);
+    QCoreApplication::processEvents();
+    engine->windowFocused(QStringLiteral("app|a1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // S1 alone goes away and takes a background focus report; S2 never leaves
+    // desktop 1.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|c1"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    engine->windowFocused(QStringLiteral("app|a1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // S2 retiles with nothing of its own changed. The arm belongs to S1's
+    // desktop-1 context, so this pass must stay suppressed.
+    QSignalSpy s2Spy(engine, &ScrollEngine::windowsTiled);
+    engine->retile(QStringLiteral("S2"));
+    QCoreApplication::processEvents();
+    QCOMPARE(s2Spy.count(), 0);
+
+    // And S1's own return still gets it, so the scoping did not simply lose it.
+    QSignalSpy s1Spy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(s1Spy.count() > 0, "the screen that armed the pending emit must still get its forced batch");
 }
 
 void TestScrollEngineStripContext::identicalSetRePushWithoutASwitchStaysSuppressed()

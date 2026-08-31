@@ -1179,6 +1179,12 @@ private:
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
     void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
+    /// Emit geometryRestoreRequested for @p record's remembered free rect, if
+    /// the restore gate allows it and the rect belongs to the screen the window
+    /// is opening on. Shared by the two float-restore entry points; see the
+    /// definition for the gate and the screen-local rule.
+    void emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                       const QString& screenId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,

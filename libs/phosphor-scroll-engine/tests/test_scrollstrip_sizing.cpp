@@ -152,10 +152,12 @@ void TestScrollStripSizing::heightAdjustResizesATabbedColumn()
 }
 
 // The preset cycle's half of the same parity. A tabbed column at Auto renders
-// at the full work area, which is taller than every entry, so the FORWARD
-// press wraps to the vocabulary's smallest and a backward press takes the
-// nearest shorter entry — cyclePresetIndexByExtent's rule, reached here
-// through the column's own extent rather than a tile's share of it.
+// at the full work area, which is taller than every entry, so a backward press
+// takes the nearest shorter entry — cyclePresetIndexByExtent's rule, reached
+// here through the column's own extent rather than a tile's share of it. This
+// slot drives the backward walk and the step back up; the forward wrap from
+// Auto is the width analogue's subject (widthPresetCycleWrapsByExtentNotBy
+// Position) and is deliberately not restated here.
 void TestScrollStripSizing::heightPresetCycleResizesATabbedColumn()
 {
     ScrollLayoutParams params = defaultParams();
@@ -565,6 +567,12 @@ void TestScrollStripSizing::tabbingAStackPicksTheShownTabAndUntabbingRestoresEve
     // change, and a future reader would not know whether the refusal was
     // expected or unnoticed.
     QVERIFY(!strip.setActiveWindowHeight(WindowHeight::makeAuto()));
+    // Re-fetched: focusAdjacentTile and the height write above are both
+    // mutating calls, and this file's rule is that a Column* does not survive
+    // one. The refusal means nothing moved THIS time, which is not the same as
+    // the pointer being guaranteed good.
+    col = strip.activeColumn();
+    QVERIFY(col);
     QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 250);
 }
@@ -684,6 +692,11 @@ void TestScrollStripSizing::bothPresetCyclesRefuseADeltaThatIsNotOneStep()
     QVERIFY(strip.cycleActiveColumnPresetWidth(1, params));
     QVERIFY(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))) != widthBefore);
     QVERIFY(strip.cycleActiveWindowPresetHeight(1, params));
+    // Geometry on the height arm too, not just its verdict — the same rule the
+    // refusal loop above follows, and the reason it exists: a verdict-only
+    // check here would pass for a cycle that reported a change and moved
+    // nothing, which is precisely the failure this slot is about.
+    QVERIFY(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))) != heightBefore);
 }
 
 void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
@@ -835,7 +848,12 @@ void TestScrollStripSizing::centeringMovesAShortTabbedColumnAndItsTabsTogether()
     // moves outright, so it has to travel with the tiles rather than stay
     // pinned to the start edge.
     const QRect indicator = resolved.columns.first().tabIndicatorRect;
-    QCOMPARE(Ax::crossPos(indicator), Ax::crossPos(before.columns.first().tabIndicatorRect) + (800 - 400) / 2);
+    // Derived from the shared cross constant and the column's own height, the
+    // way every sibling line here does: hardcoding 800 restates
+    // ScrollTestUtils::kCrossExtent, so a change to the fixture screen would
+    // leave this line asserting a shift the strip no longer makes.
+    QCOMPARE(Ax::crossPos(indicator),
+             Ax::crossPos(before.columns.first().tabIndicatorRect) + (ScrollTestUtils::kCrossExtent - 400) / 2);
 }
 
 void TestScrollStripSizing::centeringMeasuresFromTheWorkAreasCrossOriginNotTheScreens()

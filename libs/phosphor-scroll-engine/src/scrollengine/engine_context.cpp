@@ -436,7 +436,20 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
                         StashedStrip moved = m_stripStash.take(oldKey);
                         const StashedStrip displaced = m_stripStash.value(newKey);
-                        moved.blueprintCursor = qMax(moved.blueprintCursor, displaced.blueprintCursor);
+                        // Absorb the displaced cursor ONLY when the two cursors
+                        // are counting against the same blueprint — either the
+                        // identities match, or the moved entry has none of its
+                        // own and takes the displaced one below. Two entries
+                        // with DIFFERENT valid identities are counting against
+                        // different templates, and a qMax across them would pair
+                        // this entry's identity with the other's progress, which
+                        // is the pairing the paragraph above says must hold.
+                        const bool sameBlueprint = !moved.blueprintIdentity.isValid()
+                            || !displaced.blueprintIdentity.isValid()
+                            || moved.blueprintIdentity == displaced.blueprintIdentity;
+                        if (sameBlueprint) {
+                            moved.blueprintCursor = qMax(moved.blueprintCursor, displaced.blueprintCursor);
+                        }
                         if (!moved.blueprintIdentity.isValid() && displaced.blueprintIdentity.isValid()) {
                             moved.blueprintIdentity = displaced.blueprintIdentity;
                         }
@@ -720,8 +733,16 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = stale(it.key().activity) ? m_perScreenOverrides.erase(it) : std::next(it);
     }
-    // Screen-keyed, context-valued arms, on the same terms as the desktop
-    // prune's sweep — see the rationale there.
+    // No m_context call here, unlike the desktop prune's pruneDesktop, and the
+    // tracker has no activity analog on purpose: desktops are a PER-OUTPUT
+    // dimension it keeps a map of, so a removed one leaves per-screen entries
+    // to reap, while the activity dimension is a single current value
+    // (ScreenContextTracker's "the activity dimension is always the current
+    // activity"). setCurrentActivity replaces it wholesale, so there is no
+    // per-screen activity state for a prune to unwind.
+    //
+    // Context-valued arms, on the same terms as the desktop prune's sweep — see
+    // the rationale there.
     pruneContextKeyedScreenArms([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });

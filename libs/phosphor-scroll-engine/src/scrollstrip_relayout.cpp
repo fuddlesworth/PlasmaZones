@@ -799,6 +799,15 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         // from "this column cannot be any narrower" — columnExtentPx takes the
         // max of the two and the answer is indistinguishable afterwards. A
         // maximized-to-edges extent is declared, never minimum-pinned.
+        //
+        // This re-resolves the pair columnExtentPx just took a max of, which
+        // reads like the kind of duplicate per-tick walk the note at the end of
+        // this function says to remove. It stays because the only way to share
+        // the work is to fold the flag out of columnExtentPx and into its four
+        // callers, and that resolver owns the toEdges arm and the work-area cap
+        // the other three depend on. The toEdges short-circuit below keeps the
+        // extra pair off the maximized path, which is the one whose column
+        // spans the whole output.
         rc.extentPinnedByMinimum =
             !toEdges && columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
         rc.maximizedToEdges = toEdges;
