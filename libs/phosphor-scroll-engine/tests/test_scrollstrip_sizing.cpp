@@ -294,6 +294,17 @@ void TestScrollStripSizing::heightAdjustMeasuresATabbedColumnInColumnSpace()
     QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
     const int shrunkColumn = crossExtent - qRound(0.25 * crossExtent);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), shrunkColumn - reservation);
+    // The RELATIONSHIP, asserted alongside the computed figure above: the tab
+    // sits exactly one reservation under the column it belongs to. The figure
+    // restates the verb's own percentage-of-cross formula, so a shared error in
+    // that formula would reproduce in the expectation and pass; this line is
+    // independent of it and pins what the column-space conversion is actually
+    // for.
+    {
+        const ResolvedStrip resolved = strip.relayout(params);
+        QCOMPARE(Ax::crossLen(rectOf(resolved, QStringLiteral("b"))),
+                 Ax::crossLen(resolved.columns.first().rect) - reservation);
+    }
 
     // And the matching grow returns to exactly where it started, which is the
     // part an off-by-a-reservation entry rule loses.
