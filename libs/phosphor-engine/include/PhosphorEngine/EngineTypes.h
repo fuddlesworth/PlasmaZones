@@ -91,6 +91,57 @@ inline WindowKind clampWindowKindFromWire(int wire)
     }
 }
 
+/// Why a snap restore is being resolved. Replaces the `isOpenPath` bool the
+/// Snap.resolveWindowRestore wire used to carry.
+///
+/// The bool conflated FIVE drivers into "open / not open", and two daemon-side
+/// gates read it: the cross-desktop session restore, and the cross-screen tile
+/// reclaim. Both genuinely want "is this an open", so both are `== Open` and
+/// nothing changed for them. What the bool could NOT express is the
+/// DesktopArrival re-drive, which is a login-restore continuation rather than a
+/// user action — it must skip the desktop restore (it has just arrived; moving
+/// it again would bounce it straight back off) while still being eligible for
+/// the reclaim, which the bool permanently denied it.
+///
+/// A third gate reads it on the EFFECT side: the open-path setFrameGeometry
+/// shadow seed, which is what lets the daemon translate a bare RouteToScreen for
+/// a never-moved window. That one is `== Open` too, which is why the two
+/// deferred-routing flush call sites must stay Open — give them any other reason
+/// and RouteToScreen silently stops working for freshly flushed windows.
+enum class RestoreReason : int {
+    Open = 0, ///< a window OPEN: session restore, deferred-routing flush
+    Unminimize = 1, ///< unminimize of a window orphaned by a daemon restart
+    PendingSweep = 2, ///< the pending-restores sweep, once the daemon is ready
+    DesktopArrival = 3, ///< re-drive after the daemon moved the window to another desktop
+    DaemonRestartSweep = 4, ///< the bring-up stacking-restore sweep
+};
+
+/// Clamp an integer wire value to a valid RestoreReason. Mirrors
+/// clampWindowKindFromWire: an out-of-range value collapses to `Open`.
+///
+/// Note that Open is the most PERMISSIVE value, not the safest one — it is the
+/// only reason that grants both gates. It is chosen anyway because it is the
+/// default the effect's own signature carries, so an unrecognised value behaves
+/// like a caller that named nothing, which is what every pre-existing call site
+/// meant. Treating a garbled value as a non-open driver would instead silently
+/// suppress a genuine restore, and a silently skipped restore is far harder to
+/// notice than one that ran.
+inline RestoreReason clampRestoreReasonFromWire(int wire)
+{
+    switch (wire) {
+    case static_cast<int>(RestoreReason::Unminimize):
+        return RestoreReason::Unminimize;
+    case static_cast<int>(RestoreReason::PendingSweep):
+        return RestoreReason::PendingSweep;
+    case static_cast<int>(RestoreReason::DesktopArrival):
+        return RestoreReason::DesktopArrival;
+    case static_cast<int>(RestoreReason::DaemonRestartSweep):
+        return RestoreReason::DaemonRestartSweep;
+    default:
+        return RestoreReason::Open;
+    }
+}
+
 struct ResnapEntry
 {
     QString windowId;

@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Windows come back on the virtual desktop they were on**: logging out with windows spread across several desktops and logging back in put every one of them on whichever desktop was showing, so a multi-desktop layout collapsed onto one. A Wayland session carries no record of which desktop a window belonged to, and applications are simply relaunched, so nothing told PlasmaZones where they had been. PlasmaZones already stored each window's desktop with the rest of its placement, and it now uses that. A window that reopens somewhere other than its recorded desktop is sent back there before anything places it, and it takes its place in that desktop's layout when you switch to it. This works the same way whether the monitor is snapping, tiling or scrolling. Put windows back on their virtual desktop, under General → Session restore, turns this off. Each remembered window is moved at most once, and a rule that routes a window to a particular desktop still wins ([#1019](https://github.com/fuddlesworth/PlasmaZones/pull/1019)).
+
 ## [3.4.4] - 2026-08-30
 
 ### Added

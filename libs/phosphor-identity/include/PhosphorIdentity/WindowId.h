@@ -82,6 +82,32 @@ inline QString extractInstanceId(const QString& windowId)
 }
 
 /**
+ * @brief Do two window ids name the same live window instance?
+ *
+ * Identity match for records KEYED by composite id. Unlike @c extractInstanceId,
+ * which treats a bare separator-less string AS the instance id, ids without a
+ * '|' match only EXACTLY here: a store is keyed with full `appId|uuid`
+ * composites, so a bare id reaching this predicate is foreign input that must
+ * not fuzzy-match a composite's uuid component.
+ *
+ * That asymmetry is the trap this helper exists to hold in one place — it was
+ * previously duplicated by hand between the placement store and the daemon's
+ * cross-desktop restore, in different libraries, with nothing pinning the two
+ * copies together.
+ */
+inline bool sameWindowInstance(const QString& lhs, const QString& rhs)
+{
+    if (lhs == rhs) {
+        return true;
+    }
+    if (!lhs.contains(QLatin1Char('|')) || !rhs.contains(QLatin1Char('|'))) {
+        return false;
+    }
+    const QString lhsInstance = extractInstanceId(lhs);
+    return !lhsInstance.isEmpty() && lhsInstance == extractInstanceId(rhs);
+}
+
+/**
  * @brief Derive a canonical appId from a window's desktop-file name and class.
  *
  * Prefers @p desktopFileName (stable across sessions). Falls back to the
