@@ -73,12 +73,23 @@ public:
     {
         return true;
     }
+    /// Windows the adaptor OFFERED to the cross-screen session reclaim, in
+    /// order. Recorded rather than acted on: the property under test is
+    /// whether the adaptor runs the claim round at all, and answering the
+    /// claim would additionally change which dispatch branch is taken.
+    QStringList reclaimOffers;
+
     void windowOpened(const QString& windowId, const QString&, int, int) override
     {
         dispatched.append(windowId);
         if (burstDepth == 0) {
             dispatchedOutsideBurst.append(windowId);
         }
+    }
+    bool claimCrossScreenReopen(const QString& windowId, const QString&, int, int) override
+    {
+        reclaimOffers.append(windowId);
+        return false; // decline, so the arrival-screen dispatch still runs
     }
     void beginArrivalBurst() override
     {
@@ -204,6 +215,53 @@ private Q_SLOTS:
         QCOMPARE(engine.burstsOpened, 1);
         QCOMPARE(engine.maxBurstDepth, 1);
         QCOMPARE(engine.burstDepth, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // The move-release one-shot (m_moveReleasedInstances).
+    //
+    // releaseWindowTracking drops a LIVE window from engine tracking WITHOUT
+    // capturing a placement, and the effect then re-announces it on the screen
+    // the user moved it to. That announce looks like a first observation to
+    // claimCrossScreenReopen, whose same-instance branch matches the window's
+    // own stale record — still tiled on the OLD screen — and yanks it back,
+    // silently undoing the move. The one-shot suppresses exactly that claim
+    // round and nothing else.
+    //
+    // The whole feature shipped untested, and its consumption sat behind a
+    // short-circuited `allowCrossScreenClaim &&`, so a rule-routed re-announce
+    // left the entry armed to spend itself on an unrelated later announce.
+    // Asserting only "the re-announce was not reclaimed" would pass against
+    // that; the third announce below is what pins the ONE in one-shot.
+    // -------------------------------------------------------------------------
+    void testMoveReleaseSuppressesExactlyOneCrossScreenReclaim()
+    {
+        RecordingEngine engine;
+        QObject adaptorParent;
+        // Null screen manager: the panel gate never engages, so every open
+        // dispatches synchronously and the assertions read dispatch order
+        // directly rather than through a flush.
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        // Baseline: an ordinary open IS offered to the session reclaim.
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(engine.reclaimOffers, QStringList{QStringLiteral("kate|a")});
+        QCOMPARE(engine.dispatched.size(), 1);
+
+        // A live move release arms the one-shot; the re-announce skips the
+        // claim round and is adopted by the arrival screen's engine instead.
+        adaptor.releaseWindowTracking(QStringLiteral("kate|a"));
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
+        QCOMPARE(engine.reclaimOffers.size(), 1); // unchanged — suppressed
+        QCOMPARE(engine.dispatched.size(), 2); // but still dispatched
+
+        // ONE shot. The next announce for the same live window is offered
+        // again, or a single move would disarm the session reclaim for that
+        // window permanently.
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
+        QCOMPARE(engine.reclaimOffers.size(), 2);
+        QCOMPARE(engine.reclaimOffers.last(), QStringLiteral("kate|a"));
     }
 
     // -------------------------------------------------------------------------

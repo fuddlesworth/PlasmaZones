@@ -590,9 +590,17 @@ private:
         bool allowCrossScreenClaim = true;
     };
     QList<ParkedOpen> m_unclaimedOpens;
-    /// Instance ids of LIVE windows released via releaseWindowTracking — the
-    /// effect's cross-screen MOVE transfer (release on the old screen, then
-    /// re-announce on the new one). The re-announce looks like a first
+    /// Instance ids of LIVE windows released via releaseWindowTracking. The
+    /// case that motivated it is the effect's cross-screen MOVE transfer
+    /// (release on the old screen, then re-announce on the new one), but the
+    /// effect calls releaseWindowTracking from every live tracking drop —
+    /// the drag-bypass revert, the float cleanup, and the desktop/activity
+    /// demotion handlers as well as the output transfer — so the one-shot
+    /// arms on all of them. That is the intended reading rather than an
+    /// over-reach: every one of those is the user (or a rule) deliberately
+    /// moving a LIVE window, and none is a session restore, so none of them
+    /// wants the next announce reclaimed back to a remembered home.
+    /// The re-announce looks like a first
     /// observation to claimCrossScreenReopen, whose same-instance branch then
     /// matches the window's own stale record (still tiled on the OLD screen —
     /// releaseWindowTracking deliberately captures nothing) and reclaims the
@@ -602,8 +610,9 @@ private:
     /// adopts it — exactly what a move means. A genuine session restore never
     /// passes through releaseWindowTracking, and a daemon restart clears the
     /// set, so the reclaim's real audiences are untouched. Entries die with
-    /// the window (windowClosed / onTrackedWindowDestroyed) and at
-    /// clearEngine.
+    /// the window (windowClosed / onTrackedWindowDestroyed), are swept by
+    /// pruneStaleFloatBroadcasts for a window that produced neither, and go
+    /// wholesale at clearEngine.
     QSet<QString> m_moveReleasedInstances;
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);

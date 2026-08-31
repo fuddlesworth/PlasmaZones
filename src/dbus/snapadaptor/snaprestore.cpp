@@ -271,10 +271,9 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         if (!openLike || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
             return;
         }
-        PhosphorPlacement::WindowTrackingService* service = m_adaptor->service();
-        const QString appId = service->currentAppIdFor(windowId);
+        const QString appId = svc->currentAppIdFor(windowId);
         if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
-            service->placementStore().burnReclaimCredit(windowId, appId);
+            svc->placementStore().burnReclaimCredit(windowId, appId);
         }
     };
 

@@ -461,7 +461,10 @@ struct WindowPlacement
 /// and must answer whether that context resolves to @p engineId's mode;
 /// callers wrap their layout-manager mode lookup (and any null-manager
 /// permissiveness) in it, keeping this library free of the zones-layer mode
-/// type.
+/// type. (The function this whole block documents is
+/// pendingCrossScreenManagedRestore, declared below the two helpers that
+/// follow — it needs their definitions first.)
+
 /// Whether @p windowId carries a stable, FIFO-matchable appId — the guard
 /// every cross-engine gate and claim runs before consulting the placement
 /// store. A bare id (no `appId|uuid` composite, so extractAppId returns the

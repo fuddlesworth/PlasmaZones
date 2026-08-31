@@ -119,14 +119,28 @@ public:
     ///
     /// Side effect, hit or miss: BURNS ONE RECLAIM CREDIT in the @p appId
     /// bucket (the newest reclaim-eligible record not bound to a live window
-    /// and not this instance's own). Each engine calls takeForReopen exactly
-    /// once per first-observed open, so this retires a session-restore
+    /// and not this instance's own). This is what retires a session-restore
     /// credit per open — a window restored onto its CORRECT screen (where
     /// the reclaim's same-screen bail never consumes anything) spends its
     /// credit here instead of leaving it for a later same-app open to be
     /// teleported by. The exact-final early return burns nothing: it is a
     /// live window's own context-rejected verdict, not an open that used up
     /// a restore.
+    ///
+    /// The burn is per CALL, and the tiling engines do not call this exactly
+    /// once per open — the accounting is approximate in both directions, on
+    /// purpose, because both errors fail SAFE (a missed burn leaves a credit
+    /// the close-time revoke will take instead; an extra burn only makes a
+    /// reclaim less likely, never wrong):
+    ///  - AutotileEngine::insertWindow calls this only when its earlier tiers
+    ///    left the window uninserted AND the arrival is not a migration
+    ///    re-add, so a pre-seeded open burns nothing.
+    ///  - ScrollEngine::insertOpenedWindow has no migration guard, so a live
+    ///    window changing screen or desktop context re-drives the open path
+    ///    and burns again. It can only burn a NON-live record, so the cost is
+    ///    at most one not-yet-reopened sibling's restore credit.
+    /// A caller that needs exactly-once accounting must gate its own call;
+    /// do not read the burn as a per-open counter.
     std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
                                                  const QString& screenId);
 
@@ -187,12 +201,25 @@ public:
     /// The window CLOSED mid-session: revoke its records' reclaim credit
     /// (WindowPlacement::reclaimEligible) and stamp closedAtMsecs. From here
     /// on the records serve reopen restore only — never the cross-screen
-    /// reclaim's appId fallback. Called from the daemon's close funnel AFTER
+    /// reclaim's appId fallback. Called from the daemon's close funnels AFTER
     /// the close-time captureWindowPlacement (record() preserves the stored
     /// credit on merge, so order only matters for the stamp's accuracy).
     /// Sweeps every matching record across buckets, the releaseEngineSlot
     /// appId-drift rationale. Returns true when any credit was revoked.
-    bool markInstanceClosed(const QString& windowId);
+    ///
+    /// @p graceEligible stamps closedAtMsecs with the current time, which is
+    /// what lets serialize()'s ShutdownCloseGraceMs arm persist this close as
+    /// restore evidence. Pass false when the close time is NOT known to be
+    /// now — the alive-set prune backstop discovers a window that died at some
+    /// unobserved earlier moment, and dating that death "now" would hand it a
+    /// shutdown grace it never earned. The stamp is then left ALONE rather
+    /// than zeroed — an unobserved close contributes no time, and clearing a
+    /// stamp an earlier observed close wrote would strip the grace from a
+    /// window that legitimately earned it (logout can push an alive report
+    /// through the prune backstop before the final save). A record that was
+    /// never stamped keeps its default 0, so it persists credit-less at the
+    /// next save.
+    bool markInstanceClosed(const QString& windowId, bool graceEligible = true);
 
     /// Retire ONE reclaim credit in @p appId's bucket: the newest
     /// reclaim-eligible record not bound to a live window and not

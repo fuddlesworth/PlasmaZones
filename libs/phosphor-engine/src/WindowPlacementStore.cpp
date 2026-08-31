@@ -629,6 +629,17 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
         // that branch is the one this call always takes, since the take above
         // just removed the only record for this instance.
         rec->fromPersistedSession = false;
+        // The consumed record's DEATH metadata belongs to the instance that
+        // died, not to the live one adopting its placement — and the append
+        // branch would copy both across. Left alone, a dead sibling's revoked
+        // credit and its close timestamp became the live window's, so this
+        // window's own close later found the credit already false (harmless)
+        // while every save in between read a stale close time for the grace
+        // arm. Reset to the defaults a live window is entitled to; its close
+        // re-revokes through markInstanceClosed. Same hazard, same fix as the
+        // fromPersistedSession clear above.
+        rec->reclaimEligible = true;
+        rec->closedAtMsecs = 0;
         record(*rec);
     } else {
         qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
@@ -675,12 +686,20 @@ bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QStr
     return true;
 }
 
-bool WindowPlacementStore::markInstanceClosed(const QString& windowId)
+bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool graceEligible)
 {
     if (windowId.isEmpty()) {
         return false;
     }
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // An OBSERVED close is authoritative and stamps the time. An unobserved one
+    // contributes no time at all and must not overwrite a stamp an earlier
+    // observed close already wrote: logout tears windows down and can push an
+    // alive report through the prune backstop before the final save, and
+    // clearing the stamp there would strip the shutdown grace from exactly the
+    // windows that legitimately earned it — the login reclaim the grace exists
+    // for. Leaving it at its default 0 for a never-stamped record is the
+    // "closed at an unknown earlier moment, no grace" answer serialize() wants.
+    const qint64 now = graceEligible ? QDateTime::currentMSecsSinceEpoch() : 0;
     bool revoked = false;
     // Sweep every bucket — appId drift can file one instance's records under
     // two keys (the releaseEngineSlot rationale), and a surviving credit in
@@ -690,7 +709,9 @@ bool WindowPlacementStore::markInstanceClosed(const QString& windowId)
             if (!sameWindowInstance(p.windowId, windowId)) {
                 continue;
             }
-            p.closedAtMsecs = now;
+            if (now > 0) {
+                p.closedAtMsecs = now;
+            }
             if (p.reclaimEligible) {
                 p.reclaimEligible = false;
                 revoked = true;
