@@ -32,6 +32,9 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
+// KWin::Window is only forward-declared through the effect header; the wheel
+// dispatch below needs isRequestedFullScreen on the complete type.
+#include <window.h>
 
 #include <QDBusVariant>
 #include <QHash>
@@ -998,6 +1001,57 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     }
     const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
     qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
+    // Scrolling a strip that holds a natively-fullscreen tile LEAVES that
+    // fullscreen first.
+    //
+    // A window in its OWN fullscreen (a client F11, a video going fullscreen —
+    // not the windowed-fullscreen feature, whose members are committed at their
+    // column rect on purpose) refuses every geometry commit through
+    // applyWindowGeometry's fullscreen bail. The engine does not know that, so
+    // it goes on scrolling and PARKING that column while the screen still shows
+    // the fullscreen window: the model says "parked off-strip", the user sees a
+    // video, and the two owners stay split for the whole hold. Measured live,
+    // one wheel notch at a time, the same window's target walked (8,54) ->
+    // (1924,54) -> the park (1932,2176), each answered "fullscreen, skipping".
+    //
+    // Done HERE, at the wheel dispatch, rather than in the batch apply: a batch
+    // cannot tell a user scroll from an insert-driven reflow, and gating the
+    // exit on the batch's own strip-motion fields (viewDelta / scrollEdge /
+    // hasVisualPos) dropped the fullscreen whenever an unrelated window merely
+    // OPENED and slid the strip — measured. This site is the scroll itself, so
+    // it carries no such ambiguity.
+    //
+    // Exits before the verb goes out, so the engine's own relayout for this
+    // notch already places a window the compositor will accept, rather than the
+    // exit racing a batch that was built against the fullscreen.
+    //
+    // KNOWN GAP: the keyboard navigation verbs reach the engine in-process and
+    // never pass through here, so a keyboard scroll still leaves the hold in
+    // place. Closing that needs the engine to mark a batch as user-driven,
+    // which is a wire change and is deliberately not folded in here.
+    for (const QString& tiledId : m_notifiedWindows) {
+        if (m_notifiedWindowScreens.value(tiledId) != screenId) {
+            continue;
+        }
+        if (m_effect->m_windowedFullscreenWindows.contains(tiledId)) {
+            continue;
+        }
+        KWin::EffectWindow* fsWin = m_effect->findWindowByIdExact(tiledId);
+        if (!fsWin || fsWin->isDeleted() || !fsWin->isFullScreen()) {
+            continue;
+        }
+        KWin::Window* kwFs = fsWin->window();
+        if (!kwFs || !kwFs->isRequestedFullScreen()) {
+            continue;
+        }
+        qCInfo(lcEffect) << "Wheel scroll on a strip holding a fullscreen tile — leaving fullscreen for" << tiledId;
+        // Suppressed, so our own slotWindowFullScreenChanged does not read the
+        // effect's write as a user toggle. setFullScreen flips the REQUESTED
+        // state synchronously while the committed isFullScreen() lags a client
+        // round-trip, so the bail in applyWindowGeometry — which reads that same
+        // pair — already resolves false for the batch this scroll produces.
+        applyFullScreenSuppressed(kwFs, false);
+    }
     // One verb per notch. The engine owns the step SIZE, so a two-notch event
     // is two single steps rather than one double-sized one, which keeps the
     // strip's own animation identical to scrolling those notches separately.
