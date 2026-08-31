@@ -96,6 +96,12 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     }
     TilingStateHelpers::removeFromAllScreens(m_border, windowId);
     m_restartSnapCandidates.remove(windowId);
+    // The desktop-arrival park is deliberately NOT dropped here, unlike in
+    // markWindowSnapped. Unsnapping answers where the window sits in the CURRENT
+    // desktop's layout; it says nothing about a window still travelling to
+    // another desktop, and a float still wants its recorded position restored
+    // when it arrives. The park's own exits (arrival, close, daemon loss) cover
+    // the rest.
     // A window that is no longer snap-managed occupies no zone. The zone cache
     // is the source of the IsSnapped / Zone rule-match fields, and several
     // unsnap paths (drag-out unsnap in particular) get their answer in the
@@ -1256,7 +1262,18 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
             m_awaitingDesktopArrivalRestore.remove(windowId);
             continue;
         }
-        if (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+        // Measured against the window's OWN output, matching the arm in
+        // slotWindowDesktopMoveRequested. isOnCurrentDesktop() reads the global
+        // current desktop, which under per-output virtual desktops both
+        // over-fires (some other output switched to this window's desktop, so
+        // it is still not visible where it lives) and under-fires (its own
+        // output switched to it while the global current is elsewhere, so the
+        // park would sit unspent until an unrelated switch). Falls back to the
+        // global reading when the window has no output.
+        KWin::LogicalOutput* const out = window->screen();
+        KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
+        const bool desktopInView = shownHere ? window->isOnDesktop(shownHere) : window->isOnCurrentDesktop();
+        if (!desktopInView || !window->isOnCurrentActivity()) {
             continue; // Still waiting for its desktop.
         }
         if (window->isMinimized()) {

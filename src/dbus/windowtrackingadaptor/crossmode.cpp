@@ -620,6 +620,13 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     // Electron/CEF app that re-broadcast its WM_CLASS mid-session has records
     // filed under the CURRENT appId, which is the bucket the FIFO branch reads.
     const QString appId = m_service->currentAppIdFor(windowId);
+    // Only the DESKTOP is compared, deliberately. The placement key is
+    // (screen, desktop, activity), but this restore answers one question — which
+    // virtual desktop the window belongs on — and the other two are the engine
+    // restore's business once the window lands there. Virtual desktops are
+    // activity-independent in KDE, so a record from another activity still names
+    // a valid desktop, and the recorded screen may legitimately be gone.
+    //
     // hasRestorableContent, so a persisted free-geometry-only stub does not
     // drive the move on its own: no engine will adopt such a record, so the
     // window would land on the remembered desktop and simply float there, which

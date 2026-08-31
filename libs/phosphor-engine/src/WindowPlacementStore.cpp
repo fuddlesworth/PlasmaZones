@@ -173,6 +173,11 @@ void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
                 break;
             }
         }
+        // In production the probe is installed in the WindowTrackingService
+        // constructor, so this tier always runs. It is guarded because a store
+        // used without one (a unit test, or a future embedder) would otherwise
+        // fall straight to the positional last resort below and could delete a
+        // live window's record — the very harm this tier exists to prevent.
         if (victim < 0 && m_liveInstanceProbe) {
             for (int i = 0; i < bucket.size(); ++i) {
                 if (!m_liveInstanceProbe(bucket.at(i).windowId)) {
@@ -750,6 +755,13 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
 
 void WindowPlacementStore::deserialize(const QJsonObject& obj)
 {
+    // WHOLE-STORE REPLACE, and it runs more than once per startup: the daemon
+    // loads through WindowTrackingAdaptor's constructor and again through the
+    // engines' load delegate at finalizeStartup. Both are bringup, before any
+    // window opens, so discarding what is here costs nothing. Calling this
+    // mid-session would not be safe — it would drop every live capture and
+    // re-arm every record's cross-desktop one-shot, teleporting windows that
+    // had already been placed.
     m_byApp.clear();
     m_sequence = 0;
     QList<WindowPlacement> loaded;

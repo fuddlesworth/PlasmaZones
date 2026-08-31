@@ -124,6 +124,14 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // a no-op for a window that turns out to need nothing (the resolve answers
     // no-snap), so covering both is cheaper than distinguishing them.
     //
+    // That breadth is safe for the move-to-next/prev-desktop shortcut too, which
+    // is the other producer of this signal. Its re-snap branch emits
+    // applyGeometryRequested with a zone immediately after this move, and that
+    // slot calls markWindowSnapped, which cancels the park — signals on one
+    // D-Bus connection keep their order, so the cancel always follows this arm.
+    // Its no-equivalent-zone fallback branch emits no geometry and leaves the
+    // window genuinely unplaced, which is precisely the case the park is for.
+    //
     // Measured against the window's OWN output, not the global current desktop.
     // Under per-output virtual desktops (Plasma 6.7) those differ, and the
     // global reading both over-parks (the target is current somewhere else, so
