@@ -812,13 +812,20 @@ private Q_SLOTS:
         // persisted record and the merge's engine-capture branch clears the flag
         // there. Without that branch a restart would re-arm the move every time
         // the daemon came up.
-        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("sameinst"), 2);
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("sameinst"), 3);
 
         PhosphorEngine::WindowPlacement captured;
         captured.windowId = QStringLiteral("deskapp|sameinst");
         captured.appId = QStringLiteral("deskapp");
         captured.screenId = m_screenId;
-        captured.virtualDesktop = 1;
+        // Three distinct desktops on purpose. The capture must differ from the
+        // seeded record (3) so the merge is a real change, and the merged value
+        // (2) must differ from the live desktop (1) so the "already home" exit
+        // does NOT fire — otherwise this case would decline for that reason and
+        // pass even with the merge-clear deleted, proving nothing. Keeping all
+        // three apart leaves the cleared flag as the only thing that can produce
+        // the decline.
+        captured.virtualDesktop = 2;
         captured.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(),
                                 {PhosphorEngine::WindowPlacement::stateSnapped(), {}, -1});
         QVERIFY(m_wta->service()->placementStore().record(captured));
@@ -827,6 +834,94 @@ private Q_SLOTS:
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
         QVERIFY2(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|sameinst")),
                  "a live engine capture supersedes the persisted context");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_sameInstanceRecordStillMoves()
+    {
+        // The daemon-restart shape: the uuid survives, so peek matches on its
+        // same-instance branch rather than falling through to the appId FIFO.
+        // Every other case here exercises the FIFO branch, so without this one
+        // the same-instance branch has no test that expects a MOVE — only the
+        // merge-clear case, which expects a decline.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("sameinst"), 2);
+        seedLiveWindow(QStringLiteral("sameinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|sameinst")));
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(0).toString(), QStringLiteral("deskapp|sameinst"));
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+    }
+
+    void testPersistedDesktopRestore_ignoresNonPositiveRecordedDesktop()
+    {
+        // 0 means on-all-desktops or unknown on the RECORD side too. The live
+        // side of this is covered above; this pins the peek predicate's
+        // virtualDesktop > 0 term, which nothing else exercises.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 0);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_ignoresNegativeRecordedDesktop()
+    {
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), -1);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_geometryOnlyWriteLeavesTheRecordArmed()
+    {
+        // The defensive half of the merge-clear. Disarming is scoped to a real
+        // engine capture, because a geometry-only write (recordFreeGeometry and
+        // the bringup frame-geometry seed both take that path) happens for every
+        // window before any engine places it. If that scope were ever widened,
+        // the seed would disarm every record before the first window is placed
+        // and the whole feature would silently stop working — with no other test
+        // failing.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        // A valid, non-empty rect: recordFreeGeometry early-returns on an
+        // invalid one, so a default QRect would make this assert nothing.
+        m_wta->service()->recordFreeGeometry(QStringLiteral("deskapp|newinst"), m_screenId, QRect(10, 20, 300, 200),
+                                             /*overwrite=*/true);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")),
+                 "a geometry-only write must not disarm the persisted restore");
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+    }
+
+    void testPersistedDesktopRestore_declinesWithoutLiveMetadata()
+    {
+        // The effect pushes metadata ahead of every open, but the daemon must
+        // not assume it has arrived. Without this case, deleting the !meta guard
+        // crashes rather than failing a test.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("someoneelse"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|nometadata")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_declinesWithoutAWindowRegistry()
+    {
+        // No seedLiveWindow at all, so the registry is never created and the
+        // null-registry guard is the one under test.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
         QCOMPARE(desktopSpy.count(), 0);
     }
 

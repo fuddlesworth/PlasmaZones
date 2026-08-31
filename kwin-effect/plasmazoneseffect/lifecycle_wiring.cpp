@@ -401,10 +401,38 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // autotile/scrolling equivalent rides slotScreensChanged's desktop-return
     // catch-scan; snapping has no membership set to sweep against, so its arm
     // carries an explicit park list and this is where it is drained.
+    //
+    // Queued, not run inline. Two other desktopChanged handlers feed the daemon
+    // the state this restore is resolved against, and both land in a LATER event
+    // loop turn: scheduleClientAreaReport defers the work-area push through its
+    // own queued continuation, and the per-output desktop report is pushed
+    // further down this function. Driving the resolve synchronously here put the
+    // D-Bus call on the wire ahead of both, so the daemon answered it against the
+    // OUTGOING desktop's work area and screen mode. Deferring to the same later
+    // turn puts this after them in registration order.
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
-        if (m_snapHandler) {
-            m_snapHandler->slotDesktopChangedRestoreArrivals();
-        }
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (m_snapHandler) {
+                    m_snapHandler->slotDesktopChangedRestoreArrivals();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+
+    // A park can also be held by a window whose desktop is in view but whose
+    // ACTIVITY is not, and that case is released by an activity switch rather
+    // than a desktop one. Same queued shape and the same drain.
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, [this]() {
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (m_snapHandler) {
+                    m_snapHandler->slotDesktopChangedRestoreArrivals();
+                }
+            },
+            Qt::QueuedConnection);
     });
 
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The zero

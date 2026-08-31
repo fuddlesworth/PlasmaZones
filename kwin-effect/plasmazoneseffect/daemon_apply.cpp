@@ -104,8 +104,20 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // rule both land here and both leave the window equally unplaced. Parking is
     // a no-op for a window that turns out to need nothing (the resolve answers
     // no-snap), so covering both is cheaper than distinguishing them.
-    if (m_snapHandler && KWin::effects->currentDesktop() != target) {
-        m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+    //
+    // Measured against the window's OWN output, not the global current desktop.
+    // Under per-output virtual desktops (Plasma 6.7) those differ, and the
+    // global reading both over-parks (the target is current somewhere else, so
+    // the window really is out of view on its own output) and under-parks (the
+    // target is globally current while this output shows something else).
+    // Falls back to the global reading when the window has no output.
+    if (m_snapHandler) {
+        KWin::LogicalOutput* const out = w->screen();
+        KWin::VirtualDesktop* const shownHere =
+            out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
+        if (shownHere != target) {
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+        }
     }
 }
 

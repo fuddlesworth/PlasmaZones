@@ -74,7 +74,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     m_restartSnapCandidates.remove(windowId);
     // Placed by some route already — whether this restore or another — so the
     // desktop-arrival park has nothing left to do.
-    m_awaitingDesktopArrivalRestore.remove(windowId);
+    cancelDesktopArrivalRestore(windowId);
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
@@ -150,6 +150,14 @@ void SnapHandler::clearSnapTracking()
         m_minimizeFloatedWindows.insert(it.key());
     }
     m_unfloatInFlight.clear();
+    // Desktop-arrival parks do not outlive the daemon that armed them. Each
+    // entry is a promise to re-drive a restore against a specific placement
+    // record, and a reconnecting daemon reloads its store from disk — those
+    // records may already be consumed or rewritten, so a surviving park would
+    // drive a restore against state that no longer matches. The bringup
+    // stacking sweep re-announces every window anyway, which is the correct
+    // retry for a window still waiting.
+    m_awaitingDesktopArrivalRestore.clear();
     m_border.tiledWindowsByScreen.clear();
 }
 
@@ -162,7 +170,7 @@ void SnapHandler::onWindowClosed(const QString& windowId)
     m_restartSnapCandidates.remove(windowId);
     // A dead window's park would otherwise sit in the set until some later
     // desktop switch happened to notice its id has no live window.
-    m_awaitingDesktopArrivalRestore.remove(windowId);
+    cancelDesktopArrivalRestore(windowId);
 }
 
 void SnapHandler::setFocusFollowsMouse(bool enabled)
@@ -1202,6 +1210,11 @@ void SnapHandler::slotPendingRestoresAvailable()
 void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
 {
     if (windowId.isEmpty()) {
+        // The daemon has already moved this window off the visible desktop, so
+        // an unresolvable id means it is parked nowhere and nothing will restore
+        // it. Logged rather than dropped silently, because every other exit in
+        // this pair is traceable and this one strands a window.
+        qCDebug(lcEffect) << "Desktop-arrival park skipped: empty window id";
         return;
     }
     m_awaitingDesktopArrivalRestore.insert(windowId);
@@ -1214,8 +1227,11 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
         return;
     }
     if (!m_effect->isDaemonReady("desktop-arrival snap restore")) {
-        // Keep the park: the daemon coming back re-drives its own restores, and
-        // dropping the entries here would strand exactly the windows waiting.
+        // Nothing to drive the restore against. The park is left in place for a
+        // transient stall, but a real daemon loss runs clearSnapTracking, which
+        // drops the set — a reconnecting daemon reloads its store from disk, so
+        // its bringup stacking sweep is the correct retry rather than a park
+        // armed against the previous daemon's records.
         return;
     }
 
@@ -1243,24 +1259,36 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
         if (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
             continue; // Still waiting for its desktop.
         }
-        // Spend the park BEFORE dispatching: the restore is a one-shot, and an
-        // entry left behind would re-drive on every later desktop switch — the
-        // repeated-float-restore failure the member's comment describes, just
-        // reached by a different route.
-        m_awaitingDesktopArrivalRestore.remove(windowId);
-
-        if (window->isMinimized() || !m_effect->shouldHandleWindow(window)) {
+        if (window->isMinimized()) {
+            // KWin can bring a session's windows back minimized, and nothing
+            // re-drives the restore on unminimize (that path drives the unfloat
+            // retries, not this one). So the park is KEPT rather than spent: a
+            // later desktop switch is the only remaining chance to place this
+            // window, and onWindowClosed drops the entry if it never comes.
+            continue;
+        }
+        if (!m_effect->shouldHandleWindow(window)) {
+            // Never going to be placed by this handler, so the park is spent
+            // rather than carried for a restore that cannot happen.
+            m_awaitingDesktopArrivalRestore.remove(windowId);
             continue;
         }
         // Snap-mode screens only. A window that landed on a tiling or scrolling
         // screen is re-announced by that handler's own desktop-return catch-scan
         // (TilingHandler::slotScreensChanged), and driving the snap resolve at it
         // as well risks the no-match float default landing on a window the tiling
-        // engine is about to adopt.
+        // engine is about to adopt. Spent, because that handler now owns it.
         const QString screenId = m_effect->getWindowScreenId(window);
-        if (m_effect->tilingHandler() && m_effect->tilingHandler()->isManagedScreen(screenId)) {
+        if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
+            m_awaitingDesktopArrivalRestore.remove(windowId);
             continue;
         }
+
+        // Spend the park BEFORE dispatching: the restore is a one-shot, and an
+        // entry left behind would re-drive on every later desktop switch — the
+        // repeated-float-restore failure the member's comment describes, just
+        // reached by a different route.
+        m_awaitingDesktopArrivalRestore.remove(windowId);
 
         // isOpenPath=false: this is not an open. It also keeps the daemon's
         // cross-desktop restore arm (gated on isOpenPath) from firing a second
