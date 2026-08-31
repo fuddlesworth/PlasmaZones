@@ -17,6 +17,13 @@
 
 namespace PhosphorEngine {
 
+/// Upper sanity bound for a virtual desktop number read back from disk. Not a
+/// compositor limit — KWin's real desktop count is only knowable at runtime, and
+/// the effect re-checks the target against the live list before moving anything.
+/// This exists so a corrupt or foreign session.json cannot put an arbitrary
+/// integer into a placement record.
+inline constexpr int kMaxPlausibleVirtualDesktop = 1024;
+
 /// One engine's view of a window: which managed slot it occupies (or that it is
 /// floating / unmanaged) in THAT engine's mode. State is PER ENGINE — a window
 /// can be `snapped` in the snap engine AND `floating` in the autotile engine at
@@ -314,7 +321,14 @@ struct WindowPlacement
         p.appId = appId;
         p.windowId = obj.value(QLatin1String("windowId")).toString();
         p.screenId = obj.value(QLatin1String("screen")).toString();
-        p.virtualDesktop = obj.value(QLatin1String("desktop")).toInt();
+        // session.json is on-disk input this process does not control, so the
+        // desktop number is range-checked here rather than trusted all the way
+        // to the compositor. Anything outside a plausible desktop count is
+        // treated as unknown (0), which reads as "no remembered desktop" and
+        // leaves the window wherever it opens — the same outcome as a record
+        // that never carried one.
+        const int rawDesktop = obj.value(QLatin1String("desktop")).toInt();
+        p.virtualDesktop = (rawDesktop > 0 && rawDesktop <= kMaxPlausibleVirtualDesktop) ? rawDesktop : 0;
         p.activity = obj.value(QLatin1String("activity")).toString();
         p.kind = clampWindowKindFromWire(obj.value(QLatin1String("kind")).toInt());
 

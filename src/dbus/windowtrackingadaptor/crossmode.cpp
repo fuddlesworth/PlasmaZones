@@ -620,8 +620,12 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     // Electron/CEF app that re-broadcast its WM_CLASS mid-session has records
     // filed under the CURRENT appId, which is the bucket the FIFO branch reads.
     const QString appId = m_service->currentAppIdFor(windowId);
+    // hasRestorableContent, so a persisted free-geometry-only stub does not
+    // drive the move on its own: no engine will adopt such a record, so the
+    // window would land on the remembered desktop and simply float there, which
+    // is a worse outcome than leaving it where it opened.
     const auto record = m_service->placementStore().peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
-        return p.fromPersistedSession && p.virtualDesktop > 0;
+        return p.fromPersistedSession && p.virtualDesktop > 0 && p.hasRestorableContent();
     });
     if (!record) {
         return false;

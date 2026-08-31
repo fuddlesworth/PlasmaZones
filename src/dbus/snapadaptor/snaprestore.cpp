@@ -205,9 +205,11 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // Suppressed by a matched RouteToDesktop, mirroring the tiling channel: the
     // rule already named this window's desktop.
     //
-    // isOpenPath, matching the cross-screen reclaim below: the two non-open
-    // drivers of this slot (the unminimize of a daemon-restart orphan, and the
-    // pending-restores sweep) must not teleport a window across desktops.
+    // isOpenPath, matching the cross-screen reclaim below: the four non-open
+    // drivers of this slot (the unminimize of a daemon-restart orphan, the
+    // pending-restores sweep, the daemon-restart stacking sweep, and the
+    // desktop-arrival re-drive itself) must not teleport a window across
+    // desktops.
     if (isOpenPath && !desktopRuleMatched && m_adaptor->applyPersistedDesktopRestore(windowId)) {
         return;
     }

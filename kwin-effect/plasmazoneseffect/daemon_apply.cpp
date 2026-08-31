@@ -77,9 +77,27 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
         return;
     }
+    // Refusing the move is not the end of it. The daemon spends its one-shot
+    // BEFORE emitting and places nothing, expecting this window to be
+    // re-announced when it lands. If the move never happens, nothing re-announces
+    // it and the window stays unplaced for the rest of the session with the
+    // record already burnt. So each refusal below hands the window straight to
+    // the arrival restore instead, which places it on the desktop it is already
+    // on. The out-of-range case is the concrete one: a user who removed a
+    // virtual desktop between sessions has records naming a desktop that no
+    // longer exists.
+    const auto placeWhereItIs = [this, w]() {
+        if (m_snapHandler) {
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+            m_snapHandler->slotDesktopChangedRestoreArrivals();
+        }
+    };
+
     const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
     if (desktop > all.size()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size()
+                          << "— placing" << windowId << "where it is instead";
+        placeWhereItIs();
         return;
     }
     // A sticky (on-all-desktops) window is already present on the target; pinning
@@ -87,6 +105,7 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // cross-desktop move is meaningless for an everywhere window — leave it.
     if (w->isOnAllDesktops()) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        placeWhereItIs();
         return;
     }
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
