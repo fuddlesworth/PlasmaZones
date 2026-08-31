@@ -3725,14 +3725,6 @@
         <translation>Wszystkie okna</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <source>None</source>
-        <translation>Brak</translation>
-    </message>
-    <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>Text only</source>
         <translation>Tylko tekst</translation>
@@ -3902,6 +3894,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
         <translation>Automatycznie</translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <comment>@item:inlistbox OSD style, show no OSD at all</comment>
+        <translation>Brak</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
@@ -10687,6 +10685,12 @@
         <translation>Pionowy (9:16)</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
+        <source>None</source>
+        <comment>the explicit no-template choice</comment>
+        <translation>Brak</translation>
+    </message>
+    <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
         <translation>Nie używaj szablonu na tym ekranie, aby kolumny zachowały wbudowane szerokości i wysokości</translation>
@@ -10695,6 +10699,12 @@
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
         <translation>Nie używaj układu na tym ekranie, aby okna pływały i nic ich nie przyciągało ani nie kafelkowało</translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
+        <source>None</source>
+        <comment>@title:group section holding the no-layout row</comment>
+        <translation>Brak</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -17134,6 +17144,7 @@
         <translation>Wyłączone</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
@@ -19655,7 +19666,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="77"/>
         <source>Restore original size on unsnap</source>
-        <translation>Przywracaj pierwotny rozmiar po odłączeniu</translation>
+        <translation>Przywracaj pierwotny rozmiar po odczepieniu</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="89"/>

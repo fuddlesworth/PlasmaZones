@@ -3725,14 +3725,6 @@
         <translation>Все окна</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <source>None</source>
-        <translation>Нет</translation>
-    </message>
-    <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>Text only</source>
         <translation>Только текст</translation>
@@ -3902,6 +3894,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
         <translation>Авто</translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <comment>@item:inlistbox OSD style, show no OSD at all</comment>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
@@ -10687,6 +10685,12 @@
         <translation>Книжный (9:16)</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
+        <source>None</source>
+        <comment>the explicit no-template choice</comment>
+        <translation>Нет</translation>
+    </message>
+    <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
         <translation>Не использовать шаблон на этом экране, чтобы столбцы сохраняли встроенные ширины и высоты</translation>
@@ -10695,6 +10699,12 @@
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
         <translation>Не использовать раскладку на этом экране, чтобы окна плавали и ничто их не прилепляло и не выкладывало мозаикой</translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
+        <source>None</source>
+        <comment>@title:group section holding the no-layout row</comment>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -15086,7 +15096,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="258"/>
         <source>“%1” will be permanently removed.</source>
         <oldsource>&quot;%1&quot; will be permanently removed.</oldsource>
-        <translation>“%1” будет удалён без возможности восстановления.</translation>
+        <translation>«%1» будет удалён без возможности восстановления.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="308"/>
@@ -17134,6 +17144,7 @@
         <translation>Выкл</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
@@ -19120,13 +19131,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="486"/>
         <source>Installed shader pack “%1”.</source>
         <comment>@info shader install success</comment>
-        <translation>Пакет шейдеров “%1” установлен.</translation>
+        <translation>Пакет шейдеров «%1» установлен.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="487"/>
         <source>Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.</source>
         <comment>@info shader install failure</comment>
-        <translation>Не удалось установить “%1”. Папка должна содержать metadata.json и не совпадать с уже установленным пакетом.</translation>
+        <translation>Не удалось установить «%1». Папка должна содержать metadata.json и не совпадать с уже установленным пакетом.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="501"/>
@@ -19310,13 +19321,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="227"/>
         <source>Imported set “%1”.</source>
         <comment>@info set import success</comment>
-        <translation>Набор “%1” импортирован.</translation>
+        <translation>Набор «%1» импортирован.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="228"/>
         <source>Could not import “%1”. The file must be a set saved from this page.</source>
         <comment>@info set import failure</comment>
-        <translation>Не удалось импортировать “%1”. Файл должен быть набором, сохранённым с этой страницы.</translation>
+        <translation>Не удалось импортировать «%1». Файл должен быть набором, сохранённым с этой страницы.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="234"/>
@@ -19335,7 +19346,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="278"/>
         <source>“%1” already exists. Saving replaces what it currently holds.</source>
-        <translation>“%1” уже существует. Сохранение заменит его текущее содержимое.</translation>
+        <translation>«%1» уже существует. Сохранение заменит его текущее содержимое.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="289"/>

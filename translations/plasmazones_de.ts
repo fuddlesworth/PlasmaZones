@@ -1403,14 +1403,6 @@
         <translation>Alle Fenster</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <source>None</source>
-        <translation>Keine</translation>
-    </message>
-    <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>Text only</source>
         <translation>Nur Text</translation>
@@ -1580,6 +1572,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
         <translation>Automatisch</translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <comment>@item:inlistbox OSD style, show no OSD at all</comment>
+        <translation>Keiner</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
@@ -10677,6 +10675,12 @@
         <translation>Hochformat (9:16)</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
+        <source>None</source>
+        <comment>the explicit no-template choice</comment>
+        <translation>Keine</translation>
+    </message>
+    <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
         <translation>Auf diesem Bildschirm keine Vorlage verwenden, damit Spalten die eingebauten Breiten und Höhen behalten</translation>
@@ -10685,6 +10689,12 @@
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
         <translation>Auf diesem Bildschirm kein Layout verwenden, damit Fenster schweben und nichts sie einrastet oder kachelt</translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
+        <source>None</source>
+        <comment>@title:group section holding the no-layout row</comment>
+        <translation>Keines</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -17104,6 +17114,7 @@
         <translation>Aus</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>

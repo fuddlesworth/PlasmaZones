@@ -3719,14 +3719,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <source>None</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>Text only</source>
         <translation type="unfinished"></translation>
@@ -3895,6 +3887,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="403"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <comment>@item:inlistbox OSD style, show no OSD at all</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -10677,6 +10675,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
+        <source>None</source>
+        <comment>the explicit no-template choice</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
         <translation type="unfinished"></translation>
@@ -10684,6 +10688,12 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
+        <source>None</source>
+        <comment>@title:group section holding the no-layout row</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -17104,6 +17114,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>

@@ -79,12 +79,13 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()), scopeLabels);
 
         // ── Snapping overlay ────────────────────────────────────────────────
-        t.insert(pairKey(CD::snappingEffectsGroup(), CD::osdStyleKey()),
-                 {
-                     {QStringLiteral("none"), PhosphorI18n::tr("None")},
-                     {QStringLiteral("text"), PhosphorI18n::tr("Text only")},
-                     {QStringLiteral("preview"), PhosphorI18n::tr("Visual preview")},
-                 });
+        t.insert(
+            pairKey(CD::snappingEffectsGroup(), CD::osdStyleKey()),
+            {
+                {QStringLiteral("none"), PhosphorI18n::tr("None", "@item:inlistbox OSD style, show no OSD at all")},
+                {QStringLiteral("text"), PhosphorI18n::tr("Text only")},
+                {QStringLiteral("preview"), PhosphorI18n::tr("Visual preview")},
+            });
         t.insert(pairKey(CD::snappingEffectsGroup(), CD::overlayDisplayModeKey()),
                  {
                      {QStringLiteral("zoneRectangles"), PhosphorI18n::tr("Full zone highlight")},

@@ -3719,14 +3719,6 @@
         <translation>Todas as janelas</translation>
     </message>
     <message>
-        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
-        <source>None</source>
-        <translation>Nenhum</translation>
-    </message>
-    <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="85"/>
         <source>Text only</source>
         <translation>Somente texto</translation>
@@ -3896,6 +3888,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
         <translation>Automático</translation>
+    </message>
+    <message>
+        <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
+        <source>None</source>
+        <comment>@item:inlistbox OSD style, show no OSD at all</comment>
+        <translation>Nenhum</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
@@ -10407,34 +10405,34 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="617"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="622"/>
         <source>Could not read the set “%1”.</source>
-        <translation>Não foi possível ler o conjunto &quot;%1&quot;.</translation>
+        <translation>Não foi possível ler o conjunto “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="359"/>
         <source>“%1” was written by a newer version of PlasmaZones.</source>
-        <translation>&quot;%1&quot; foi gravado por uma versão mais nova do PlasmaZones.</translation>
+        <translation>“%1” foi gravado por uma versão mais nova do PlasmaZones.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="367"/>
         <source>“%1” does not match this page.</source>
-        <translation>&quot;%1&quot; não corresponde a esta página.</translation>
+        <translation>“%1” não corresponde a esta página.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="371"/>
         <source>Could not apply “%1”.</source>
-        <translation>Não foi possível aplicar &quot;%1&quot;.</translation>
+        <translation>Não foi possível aplicar “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="449"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="545"/>
         <source>A set named “%1” already exists.</source>
-        <translation>Já existe um conjunto chamado &quot;%1&quot;.</translation>
+        <translation>Já existe um conjunto chamado “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
         <source>Could not delete “%1”.</source>
-        <translation>Não foi possível excluir &quot;%1&quot;.</translation>
+        <translation>Não foi possível excluir “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="715"/>
@@ -10457,18 +10455,18 @@
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="159"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="178"/>
         <source>Could not save the preset “%1”.</source>
-        <translation>Não foi possível salvar a predefinição &quot;%1&quot;.</translation>
+        <translation>Não foi possível salvar a predefinição “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="261"/>
         <source>Could not find the preset “%1”.</source>
-        <translation>Não foi possível encontrar a predefinição &quot;%1&quot;.</translation>
+        <translation>Não foi possível encontrar a predefinição “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="269"/>
         <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="279"/>
         <source>Could not delete the preset “%1”.</source>
-        <translation>Não foi possível excluir a predefinição &quot;%1&quot;.</translation>
+        <translation>Não foi possível excluir a predefinição “%1”.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
@@ -10677,6 +10675,12 @@
         <translation>Retrato (9:16)</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
+        <source>None</source>
+        <comment>the explicit no-template choice</comment>
+        <translation>Nenhum</translation>
+    </message>
+    <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
         <translation>Não usar modelo nesta tela, para que as colunas mantenham as larguras e alturas internas</translation>
@@ -10685,6 +10689,12 @@
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
         <translation>Não usar layout nesta tela, para que as janelas flutuem e nada as encaixe nem as ladrilhe</translation>
+    </message>
+    <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
+        <source>None</source>
+        <comment>@title:group section holding the no-layout row</comment>
+        <translation>Nenhum</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -14800,7 +14810,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="25"/>
         <source>Animations for virtual desktops. “All Desktop Events” is the default. Each event can override it.</source>
         <oldsource>Animations for virtual desktops. &quot;All Desktop Events&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações das áreas de trabalho virtuais. O padrão é &quot;Todos os eventos de área de trabalho&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações das áreas de trabalho virtuais. O padrão é “Todos os eventos de área de trabalho”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsDesktopsPage.qml.cpp" line="29"/>
@@ -14816,7 +14826,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="13"/>
         <source>Animations inside the layout editor. “All Editor Events” is the default. Each event can override it.</source>
         <oldsource>Animations inside the layout editor. &quot;All Editor Events&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações dentro do editor de layouts. O padrão é &quot;Todos os eventos do editor&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações dentro do editor de layouts. O padrão é “Todos os eventos do editor”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="17"/>
@@ -14976,7 +14986,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="16"/>
         <source>Animations for on-screen displays. “All OSDs” is the default. Each event can override it.</source>
         <oldsource>Animations for on-screen displays. &quot;All OSDs&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações dos avisos na tela. O padrão é &quot;Todos os avisos na tela&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações dos avisos na tela. O padrão é “Todos os avisos na tela”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="20"/>
@@ -14992,7 +15002,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="13"/>
         <source>Animations for overlays like the zone selector and snap assist. “All Overlays” is the default. Each event can override it.</source>
         <oldsource>Animations for overlays like the zone selector and snap assist. &quot;All Overlays&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações de sobreposições como o seletor de zonas e o assistente de encaixe. O padrão é &quot;Todas as sobreposições&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações de sobreposições como o seletor de zonas e o assistente de encaixe. O padrão é “Todas as sobreposições”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOverlaysPage.qml.cpp" line="17"/>
@@ -15038,13 +15048,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
         <source>No custom easing presets yet. Use “Save as preset…” in the curve editor to create one.</source>
         <oldsource>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</oldsource>
-        <translation>Ainda não há predefinições de suavização personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
+        <translation>Ainda não há predefinições de suavização personalizadas. Use “Salvar como predefinição…” no editor de curvas para criar uma.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="401"/>
         <source>No custom spring presets yet. Use “Save as preset…” in the curve editor to create one.</source>
         <oldsource>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</oldsource>
-        <translation>Ainda não há predefinições de mola personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
+        <translation>Ainda não há predefinições de mola personalizadas. Use “Salvar como predefinição…” no editor de curvas para criar uma.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="252"/>
@@ -15108,7 +15118,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="16"/>
         <source>Animations for side panels that slide in from an edge. “All Side Panels” is the default. Each event can override it.</source>
         <oldsource>Animations for side panels that slide in from an edge. &quot;All Side Panels&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações dos painéis laterais que deslizam a partir de uma borda. O padrão é &quot;Todos os painéis laterais&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações dos painéis laterais que deslizam a partir de uma borda. O padrão é “Todos os painéis laterais”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="20"/>
@@ -15139,7 +15149,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="9"/>
         <source>Animations for widget interactions. “All Widget Events” is the default. Each event can override it.</source>
         <oldsource>Animations for widget interactions. &quot;All Widget Events&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações das interações com os widgets. O padrão é &quot;Todos os eventos de widget&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações das interações com os widgets. O padrão é “Todos os eventos de widget”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="13"/>
@@ -15180,7 +15190,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="25"/>
         <source>Animations for windows moving and snapping. “All Windows” is the default. Each event can override it.</source>
         <oldsource>Animations for windows moving and snapping. &quot;All Windows&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações das janelas ao se moverem e se encaixarem. O padrão é &quot;Todas as janelas&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações das janelas ao se moverem e se encaixarem. O padrão é “Todas as janelas”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="29"/>
@@ -15198,7 +15208,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="17"/>
         <source>Animations for windows opening and closing. “All Windows” is the default. Each event can override it.</source>
         <oldsource>Animations for windows opening and closing. &quot;All Windows&quot; is the default. Each event can override it.</oldsource>
-        <translation>Animações das janelas ao abrir e fechar. O padrão é &quot;Todas as janelas&quot;. Cada evento pode substituí-lo.</translation>
+        <translation>Animações das janelas ao abrir e fechar. O padrão é “Todas as janelas”. Cada evento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="67"/>
@@ -15578,7 +15588,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="16"/>
         <source>Decoration for the transient popups. “All Popups” is the default. Each popup can override it.</source>
         <oldsource>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</oldsource>
-        <translation>Decoração das janelas instantâneas transitórias. O padrão é &quot;Todas as janelas instantâneas&quot;. Cada uma pode substituí-lo.</translation>
+        <translation>Decoração das janelas instantâneas transitórias. O padrão é “Todas as janelas instantâneas”. Cada uma pode substituí-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="20"/>
@@ -15707,7 +15717,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="17"/>
         <source>Decoration for windows. “All Windows” is the default. Each placement state can override it.</source>
         <oldsource>Decoration for windows. &quot;All Windows&quot; is the default. Each placement state can override it.</oldsource>
-        <translation>Decoração das janelas. O padrão é &quot;Todas as janelas&quot;. Cada estado de posicionamento pode substituí-lo.</translation>
+        <translation>Decoração das janelas. O padrão é “Todas as janelas”. Cada estado de posicionamento pode substituí-lo.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="289"/>
@@ -16753,7 +16763,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
         <source>Are you sure you want to delete “%1”?</source>
         <oldsource>Are you sure you want to delete &quot;%1&quot;?</oldsource>
-        <translation>Tem certeza de que deseja excluir &quot;%1&quot;?</translation>
+        <translation>Tem certeza de que deseja excluir “%1”?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="43"/>
@@ -17104,6 +17114,7 @@
         <translation>Desligado</translation>
     </message>
     <message>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
@@ -22651,7 +22662,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. “All Shell Surfaces” is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
         <oldsource>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</oldsource>
-        <translation>Animações das superfícies que pertencem ao shell do Plasma, como o lançador de aplicativos e as janelas instantâneas da bandeja do sistema. Nenhum shader que você escolher para as suas janelas chega até elas, então cada linha começa sem shader e escolher um já é toda a adesão. Enquanto você não escolher, essas superfícies animam do jeito que o Plasma as anima. O padrão dos dois eventos é &quot;Todas as superfícies do shell&quot;, e qualquer um deles pode substituí-lo. Os painéis não têm linhas aqui, porque um painel fica na tela a sessão inteira em vez de abrir e fechar.</translation>
+        <translation>Animações das superfícies que pertencem ao shell do Plasma, como o lançador de aplicativos e as janelas instantâneas da bandeja do sistema. Nenhum shader que você escolher para as suas janelas chega até elas, então cada linha começa sem shader e escolher um já é toda a adesão. Enquanto você não escolher, essas superfícies animam do jeito que o Plasma as anima. O padrão dos dois eventos é “Todas as superfícies do shell”, e qualquer um deles pode substituí-lo. Os painéis não têm linhas aqui, porque um painel fica na tela a sessão inteira em vez de abrir e fechar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
