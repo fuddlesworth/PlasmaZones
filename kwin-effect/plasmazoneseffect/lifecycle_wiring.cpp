@@ -396,6 +396,17 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         updateAllDecorations();
     });
 
+    // Snap restores for windows the daemon relocated to a desktop that was not
+    // in view (the cross-desktop login restore, and RouteToDesktop). The
+    // autotile/scrolling equivalent rides slotScreensChanged's desktop-return
+    // catch-scan; snapping has no membership set to sweep against, so its arm
+    // carries an explicit park list and this is where it is drained.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
+        if (m_snapHandler) {
+            m_snapHandler->slotDesktopChangedRestoreArrivals();
+        }
+    });
+
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The zero
     // point for the other lcStripDiag sites: everything they report is read as
     // "how long after the switch, if ever". Deliberately a separate connection

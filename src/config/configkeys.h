@@ -96,6 +96,14 @@ public:
     // top-level group; the gap values are read by both engines.
     P_CONFIG_GROUP(gapsGroup, "Gaps")
 
+    // Cross-desktop session restore. Mode-neutral top-level group for the same
+    // reason as Windows / Gaps above: the virtual desktop a window is restored
+    // to is a property of the window, not of whichever engine happens to place
+    // it, and all three engines consult the one value. Deliberately NOT folded
+    // into Snapping.Behavior.WindowHandling beside RestoreOnLogin — that key
+    // means "restore to its ZONE", which is snapping's business alone.
+    P_CONFIG_GROUP(windowRestoreGroup, "WindowRestore")
+
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     P_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
@@ -310,6 +318,9 @@ public:
     // Scrolling.Behavior: stack the mode's floated windows above the windows it
     // places (keep-above, applied by the KWin effect beneath any SetWindowLayer rule).
     P_CONFIG_KEY(keepFloatingAboveKey, "KeepFloatingAbove")
+
+    // WindowRestore
+    P_CONFIG_KEY(restoreDesktopOnLoginKey, "RestoreDesktopOnLogin")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")

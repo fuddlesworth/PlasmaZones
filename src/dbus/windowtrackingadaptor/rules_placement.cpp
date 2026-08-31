@@ -207,13 +207,13 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     return directive;
 }
 
-void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
+bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
                                                         const QString& windowId)
 {
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop));
     if (!route) {
-        return;
+        return false;
     }
     // The descriptor validator already guaranteed a 1-based desktop in range; the
     // effect-side slot re-guards (rejects < 1, out-of-range, and sticky windows),
@@ -222,10 +222,16 @@ void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
     if (desktop >= 1) {
         qCInfo(lcDbusWindow) << "open-routing: routing" << windowId << "to virtual desktop" << desktop;
         Q_EMIT windowDesktopMoveRequested(windowId, desktop);
+        return true;
     }
+    // A matched RouteToDesktop whose target failed the >= 1 guard still counts
+    // as MATCHED for the caller's suppression: the rule owns this window's
+    // desktop, and letting the remembered-desktop restore step in behind a
+    // malformed target would apply a desktop the user's rule overrode.
+    return true;
 }
 
-void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, const QString& screenId)
+bool WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, const QString& screenId)
 {
     // Engine-neutral RouteToDesktop: when a matched rule pins the opening window
     // to a virtual desktop, ask the compositor to move it there. Independent of
@@ -233,18 +239,18 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // Called from the snap open-path facade (the autotile path uses
     // applyOpenRoutingForTiling, which also handles the screen redirect).
     if (!m_ruleStore) {
-        return;
+        return false;
     }
     std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
-        return;
+        return false;
     }
     // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
     // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
     // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
     stampScreenContext(*query, screenId);
     ensureRuleEvaluator();
-    emitRouteToDesktopIfMatched(
+    return emitRouteToDesktopIfMatched(
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 

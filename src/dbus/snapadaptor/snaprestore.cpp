@@ -189,7 +189,28 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // be routed to a desktop whether or not it snaps (and even when it doesn't
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
     // early-return below.
-    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    const bool desktopRuleMatched = m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+
+    // Cross-desktop session restore — the snap-mode channel's arm of the same
+    // behaviour TilingAdaptor::dispatchWindowOpened runs for the tiling engines.
+    // Ahead of the engine resolve below and returning without snapping: the
+    // window is on its way to a desktop this screen is not showing, and snapping
+    // it into the CURRENT desktop's layout would place it where the user cannot
+    // see it and record a zone on the wrong desktop. The record is deliberately
+    // left unconsumed: the effect parks the window on the desktop move
+    // (SnapHandler::armDesktopArrivalRestore) and re-enters this slot with
+    // isOpenPath=false once that desktop is shown, which is when the zone
+    // resolves against the layout the window actually landed in.
+    //
+    // Suppressed by a matched RouteToDesktop, mirroring the tiling channel: the
+    // rule already named this window's desktop.
+    //
+    // isOpenPath, matching the cross-screen reclaim below: the two non-open
+    // drivers of this slot (the unminimize of a daemon-restart orphan, and the
+    // pending-restores sweep) must not teleport a window across desktops.
+    if (isOpenPath && !desktopRuleMatched && m_adaptor->applyPersistedDesktopRestore(windowId)) {
+        return;
+    }
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);

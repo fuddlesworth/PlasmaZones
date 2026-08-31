@@ -241,6 +241,19 @@ public:
     {
         return true;
     }
+    // Send a window back to the virtual desktop it was on before logout. A
+    // Wayland session cannot restore desktop membership on its own (KWin's
+    // session management is X11-only), so every window reopens on whatever
+    // desktop is current and a multi-desktop layout collapses onto one. The
+    // placement records already carry the desktop, so this is on by default —
+    // the collapse is the surprising behaviour, not the restore.
+    //
+    // Mode-neutral: read by all three engines, unlike the per-mode
+    // *RestoreFloatedWindowsOnLogin trio below.
+    static bool restoreWindowsToDesktopOnLogin()
+    {
+        return true;
+    }
     // Restore a FLOATED window to its previous position on reopen. Per-engine
     // (snap-floated vs autotile-floated); snapping delegates to the autotile
     // canonical so both modes start identical, mirroring the border defaults.

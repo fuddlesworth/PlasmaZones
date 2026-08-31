@@ -21,6 +21,10 @@ private Q_SLOTS:
     void init()
     {
         initFixture();
+        // Owned by m_parent, which initFixture replaces per test — drop the
+        // stale pointer or seedLiveWindow would push metadata into a registry
+        // the previous test's teardown already destroyed.
+        m_windowRegistry = nullptr;
     }
     void cleanup()
     {
@@ -685,6 +689,199 @@ private Q_SLOTS:
         m_snapAdaptor->snapToEmptyZone(QStringLiteral("app5|late"), m_screenId, false, x, y, width, height, lateSnap);
         QVERIFY2(!lateSnap, "a full layout must decline the empty-zone hoist");
     }
+
+    // ── Cross-desktop session restore (applyPersistedDesktopRestore) ──
+    //
+    // A Wayland session restores no virtual-desktop membership, so every window
+    // reopens on whichever desktop is current at login. These pin the daemon's
+    // compensation: the persisted record's desktop is re-applied through
+    // windowDesktopMoveRequested before any engine places the window.
+
+    void testPersistedDesktopRestore_sendsWindowBackToItsRecordedDesktop()
+    {
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), /*recordedDesktop=*/2);
+        // The window reopened with a FRESH uuid (a real logout: the client is a
+        // new Wayland surface) on desktop 1 — so the store's same-instance
+        // branch cannot match and the appId FIFO has to carry the record.
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), /*liveDesktop=*/1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")),
+                 "a record naming another desktop must claim the open");
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(0).toString(), QStringLiteral("deskapp|newinst"));
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+    }
+
+    void testPersistedDesktopRestore_leavesTheRecordForTheEngineRestore()
+    {
+        // Non-consuming by contract: the window is only on its way to the
+        // recorded desktop, and the engine restore that runs when that desktop
+        // is next shown needs the same record. A take() here would strand it.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QVERIFY(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+
+        const auto still = m_wta->service()->placementStore().peek(QString(), QStringLiteral("deskapp"),
+                                                                   [](const PhosphorEngine::WindowPlacement& p) {
+                                                                       return p.virtualDesktop == 2;
+                                                                   });
+        QVERIFY2(still.has_value(), "the placement record must survive the desktop move");
+    }
+
+    void testPersistedDesktopRestore_declinesWhenAlreadyOnTheRecordedDesktop()
+    {
+        // The commonest outcome at login — every window that was on the desktop
+        // showing when the session came up.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), /*liveDesktop=*/2);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")),
+                 "a window already on its recorded desktop must fall through to normal placement");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_honoursTheSettingBeingOff()
+    {
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+        m_settings->setRestoreWindowsToDesktopOnLogin(false);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_ignoresAnInSessionRecord()
+    {
+        // THE login-only guard. This record was captured live in this session
+        // (record(), not deserialize()), so it carries no fromPersistedSession
+        // flag and must not relocate anything — otherwise closing a window on
+        // desktop 2 and reopening it from desktop 1 would teleport it, which is
+        // a mid-session behaviour the setting does not promise.
+        PhosphorEngine::WindowPlacement live;
+        live.windowId = QStringLiteral("deskapp|old-uuid");
+        live.appId = QStringLiteral("deskapp");
+        live.screenId = m_screenId;
+        live.virtualDesktop = 2;
+        live.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(),
+                            {PhosphorEngine::WindowPlacement::stateSnapped(), {}, -1});
+        m_wta->service()->placementStore().record(live);
+
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")),
+                 "an in-session record must not drive a cross-desktop move");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_firesAtMostOncePerRecord()
+    {
+        // The one-shot property, and the reason the restore spends the flag
+        // itself instead of leaving it to the engine restore: after a logout the
+        // record's windowId carries the OLD uuid while the live window has a new
+        // one, so the store's same-instance merge never fires and nothing else
+        // would ever disarm it. A record left armed teleports the app across
+        // desktops on any later mid-session reopen — which is exactly the
+        // behaviour the login-only contract rules out.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), 1);
+        QVERIFY(m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+
+        // Same window announced again from desktop 1 — the engine restore
+        // declined, so the record was never consumed and is still in the store.
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")),
+                 "a spent record must not re-arm the cross-desktop restore");
+        QCOMPARE(desktopSpy.count(), 0);
+
+        // A DIFFERENT window of the same app must not inherit the spent record
+        // either — the flag is per record, not per call.
+        seedLiveWindow(QStringLiteral("otherinst"), QStringLiteral("deskapp"), 1);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|otherinst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_liveCaptureDisarmsTheDaemonRestartShape()
+    {
+        // The other disarm path, covering a daemon restart rather than a logout:
+        // the uuid survives, so the engine's live capture MERGES into the
+        // persisted record and the merge's engine-capture branch clears the flag
+        // there. Without that branch a restart would re-arm the move every time
+        // the daemon came up.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("sameinst"), 2);
+
+        PhosphorEngine::WindowPlacement captured;
+        captured.windowId = QStringLiteral("deskapp|sameinst");
+        captured.appId = QStringLiteral("deskapp");
+        captured.screenId = m_screenId;
+        captured.virtualDesktop = 1;
+        captured.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(),
+                                {PhosphorEngine::WindowPlacement::stateSnapped(), {}, -1});
+        QVERIFY(m_wta->service()->placementStore().record(captured));
+
+        seedLiveWindow(QStringLiteral("sameinst"), QStringLiteral("deskapp"), 1);
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|sameinst")),
+                 "a live engine capture supersedes the persisted context");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testPersistedDesktopRestore_leavesStickyAndUnknownWindowsAlone()
+    {
+        // virtualDesktop 0 on the LIVE side means on-all-desktops or unknown.
+        // A sticky window is already everywhere so there is nowhere to send it,
+        // and an unknown one gives nothing to compare — moving on a guess is
+        // worse than leaving KWin's choice standing.
+        seedPersistedDesktopRecord(QStringLiteral("deskapp"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("deskapp"), /*liveDesktop=*/0);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyPersistedDesktopRestore(QStringLiteral("deskapp|newinst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+private:
+    /// Seed a placement record as if it had been read back from disk at startup.
+    /// Routed through deserialize() rather than record() deliberately: fromJson
+    /// is the only producer of WindowPlacement::fromPersistedSession, so a
+    /// hand-built record would test a state the daemon cannot actually reach.
+    void seedPersistedDesktopRecord(const QString& appId, const QString& instanceId, int recordedDesktop)
+    {
+        QJsonObject slot;
+        slot[QLatin1String("state")] = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        QJsonObject engines;
+        engines[QString(PhosphorEngine::WindowPlacement::snapEngineId())] = slot;
+
+        QJsonObject rec;
+        rec[QLatin1String("windowId")] = QString(appId + QLatin1Char('|') + instanceId);
+        rec[QLatin1String("screen")] = m_screenId;
+        rec[QLatin1String("desktop")] = recordedDesktop;
+        rec[QLatin1String("engines")] = engines;
+
+        QJsonArray bucket;
+        bucket.append(rec);
+        QJsonObject root;
+        root[appId] = bucket;
+        m_wta->service()->placementStore().deserialize(root);
+    }
+
+    /// Register live metadata for a reopened window, as the effect's
+    /// setWindowMetadata push does ahead of every open.
+    void seedLiveWindow(const QString& instanceId, const QString& appId, int liveDesktop)
+    {
+        if (!m_windowRegistry) {
+            m_windowRegistry = new PhosphorEngine::WindowRegistry(m_parent);
+            m_wta->setWindowRegistry(m_windowRegistry);
+        }
+        m_wta->setWindowMetadata(instanceId, appId, QString(), QString(), QString(), /*pid=*/0, liveDesktop, QString(),
+                                 /*windowType=*/0, QVariantMap());
+    }
+
+    PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
 };
 
 QTEST_MAIN(TestWtaRouting)

@@ -1170,6 +1170,12 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Outer gap along the right edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
     };
+
+    schema.groups[CD::windowRestoreGroup()] = {
+        {CD::restoreDesktopOnLoginKey(), CD::restoreWindowsToDesktopOnLogin(), QMetaType::Bool,
+         QStringLiteral("After a logout, put each window back on the virtual desktop it was on. Without this, a "
+                        "Wayland session reopens every window on whichever desktop is showing at login.")},
+    };
 }
 
 // ─── Decorations ──────────────────────────────────────────────────────────────

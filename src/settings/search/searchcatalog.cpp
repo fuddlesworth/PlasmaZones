@@ -370,6 +370,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Don't assign a layout by default"),
                {PhosphorI18n::tr("default"), PhosphorI18n::tr("assign"), PhosphorI18n::tr("snapping"),
                 PhosphorI18n::tr("tiling")});
+    addSection(search, QStringLiteral("general"), QStringLiteral("sessionRestore"),
+               PhosphorI18n::tr("Session restore"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("restoreWindowsToDesktopOnLogin"),
+               PhosphorI18n::tr("Put windows back on their virtual desktop"),
+               {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"), PhosphorI18n::tr("restore"),
+                PhosphorI18n::tr("login"), PhosphorI18n::tr("logout"), PhosphorI18n::tr("session")});
     addSection(search, QStringLiteral("general"), QStringLiteral("windowFiltering"),
                PhosphorI18n::tr("Window filtering"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("excludeTransient"),

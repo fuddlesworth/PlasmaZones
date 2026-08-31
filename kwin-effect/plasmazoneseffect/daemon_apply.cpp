@@ -91,7 +91,22 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     }
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
     // (not on-all-desktops) so the window genuinely moves to the target.
-    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+    KWin::VirtualDesktop* target = all.at(desktop - 1);
+    KWin::effects->windowToDesktops(w, {target});
+
+    // The window has just left the desktop on screen, so nothing will place it
+    // until the user goes to where it went. On a tiling or scrolling screen that
+    // handler's desktop-return catch-scan re-announces it; snapping has no such
+    // sweep, so park it for SnapHandler to re-drive on arrival.
+    //
+    // Keyed on the target not being in view rather than on WHY the move
+    // happened: the daemon's cross-desktop login restore and a RouteToDesktop
+    // rule both land here and both leave the window equally unplaced. Parking is
+    // a no-op for a window that turns out to need nothing (the resolve answers
+    // no-snap), so covering both is cheaper than distinguishing them.
+    if (m_snapHandler && KWin::effects->currentDesktop() != target) {
+        m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+    }
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,

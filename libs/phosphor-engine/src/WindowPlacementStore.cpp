@@ -90,6 +90,16 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
                 if (incoming.kind != WindowKind::Unknown) {
                     merged.kind = incoming.kind;
                 }
+                // A real engine capture is live truth about where the window is
+                // NOW, so the persisted context this record arrived with has
+                // been superseded: disarm the one-shot cross-desktop restore.
+                // Scoped to the engine-capture branch with the other context
+                // fields, deliberately — a geometry-only write (recordFreeGeometry
+                // and the bringup frame-geometry seed both take that path) leaves
+                // the persisted desktop standing, so it must leave the flag
+                // standing too or the seed would disarm every record before the
+                // first window is ever placed.
+                merged.fromPersistedSession = false;
             }
             for (auto e = incoming.engines.constBegin(); e != incoming.engines.constEnd(); ++e) {
                 merged.engines.insert(e.key(), e.value());

@@ -574,4 +574,87 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     }
 }
 
+bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId)
+{
+    if (windowId.isEmpty() || !m_settings || !m_settings->restoreWindowsToDesktopOnLogin()) {
+        return false;
+    }
+    if (m_windowRegistry.isNull() || !m_service) {
+        return false;
+    }
+    // The window's LIVE desktop, from the registry metadata the effect pushes
+    // ahead of every open (and re-pushes for every window at bringup). The
+    // daemon has no other view of it: WindowOpenedEntry carries screen and
+    // minimum size only.
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId);
+    if (!meta) {
+        return false;
+    }
+    // 0 means on-all-desktops / unknown (see WindowPlacement::virtualDesktop).
+    // A sticky window is already on every desktop, so there is nowhere to send
+    // it; an unknown one gives us nothing to compare against and moving it on a
+    // guess would be worse than leaving it where KWin put it.
+    const int liveDesktop = meta->virtualDesktop;
+    if (liveDesktop <= 0) {
+        return false;
+    }
+
+    // Non-consuming: the record must stay put for the engine restore that runs
+    // once the window actually lands on its recorded desktop. peek's accept runs
+    // on the same-instance branch too, which is what makes one call serve both
+    // shapes of restart — the geometry-only stub every open writes under the
+    // live uuid (see WindowPlacementStore::takeForReopen) fails accept, so a
+    // logout's fresh uuid falls through to the appId FIFO, while a daemon
+    // restart (uuid intact) matches the real record on branch 1.
+    // The service's registry-aware lookup, not the id's embedded class: an
+    // Electron/CEF app that re-broadcast its WM_CLASS mid-session has records
+    // filed under the CURRENT appId, which is the bucket the FIFO branch reads.
+    const QString appId = m_service->currentAppIdFor(windowId);
+    const auto record = m_service->placementStore().peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
+        return p.fromPersistedSession && p.virtualDesktop > 0;
+    });
+    if (!record) {
+        return false;
+    }
+    if (record->virtualDesktop == liveDesktop) {
+        // Already home. Much the commonest outcome — every window that was on
+        // the desktop showing at login takes this exit.
+        return false;
+    }
+
+    // Spend the one-shot on the record we acted on, BEFORE emitting. Clearing
+    // the flag here rather than leaving it to the engine restore is what makes
+    // "at most once per record" true in every outcome: the reopen path consumes
+    // the record through takeForReopen only when an engine actually adopts the
+    // window, so a restore that ends in a float (or in no engine claiming it at
+    // all) would otherwise leave the flag standing for the rest of the session
+    // and teleport the app across desktops on a later mid-session reopen.
+    //
+    // Matched on the RECORD's own windowId, not the live one: after a logout the
+    // two differ (fresh uuid, appId-FIFO match) and clearing by the live id
+    // would miss the record entirely — the shape the "disarmed by the first live
+    // capture" case gets wrong if this is left to the store merge, which only
+    // fires for a same-instance daemon restart.
+    //
+    // transform, not record(): the flag is not persisted content, so this must
+    // not restamp a sequence or mark the store dirty.
+    const QString recordWindowId = record->windowId;
+    m_service->placementStore().transform([&recordWindowId](PhosphorEngine::WindowPlacement& p) {
+        if (p.windowId != recordWindowId || !p.fromPersistedSession) {
+            return false;
+        }
+        p.fromPersistedSession = false;
+        return true;
+    });
+
+    // The effect's slot re-guards the range against the live desktop list and
+    // refuses to un-sticky an on-all-desktops window, so no range check here
+    // could be authoritative anyway; the daemon's job is to name the target.
+    qCInfo(lcDbusWindow) << "applyPersistedDesktopRestore: sending" << windowId << "back to recorded virtual desktop"
+                         << record->virtualDesktop << "— it reopened on" << liveDesktop;
+    Q_EMIT windowDesktopMoveRequested(windowId, record->virtualDesktop);
+    return true;
+}
+
 } // namespace PlasmaZones

@@ -94,6 +94,19 @@ struct WindowPlacement
     // ── Recency (most-recent-wins ordering; stamped by the store) ──
     quint64 sequence = 0;
 
+    /// TRANSIENT, never serialized: true only for a record this daemon read back
+    /// from disk at startup and has not yet re-captured live. It is what makes
+    /// the cross-desktop restore (WindowTrackingAdaptor::applyPersistedDesktopRestore)
+    /// a genuine login-time behaviour without a timer — the flag can only ever be
+    /// set on a record that predates this daemon's start, and the first live
+    /// engine capture clears it, so the restore fires at most once per record and
+    /// never for a placement made in this session.
+    ///
+    /// Deliberately absent from sameContentAs: it is not part of the persisted
+    /// content, and letting it count as a change would make the clearing merge
+    /// re-mark the store dirty and reschedule the save timer on every capture.
+    bool fromPersistedSession = false;
+
     bool isValid() const
     {
         return !windowId.isEmpty() && !appId.isEmpty();
@@ -333,6 +346,16 @@ struct WindowPlacement
         }
 
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
+        // fromJson is the ONLY producer of this flag. The daemon's sole
+        // deserialize is the startup load (Daemon::finalizeStartup →
+        // WTA::loadState → placementStore().deserialize), so a set flag means
+        // "written before this daemon started". The engines' load delegate is
+        // wired to that same loadState and has no other caller; were one ever
+        // added mid-session, records would re-arm — which is why the flag is
+        // ALSO cleared by the first live capture below rather than relying on
+        // the load being unique. There is no matching key in toJson: the flag
+        // must not survive a save/load round trip.
+        p.fromPersistedSession = true;
         return p;
     }
 };

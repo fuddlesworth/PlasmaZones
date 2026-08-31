@@ -72,6 +72,9 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     TilingStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
     m_restartSnapCandidates.remove(windowId);
+    // Placed by some route already — whether this restore or another — so the
+    // desktop-arrival park has nothing left to do.
+    m_awaitingDesktopArrivalRestore.remove(windowId);
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
@@ -157,6 +160,9 @@ void SnapHandler::onWindowClosed(const QString& windowId)
     // entry / shader redirect and the title bar dies with the window).
     TilingStateHelpers::removeFromAllScreens(m_border, windowId);
     m_restartSnapCandidates.remove(windowId);
+    // A dead window's park would otherwise sit in the set until some later
+    // desktop switch happened to notice its id has no live window.
+    m_awaitingDesktopArrivalRestore.remove(windowId);
 }
 
 void SnapHandler::setFocusFollowsMouse(bool enabled)
@@ -1191,6 +1197,78 @@ void SnapHandler::slotPendingRestoresAvailable()
             callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
         }
     });
+}
+
+void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_awaitingDesktopArrivalRestore.insert(windowId);
+    qCDebug(lcEffect) << "Parked for snap restore on desktop arrival:" << windowId;
+}
+
+void SnapHandler::slotDesktopChangedRestoreArrivals()
+{
+    if (m_awaitingDesktopArrivalRestore.isEmpty()) {
+        return;
+    }
+    if (!m_effect->isDaemonReady("desktop-arrival snap restore")) {
+        // Keep the park: the daemon coming back re-drives its own restores, and
+        // dropping the entries here would strand exactly the windows waiting.
+        return;
+    }
+
+    // Resolve against the LIVE window set rather than walking the id set: an id
+    // whose window is gone must be dropped, not carried forever.
+    QHash<QString, KWin::EffectWindow*> live;
+    for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        const QString id = m_effect->getWindowId(w);
+        if (m_awaitingDesktopArrivalRestore.contains(id)) {
+            live.insert(id, w);
+        }
+    }
+
+    for (const QString& windowId : QSet<QString>(m_awaitingDesktopArrivalRestore)) {
+        KWin::EffectWindow* window = live.value(windowId);
+        if (!window) {
+            // Closed while parked, or its id changed under it. Either way no
+            // restore is possible and the entry is spent.
+            m_awaitingDesktopArrivalRestore.remove(windowId);
+            continue;
+        }
+        if (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+            continue; // Still waiting for its desktop.
+        }
+        // Spend the park BEFORE dispatching: the restore is a one-shot, and an
+        // entry left behind would re-drive on every later desktop switch — the
+        // repeated-float-restore failure the member's comment describes, just
+        // reached by a different route.
+        m_awaitingDesktopArrivalRestore.remove(windowId);
+
+        if (window->isMinimized() || !m_effect->shouldHandleWindow(window)) {
+            continue;
+        }
+        // Snap-mode screens only. A window that landed on a tiling or scrolling
+        // screen is re-announced by that handler's own desktop-return catch-scan
+        // (TilingHandler::slotScreensChanged), and driving the snap resolve at it
+        // as well risks the no-match float default landing on a window the tiling
+        // engine is about to adopt.
+        const QString screenId = m_effect->getWindowScreenId(window);
+        if (m_effect->tilingHandler() && m_effect->tilingHandler()->isManagedScreen(screenId)) {
+            continue;
+        }
+
+        // isOpenPath=false: this is not an open. It also keeps the daemon's
+        // cross-desktop restore arm (gated on isOpenPath) from firing a second
+        // time and bouncing the window straight back off the desktop it just
+        // reached.
+        qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
+        callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
+    }
 }
 
 } // namespace PlasmaZones
