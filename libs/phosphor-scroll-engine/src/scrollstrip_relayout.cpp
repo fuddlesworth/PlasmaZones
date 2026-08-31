@@ -837,7 +837,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // the start edge comes from crossStartFor rather than the area.
             if (!toEdges) {
                 const int tabbedCross = tabbedColumnCrossPx(col, params);
-                rc.rect = axis.makeRect(mainCursor, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
+                // mainStart, matching the default rect above and the stack
+                // tiles below. It equals mainCursor on this branch today (the
+                // outer-gap shift is zero whenever !toEdges), but spelling the
+                // main-axis origin two ways in one function is how that stops
+                // being true silently.
+                rc.rect = axis.makeRect(mainStart, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
             }
             // Only the active tile is laid out, at the column's content rect;
             // the others share its rect but are reported hidden.
@@ -909,12 +914,15 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     break;
                 }
             }
-            // A lone tile fills the column height on Auto intent only; an
-            // explicit Fixed/Preset height is honored (niri parity — a solo
-            // window can be shorter than the column, leaving empty space
-            // below it). The explicit heights were already resolved and
-            // clamped to the work area in the switch above, and the
-            // min-height clamp below still applies.
+            // A lone tile fills the column height on Auto intent, or whenever
+            // the column is maximized to edges — that flag overrides the stored
+            // intent for as long as it is set, exactly as it does for the stack
+            // below and for the tabbed branch. Otherwise an explicit
+            // Fixed/Preset height is honored (niri parity — a solo window can
+            // be shorter than the column, leaving empty space below it). The
+            // explicit heights were already resolved and clamped to the work
+            // area in the switch above, and the min-height clamp below still
+            // applies.
             if (n == 1) {
                 if (toEdges || col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
                     heights[0] = availH;

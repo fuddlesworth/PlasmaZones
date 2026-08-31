@@ -873,7 +873,9 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     }
     // The stashed EXTENT owner, a different question from the shown tab and
     // allowed to name a different window, so it carries its own latch on the
-    // same terms, empty included. The insert can take the ownership on its way
+    // same terms: an empty stashed owner never latches, exactly as an empty
+    // shown tab never does, which is why the hand-back arm below cannot run
+    // until some non-empty owner has latched. The insert can take the ownership on its way
     // in (the height intent above claims it when it is not Auto), so the
     // latched arm hands the pre-insert owner back rather than doing nothing.
     if (const QString owner = stash.at(colIdx).heightOwnerId; !stash.at(colIdx).heightOwnerRestored) {
@@ -1015,13 +1017,7 @@ QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
     }
     // QSet iteration order is unspecified; pick the lexicographic minimum so
     // repeated shortcut presses with no active screen land deterministically.
-    QString fallback = *m_scrollingScreens.cbegin();
-    for (const QString& candidate : m_scrollingScreens) {
-        if (candidate < fallback) {
-            fallback = candidate;
-        }
-    }
-    return fallback;
+    return *std::min_element(m_scrollingScreens.cbegin(), m_scrollingScreens.cend());
 }
 
 // ── Tracking predicates ─────────────────────────────────────────────────────
@@ -1394,6 +1390,10 @@ void ScrollEngine::retile(const QString& screenId)
 {
     if (screenId.isEmpty()) {
         for (const QString& sid : std::as_const(m_scrollingScreens)) {
+            // Drop any queued retile for this screen: we are performing that
+            // apply right now, and the queued callback would otherwise run a
+            // second full pass for it when it drains.
+            m_pendingRetiles.remove(sid);
             applyLayout(sid);
         }
         return;

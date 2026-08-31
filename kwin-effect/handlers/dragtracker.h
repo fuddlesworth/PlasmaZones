@@ -45,8 +45,9 @@ public:
     // drag on LMB release while KWin keeps its move alive until ALL buttons
     // are up, and a window shouldHandleWindow() rejected is never tracked at
     // all yet still holds KWin's move filter. Consumers that must not steal
-    // input from KWin's move filter (the scroll tab pill interception) gate
-    // on this, not on isDragging().
+    // input from KWin's move filter (the scroll tab pill interception) gate on
+    // this IN ADDITION to isDragging(): neither predicate implies the other
+    // across the whole span, so the guards OR the two together.
     bool compositorMoveResizeActive() const
     {
         return m_interactiveWindow != nullptr;
@@ -69,6 +70,17 @@ public:
     // windowFinishUserMovedResized, replacing the poll timer entirely.
     void handleWindowStartMoveResize(KWin::EffectWindow* w);
     void handleWindowFinishMoveResize(KWin::EffectWindow* w);
+
+    // Seed the compositor move/resize state for a window that is ALREADY in an
+    // interactive move at the moment it gets wired. m_interactiveWindow is
+    // otherwise only ever stamped by the start signal, so a move already in
+    // flight when the effect loads (effect reload or compositor restart
+    // mid-gesture) would leave compositorMoveResizeActive() answering false for
+    // the rest of that move, and the pill hover could take an interception
+    // against KWin's live move filter — the exact strand the guard exists to
+    // prevent. Idempotent and no-op for a window that is not moving; the finish
+    // signal clears it the same way it clears a stamped one.
+    void noteWiredWindowMoveState(KWin::EffectWindow* w);
 
     // Event-driven cursor position update during drag. Called from slotMouseChanged.
     // Throttled to ~30Hz internally to avoid D-Bus flooding.

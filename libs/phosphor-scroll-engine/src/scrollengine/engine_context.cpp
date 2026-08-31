@@ -361,6 +361,15 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                 // correctly stays silent for a pinned screen.
                 contextChangedScreens.insert(screenId);
                 const PhosphorEngine::PlacementStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
+                // A pending background-focus emit armed while this screen sat
+                // pinned names the key we are moving off. It can never match
+                // again in this era, and a desktop index KWin later reuses
+                // would make it match the WRONG era, so drop it here rather
+                // than leave it standing. The centering this unpin owes is not
+                // lost with it: the loop at the end of this function arms
+                // m_forceEmitScreens for every screen whose announce fires, and
+                // a migration that moved the key is exactly that case.
+                m_pendingFocusEmitByScreen.remove(screenId);
                 // A live preview's captured keys are plain copies that
                 // rekeyWindows cannot rewrite — migrating under it would
                 // strand the preview on the dead key and commit would then
@@ -615,6 +624,20 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
     }
 }
 
+void ScrollEngine::pruneContextKeyedScreenArms(
+    const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied)
+{
+    // Value-keyed, not key-keyed: the screen is still live and still scrolling,
+    // it is the CONTEXT the entry names that has gone.
+    for (auto it = m_pendingFocusEmitByScreen.begin(); it != m_pendingFocusEmitByScreen.end();) {
+        it = contextDied(it.value()) ? m_pendingFocusEmitByScreen.erase(it) : std::next(it);
+    }
+    // This one is context-keyed outright.
+    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
+        it = contextDied(it.key()) ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
+}
+
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
     // Unwind a preview stranded by the dying context while both its states
@@ -651,6 +674,16 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = it.key().desktop == removedDesktop ? m_perScreenOverrides.erase(it) : std::next(it);
     }
+    // Same renumbering hazard, one level indirect: these two are keyed by
+    // SCREEN and carry the context as their value, so a screen that stays
+    // scrolling keeps its entry when its desktop dies. The promotion in
+    // applyLayout and the burst drain in endArrivalBurst both gate on the
+    // stored key equalling the current one, which is exactly the compare a
+    // reused desktop index passes — the entry would then force a batch, or
+    // apply an arrival focus, for a context from before the deletion.
+    pruneContextKeyedScreenArms([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+        return key.desktop == removedDesktop;
+    });
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
@@ -687,6 +720,11 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = stale(it.key().activity) ? m_perScreenOverrides.erase(it) : std::next(it);
     }
+    // Screen-keyed, context-valued arms, on the same terms as the desktop
+    // prune's sweep — see the rationale there.
+    pruneContextKeyedScreenArms([&stale](const PhosphorEngine::PlacementStateKey& key) {
+        return stale(key.activity);
+    });
 }
 
 void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
@@ -813,6 +851,19 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     }
     for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
         it = matches(it.key().screenId) ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
+    // Close-reflow hold + retile queue, completing the per-screen sweep. An
+    // armed flush timer holds only the id, and its lambda re-reads both maps,
+    // so dropping the entries here just makes it a no-op when it fires. Without
+    // this a monitor that comes back inherits the hold deadline it left with.
+    for (auto it = m_closeReflowHoldUntil.begin(); it != m_closeReflowHoldUntil.end();) {
+        it = matches(it.key()) ? m_closeReflowHoldUntil.erase(it) : std::next(it);
+    }
+    for (auto it = m_closeReflowFlushScheduled.begin(); it != m_closeReflowFlushScheduled.end();) {
+        it = matches(*it) ? m_closeReflowFlushScheduled.erase(it) : std::next(it);
+    }
+    for (auto it = m_pendingRetiles.begin(); it != m_pendingRetiles.end();) {
+        it = matches(*it) ? m_pendingRetiles.erase(it) : std::next(it);
     }
     // A dead screen id must not keep feeding the hint-less shortcut paths
     // (autotile's twin clears the same way).

@@ -40,7 +40,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
-    ScrollState* state = stateForKey(currentKeyForScreen(screenId), false);
+    const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+    ScrollState* state = stateForKey(currentKey, false);
     if (!state) {
         // No state for the CURRENT context (fresh desktop, or the state was
         // just pruned) — the previous context's indicator must not stay
@@ -48,18 +49,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // tabStripsChanged, so this bail is its only chance to clear.
         clearTabStripsForScreen(screenId);
         return;
-    }
-    // Promote a pending background-focus emit (windowFocused's off-current-key
-    // arm) now that its context is provably the one on screen. Promotion
-    // rather than a second flag at the emit gate: m_forceEmitScreens already
-    // breaks the view-delta basis at the sameBasis read below and is consumed
-    // at the gate, so folding in here inherits both behaviours. The key
-    // compare is what the bare flag lacks — a pass for a DIFFERENT context
-    // leaves the entry armed for the return that actually shows this strip.
-    if (const auto pendIt = m_pendingFocusEmitByScreen.constFind(screenId);
-        pendIt != m_pendingFocusEmitByScreen.constEnd() && *pendIt == currentKeyForScreen(screenId)) {
-        m_pendingFocusEmitByScreen.remove(screenId);
-        m_forceEmitScreens.insert(screenId);
     }
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (!params.workArea.isValid()) {
@@ -69,6 +58,25 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         clearTabStripsForScreen(screenId);
         qCDebug(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
+    }
+    // Promote a pending background-focus emit (windowFocused's off-current-key
+    // arm) now that its context is provably the one on screen. Promotion
+    // rather than a second flag at the emit gate: m_forceEmitScreens already
+    // breaks the view-delta basis at the sameBasis read below and is consumed
+    // at the gate, so folding in here inherits both behaviours. The key
+    // compare is what the bare flag lacks — a pass for a DIFFERENT context
+    // leaves the entry armed for the return that actually shows this strip.
+    //
+    // Deliberately BELOW the work-area bail, not above it. The promotion trades
+    // a context-keyed guard for a screen-keyed flag, and that flag is spendable
+    // by any later pass; a pass that promotes and then bails without emitting
+    // would hand the force to whichever context runs next, which is the very
+    // failure the key compare exists to prevent. Everything from here on
+    // reaches the emit gate.
+    if (const auto pendIt = m_pendingFocusEmitByScreen.constFind(screenId);
+        pendIt != m_pendingFocusEmitByScreen.constEnd() && *pendIt == currentKey) {
+        m_pendingFocusEmitByScreen.remove(screenId);
+        m_forceEmitScreens.insert(screenId);
     }
     // Live drag-insert preview on THIS screen: the view must not move for the
     // rest of the hold. That is the DETACH-ONCE invariant this whole design
@@ -780,7 +788,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // Logged only when the force is what carried the batch. A switch onto a
         // strip that DID change would have emitted anyway, and reporting those
         // would make the line useless for confirming this arm ever fires.
-        qCDebug(lcScrollEngine) << "applyLayout: emitting on context switch for" << screenId
+        // "forced" rather than "on context switch": the flag now has two
+        // origins, the announce pairing and the promoted background-focus arm,
+        // and this line cannot tell them apart.
+        qCDebug(lcScrollEngine) << "applyLayout: forced emit for" << screenId
                                 << "— every rect matched the previous strip's baseline";
     }
     if (anyEntryChanged || forceEmit) {

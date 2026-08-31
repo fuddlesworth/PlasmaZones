@@ -62,6 +62,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
     m_wiredWindows.insert(w);
 
+    // Recover the compositor's move state for a window already being dragged
+    // when we wired it. The start signal we connect below has come and gone for
+    // such a window (effect reload or compositor restart mid-gesture), so
+    // without this the tracker would report no compositor move for the rest of
+    // that drag.
+    if (m_dragTracker) {
+        m_dragTracker->noteWiredWindowMoveState(w);
+    }
+
     // Virtual-desktop set changes (departure / arrival arms and the stamp they
     // diff against) live in window_desktop_connections.cpp.
     wireDesktopChangeHandler(w);
@@ -741,7 +750,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // suppressed while KWin still holds the move for other buttons, so a
         // multi-button drop onto the pill band would otherwise stay unlit
         // until the next pointer twitch.
-        if (m_tilingHandler && KWin::effects) {
+        // KWin::effects, not m_tilingHandler: cursorPos() needs the former, while
+        // the latter is constructed with the effect and outlives every window
+        // connection — the tail call below dereferences it unguarded, as does
+        // the rest of this file.
+        if (KWin::effects) {
             m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
         }
         // A maximize claim taken during the gesture was never paid: the batch

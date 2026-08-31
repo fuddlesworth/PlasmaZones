@@ -1214,7 +1214,13 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         // pending emit anyway: the desktop return then re-asserts this
         // strip's geometry unconditionally, which is exactly the repair a
         // report the model could not classify still deserves.
-        if (key != currentKeyForScreen(key.screenId)) {
+        //
+        // Membership-gated, unlike the mutate arm below which by construction
+        // has one: a refused open can leave a reverse-map key whose state holds
+        // the window in neither the strip nor the float set, and a focus report
+        // naming such a phantom would otherwise arm a forced full-place batch
+        // for a context that never held it.
+        if (key != currentKeyForScreen(key.screenId) && state->containsWindow(windowId)) {
             m_pendingFocusEmitByScreen.insert(key.screenId, key);
         }
         return;

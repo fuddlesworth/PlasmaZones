@@ -1067,6 +1067,18 @@ private:
     /// in @p screenIds that no longer has ANY context state. Overrides
     /// survive by design; see the definition.
     void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
+    /// Drop the one-shot arms that are keyed by SCREEN but carry a CONTEXT as
+    /// their value, for every entry whose context @p contextDied accepts:
+    /// m_pendingFocusEmitByScreen and m_burstPendingApplies.
+    ///
+    /// Both are consumed by comparing the stored context against the current
+    /// one, so an entry outliving its context is not inert — KWin hands a
+    /// removed desktop's index back out, and the reborn context compares equal
+    /// to the dead one. The state prunes take the same predicate; this exists
+    /// because those two maps cannot be swept by the screen-keyed sweep that
+    /// serves a REMOVED screen (here the screen survives, only its context
+    /// died).
+    void pruneContextKeyedScreenArms(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied);
     // engine_core.cpp
     /// Capture @p state's strip STRUCTURE (column groupings, widths,
     /// display, per-tile height intents) before a mode reassignment tears
@@ -1316,10 +1328,18 @@ private:
     /// describing the strip it had been showing.
     ///
     /// Armed wherever announceStripContextIfChanged actually fires, which is
-    /// what pairs the two: a screen is forced when, and only when, its
-    /// consumer was just told to retire. Four sites do it — the identical-set
-    /// branch of setActiveScreens, its added and stayer loops, and the
-    /// sticky-pin release in updateStickyScreenPins.
+    /// what pairs the two: on those paths a screen is forced when, and only
+    /// when, its consumer was just told to retire. Four sites do it — the
+    /// identical-set branch of setActiveScreens, its added and stayer loops,
+    /// and the sticky-pin release in updateStickyScreenPins.
+    ///
+    /// There is a FIFTH producer that is deliberately NOT announce-paired:
+    /// applyLayout promotes an m_pendingFocusEmitByScreen entry into this set
+    /// once the context that armed it is the one on screen. Nothing retired
+    /// there — the arm exists because a background focus report moved the
+    /// strip's focus and anchor with only placementChanged emitted, so the
+    /// return owes a geometry batch the change gate would otherwise suppress.
+    /// See that member for the full contract.
     ///
     /// A screen ADDED to the set is armed too, and the reason is worth stating
     /// because the obvious argument for leaving it unarmed is wrong. That
