@@ -164,6 +164,78 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 0);
     }
 
+    void testGeometryOnlyWriteDoesNotDisarmThePersistedSessionFlag()
+    {
+        // The disarm is scoped to a real ENGINE capture on purpose. Every open
+        // writes a geometry-only record first (recordFreeGeometry and the
+        // bringup frame-geometry seed), so widening that scope by one brace
+        // would disarm every record before any window is placed and silently
+        // kill the cross-desktop restore with no other test failing.
+        WindowPlacementStore store;
+        WindowPlacement seed = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
+                                             WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        seed.virtualDesktop = 3;
+        store.record(seed);
+
+        WindowPlacementStore loaded;
+        loaded.deserialize(store.serialize());
+        QVERIFY(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession);
+
+        // Geometry only: no engine slot at all.
+        WindowPlacement geometryOnly;
+        geometryOnly.windowId = QStringLiteral("firefox|u");
+        geometryOnly.appId = QStringLiteral("firefox");
+        geometryOnly.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(5, 6, 700, 800));
+        loaded.record(geometryOnly);
+
+        QVERIFY2(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
+                 "a geometry-only write must leave the one-shot armed");
+
+        // And the positive arm still disarms, so the guard above is not simply
+        // asserting that nothing ever clears the flag.
+        WindowPlacement capture = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
+                                                WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        capture.virtualDesktop = 1;
+        loaded.record(capture);
+        QVERIFY2(!loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
+                 "a real engine capture must disarm the one-shot");
+    }
+
+    void testFromPersistedSessionIsSetByLoadAndNeverSerialized()
+    {
+        // The cross-desktop login restore is armed by this transient flag, and
+        // its whole safety argument is that the flag cannot round-trip: if it
+        // were ever written to session.json, every load would re-arm every
+        // record and windows would be teleported across desktops for the rest
+        // of time rather than once after a logout.
+        WindowPlacementStore store;
+        WindowPlacement p = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
+                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
+        p.virtualDesktop = 3;
+        store.record(p);
+
+        // A live capture is never armed.
+        QVERIFY(!store.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession);
+
+        // A load IS armed — this is the only producer.
+        WindowPlacementStore loaded;
+        loaded.deserialize(store.serialize());
+        QVERIFY2(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
+                 "deserialize must arm the one-shot");
+
+        // Asserted on the key BY NAME rather than by round-tripping: a
+        // round-trip comparison would pass even if the flag were written, since
+        // reading it back produces the same value the load sets anyway.
+        const QJsonObject json = loaded.serialize();
+        const QJsonArray bucket = json.value(QStringLiteral("firefox")).toArray();
+        QCOMPARE(bucket.size(), 1);
+        const QJsonObject rec = bucket.at(0).toObject();
+        for (const QString& key : rec.keys()) {
+            QVERIFY2(!key.contains(QStringLiteral("ersisted"), Qt::CaseInsensitive),
+                     qPrintable(QStringLiteral("session flag leaked into serialized output as key: ") + key));
+        }
+    }
+
     void testSerializeRoundTrip()
     {
         WindowPlacementStore store;

@@ -925,6 +925,26 @@ private Q_SLOTS:
         QCOMPARE(desktopSpy.count(), 0);
     }
 
+    void testPersistedDesktopRestore_usesTheRegistryAppIdNotTheEmbeddedOne()
+    {
+        // An Electron/CEF app that re-broadcasts its WM_CLASS mid-session has
+        // its records filed under the CURRENT class, while a window id minted
+        // earlier still carries the OLD one. The lookup therefore has to ask the
+        // registry rather than split the id. Without this case, swapping
+        // currentAppIdFor for WindowId::extractAppId passes every other test.
+        // The instance ids must DIFFER, or peek's same-instance branch matches
+        // across buckets and the appId is never consulted at all — which is
+        // exactly what made a first draft of this case pass either way.
+        seedPersistedDesktopRecord(QStringLiteral("newclass"), QStringLiteral("old-uuid"), 2);
+        seedLiveWindow(QStringLiteral("newinst"), QStringLiteral("newclass"), 1);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(m_wta->applyPersistedDesktopRestore(QStringLiteral("oldclass|newinst")),
+                 "the record is filed under the registry's current appId, not the id's embedded one");
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+    }
+
     void testPersistedDesktopRestore_leavesStickyAndUnknownWindowsAlone()
     {
         // virtualDesktop 0 on the LIVE side means on-all-desktops or unknown.
