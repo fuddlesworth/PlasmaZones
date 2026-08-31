@@ -72,6 +72,7 @@ private Q_SLOTS:
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
     void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
     void maximizeToEdgesResolvesTheRawAreaGapFree();
+    void maximizeToEdgesOverridesAnExplicitHeightIntent();
     void scrollingPastAMaximizedColumnMovesItByExactlyTheViewDelta();
     void maximizeToEdgesRestoreIsJustTheStoredIntentAgain();
     void widthAndHeightVerbsClearMaximizeToEdges();
@@ -812,6 +813,42 @@ void TestScrollStripSizing::maximizeToEdgesResolvesTheRawAreaGapFree()
     QCOMPARE(a.united(b), params.rawWorkArea);
 }
 
+// Maximize-to-edges must override an explicit Fixed/Preset height intent the
+// same way the tabbed branch overrides its owner's intent. Before the fix a
+// lone tile kept its short height while the column's main extent (and KWin's
+// maximize state) went full, and with the centre-short-columns policy on the
+// window floated mid-screen — the live "maximize only widens" report. The
+// intent itself must survive for the restore.
+void TestScrollStripSizing::maximizeToEdgesOverridesAnExplicitHeightIntent()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.rawWorkArea = params.workArea;
+    params.workArea = params.workArea.adjusted(20, 20, -20, -20);
+    params.centerShortColumns = true;
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), params.rawWorkArea);
+
+    // A two-tile stack still partitions the raw cross extent when one tile
+    // carries an explicit height. Built fresh so the insert cannot disturb
+    // the flag under test.
+    ScrollStrip stacked;
+    QVERIFY(stacked.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(stacked.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(stacked.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(stacked.toggleMaximizeToEdgesActiveColumn(params));
+    {
+        const ResolvedStrip resolved = stacked.relayout(params);
+        const QRect a = rectOf(resolved, QStringLiteral("a"));
+        const QRect b = rectOf(resolved, QStringLiteral("b"));
+        QCOMPARE(Ax::crossLen(a) + Ax::crossLen(b), Ax::crossLen(params.rawWorkArea));
+        QCOMPARE(a.united(b), params.rawWorkArea);
+    }
+}
+
 // The maximize-to-edges rect is shifted low by the outer gap on EVERY frame,
 // not only while the column covers the viewport. The batch's viewDelta is
 // differenced from the view coordinate alone, so a shift that appears and
@@ -1232,12 +1269,15 @@ void TestScrollStripSizing::centeringYieldsNoOffsetWhenTheStackOverflowsTheCross
     QCOMPARE(Ax::crossPos(first), 0);
 }
 
-// The seam between the two features, which neither side's suite reaches: a
-// maximized-to-edges column is laid out in the RAW work area, so a short stack
-// inside one must be centred in the raw slack, not the gapped slack. Centring
-// against the gapped extent would offset it by half an outer gap — small
-// enough to look like a rounding artefact and wrong on every screen with
-// outer gaps set.
+// The seam between the two features: with the flag overriding every height
+// intent there is no short stack inside a maximized column any more, so the
+// centre policy has no slack to act on and the tile lands on the raw rect
+// exactly. This test used to assert the opposite (the 300px intent honoured
+// and centred in the raw slack), which was the live "maximize only widens"
+// bug: full main extent and compositor maximize state beside a short centred
+// window. The asymmetric-gap fixture is kept so any regression back to
+// intent-honouring also re-exposes the raw-vs-gapped centring question it
+// originally probed.
 void TestScrollStripSizing::centeringAShortMaximizedToEdgesColumnUsesTheRawArea()
 {
     ScrollLayoutParams params = defaultParams();
@@ -1259,12 +1299,10 @@ void TestScrollStripSizing::centeringAShortMaximizedToEdgesColumnUsesTheRawArea(
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
 
     const QRect r = rectOf(strip.relayout(params), QStringLiteral("a"));
-    QCOMPARE(Ax::crossLen(r), 300);
-    // Centred in the RAW cross extent and measured from the RAW origin. The
-    // gapped answer would be 20 + (rawCross - 40 - 300) / 2, which is 20 short
-    // of this, so the assertion tells the two apart.
-    const int rawCross = Ax::crossLen(params.rawWorkArea);
-    QCOMPARE(Ax::crossPos(r), Ax::crossPos(params.rawWorkArea) + (rawCross - 300) / 2);
+    QCOMPARE(r, params.rawWorkArea);
+    // And the 300px intent survives the round trip untouched.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 300);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

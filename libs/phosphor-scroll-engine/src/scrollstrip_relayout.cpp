@@ -879,6 +879,19 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             int fixedTotal = 0;
             for (int vi = 0; vi < n; ++vi) {
                 const Tile& t = col.tiles.at(visible.at(vi));
+                // Maximize-to-edges wins over the tiles' height intents, the
+                // same override the tabbed branch applies to its owner's
+                // intent: the flag declares the full raw cross extent, so a
+                // Fixed/Preset tile is resolved as Auto (sharing by weight)
+                // and its stored intent survives untouched for the restore.
+                // Without this a lone Fixed/Preset tile kept its short height
+                // and the centre policy floated it mid-screen while the
+                // column's main extent — and the compositor's maximize state —
+                // said full, which is the "maximize only widens" report.
+                if (toEdges) {
+                    autoWeightTotal += qMax<qreal>(0.01, t.height.weight);
+                    continue;
+                }
                 switch (t.height.kind) {
                 case WindowHeight::Fixed:
                     heights[vi] = qBound(1, t.height.fixedPx, availH);
@@ -903,7 +916,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // clamped to the work area in the switch above, and the
             // min-height clamp below still applies.
             if (n == 1) {
-                if (col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
+                if (toEdges || col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
                     heights[0] = availH;
                 }
             } else {
@@ -936,7 +949,9 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 qreal weightLeft = autoWeightTotal;
                 for (int vi = 0; vi < n; ++vi) {
                     const Tile& t = col.tiles.at(visible.at(vi));
-                    if (t.height.kind != WindowHeight::Auto) {
+                    // toEdges: every tile was accumulated as Auto above, so
+                    // every tile takes its weight share here too.
+                    if (!toEdges && t.height.kind != WindowHeight::Auto) {
                         continue;
                     }
                     const qreal w = qMax<qreal>(0.01, t.height.weight);
