@@ -1423,6 +1423,238 @@ private Q_SLOTS:
         QVERIFY(!store.peekForReclaim(QStringLiteral("term|fresh"), QString()).has_value());
     }
 
+    void testPeekForReclaim_closedInstanceLosesCredit()
+    {
+        // The #1017 teleport: a window that CLOSED mid-session leaves an
+        // immortal tiled record, and without the credit gate that record
+        // homed every later same-app window (a detached browser tab) on the
+        // closed sibling's monitor. markInstanceClosed revokes the credit;
+        // the record keeps serving reopen restore (peek/takeForReopen), just
+        // never the cross-screen pull.
+        WindowPlacementStore store;
+        WindowPlacement sibling =
+            makePlacement(QStringLiteral("firefox|dead"), QStringLiteral("firefox"), WindowPlacement::stateTiled(),
+                          WindowPlacement::autotileEngineId(), QStringLiteral("DP-1"));
+        QVERIFY(store.record(sibling));
+
+        // Runtime records carry credit by default (a capture describes a live
+        // window), so the fallback matches before the close...
+        QVERIFY(store.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value());
+
+        // ...and never after it.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("firefox|dead")));
+        QVERIFY2(!store.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value(),
+                 "a mid-session-closed sibling's record must not justify a cross-screen pull");
+        // Non-reclaim reads are untouched.
+        QVERIFY(store.peek(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value());
+        // The window's OWN record still wins regardless of credit (the
+        // daemon-restart same-instance reclaim).
+        QVERIFY(store.peekForReclaim(QStringLiteral("firefox|dead"), QStringLiteral("firefox")).has_value());
+    }
+
+    void testTakeForReopen_burnsOneReclaimCreditPerOpen()
+    {
+        // A window restored onto its CORRECT screen never enters the claim
+        // (same-screen bail), so its loaded credit would dangle for a later
+        // tab detach to spend. takeForReopen runs exactly once per
+        // first-observed open and retires the newest non-live credit, hit or
+        // miss.
+        WindowPlacementStore store;
+        WindowPlacement older =
+            makePlacement(QStringLiteral("firefox|s1"), QStringLiteral("firefox"), WindowPlacement::stateTiled(),
+                          WindowPlacement::autotileEngineId(), QStringLiteral("DP-1"));
+        WindowPlacement newer =
+            makePlacement(QStringLiteral("firefox|s2"), QStringLiteral("firefox"), WindowPlacement::stateTiled(),
+                          WindowPlacement::autotileEngineId(), QStringLiteral("DP-2"));
+        QVERIFY(store.record(older));
+        QVERIFY(store.record(newer));
+
+        // First open: a tiled record is never CONSUMED (miss), but the newest
+        // credit (s2) is burned.
+        QVERIFY(!store
+                     .takeForReopen(QString(WindowPlacement::autotileEngineId()), QStringLiteral("firefox|o1"),
+                                    QStringLiteral("firefox"), QStringLiteral("DP-1"))
+                     .has_value());
+        const auto afterOne = store.peekForReclaim(QStringLiteral("firefox|o2"), QStringLiteral("firefox"));
+        QVERIFY(afterOne.has_value());
+        QCOMPARE(afterOne->windowId, QStringLiteral("firefox|s1"));
+
+        // Second open burns the remaining credit; the third finds none.
+        QVERIFY(!store
+                     .takeForReopen(QString(WindowPlacement::autotileEngineId()), QStringLiteral("firefox|o2"),
+                                    QStringLiteral("firefox"), QStringLiteral("DP-1"))
+                     .has_value());
+        QVERIFY2(!store.peekForReclaim(QStringLiteral("firefox|o3"), QStringLiteral("firefox")).has_value(),
+                 "two opens must retire both session-restore credits");
+        // The records themselves survive as reopen memory.
+        QCOMPARE(store.size(), 2);
+    }
+
+    void testBurnReclaimCredit_skipsOwnAndLiveRecords()
+    {
+        // The snap adaptor's open-path burn (the snap-screen half of the
+        // per-open partition). A live sibling's and the opener's own record
+        // keep their credit; only a non-live sibling's is retired.
+        WindowPlacementStore store;
+        QSet<QString> live;
+        store.setLiveInstanceProbe([&live](const QString& windowId) {
+            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
+        store.record(makePlacement(QStringLiteral("kate|self"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+        store.record(makePlacement(QStringLiteral("kate|open"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+        live.insert(QStringLiteral("open"));
+
+        // Only the live sibling and the opener's own record exist — no burn.
+        QVERIFY(!store.burnReclaimCredit(QStringLiteral("kate|self"), QStringLiteral("kate")));
+
+        store.record(makePlacement(QStringLiteral("kate|dead"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-2")));
+        QVERIFY(store.burnReclaimCredit(QStringLiteral("kate|self"), QStringLiteral("kate")));
+        // The dead sibling's credit is gone; nothing else was touched.
+        QVERIFY(!store.burnReclaimCredit(QStringLiteral("kate|self"), QStringLiteral("kate")));
+        QVERIFY(store.peekForReclaim(QStringLiteral("kate|self"), QStringLiteral("kate")).has_value()); // own record
+    }
+
+    void testSerialize_derivesReclaimCreditFromLiveness()
+    {
+        // Persisted "liveAtSave" is derived at save time when the probe is
+        // wired: live windows persist as restore evidence, a just-closed
+        // window rides the shutdown grace (the logout save), and the
+        // never-live cross-session graveyard is stripped — whatever its
+        // in-memory credit says.
+        WindowPlacementStore store;
+        QSet<QString> live;
+        store.setLiveInstanceProbe([&live](const QString& windowId) {
+            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
+        store.record(makePlacement(QStringLiteral("firefox|alive"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
+                                   QStringLiteral("DP-1")));
+        store.record(makePlacement(QStringLiteral("firefox|graveyard"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
+                                   QStringLiteral("DP-2")));
+        store.record(makePlacement(QStringLiteral("firefox|logout"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
+                                   QStringLiteral("DP-2")));
+        live.insert(QStringLiteral("alive"));
+        store.markInstanceClosed(QStringLiteral("firefox|logout")); // just now — inside the grace
+
+        const QJsonObject saved = store.serialize();
+        QHash<QString, bool> persisted;
+        for (const QJsonValue& v : saved.value(QStringLiteral("firefox")).toArray()) {
+            const QJsonObject o = v.toObject();
+            persisted.insert(o.value(QStringLiteral("windowId")).toString(),
+                             o.value(QStringLiteral("liveAtSave")).toBool());
+        }
+        QCOMPARE(persisted.value(QStringLiteral("firefox|alive")), true);
+        QCOMPARE(persisted.value(QStringLiteral("firefox|logout")), true);
+        QVERIFY2(!persisted.value(QStringLiteral("firefox|graveyard")), "a never-live record must persist credit-less");
+
+        // Next session: only the credited records power the fallback.
+        WindowPlacementStore next;
+        next.deserialize(saved);
+        const auto match = next.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox"));
+        QVERIFY(match.has_value());
+        QVERIFY(match->windowId != QStringLiteral("firefox|graveyard"));
+    }
+
+    void testDeserialize_missingLiveAtSaveDefaultsEligible()
+    {
+        // A record persisted by a pre-credit build has no "liveAtSave" key
+        // and must behave as before for that one legacy session.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("kate|old"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+        QJsonObject saved = store.serialize();
+        QJsonArray bucket = saved.value(QStringLiteral("kate")).toArray();
+        QJsonObject rec = bucket.first().toObject();
+        rec.remove(QStringLiteral("liveAtSave"));
+        bucket[0] = rec;
+        saved[QStringLiteral("kate")] = bucket;
+
+        WindowPlacementStore next;
+        next.deserialize(saved);
+        QVERIFY(next.peekForReclaim(QStringLiteral("kate|fresh"), QStringLiteral("kate")).has_value());
+    }
+
+    void testTakeForReopen_reboundRecordShedsTheDeadSiblingsRevokedCredit()
+    {
+        // takeForReopen's re-bind hands a DEAD instance's record to a LIVE
+        // one, and record()'s append branch copies the incoming record
+        // wholesale — so the dead window's credit revocation and close
+        // timestamp rode across onto a window that is very much alive. The
+        // consumed record IS the live window's history now; its predecessor's
+        // death metadata is not. (Same hazard the fromPersistedSession clear
+        // on that path exists for.)
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("app|dead"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+                                   WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1")));
+        QVERIFY(store.markInstanceClosed(QStringLiteral("app|dead")));
+        QVERIFY2(!store.peekForReclaim(QStringLiteral("app|third"), QStringLiteral("app")).has_value(),
+                 "the closed sibling's record must not justify a cross-screen pull");
+
+        // The reopen still CONSUMES that record and re-binds it to the live id.
+        const auto rec = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
+                                             QStringLiteral("app"), QStringLiteral("DP-1"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->windowId, QStringLiteral("app|new"));
+        QVERIFY2(store.peekForReclaim(QStringLiteral("app|third"), QStringLiteral("app")).has_value(),
+                 "a record re-bound to a live window must not inherit the dead sibling's revoked credit");
+
+        // And the live window's OWN close revokes it again, so the reset is a
+        // hand-back rather than a permanent exemption.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("app|new")));
+        QVERIFY(!store.peekForReclaim(QStringLiteral("app|third"), QStringLiteral("app")).has_value());
+    }
+
+    void testMarkInstanceClosed_unobservedCloseEarnsNoShutdownGrace()
+    {
+        // The alive-set prune backstop discovers a window that died at some
+        // UNOBSERVED earlier moment. Stamping that death "now" would hand it
+        // serialize()'s logout grace, and the record would persist as restore
+        // evidence — the #1017 teleport surviving into the next session on
+        // exactly the windows whose close signal went missing.
+        WindowPlacementStore store;
+        QSet<QString> live; // nothing is live: both windows are gone
+        store.setLiveInstanceProbe([&live](const QString& windowId) {
+            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
+        store.record(makePlacement(QStringLiteral("firefox|observed"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
+                                   QStringLiteral("DP-1")));
+        store.record(makePlacement(QStringLiteral("firefox|unobserved"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
+                                   QStringLiteral("DP-2")));
+        store.markInstanceClosed(QStringLiteral("firefox|observed")); // just now — the logout shape
+        store.markInstanceClosed(QStringLiteral("firefox|unobserved"), /*graceEligible=*/false);
+
+        QHash<QString, bool> persisted;
+        for (const QJsonValue& v : store.serialize().value(QStringLiteral("firefox")).toArray()) {
+            const QJsonObject o = v.toObject();
+            persisted.insert(o.value(QStringLiteral("windowId")).toString(),
+                             o.value(QStringLiteral("liveAtSave")).toBool());
+        }
+        QCOMPARE(persisted.value(QStringLiteral("firefox|observed")), true);
+        QVERIFY2(!persisted.value(QStringLiteral("firefox|unobserved")),
+                 "a close whose time was never observed must not ride the shutdown grace");
+
+        // The unobserved arm must not CLEAR a stamp an observed close already
+        // wrote. Logout tears windows down and can push an alive report
+        // through the prune backstop before the final save, so the two arms
+        // run over the same record in that order — zeroing there would strip
+        // the grace from exactly the windows the login reclaim needs it for.
+        store.markInstanceClosed(QStringLiteral("firefox|observed"), /*graceEligible=*/false);
+        for (const QJsonValue& v : store.serialize().value(QStringLiteral("firefox")).toArray()) {
+            const QJsonObject o = v.toObject();
+            if (o.value(QStringLiteral("windowId")).toString() == QStringLiteral("firefox|observed")) {
+                QVERIFY2(o.value(QStringLiteral("liveAtSave")).toBool(),
+                         "an unobserved re-close must not revoke an observed close's shutdown grace");
+            }
+        }
+    }
+
     void testReleaseEngineSlot_downgradesOnlyThatEnginesSlot()
     {
         // The handoff-release primitive. Slots are otherwise only merged,

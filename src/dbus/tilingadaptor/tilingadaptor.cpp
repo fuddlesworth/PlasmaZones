@@ -678,6 +678,28 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     // on a redirect having happened, so a rule pinning the window to the
     // screen it already opened on still outranks the remembered placement
     // (dispatchWindowOpened documents the same distinction).
+    //
+    // Move-release suppression: this announce can be the second half of a
+    // live release/re-announce pair (releaseWindowTracking then re-announce —
+    // m_moveReleasedInstances documents the yank-back this caused). Consume
+    // the one-shot and let the ARRIVAL screen's engine adopt the window where
+    // the user put it.
+    //
+    // Consumed UNCONDITIONALLY, ahead of the allowCrossScreenClaim test rather
+    // than behind it. This announce IS the release's re-announce whichever way
+    // the claim gate already stands, so it is what the one-shot was armed for;
+    // short-circuiting the remove() behind the gate left the entry armed on a
+    // rule-routed re-announce (allowCrossScreenClaim already false), and the
+    // window's NEXT announce — the effect re-announces a live window after a
+    // desktop or activity demotion, with no daemon-side close, see
+    // flushPendingWindowOpens — then spent the stale one-shot suppressing a
+    // reclaim that had nothing to do with the move.
+    if (m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId)) > 0
+        && allowCrossScreenClaim) {
+        qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId
+                             << "re-announced after a live move release — cross-screen reclaim suppressed";
+        allowCrossScreenClaim = false;
+    }
     if (allowCrossScreenClaim) {
         for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
             if (engine->claimCrossScreenReopen(entry.windowId, entry.screenId, qMax(0, entry.minWidth),
@@ -983,6 +1005,10 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // A move-release one-shot for a window that closed instead of
+    // re-announcing dies with it — instance ids are unique, so the entry
+    // could never fire again, but the set must not accumulate corpses.
+    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -1020,6 +1046,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     m_lastScrollTabColorsRelay.remove(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -1044,10 +1071,11 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
             ++it;
         }
     }
-    // The two OPEN QUEUES go with them. windowClosed drops all four together,
-    // and this prune is the backstop for a window that never produced a
-    // destroy notification — so covering only the two dedup maps left exactly
-    // the windows this function exists for holding a queue slot.
+    // The two OPEN QUEUES and the move-release one-shot set go with them.
+    // windowClosed drops all five together, and this prune is the backstop for
+    // a window that never produced a destroy notification — so covering only
+    // the two dedup maps left exactly the windows this function exists for
+    // holding a queue slot.
     //
     // Milder than a stale dedup entry (both queues are capped, and a flush or
     // an announce retry drains them wholesale), but a dead entry that reaches
@@ -1058,6 +1086,13 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
     });
     m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
         return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
+    });
+    // Already keyed by instance id, so it is compared against `alive` directly.
+    // A leaked entry can never fire (instance ids are unique to a window), but
+    // the set is otherwise unbounded across a session of drag-out floats and
+    // desktop moves whose windows die without a destroy notification.
+    m_moveReleasedInstances.removeIf([&alive](const QString& instanceId) {
+        return !alive.contains(instanceId);
     });
 }
 
@@ -1082,6 +1117,11 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // Arm the move-release one-shot BEFORE the pipeline gate, mirroring the
+    // bookkeeping above: the window is live and being moved, and its next
+    // announce must not be mistaken for a session restore (see
+    // m_moveReleasedInstances).
+    m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }
@@ -1144,6 +1184,7 @@ void TilingAdaptor::clearEngine()
     m_pendingIsDesktopSwitch = false;
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
+    m_moveReleasedInstances.clear();
     m_lastFloatBroadcast.clear();
     m_lastScrollTabColorsRelay.clear();
     m_lastEnabledBroadcast.reset();
