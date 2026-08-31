@@ -1163,8 +1163,17 @@ private:
     /// on the early FLOAT exits, which return before the resolver runs) so
     /// the caller's focus arm can read the openFocused override without a
     /// second rule resolve.
+    /// @p migrationReAdd marks a re-drive for a window this engine ALREADY
+    /// holds in another context (the screen / desktop migration windowOpened
+    /// performs), as opposed to a genuine first observation. Only the
+    /// placement store's reclaim-credit accounting reads it: a migration is
+    /// not an open and must not spend a session-restore credit a sibling
+    /// that has not reopened yet still needs. The record consumption itself
+    /// is deliberately NOT gated on it — a cross-screen migration is already
+    /// refused by the store's screen-matching accept, and a same-screen one
+    /// legitimately restores the window's own remembered float position.
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
-                            int minHeightIn, ScrollOpenParams* outOpenParams = nullptr);
+                            int minHeightIn, bool migrationReAdd = false, ScrollOpenParams* outOpenParams = nullptr);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -1178,7 +1187,9 @@ private:
     /// geometry emit the record-float branch of insertOpenedWindow performs.
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
-    void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
+    /// @p migrationReAdd carries insertOpenedWindow's flag through to the
+    /// store's credit accounting; see that declaration.
+    void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId, bool migrationReAdd);
     /// Emit geometryRestoreRequested for @p record's remembered free rect, if
     /// the restore gate allows it and the rect belongs to the screen the window
     /// is opening on. Shared by the two float-restore entry points; see the

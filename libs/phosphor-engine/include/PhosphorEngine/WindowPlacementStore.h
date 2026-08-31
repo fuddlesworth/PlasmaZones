@@ -127,22 +127,27 @@ public:
     /// live window's own context-rejected verdict, not an open that used up
     /// a restore.
     ///
-    /// The burn is per CALL, and the tiling engines do not call this exactly
-    /// once per open — the accounting is approximate in both directions, on
-    /// purpose, because both errors fail SAFE (a missed burn leaves a credit
-    /// the close-time revoke will take instead; an extra burn only makes a
-    /// reclaim less likely, never wrong):
-    ///  - AutotileEngine::insertWindow calls this only when its earlier tiers
-    ///    left the window uninserted AND the arrival is not a migration
-    ///    re-add, so a pre-seeded open burns nothing.
-    ///  - ScrollEngine::insertOpenedWindow has no migration guard, so a live
-    ///    window changing screen or desktop context re-drives the open path
-    ///    and burns again. It can only burn a NON-live record, so the cost is
-    ///    at most one not-yet-reopened sibling's restore credit.
-    /// A caller that needs exactly-once accounting must gate its own call;
-    /// do not read the burn as a per-open counter.
+    /// The burn is per CALL, so a caller that re-drives the open path for a
+    /// window ALREADY LIVE in its own state must pass @p burnCredit false —
+    /// a migration is not an open, and spending a session-restore credit on
+    /// one takes it from a sibling that has not reopened yet. The engines
+    /// differ in how they reach that verdict, and only ScrollEngine has to
+    /// state it here:
+    ///  - AutotileEngine::insertWindow skips the call entirely on a migration
+    ///    re-add (and on a pre-seeded insert), so it never reaches the burn.
+    ///  - ScrollEngine::insertOpenedWindow re-runs the whole open path on a
+    ///    migration by design, so it passes @p burnCredit instead. Only a
+    ///    SAME-SCREEN context change gets that far: a cross-screen migration
+    ///    fails the accept's screen term, and the exact-final early return
+    ///    below fires before the burn.
+    /// A missed burn still fails safe on its own (the credit is taken by the
+    /// close-time revoke instead); the parameter exists so the accounting is
+    /// stated by the caller that knows, not inferred here.
+    ///
+    /// @p burnCredit false suppresses ONLY the credit burn. Consumption,
+    /// re-binding and re-recording are unchanged.
     std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
-                                                 const QString& screenId);
+                                                 const QString& screenId, bool burnCredit = true);
 
     /// Non-consuming lookup (unlike take): the record for the same live instance, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the

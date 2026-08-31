@@ -1609,6 +1609,50 @@ private Q_SLOTS:
         QVERIFY(!store.peekForReclaim(QStringLiteral("app|third"), QStringLiteral("app")).has_value());
     }
 
+    void testTakeForReopen_migrationReDriveSpendsNoReclaimCredit()
+    {
+        // A migration re-drive is not an open. ScrollEngine re-runs its whole
+        // open path when a live window changes context, and spending a
+        // session-restore credit there takes it from a sibling that has not
+        // reopened yet — the window the credit exists to bring home.
+        //
+        // The live probe is load-bearing, not scenery: without it the
+        // re-bound record of the migrating window itself answers the reclaim
+        // lookup and the assertion passes whether or not the sibling's credit
+        // was burned.
+        WindowPlacementStore store;
+        QSet<QString> live{QStringLiteral("live")};
+        store.setLiveInstanceProbe([&live](const QString& windowId) {
+            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
+        // The sibling that has not reopened yet, holding the credit.
+        store.record(makePlacement(QStringLiteral("firefox|sibling"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-2")));
+        // The migrating window's own record: a floating slot on the screen it
+        // is re-arriving on, so the accept passes and the call reaches the
+        // burn rather than stopping at the exact-final gate.
+        store.record(makePlacement(QStringLiteral("firefox|live"), QStringLiteral("firefox"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-1")));
+
+        QVERIFY(store
+                    .takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("firefox|live"),
+                                   QStringLiteral("firefox"), QStringLiteral("DP-1"), /*burnCredit=*/false)
+                    .has_value());
+        QVERIFY2(store.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value(),
+                 "a migration re-drive must leave the sibling's session-restore credit alone");
+
+        // The identical call as a genuine OPEN does spend it, so the
+        // suppression is the parameter's doing and not a dead path.
+        QVERIFY(store
+                    .takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("firefox|live"),
+                                   QStringLiteral("firefox"), QStringLiteral("DP-1"))
+                    .has_value());
+        QVERIFY2(!store.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value(),
+                 "a genuine open must still retire a credit");
+    }
+
     void testMarkInstanceClosed_unobservedCloseEarnsNoShutdownGrace()
     {
         // The alive-set prune backstop discovers a window that died at some

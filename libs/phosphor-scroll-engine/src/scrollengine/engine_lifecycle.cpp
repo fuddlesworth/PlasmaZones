@@ -64,7 +64,7 @@ void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const 
     }
 }
 
-void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
+void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId, bool migrationReAdd)
 {
     // Registry answer, not a parse: a canonical id frozen before KWin resolved
     // the class has no appId to parse, and this gate would then silently skip
@@ -77,7 +77,8 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     // a FLOATING record is consumed — takeForReopen's contract. The accept
     // itself is the store's shared predicate.
     const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
-    const auto record = m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, key.screenId);
+    const auto record = m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, key.screenId,
+                                                                        /*burnCredit=*/!migrationReAdd);
     if (!record) {
         return;
     }
@@ -85,7 +86,8 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
-                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams)
+                                      int minWidthIn, int minHeightIn, bool migrationReAdd,
+                                      ScrollOpenParams* outOpenParams)
 {
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
@@ -137,7 +139,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // the same outcome through its record branch (record first, rule
         // float layered on top); this engine floats before ever consulting
         // the store, so the consumption happens here or never.
-        restoreFloatRecordForOpen(windowId, screenId);
+        restoreFloatRecordForOpen(windowId, screenId, migrationReAdd);
         Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
         return true;
     }
@@ -162,8 +164,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const QString appId = currentAppIdFor(windowId);
     if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
-        if (const auto record =
-                m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
+        if (const auto record = m_windowTracker->placementStore().takeForReopen(
+                engineId(), windowId, appId, currentKey.screenId, /*burnCredit=*/!migrationReAdd)) {
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 state->addFloating(windowId);
@@ -760,7 +762,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // parked right now.
     const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     ScrollOpenParams openParams;
-    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams)) {
+    // trackedHere, not bare `oldState`: the raw reverse-map key can be a
+    // phantom left by a refused earlier open, and such a window is NOT a live
+    // tile migrating across — it never landed, so its record is genuine
+    // restore memory and its arrival is a genuine open that should spend a
+    // credit. Membership is the same term the cross-screen defer gate above
+    // picked, for the same reason.
+    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, /*migrationReAdd=*/trackedHere,
+                            &openParams)) {
         // Every insert refused (the strip already holds the window). On a
         // fresh open nothing moved; on the MIGRATION path above the old
         // context already released the window and announced its own retile,

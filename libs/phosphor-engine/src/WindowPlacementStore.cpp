@@ -563,7 +563,8 @@ bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QStr
 } // namespace
 
 std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString& engineId, const QString& windowId,
-                                                                   const QString& appId, const QString& screenId)
+                                                                   const QString& appId, const QString& screenId,
+                                                                   bool burnCredit)
 {
     const auto accept = [&](const WindowPlacement& p) {
         return acceptsReopen(p, engineId, windowId, screenId);
@@ -647,8 +648,11 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
     }
     // Per-open reclaim-credit burn — see the header contract. Hit or miss,
     // and AFTER any consumption/re-record above (the bucket may have been
-    // erased and re-created by it, so the helper re-finds it).
-    burnReclaimCredit(windowId, appId);
+    // erased and re-created by it, so the helper re-finds it). Suppressed
+    // when the caller says this is not an open (a migration re-drive).
+    if (burnCredit) {
+        burnReclaimCredit(windowId, appId);
+    }
     return rec;
 }
 
