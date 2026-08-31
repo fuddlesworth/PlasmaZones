@@ -1,6 +1,22 @@
 {
     "releases": [
         {
+            "version": "3.4.4",
+            "date": "2026-08-30",
+            "highlights": [
+                "New: Maximize to Screen Edges gives a scrolling column the whole work area with no gaps, and the maximize button, Meta+PgUp and an application's own maximize request all do that on a scrolling monitor. The new shortcut is Meta+Alt+M, and Meta+Alt+F is a width verb again (#1007)",
+                "New: Center short columns, under Scrolling → Window → Window handling, centers the windows of a column that does not fill the screen instead of leaving the space at the end. It is off by default and a window rule can set it per monitor, desktop or activity (#1010)",
+                "New: the support archive records which KWin effects your configuration enables and which ones KWin has actually loaded (#1008)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1007, #1013)",
+                "Fixed: with more than one virtual desktop on a scrolling monitor, the first click on a window on a desktop you had switched away from works instead of being swallowed (#1005)",
+                "Fixed: coming back to a desktop leaves the strip working, so the first scroll after a return moves it (#1013)",
+                "Fixed: a window that says it is a dialog, stays above others or is skipped by the task switcher a moment after it opens is no longer placed into a column first. Yakuake's dropdown terminal is the case that showed it (#1009, #1011)",
+                "Fixed: Steam's game-launch dialog and its other fixed-size windows are kept out of placement by the built-in Steam rule (#1014)",
+                "Fixed: scrolling past a maximized column moves it once rather than running a second animation on top of the strip's own (#1012)",
+                "Fixed: an expanded rule on the Rules page shows the rule you just edited without collapsing the row (#1016)"
+            ]
+        },
+        {
             "version": "3.4.3",
             "date": "2026-08-29",
             "highlights": [
