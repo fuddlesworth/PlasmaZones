@@ -310,12 +310,16 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       of animating it, because a leg retargeted every 16 ms never progresses
 //       on a stateless curve.
 //
-//       Snap.resolveWindowRestore gained three in-args: isOpenPath, minWidth,
-//       minHeight. The cross-screen tile reclaim hangs off this slot and two of
-//       its drivers are NOT opens (the unminimize of a daemon-restart orphan
-//       and the pending-restores sweep); without the flag the daemon could not
+//       Snap.resolveWindowRestore gained three in-args: restoreReason, minWidth,
+//       minHeight. The cross-screen tile reclaim hangs off this slot and four of
+//       its drivers are NOT opens (the unminimize of a daemon-restart orphan,
+//       the pending-restores sweep, the bring-up stacking sweep and the
+//       desktop-arrival re-drive); without the argument the daemon could not
 //       tell them apart, and unminimizing a window teleported it across
-//       monitors. The min sizes exist because a reclaim ADOPTS the window into
+//       monitors. It began as an isOpenPath BOOL and became an enum: the
+//       desktop-arrival re-drive is a login-restore continuation that must skip
+//       the desktop restore but still qualify for the reclaim, which two states
+//       cannot express. The min sizes exist because a reclaim ADOPTS the window into
 //       a strip or layout and the adopting engine evaluates its oversized /
 //       float verdict exactly once from them, so passing 0,0 left an oversized
 //       window tiled for the session.

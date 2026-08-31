@@ -17,6 +17,13 @@
 
 namespace PhosphorEngine {
 
+/// Upper sanity bound for a virtual desktop number read back from disk. Not a
+/// compositor limit — KWin's real desktop count is only knowable at runtime, and
+/// the effect re-checks the target against the live list before moving anything.
+/// This exists so a corrupt or foreign session.json cannot put an arbitrary
+/// integer into a placement record.
+inline constexpr int MAX_PLAUSIBLE_VIRTUAL_DESKTOP = 1024;
+
 /// One engine's view of a window: which managed slot it occupies (or that it is
 /// floating / unmanaged) in THAT engine's mode. State is PER ENGINE — a window
 /// can be `snapped` in the snap engine AND `floating` in the autotile engine at
@@ -116,6 +123,19 @@ struct WindowPlacement
     /// grace (a close moments before the final logout save must still persist
     /// as restore evidence); never written to JSON.
     qint64 closedAtMsecs = 0;
+
+    /// TRANSIENT, never serialized: true only for a record this daemon read back
+    /// from disk at startup and has not yet re-captured live. It is what makes
+    /// the cross-desktop restore (WindowTrackingAdaptor::applyPersistedDesktopRestore)
+    /// a genuine login-time behaviour without a timer — the flag can only ever be
+    /// set on a record that predates this daemon's start, and the first live
+    /// engine capture clears it, so the restore fires at most once per record and
+    /// never for a placement made in this session.
+    ///
+    /// Deliberately absent from sameContentAs: it is not part of the persisted
+    /// content, and letting it count as a change would make the clearing merge
+    /// re-mark the store dirty and reschedule the save timer on every capture.
+    bool fromPersistedSession = false;
 
     bool isValid() const
     {
@@ -325,7 +345,14 @@ struct WindowPlacement
         p.appId = appId;
         p.windowId = obj.value(QLatin1String("windowId")).toString();
         p.screenId = obj.value(QLatin1String("screen")).toString();
-        p.virtualDesktop = obj.value(QLatin1String("desktop")).toInt();
+        // session.json is on-disk input this process does not control, so the
+        // desktop number is range-checked here rather than trusted all the way
+        // to the compositor. Anything outside a plausible desktop count is
+        // treated as unknown (0), which reads as "no remembered desktop" and
+        // leaves the window wherever it opens — the same outcome as a record
+        // that never carried one.
+        const int rawDesktop = obj.value(QLatin1String("desktop")).toInt();
+        p.virtualDesktop = (rawDesktop > 0 && rawDesktop <= MAX_PLAUSIBLE_VIRTUAL_DESKTOP) ? rawDesktop : 0;
         p.activity = obj.value(QLatin1String("activity")).toString();
         p.kind = clampWindowKindFromWire(obj.value(QLatin1String("kind")).toInt());
 
@@ -361,6 +388,22 @@ struct WindowPlacement
         // one legacy session behaves exactly as before, and the next save
         // stamps the derived value. Not migration code — a default.
         p.reclaimEligible = obj.value(QLatin1String("liveAtSave")).toBool(true);
+        // fromJson is the primary producer of this flag, but NOT the only one:
+        // WindowPlacementStore::record()'s append branch copies an incoming
+        // record wholesale, so a persisted record replayed through record()
+        // (deserialize) or re-recorded by takeForReopen carries the flag with
+        // it. Both of those are startup-time or already-spent paths.
+        //
+        // Deserialize itself is not unique either. WTA::loadState runs from the
+        // WindowTrackingAdaptor constructor, and again through the engines' load
+        // delegate (wired for the snap, autotile and scroll engines) driven from
+        // Daemon::finalizeStartup, so the store is loaded at least twice per
+        // startup and every load re-arms every record. The flag's correctness
+        // therefore rests on all of those calls being startup-time, which is why
+        // it is ALSO cleared by the first live engine capture rather than
+        // relying on the load being unique. There is no matching key in toJson:
+        // the flag must not survive a save/load round trip.
+        p.fromPersistedSession = true;
         return p;
     }
 };

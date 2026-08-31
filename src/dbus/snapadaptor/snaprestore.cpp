@@ -162,7 +162,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY,
+                                       int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY,
                                        int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
@@ -185,11 +185,70 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
+    const PhosphorEngine::RestoreReason reason = PhosphorEngine::clampRestoreReasonFromWire(restoreReason);
+    const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;
+    auto* const svc = m_adaptor->service(); // non-null: guarded above
+
+    // Claim this instance's placement record BEFORE anything reads one. The
+    // desktop restore below and the engine resolve after it are two independent
+    // selectors over the same appId bucket, and at login every uuid is fresh so
+    // both fall to that bucket. Claiming once makes them agree: without it a
+    // multi-window app got one record's desktop paired with another's zone, and
+    // an already-home window could consume a sibling's record outright.
+    //
+    // Open AND PendingSweep. The sweep re-resolves windows that are already
+    // OPEN, but for the placement store it CAN still be a first touch: a window
+    // whose open resolve arrived before the daemon was ready never got past the
+    // readiness gate above, so it never claimed anything. For one that did
+    // already claim, claimForOpen is idempotent and this is harmless. Without this the pairing guard was
+    // absent in exactly the slow-daemon login the feature exists for.
+    //
+    // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
+    // with stable uuids that route to the store's same-instance branch
+    // (DaemonRestartSweep), so their claim or consumption is already settled.
+    if (isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep) {
+        svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
+    }
+
     // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
     // be routed to a desktop whether or not it snaps (and even when it doesn't
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
     // early-return below.
-    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    const bool desktopRuleMatched = m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+
+    // Cross-desktop session restore — the snap-mode channel's arm of the same
+    // behaviour TilingAdaptor::dispatchWindowOpened runs for the tiling engines.
+    // Ahead of the engine resolve below and returning without snapping: the
+    // window is on its way to a desktop this screen is not showing, and snapping
+    // it into the CURRENT desktop's layout would place it where the user cannot
+    // see it and record a zone on the wrong desktop. The record is deliberately
+    // left unconsumed: the effect parks the window on the desktop move
+    // (SnapHandler::armDesktopArrivalRestore) and re-enters this slot with
+    // RestoreReason::DesktopArrival once that desktop is shown, which is when the zone
+    // resolves against the layout the window actually landed in.
+    //
+    // Suppressed by a matched RouteToDesktop, mirroring the tiling channel: the
+    // rule already named this window's desktop.
+    //
+    // Open only, matching the cross-screen reclaim below: the four non-open
+    // drivers of this slot (the unminimize of a daemon-restart orphan, the
+    // pending-restores sweep, the daemon-restart stacking sweep, and the
+    // desktop-arrival re-drive itself) must not teleport a window across
+    // desktops. DesktopArrival in particular has JUST landed where the record
+    // wanted it — moving it again would bounce it straight back off.
+    //
+    // Behind the disabled-context gate that applySnapResult applies to every
+    // zone placement this file makes. A user who turned PlasmaZones off for this monitor, desktop or
+    // activity expects it to leave their windows alone there, and moving one to
+    // another desktop is the most visible thing it could do. Checked against the
+    // screen the window OPENED on, since that is the context being acted in —
+    // applySnapResult's gate below cannot cover this path, because it keys on a
+    // placement result that does not exist yet here.
+    const bool contextDisabled =
+        m_contextResolver != nullptr && m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
+    if (isOpen && !desktopRuleMatched && !contextDisabled && m_adaptor->applyPersistedDesktopRestore(windowId)) {
+        return;
+    }
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
@@ -198,13 +257,18 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // (WindowPlacementStore::burnReclaimCredit documents the tiling half —
     // takeForReopen, which snap never calls). Runs for genuine OPENS on
     // SNAP-mode screens only: tiling-screen arrivals burn through their
-    // engine's own open path, and non-open drivers of this slot (unminimize,
-    // the pending-restores sweep) must retire nothing. Skipped when a tiling
+    // engine's own open path, and the re-resolve drivers of this slot
+    // (unminimize, the sweeps) must retire nothing. DesktopArrival burns
+    // like Open because it IS the open's continuation: the persisted
+    // desktop restore's early return above fires before this lambda exists,
+    // so the parked window's one burn happens at the arrival re-drive —
+    // exactly one burn per logical open either way. Skipped when a tiling
     // claim adopts the window below — the adopted windowOpened's
     // takeForReopen is that open's burn.
     bool reclaimedByTiling = false;
     const auto burnOpenCredit = [&]() {
-        if (!isOpenPath || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
+        const bool openLike = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
+        if (!openLike || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
             return;
         }
         PhosphorPlacement::WindowTrackingService* service = m_adaptor->service();
@@ -234,12 +298,33 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // there. (Managed-screen arrivals reach the reclaim through
         // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
         // fail the effect's canSnapRestore gate never reach this slot at
-        // all — see setCrossScreenTileReclaim's contract.) isOpenPath keeps
-        // the two NON-open drivers of this slot (the unminimize of a
-        // daemon-restart orphan, the pending-restores sweep) from
-        // teleporting a window the user merely unminimized.
+        // all — see setCrossScreenTileReclaim's contract.) The reason gate
+        // keeps the drivers that re-resolve an ALREADY-VISIBLE window (the
+        // unminimize of a daemon-restart orphan, the pending-restores sweep,
+        // the bring-up stacking sweep) from teleporting a window the user is
+        // looking at.
+        //
+        // DesktopArrival is admitted alongside Open, and that is the whole
+        // reason this argument stopped being a bool. It is a login-restore
+        // CONTINUATION, not a user action: the daemon moved the window to
+        // another desktop, deliberately placed nothing, and this is the
+        // re-drive once it landed. Denying it the reclaim — which the bool did,
+        // since it is not an open — permanently stranded any window whose
+        // record was tiled on another screen: it lost the reclaim on the open
+        // path (the desktop restore returned early) and again on arrival, and
+        // fell to the no-match float default instead.
+        //
+        // This DOES relax the never-move-a-visible-window rule, deliberately.
+        // The effect only drains an arrival once the window's own output is
+        // showing its desktop, so a reclaimed window is on screen at that
+        // moment. At login that is the user meeting the window for the first
+        // time, which is the intent. The cost is the delayed case: a park held
+        // until the user first visits that desktop much later, where the
+        // reclaim lands as a visible jump. That is the better trade against
+        // stranding the window on the wrong monitor for the whole session.
+        const bool mayReclaim = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
         if (result.deferredToTilingEngine && !routed) {
-            const bool reclaimed = isOpenPath && m_crossScreenTileReclaim
+            const bool reclaimed = mayReclaim && m_crossScreenTileReclaim
                 && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
             reclaimedByTiling = reclaimed;
             if (!reclaimed) {

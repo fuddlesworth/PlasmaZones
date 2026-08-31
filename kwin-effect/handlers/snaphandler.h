@@ -6,6 +6,7 @@
 #include "compositor/deferredwindowcommits.h"
 
 #include <PhosphorCompositor/TilingState.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QHash>
@@ -148,14 +149,18 @@ public:
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
-    /// isOpenPath: whether this resolve is driven by a window OPEN (session
-    /// restore, bring-up re-announce, deferred-routing flush) as opposed to
-    /// the unminimize-orphan and pending-restores-sweep drivers. Threaded to
-    /// the daemon, which gates the cross-screen tile reclaim on it — an
-    /// unminimize must never teleport a window across monitors.
+    /// @p reason says WHY this resolve is running. It is threaded to the daemon,
+    /// which gates the cross-desktop session restore and the cross-screen tile
+    /// reclaim on it: an unminimize must never teleport a window across
+    /// monitors, while the desktop-arrival re-drive DOES want the reclaim, which
+    /// is the distinction the old isOpenPath bool could not make.
+    /// It defaults to Open so the deferred-routing flush call sites, which
+    /// pass neither trailing argument, keep the open-path semantics they rely on
+    /// — including the frame-geometry shadow seed that RouteToScreen needs.
     void callResolveWindowRestore(KWin::EffectWindow* window,
                                   std::function<void(bool snapApplied)> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true, bool isOpenPath = true);
+                                  bool releaseSuppressionOnMiss = true,
+                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -277,8 +282,38 @@ public Q_SLOTS:
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                                int height);
     void slotPendingRestoresAvailable();
+    /// Re-drive the snap restore for windows parked by armDesktopArrivalRestore
+    /// that the just-arrived desktop has brought into view. Connected to KWin's
+    /// desktopChanged.
+    ///
+    /// The snapping counterpart of the autotile desktop-return catch-scan in
+    /// TilingHandler::slotScreensChanged: snapping has no membership set the
+    /// effect can consult, so where the catch-scan can safely re-announce
+    /// anything it does not already track, this arm carries its own list.
+    void slotDesktopChangedRestoreArrivals();
     void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
+
+public:
+    /// Park @p windowId for a snap restore once the desktop it was just moved to
+    /// comes into view. Called from PlasmaZonesEffect::slotWindowDesktopMoveRequested
+    /// after the move, and ONLY when the target desktop is not the one on screen —
+    /// a window moved onto the visible desktop needs no deferral.
+    void armDesktopArrivalRestore(const QString& windowId);
+
+    /// Drop @p windowId from the desktop-arrival park (window closed, or the
+    /// daemon placed it by another route).
+    void cancelDesktopArrivalRestore(const QString& windowId)
+    {
+        m_awaitingDesktopArrivalRestore.remove(windowId);
+    }
+
+    /// Drain ONE window's desktop-arrival park, if it has one and has arrived.
+    /// Returns true when the restore was actually dispatched, so a caller that
+    /// has its own placement to run for the same window can stand down rather
+    /// than racing this one — two placement answers for a single window resolve
+    /// in D-Bus reply order, which is nobody's intent.
+    bool drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window);
 
 private:
     void cancelPendingMinimizeFloat(const QString& windowId)
@@ -332,6 +367,20 @@ private:
     // Snap membership retained only as minimize provenance while daemon-owned
     // visual placement state is unavailable.
     QSet<QString> m_restartSnapCandidates;
+    // Windows the daemon relocated to a virtual desktop that was NOT in view,
+    // awaiting the desktop switch that brings them into sight so their snap
+    // restore can run in the context they actually landed in.
+    //
+    // Deliberately a SET OF EXACTLY THOSE WINDOWS rather than a sweep over
+    // everything on the arriving desktop. The obvious implementation — reuse
+    // slotPendingRestoresAvailable's shape, skipping the daemon's tracked set —
+    // is wrong here: WindowTrackingService::snappedWindows() lists only windows
+    // assigned to a ZONE, so every FLOATED window looks untracked to it. That is
+    // harmless for a once-per-daemon-session retry net, but on a signal that
+    // fires every time the user changes desktop it would re-drive the float
+    // restore continually and drag each floated window back to its recorded
+    // position, undoing any move the user had made since.
+    QSet<QString> m_awaitingDesktopArrivalRestore;
     // Pending debounced minimize→float commits. Shares the compositor's
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};

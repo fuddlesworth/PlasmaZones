@@ -204,6 +204,41 @@ public:
     /// Returns true when a credit was burned.
     bool burnReclaimCredit(const QString& windowId, const QString& appId);
 
+    /// Reserve, once per opening window instance, the record that instance owns.
+    ///
+    /// WHY THIS EXISTS. Two independent selectors read a record for the same
+    /// opening window: the daemon's cross-desktop restore through peek() (newest
+    /// first) and the engines' restore through take() / takeForReopen(). At login
+    /// every uuid is fresh, so both always fall to their appId branch, and their
+    /// orders differ — a multi-window app got one record's DESKTOP paired with a
+    /// different record's ZONE. Worse, an already-home window could consume a
+    /// SIBLING's record, so that sibling never returned to its desktop at all.
+    ///
+    /// The fix has to be a RESERVATION, never a predicate. "Skip armed records"
+    /// or "skip non-same-instance records" both look right and both destroy the
+    /// feature: after a logout EVERY record is persisted-armed and NONE is
+    /// same-instance, so such a predicate refuses the whole bucket. Instead the
+    /// first daemon-side touch of an opening window claims one record, and every
+    /// later reader honours that claim.
+    ///
+    /// Non-consuming and idempotent: repeat calls for the same instance return
+    /// the same record for the life of the claim. Selection is the same-instance
+    /// record when one carries restorable content (the daemon-restart shape,
+    /// uuid intact — never the slot-less geometry stub every open writes), else
+    /// the NEWEST unclaimed record in the appId bucket that is not bound to a
+    /// still-live sibling. Newest matches peek() and takeForReopen(); take()'s
+    /// oldest-first is a starvation order, not a claim about ownership, and with
+    /// N windows the SET consumed is the same either way.
+    ///
+    /// Returns the claimed record, or nullopt when nothing is claimable.
+    std::optional<WindowPlacement> claimForOpen(const QString& windowId, const QString& appId);
+
+    /// Drop @p windowId's open claim. Called when the window closes, so a claim
+    /// never outlives the instance that made it. Consumption through take() /
+    /// takeForReopen() releases it too — after the re-bind the record IS the
+    /// window's own, and the claim is redundant identity.
+    void releaseOpenClaim(const QString& windowId);
+
     /// Inject the live-window probe takeForReopen's appId fallback uses to
     /// skip records bound to a still-open window (see its doc). Answers per
     /// full windowId; evaluated at consume time. Unwired (tests) means no
@@ -316,6 +351,19 @@ private:
     /// comment. Non-static: the middle tier consults m_liveInstanceProbe.
     void evictForCapacity(QList<WindowPlacement>& bucket);
 
+    /// May the instance behind @p windowId read @p candidate?
+    ///
+    /// FAILS OPEN by design. A claim naming a record that is no longer in the
+    /// store (evicted, collapsed, consumed elsewhere) is ignored rather than
+    /// honoured, because honouring it would make the instance permanently
+    /// unpairable and restore NOTHING — strictly worse than the disagreement
+    /// this whole mechanism exists to fix.
+    bool pairingAllows(const QString& windowId, const WindowPlacement& candidate) const;
+
+    /// Drop any open claim naming @p recordWindowId, for use at the two sites
+    /// that remove a record out from under a possible claim.
+    void dropClaimsNaming(const QString& recordWindowId);
+
 public:
     /// Per-app record cap (public so tests can pin the eviction contract).
     static constexpr int MaxPerApp = 16;
@@ -340,6 +388,20 @@ private:
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
     std::function<bool(const QString&)> m_liveInstanceProbe;
+
+    /// instanceId → the windowId of the record that instance claimed at open,
+    /// and its inverse. TRANSIENT and never serialized: they describe which live
+    /// window owns which record for the duration of one open, and mean nothing
+    /// across a restart.
+    ///
+    /// Kept in lockstep, and kept TRUE: every path that removes a record drops
+    /// the claim naming it, so a claim in these maps always names a record that
+    /// is still in the store. That invariant is what lets the lookups be hash
+    /// hits instead of a full-store scan on a per-open hot path. The lookup
+    /// still fails open if the two ever disagree, because refusing an instance
+    /// every record is worse than the disagreement the claim exists to fix.
+    QHash<QString, QString> m_openPairing;
+    QHash<QString, QString> m_claimedBy;
 };
 
 } // namespace PhosphorEngine
