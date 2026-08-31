@@ -147,7 +147,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     // profiles directory behind.
     if (dir.isEmpty() || filePath.isEmpty() || !QDir().mkpath(dir)) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: no writable profiles directory for" << name;
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset “%1”.").arg(name));
         return false;
     }
 
@@ -156,7 +156,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (m_snapshot && !m_snapshot(filePath)) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
                             << "— could not capture its pre-edit content";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset “%1”.").arg(name));
         return false;
     }
 
@@ -175,7 +175,7 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         // dropped something, so this must not emit as well.
         if (m_rollback)
             m_rollback(filePath);
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset “%1”.").arg(name));
         return false;
     }
 
@@ -258,7 +258,7 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
 
     QFile file(filePath);
     if (filePath.isEmpty() || !file.exists()) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not find the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not find the preset “%1”.").arg(name));
         return false;
     }
     // A false return means the pre-edit content could not be captured. Writing
@@ -266,7 +266,7 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     if (m_snapshot && !m_snapshot(filePath)) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
                             << "— could not capture its pre-edit content";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset “%1”.").arg(name));
         return false;
     }
     if (!file.remove()) {
@@ -276,7 +276,7 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
         // rollback owns the dirty-state signal (see addUserPreset).
         if (m_rollback)
             m_rollback(filePath);
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset “%1”.").arg(name));
         return false;
     }
 

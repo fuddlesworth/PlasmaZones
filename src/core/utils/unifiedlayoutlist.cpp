@@ -109,7 +109,7 @@ LayoutPreview noScrollingTemplatePreview()
 {
     LayoutPreview preview;
     preview.id = QString(PhosphorZones::NoScrollingTemplate);
-    preview.displayName = PhosphorI18n::tr("None");
+    preview.displayName = PhosphorI18n::tr("None", "the explicit no-template choice");
     preview.description =
         PhosphorI18n::tr("Use no template on this screen, so columns keep the built-in widths and heights");
     preview.isScrollingTemplate = true;
@@ -133,12 +133,12 @@ LayoutPreview noLayoutPreview()
 {
     LayoutPreview preview;
     preview.id = QString(PhosphorZones::NoSnappingLayout);
-    preview.displayName = PhosphorI18n::tr("None");
+    preview.displayName = PhosphorI18n::tr("None", "the explicit no-layout choice");
     preview.description = PhosphorI18n::tr(
         "Use no layout on this screen, so windows float and nothing "
         "snaps or tiles them");
     preview.sectionKey = QStringLiteral("no-layout");
-    preview.sectionLabel = PhosphorI18n::tr("None");
+    preview.sectionLabel = PhosphorI18n::tr("None", "@title:group section holding the no-layout row");
     preview.sectionOrder = 99;
     return preview;
 }

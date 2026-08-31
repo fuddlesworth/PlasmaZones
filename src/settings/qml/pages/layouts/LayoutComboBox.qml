@@ -51,7 +51,7 @@ ComboBox {
     // Placed after Default rather than before it so row 0 keeps meaning what
     // updateSelection and clearSelection assume it means.
     property bool showExplicitNoneOption: false
-    property string explicitNoneText: i18n("None")
+    property string explicitNoneText: i18nc("the explicit no-layout choice", "None")
     /// The value the explicit-none row carries. Never empty when the row is
     /// shown — an empty token would collide with the Default row and make the
     /// two indistinguishable to updateSelection's value match.

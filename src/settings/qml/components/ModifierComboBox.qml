@@ -31,7 +31,7 @@ RowLayout {
 
         readonly property var modifierOptions: [
             {
-                "text": i18n("None"),
+                "text": i18nc("@item:inlistbox no modifier key selected", "None"),
                 "value": 0
             },
             {

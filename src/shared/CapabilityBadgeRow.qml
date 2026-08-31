@@ -72,7 +72,7 @@ Row {
         source: "transform-scale-symbolic"
         color: Kirigami.Theme.highlightColor
         Accessible.name: i18n("Reflows")
-        tooltipText: i18n("Reflows neighbouring windows when you resize a tiled window")
+        tooltipText: i18n("Reflows neighboring windows when you resize a tiled window")
     }
 
     // Script-state indicator for scripted algorithms that persist an opaque

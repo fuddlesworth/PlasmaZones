@@ -407,7 +407,7 @@ private Q_SLOTS:
                  "an unconfirmed overwrite must be refused");
         QCOMPARE(toastSpy.count(), 1);
         QCOMPARE(toastSpy.first().first().toString(),
-                 PhosphorI18n::tr("A set named \"%1\" already exists.").arg(QStringLiteral("Taken")));
+                 PhosphorI18n::tr("A set named “%1” already exists.").arg(QStringLiteral("Taken")));
 
         // The stored set is intact — same description, same payload.
         const QVariantMap row = rowFor(sets, QStringLiteral("Taken"));
@@ -448,16 +448,15 @@ private Q_SLOTS:
         QVERIFY(!sets->applySet(QStringLiteral("nonexistent")));
         QCOMPARE(missingSpy.count(), 1);
         QCOMPARE(missingSpy.first().first().toString(),
-                 PhosphorI18n::tr("Could not read the set \"%1\".").arg(QStringLiteral("nonexistent")));
+                 PhosphorI18n::tr("Could not read the set “%1”.").arg(QStringLiteral("nonexistent")));
 
         // Newer format version.
         writeSetFile(decorationSetsDir() + QStringLiteral("/newer.json"), validSetPayload(QStringLiteral("newer"), 2));
         QSignalSpy versionSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY(!sets->applySet(QStringLiteral("newer")));
         QCOMPARE(versionSpy.count(), 1);
-        QCOMPARE(
-            versionSpy.first().first().toString(),
-            PhosphorI18n::tr("\"%1\" was written by a newer version of PlasmaZones.").arg(QStringLiteral("newer")));
+        QCOMPARE(versionSpy.first().first().toString(),
+                 PhosphorI18n::tr("“%1” was written by a newer version of PlasmaZones.").arg(QStringLiteral("newer")));
 
         // Foreign payload (an event path, not a decoration surface).
         QJsonObject entry;
@@ -475,7 +474,7 @@ private Q_SLOTS:
         QVERIFY(!sets->applySet(QStringLiteral("foreign")));
         QCOMPARE(validateSpy.count(), 1);
         QCOMPARE(validateSpy.first().first().toString(),
-                 PhosphorI18n::tr("\"%1\" does not match this page.").arg(QStringLiteral("foreign")));
+                 PhosphorI18n::tr("“%1” does not match this page.").arg(QStringLiteral("foreign")));
     }
 
     /// An import carrying no entries would land as a row that applySet then
@@ -599,7 +598,7 @@ private Q_SLOTS:
         QVERIFY(!sets->removeSet(QStringLiteral("nonexistent")));
         QCOMPARE(toastSpy.count(), 1);
         QCOMPARE(toastSpy.first().first().toString(),
-                 PhosphorI18n::tr("Could not delete \"%1\".").arg(QStringLiteral("nonexistent")));
+                 PhosphorI18n::tr("Could not delete “%1”.").arg(QStringLiteral("nonexistent")));
         QCOMPARE(setsSpy.count(), 0);
     }
     /// Export is fire-and-forget from QML's side, so every failure has to carry
@@ -639,7 +638,7 @@ private Q_SLOTS:
                  "exporting a set that does not exist must fail");
         QCOMPARE(missing.count(), 1);
         QCOMPARE(missing.first().first().toString(),
-                 PhosphorI18n::tr("Could not read the set \"%1\".").arg(QStringLiteral("Nope")));
+                 PhosphorI18n::tr("Could not read the set “%1”.").arg(QStringLiteral("Nope")));
     }
 
     /// The case canUseSetName's path compare exists for: a file whose stem IS a

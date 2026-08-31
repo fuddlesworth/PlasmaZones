@@ -517,9 +517,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // that predates a range change.
     schema.groups[CD::scrollingDragScrollGroup()] = {
         {CD::enabledKey(), CD::scrollingDragScrollEnabled(), QMetaType::Bool,
-         QStringLiteral("Scroll the strip when a dragged window is held near the edge of the working area.")},
+         QStringLiteral("Scroll the strip when a dragged window is held near the edge of the work area.")},
         {CD::triggerWidthKey(), CD::scrollingDragScrollTriggerWidth(), QMetaType::Int,
-         QStringLiteral("How close to the edge of the working area the pointer has to be before the strip can start "
+         QStringLiteral("How close to the edge of the work area the pointer has to be before the strip can start "
                         "scrolling."),
          clampInt(CD::scrollingDragScrollTriggerWidthMin(), CD::scrollingDragScrollTriggerWidthMax())},
         {CD::delayMsKey(), CD::scrollingDragScrollDelayMs(), QMetaType::Int,
