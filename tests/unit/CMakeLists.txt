@@ -1172,6 +1172,20 @@ target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/l
 target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
 
+# WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
+# comparison that keeps or drops a snap when the compositor reports a window
+# on a new output. Split out rather than folded into test_wta_convenience,
+# which is already at the file-size ceiling. Same shared fixture, so the same
+# FakeScreenProvider compile-in and engine link set.
+add_executable(test_wta_screen_changed dbus/test_wta_screen_changed.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_screen_changed PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
+
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)

@@ -23,6 +23,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 #include <memory>
@@ -57,8 +58,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     const bool startedFloating = m_dragActivation.startedFloating;
 
     // Identity of the interactive move/resize this drag belongs to, captured
-    // synchronously at dispatch. The three rescue sites in the reply lambda
-    // below (ApplyFloat's end, ApplySnap's and RestoreSize's cancel) all read
+    // synchronously at dispatch. The four rescue sites in the reply lambda
+    // below (ApplyFloat's end, ApplySnap's cancel, and RestoreSize's cancel
+    // when the resize is still owed / end when it is not) all read
     // isUserMove() at reply time, up to EndDragTimeoutMs later. By then the
     // user may have released the remaining button and begun a NEW gesture on
     // the same window (a Meta+RMB resize, say) — the predicate cannot tell the
@@ -332,10 +334,46 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // defers (100ms retry) until ALL buttons are released —
                     // noticeable delay when using a mouse button (RMB) for
                     // zone activation.
-                    if (KWin::Window* kw = rescuableMove()) {
-                        kw->cancelInteractiveMoveResize();
+                    //
+                    // Both the cancel and the apply run under the
+                    // self-caused-frame-change guard, and the cancel is why
+                    // the bracket has to open BEFORE it rather than inside
+                    // applyWindowGeometry: cancelInteractiveMoveResize()
+                    // reverts the window to its DRAG-START rect, which on a
+                    // cross-screen drop is the source monitor. KWin fires
+                    // outputChanged synchronously from that revert, in the gap
+                    // before the zone geometry lands. By then the drag tracker
+                    // has already stopped (this is the async endDrag reply), so
+                    // the outputChanged handler's mid-drag gate no longer
+                    // holds it back and it reported a cross-screen move to the
+                    // SOURCE screen — moments after the daemon stored the
+                    // TARGET screen in commitSnap. The daemon read the
+                    // mismatch as the user moving the window off its zone and
+                    // unsnapped the snap it had just committed, leaving the
+                    // window at the zone rect the apply below writes but with
+                    // no snap state behind it.
+                    //
+                    // Pre-seed the tracked screen from the daemon's
+                    // authoritative answer first, exactly as the batch apply
+                    // does and for the same reason: the bracket covers the
+                    // synchronous frame changes, the seed covers any async
+                    // follow-up (X11 size constraints, client round-trip)
+                    // that lands after it closes.
+                    if (!outcome.targetScreenId.isEmpty()) {
+                        m_trackedScreenPerWindow[safeWindow] = outcome.targetScreenId;
                     }
-                    applyWindowGeometry(safeWindow, snapGeometry);
+                    // Save/restore, not set/clear (nesting-safe).
+                    const bool prevInApply = m_daemonGate.inGeometryApply;
+                    m_daemonGate.inGeometryApply = true;
+                    {
+                        const auto applyGuard = qScopeGuard([this, prevInApply] {
+                            m_daemonGate.inGeometryApply = prevInApply;
+                        });
+                        if (KWin::Window* kw = rescuableMove()) {
+                            kw->cancelInteractiveMoveResize();
+                        }
+                        applyWindowGeometry(safeWindow, snapGeometry);
+                    }
                     // Drag-drop snap committed — record in snapping's border set,
                     // but only for a resolved snap-mode screen. An empty
                     // (unresolved) or autotile-managed screen is owned by
@@ -395,11 +433,40 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1;
                     if (sizeAlreadyRestored) {
                         qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping the resize";
+                        // The resize is owed no longer, but the rescue still is.
+                        // Skipping it here left KWin's interactive move alive on
+                        // the COMMON drag-out path (slotRestoreSizeDuringDrag
+                        // lands mid-drag, so this branch is the usual one), and a
+                        // live move makes the window follow every desktop switch
+                        // until the last button comes up somewhere KWin's filter
+                        // can see. END rather than cancel, for ApplyFloat's
+                        // reason: no apply follows to undo a revert, so
+                        // cancelInteractiveMoveResize would throw the window back
+                        // to the drag-start rect and undo the drag-out itself.
+                        if (KWin::Window* kw = rescuableMove()) {
+                            kw->endInteractiveMoveResize();
+                        }
                     } else {
                         // qRound, not truncation: fractional-scale outputs leave
                         // sub-pixel residue in frameGeometry() (same convention as
                         // the toRect() sites).
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), outcome.width, outcome.height);
+                        // Same self-caused-frame-change bracket as ApplySnap,
+                        // for the same reason: the cancel reverts to the
+                        // drag-start rect, and on a cross-screen drag-out that
+                        // revert lands on the SOURCE monitor and fires a
+                        // synchronous outputChanged the post-drag handler would
+                        // forward to the daemon as a user move. `geo` above was
+                        // captured from the pre-cancel frame, so the apply puts
+                        // the window back where the user dropped it and the
+                        // tracked screen (still the drop screen, because the
+                        // guard suppresses the revert's stamp) stays correct.
+                        // Save/restore, not set/clear (nesting-safe).
+                        const bool prevInApply = m_daemonGate.inGeometryApply;
+                        m_daemonGate.inGeometryApply = true;
+                        const auto applyGuard = qScopeGuard([this, prevInApply] {
+                            m_daemonGate.inGeometryApply = prevInApply;
+                        });
                         if (KWin::Window* kw = rescuableMove()) {
                             kw->cancelInteractiveMoveResize();
                         }
