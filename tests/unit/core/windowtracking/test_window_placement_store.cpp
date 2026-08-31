@@ -287,7 +287,10 @@ private Q_SLOTS:
         const auto stolen = store.claimForOpen(QStringLiteral("newclass|u2"), QStringLiteral("newclass"));
         QVERIFY2(!stolen.has_value(), "a renamed record must stay claimed by the instance that owns it");
 
-        // And the owner still reaches it under its new id.
+        // Documentation, not a second guard: this also passes under a naive
+        // "drop the claim" fix and under the stale-id bug, because claimForOpen
+        // self-heals a dangling pairing. The sibling assertion above is the one
+        // that carries this case.
         const auto mine = store.claimForOpen(QStringLiteral("newclass|u1"), QStringLiteral("newclass"));
         QVERIFY(mine.has_value());
         QCOMPARE(mine->windowId, QStringLiteral("newclass|u1"));

@@ -197,9 +197,10 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // an already-home window could consume a sibling's record outright.
     //
     // Open AND PendingSweep. The sweep re-resolves windows that are already
-    // OPEN, but for the placement store it is still a first touch: a window
+    // OPEN, but for the placement store it CAN still be a first touch: a window
     // whose open resolve arrived before the daemon was ready never got past the
-    // readiness gate above, so it never claimed anything. Without this the pairing guard was
+    // readiness gate above, so it never claimed anything. For one that did
+    // already claim, claimForOpen is idempotent and this is harmless. Without this the pairing guard was
     // absent in exactly the slow-daemon login the feature exists for.
     //
     // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
