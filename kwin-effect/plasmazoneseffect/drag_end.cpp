@@ -272,16 +272,25 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // to the SOURCE strip's screen instead of where the user
                     // actually dropped it.
                     //
-                    // Fall back to the daemon's own release screen when the
-                    // compositor-side resolve comes back empty. Everything above
-                    // has already committed the float effect-side (tiled
-                    // membership cleared, snap entry dropped, rules
-                    // re-resolved); bailing here left the daemon's per-screen
-                    // float slot unwritten, so its float readers still answered
-                    // "not floating" for a window this side had floated.
+                    // Fall back to the RELEASE CURSOR when the window-based
+                    // resolve comes back empty (a window fully off-screen
+                    // mid-reconfigure). Not outcome.targetScreenId: the daemon
+                    // clears that field on this branch by construction and
+                    // passes the cursor instead, precisely because "the release
+                    // screen is resolved plugin-side from the cursor position"
+                    // (drag_protocol.cpp's bypass arm, the sole ApplyFloat
+                    // producer). Everything above has already committed the
+                    // float effect-side, so bailing without a screen leaves the
+                    // daemon's per-screen float slot unwritten and its float
+                    // readers answering "not floating" for a window this side
+                    // has floated.
                     QString dropScreenId = getWindowScreenId(safeWindow);
                     if (dropScreenId.isEmpty()) {
-                        dropScreenId = outcome.targetScreenId;
+                        const QPoint releaseCursor(outcome.x, outcome.y);
+                        if (const KWin::LogicalOutput* output =
+                                KWin::effects ? KWin::effects->screenAt(releaseCursor) : nullptr) {
+                            dropScreenId = resolveEffectiveScreenId(releaseCursor, output);
+                        }
                     }
                     if (dropScreenId.isEmpty()) {
                         qCWarning(lcEffect) << "endDrag ApplyFloat: no drop screen resolved for" << windowId
