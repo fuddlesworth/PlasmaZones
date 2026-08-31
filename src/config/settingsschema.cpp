@@ -63,6 +63,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
+    appendWindowRestoreSchema(s);
     appendDecorationsSchema(s);
 
     return s;
@@ -1170,9 +1171,18 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Outer gap along the right edge of the screen. Only applies when per-side outer gaps are on."),
          clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
     };
+}
 
+// ─── WindowRestore ────────────────────────────────────────────────────────────
+// Mode-neutral cross-desktop session restore. Top-level group following the
+// Windows / Gaps precedent: all three engines read the one value, so it does not
+// belong under any single mode's tree.
+
+void appendWindowRestoreSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
     schema.groups[CD::windowRestoreGroup()] = {
-        {CD::restoreDesktopOnLoginKey(), CD::restoreWindowsToDesktopOnLogin(), QMetaType::Bool,
+        {CD::restoreOnLoginKey(), CD::restoreWindowsToDesktopOnLogin(), QMetaType::Bool,
          QStringLiteral("After a logout, put each window back on the virtual desktop it was on. Without this, a "
                         "Wayland session reopens every window on whichever desktop is showing at login.")},
     };

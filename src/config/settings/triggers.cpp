@@ -291,8 +291,8 @@ P_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandling
 // one mode's behaviour group — but it lives here with the rest of the restore
 // family (which already spans the snapping, tiling and scrolling groups) so the
 // login-restore policy is not split across two files.
-P_STORE_GET(bool, restoreWindowsToDesktopOnLogin, windowRestoreGroup, restoreDesktopOnLoginKey, bool)
-P_STORE_SET_BOOL(setRestoreWindowsToDesktopOnLogin, windowRestoreGroup, restoreDesktopOnLoginKey,
+P_STORE_GET(bool, restoreWindowsToDesktopOnLogin, windowRestoreGroup, restoreOnLoginKey, bool)
+P_STORE_SET_BOOL(setRestoreWindowsToDesktopOnLogin, windowRestoreGroup, restoreOnLoginKey,
                  restoreWindowsToDesktopOnLoginChanged)
 P_STORE_GET(bool, snappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreFloatedOnLoginKey,
             bool)

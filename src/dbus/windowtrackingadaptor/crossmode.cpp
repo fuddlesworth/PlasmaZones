@@ -599,6 +599,15 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     if (liveDesktop <= 0) {
         return false;
     }
+    // On SEVERAL desktops but not all. virtualDesktop reports only the first of
+    // them, so it passes the > 0 check above while the effect's on-all-desktops
+    // guard does not catch it either. The move pins the window to a single
+    // desktop, so restoring here would silently drop the rest of a membership
+    // the user chose deliberately. A remembered single desktop is not worth
+    // that, so leave it alone.
+    if (meta->virtualDesktops.size() > 1) {
+        return false;
+    }
 
     // Non-consuming: the record must stay put for the engine restore that runs
     // once the window actually lands on its recorded desktop. peek's accept runs
@@ -639,18 +648,39 @@ bool WindowTrackingAdaptor::applyPersistedDesktopRestore(const QString& windowId
     //
     // transform, not record(): the flag is not persisted content, so this must
     // not restamp a sequence or mark the store dirty.
+    // Instance identity, not an exact compare on the full composite: the store
+    // matches records that way everywhere else (the contract note at the top of
+    // WindowPlacementStore.cpp), and an appId that drifted mid-session makes the
+    // composite ids differ for what is one window. Mirrors that predicate's
+    // contract, including its refusal to fuzzy-match a separator-less id — the
+    // helper itself is file-local to the store, so it cannot be called here.
     const QString recordWindowId = record->windowId;
-    m_service->placementStore().transform([&recordWindowId](PhosphorEngine::WindowPlacement& p) {
-        if (p.windowId != recordWindowId || !p.fromPersistedSession) {
+    const QString recordInstance = recordWindowId.contains(QLatin1Char('|'))
+        ? PhosphorIdentity::WindowId::extractInstanceId(recordWindowId)
+        : QString();
+    const int spent = m_service->placementStore().transform([&](PhosphorEngine::WindowPlacement& p) {
+        if (!p.fromPersistedSession) {
+            return false;
+        }
+        const bool sameInstance = p.windowId == recordWindowId
+            || (!recordInstance.isEmpty() && p.windowId.contains(QLatin1Char('|'))
+                && PhosphorIdentity::WindowId::extractInstanceId(p.windowId) == recordInstance);
+        if (!sameInstance) {
             return false;
         }
         p.fromPersistedSession = false;
         return true;
     });
+    if (spent <= 0) {
+        // The record went away between the peek and the spend. Emitting now
+        // would move the window with the one-shot unspent, so it could fire
+        // again later; declining costs this window its restore for the session,
+        // which is the safer of the two.
+        qCWarning(lcDbusWindow) << "applyPersistedDesktopRestore: record for" << windowId
+                                << "vanished before the one-shot could be spent — declining the move";
+        return false;
+    }
 
-    // The effect's slot re-guards the range against the live desktop list and
-    // refuses to un-sticky an on-all-desktops window, so no range check here
-    // could be authoritative anyway; the daemon's job is to name the target.
     qCInfo(lcDbusWindow) << "applyPersistedDesktopRestore: sending" << windowId << "back to recorded virtual desktop"
                          << record->virtualDesktop << "— it reopened on" << liveDesktop;
     Q_EMIT windowDesktopMoveRequested(windowId, record->virtualDesktop);

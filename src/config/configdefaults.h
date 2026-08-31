@@ -249,7 +249,8 @@ public:
     // the collapse is the surprising behaviour, not the restore.
     //
     // Mode-neutral: read by all three engines, unlike the per-mode
-    // *RestoreFloatedWindowsOnLogin trio below.
+    // *RestoreFloatedWindowsOnLogin pair below (the scrolling twin's default
+    // lives on ISettings).
     static bool restoreWindowsToDesktopOnLogin()
     {
         return true;

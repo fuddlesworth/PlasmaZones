@@ -413,7 +413,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // rather than folded into a neighbouring lambda, so removing the
     // instrumentation is a whole-block delete with no behaviour attached to it.
     //
-    // Registered AFTER two other desktopChanged handlers, and Qt delivers
+    // Registered AFTER three other desktopChanged handlers, and Qt delivers
     // direct connections in registration order, so this line printing first is
     // a property of those two not logging under this category rather than
     // something the ordering guarantees. Both are effect-internal and neither

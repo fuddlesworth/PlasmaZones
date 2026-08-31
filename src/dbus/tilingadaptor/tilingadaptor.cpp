@@ -607,9 +607,10 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // baked into the parked entry instead.
     PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
     bool ruleRouted = false;
+    bool desktopRuleMatched = false;
     if (m_windowTrackingAdaptor) {
-        const QString routed =
-            m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId, &ruleRouted);
+        const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId,
+                                                                                  &ruleRouted, &desktopRuleMatched);
         if (!routed.isEmpty()) {
             routedEntry.screenId = routed;
         }
@@ -622,11 +623,14 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // desktop-return catch-scan re-announces it on arrival and this same
     // dispatch then runs with the two contexts in agreement.
     //
-    // Under the same `ruleRouted` suppression as the cross-screen reclaim, and
-    // for the same reason: applyOpenRoutingForTiling has already emitted this
-    // window's RouteToDesktop move if a rule matched, and a remembered desktop
-    // must not fight an explicit directive.
-    if (!ruleRouted && m_windowTrackingAdaptor
+    // Suppressed by a matched DESKTOP directive only, not by `ruleRouted`:
+    // applyOpenRoutingForTiling has already emitted this window's RouteToDesktop
+    // move if one matched, and a remembered desktop must not fight an explicit
+    // directive. A RouteToScreen or SnapToZone match (which also sets
+    // `ruleRouted`) says nothing about which desktop the window belongs on, so
+    // gating on that would let a bare move-to-monitor rule silently disable the
+    // remembered desktop here while leaving it on for snapping screens.
+    if (!desktopRuleMatched && m_windowTrackingAdaptor
         && m_windowTrackingAdaptor->applyPersistedDesktopRestore(routedEntry.windowId)) {
         // No parked entry to keep: the catch-scan announce is the retry, and a
         // park would additionally resurrect the window on the next unrelated

@@ -1084,8 +1084,15 @@ public:
     /// cross-screen-reclaim veto applies the same precedence the snap facade
     /// does. The two answers are deliberately separate; overloading the empty
     /// return let the two channels drift apart.
+    ///
+    /// @p desktopDirectiveMatched, when non-null, is set true only when a
+    /// RouteToDesktop directive matched. It is deliberately SEPARATE from
+    /// @p directiveMatched, which is also set by RouteToScreen and SnapToZone:
+    /// a rule that pins a window to a monitor says nothing about which virtual
+    /// desktop it belongs on, so it must not suppress the cross-desktop session
+    /// restore. This is the same split the snap facade applies.
     QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
-                                      bool* directiveMatched = nullptr);
+                                      bool* directiveMatched = nullptr, bool* desktopDirectiveMatched = nullptr);
 
     /// Canonical key for daemon-local per-window shadow maps, and the canonical
     /// form sibling adaptors must agree on for per-window state. Window ids
@@ -1149,10 +1156,13 @@ public:
     /// placement that predates this daemon's start. It CLEARS that flag on the
     /// record it acted on, which is what makes "at most once per record" hold
     /// even when the engine restore declines and never consumes the record.
-    /// Suppressed by a matched routing directive on the tiling channel: a
-    /// RouteToDesktop rule is an explicit instruction and outranks a remembered
-    /// desktop, the same precedence the cross-screen reclaim already yields to.
+    /// Suppressed on BOTH channels by a matched RouteToDesktop directive, and by
+    /// that directive alone: such a rule is an explicit instruction and outranks
+    /// a remembered desktop. It is deliberately NOT suppressed by a RouteToScreen
+    /// or SnapToZone match, which pin the window's monitor or zone and say
+    /// nothing about which virtual desktop it belongs on.
     bool applyPersistedDesktopRestore(const QString& windowId);
+
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *

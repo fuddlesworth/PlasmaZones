@@ -99,7 +99,14 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
                 // the persisted desktop standing, so it must leave the flag
                 // standing too or the seed would disarm every record before the
                 // first window is ever placed.
-                merged.fromPersistedSession = false;
+                //
+                // Taken from the INCOMING record rather than hard-cleared: a
+                // genuine live capture always arrives with the flag false, so
+                // the disarm still happens, but deserialize() replays persisted
+                // records through record() and two records that collapse onto
+                // one instance would otherwise disarm each other DURING LOAD,
+                // silently costing those windows their restore.
+                merged.fromPersistedSession = incoming.fromPersistedSession;
             }
             for (auto e = incoming.engines.constBegin(); e != incoming.engines.constEnd(); ++e) {
                 merged.engines.insert(e.key(), e.value());
@@ -263,6 +270,18 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                 // sibling recordless — the same harm the live-instance probe
                 // guards the reopen fallback against, reached via the close
                 // collapse instead.
+                continue;
+            }
+            if (other.fromPersistedSession && other.virtualDesktop > 0) {
+                // A persisted record for a window that has NOT REOPENED YET.
+                // The live-instance probe above cannot protect it, because a
+                // window that has never opened is by definition not live. The
+                // absorb below carries free geometry and engine slots across
+                // but has no arm for the per-instance virtualDesktop, so
+                // pruning here would silently cost that window the cross-desktop
+                // restore it is still waiting for: log in with two windows of
+                // one app on different desktops, close the first, and the second
+                // loses its desktop memory before it ever opens.
                 continue;
             }
             bool sharesScreen = false;
@@ -451,6 +470,13 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                                   << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
+        // The record has now been consumed by an engine restore and re-bound to
+        // a live instance, so it is no longer "as persisted". Cleared explicitly
+        // because record()'s APPEND branch copies the incoming record wholesale
+        // and would otherwise re-arm the one-shot under the LIVE windowId — and
+        // that branch is the one this call always takes, since the take above
+        // just removed the only record for this instance.
+        rec->fromPersistedSession = false;
         record(*rec);
     } else {
         qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"

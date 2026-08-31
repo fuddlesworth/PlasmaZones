@@ -346,15 +346,21 @@ struct WindowPlacement
         }
 
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
-        // fromJson is the ONLY producer of this flag. The daemon's sole
-        // deserialize is the startup load (Daemon::finalizeStartup →
-        // WTA::loadState → placementStore().deserialize), so a set flag means
-        // "written before this daemon started". The engines' load delegate is
-        // wired to that same loadState and has no other caller; were one ever
-        // added mid-session, records would re-arm — which is why the flag is
-        // ALSO cleared by the first live capture below rather than relying on
-        // the load being unique. There is no matching key in toJson: the flag
-        // must not survive a save/load round trip.
+        // fromJson is the primary producer of this flag, but NOT the only one:
+        // WindowPlacementStore::record()'s append branch copies an incoming
+        // record wholesale, so a persisted record replayed through record()
+        // (deserialize) or re-recorded by takeForReopen carries the flag with
+        // it. Both of those are startup-time or already-spent paths.
+        //
+        // Deserialize itself is not unique either. WTA::loadState runs from the
+        // WindowTrackingAdaptor constructor, and again through the engines' load
+        // delegate (wired for the snap, autotile and scroll engines) driven from
+        // Daemon::finalizeStartup, so the store is loaded at least twice per
+        // startup and every load re-arms every record. The flag's correctness
+        // therefore rests on all of those calls being startup-time, which is why
+        // it is ALSO cleared by the first live engine capture rather than
+        // relying on the load being unique. There is no matching key in toJson:
+        // the flag must not survive a save/load round trip.
         p.fromPersistedSession = true;
         return p;
     }

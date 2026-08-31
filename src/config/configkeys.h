@@ -308,6 +308,8 @@ public:
     P_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
+    // Also used by the top-level WindowRestore group for the mode-neutral
+    // cross-desktop restore — the group disambiguates, so the key stays generic.
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
     // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
     // Scrolling.Behavior — restore a FLOATED (unsnapped / untiled) window to its
@@ -319,8 +321,6 @@ public:
     // places (keep-above, applied by the KWin effect beneath any SetWindowLayer rule).
     P_CONFIG_KEY(keepFloatingAboveKey, "KeepFloatingAbove")
 
-    // WindowRestore
-    P_CONFIG_KEY(restoreDesktopOnLoginKey, "RestoreDesktopOnLogin")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
