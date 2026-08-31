@@ -21550,7 +21550,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="696"/>
         <source>Untitled window</source>
         <translation type="unfinished"></translation>
     </message>
