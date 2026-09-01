@@ -35,19 +35,32 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
     // capture is the source; snap and autotile read the SAME value, so a window's
     // free position never differs between modes and a managed rect can't leak from
     // one engine's store into the other's float restore.
-    if (m_service) {
-        m_service->recordFreeGeometry(windowId, screenId, QRect(x, y, width, height), overwrite);
-    }
+    m_service->recordFreeGeometry(windowId, screenId, QRect(x, y, width, height), overwrite);
     qCDebug(lcDbusWindow) << "Stored pre-tile geometry to record for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
 }
 
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 {
-    if (windowId.isEmpty() || !m_service) {
+    // No m_service guard: the ctor qFatals on a null service and then assigns
+    // it unconditionally, so it is non-null for the object's whole life. The
+    // three siblings below deref unguarded on that basis, and a half-guard here
+    // only made a reader wonder which of the two positions the file held.
+    if (windowId.isEmpty()) {
         return false;
     }
     const QString screenId = m_service->screenForWindow(windowId);
+    // Same resolver as getValidatedPreTileGeometry, which is what keeps the two
+    // honest: they are a documented pair — "is there a pre-tile geometry" and
+    // "give me the pre-tile geometry" — and answering them from different
+    // record sets would make one a liar.
+    //
+    // The resolver is per-window by construction, which is the right answer on
+    // its own terms. SnapHandler dropped its pre-check against this method for
+    // exactly what appId matching used to bring: "a stale cross-session entry
+    // from a prior window instance (keyed by appId) would block the fresh
+    // per-instance capture and freeze float-restore at ancient coordinates". A
+    // per-window question deserves a per-window answer.
     return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
 }
 
@@ -63,17 +76,12 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     // pre-tile frame as a whole is obsolete — a per-screen clear would leave
     // other monitors restoring a position captured under a layout that is
     // gone.
-    if (m_service) {
-        m_service->clearFreeGeometry(windowId);
-    }
+    m_service->clearFreeGeometry(windowId);
 }
 
 PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
     PhosphorProtocol::PreTileGeometryList result;
-    if (!m_service) {
-        return result;
-    }
     // Source from the SINGLE float-back store — the unified record's shared
     // per-screen free geometry — so the effect's float-cache seed sees every
     // window's float-back regardless of which mode captured it.
@@ -120,6 +128,17 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     // one deref and missed the next.
     const QString screenId = m_service->screenForWindow(windowId);
 
+    // A PER-WINDOW restore ("put THIS window back where it was before we tiled
+    // it"), and the resolver is per-window by construction — there is no
+    // sharing mode left to opt out of. That is the whole point: sharing used to
+    // admit a same-app SIBLING's free geometry, and for a window with no record
+    // of its own — the ordinary case once an app's bucket has filled with dead
+    // instances at MaxPerApp — it borrowed a stranger's rect and handed it back
+    // as this window's pre-tile position. Worse, the rect is resolved against
+    // screenForWindow(), the daemon's TRACKED screen, so a sibling's rect from
+    // another monitor came back either verbatim (when the tracked screen
+    // matched the sibling's) or re-centred onto that tracked screen — and the
+    // effect applies it as absolute coordinates, moving the window there.
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         return false;

@@ -152,6 +152,23 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                                      << "— target intersects no live screen";
                     g = QRect();
                 }
+                // intersectsAnyLiveScreen is NOT a screen-agreement check and
+                // must not be read as one: it asks whether the rect is on ANY
+                // live output, and a mis-keyed rect is — the wrong one. It
+                // therefore fails open for exactly the case that matters here.
+                // The key here is the LIVE screenForWindow, falling back to
+                // the record's own screen only when that is empty, so it can
+                // genuinely select another monitor's entry when the window has
+                // moved. The ZoneAssignmentEntry below would then carry a
+                // targetGeometry on one screen while targetScreenId names
+                // another, which is what the explicit check exists to stop.
+                if (const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen; g.isValid()
+                    && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()
+                    && !m_windowTrackingAdaptor->service()->geometryBelongsToScreen(g, restoreScreen)) {
+                    qCInfo(lcDaemon) << "windowsReleased: dropping snap-float restore for" << windowId << "geo=" << g
+                                     << "— does not lie on" << restoreScreen;
+                    g = QRect();
+                }
                 if (g.isValid()) {
                     ZoneAssignmentEntry entry;
                     entry.windowId = windowId;

@@ -808,6 +808,12 @@ void Daemon::stop()
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setRuleStore(nullptr);
+        // The zone-detection borrow belongs in this block too, and was the one
+        // late-bound pointer missing from it. Nothing can deref it in the
+        // teardown gap today (its single use is at wiring time, never on a
+        // D-Bus-reachable path), so this is the grep-discoverable contract
+        // rather than a live fix.
+        m_windowTrackingAdaptor->setZoneDetectionAdaptor(nullptr);
     }
 
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via

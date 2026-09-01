@@ -611,6 +611,14 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
             m_lastAppliedTileRect.remove(windowId);
+            // Pending seeds and focus follow the same obligation every other
+            // drop path carries (removeWindow, handoffRelease, the defer gate,
+            // claimCrossScreenReopen). Without the focus purge, the autotile
+            // screen's next applyTiling drains an entry naming a window that
+            // now lives on another monitor and emits activateWindowRequested
+            // for it — a focus steal with no repair path.
+            purgeFromPendingOrders(windowId);
+            purgePendingFocusForWindow(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
@@ -792,10 +800,8 @@ void AutotileEngine::revalidateWindowContext(const QString& windowId, const QStr
 void AutotileEngine::onWindowAdded(const QString& windowId)
 {
     const QString screenId = screenForWindow(windowId);
-    // Computed before the first gate: BOTH gates below need it, and hoisting it
-    // also keeps the daemon-injected float predicate out of an arrival's path
-    // entirely (see ruleWillFloat) rather than running it inside the marker's
-    // window on a path the marker says it has no say over.
+    // Computed before the gate below, which exempts an arrival from the
+    // tileability half.
     const bool isMigrationArrival = m_migrationArrival && m_migrationArrival->windowId == windowId;
     // The two disjuncts are NOT symmetric for an arrival, so they are not
     // exempted together:
@@ -808,8 +814,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // cannot reach this line with a non-autotile screen. Exempting it would buy
     // nothing and would drop the guard against ever tiling onto a snap screen.
     //
-    // shouldTileWindow IS exempted for an arrival, for the reason the cap gate
-    // below is: the source state has already dropped the window, so refusing here
+    // shouldTileWindow IS exempted for an arrival: the source state has already dropped the window, so refusing here
     // strands it — removed from the source, keyed to the destination, present in
     // neither, and isWindowTiled() then reports a phantom tile forever. An
     // arrival's tileability was already settled on the source (a sticky window
@@ -822,55 +827,50 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     if (!isAutotileScreen(screenId) || (!isMigrationArrival && !shouldTileWindow(windowId))) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
                                                   << "isAutotile=" << isAutotileScreen(screenId);
+        // windowOpened keys the reverse map BEFORE calling in here, so this
+        // return has to sweep that key exactly as the defer gate and
+        // claimCrossScreenReopen sweep theirs — otherwise isWindowTracked
+        // answers true for a window no TilingState holds, the daemon's float
+        // dispatch skips the adoption handoff, and setWindowFloat writes into a
+        // state that ignores it. That is the #1028 stranding, reached through
+        // this gate rather than the cap gate that used to sit below.
+        //
+        // The membership test is LOAD-BEARING, not defensive. shouldTileWindow
+        // answers false for a window floating in a current-context state, which
+        // is every window the overflow pass floated out — so those windows take
+        // this same return on their next re-announce. An unconditional sweep
+        // here would untrack every one of them.
+        const auto keyIt = m_states.windowKeys().constFind(windowId);
+        if (keyIt != m_states.windowKeys().constEnd()) {
+            const PhosphorTiles::TilingState* held = m_states.stateForKey(keyIt.value());
+            if (!held || !held->containsWindow(windowId)) {
+                m_states.removeWindow(windowId);
+                m_windowMinSizes.remove(windowId);
+                m_autotileFloatedWindows.remove(windowId);
+                purgeFromPendingOrders(windowId);
+            }
+        }
         return;
     }
 
+    // No cap gate here. The cap is enforced by applyTiling's overflow pass,
+    // which floats everything past effectiveMaxWindows back out; under
+    // Unlimited the only ceiling left is MaxZones, which that pass still
+    // applies.
+    // Refusing the window here instead delivered neither: the open was dropped
+    // on the floor, so an over-cap window was left unmanaged (not tiled, not
+    // floated, just wherever KWin put it) and — because windowOpened keys the
+    // reverse map BEFORE this call — it also left a phantom key behind.
+    // isWindowTracked then answered true for a window no TilingState held, so
+    // the daemon's float dispatch skipped the adoption handoff and drove
+    // setWindowFloat straight into a state that silently ignored it: the
+    // minimize float and the unminimize unfloat both became no-ops, the effect's
+    // float cache latched at "floating" for the rest of the session, and
+    // focus-follows-mouse (which pauses while the active window floats) died
+    // with it. Admitting the window and letting the overflow pass decide is the
+    // behaviour AutotileConfig::overflowBehavior documents, and it is what a
+    // migration arrival has always done.
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
-    const int maxWin = effectiveMaxWindows(screenId);
-    // A window OPENING under a matched "Float this app" rule must bypass the
-    // tiled-window cap: it opens floating and so consumes no tile slot
-    // (tiledWindowCount excludes floats), and insertWindow marks it floating once
-    // inserted. Dropping it here would leave it untracked — neither floating in
-    // autotile (so the IsFloating match field stays false) nor re-tileable via
-    // Meta+F.
-    //
-    // A migration ARRIVAL bypasses the cap outright, whatever float state it
-    // carries across (see insertShouldFloat). By the time it reaches here its
-    // source state has already dropped it, so refusing would strand it: removed
-    // from the source, keyed to the destination, and present in neither state —
-    // isWindowTiled() would then report a phantom tile forever. Accepting is
-    // safe because applyTiling's overflow pass floats everything past the cap
-    // back out. Screens that must turn a full destination away have to refuse
-    // BEFORE the removal, which is what the proactive bare-cap guard in
-    // NavigationController::crossOutputMove does.
-    //
-    // The predicate is skipped outright for an arrival: it is dead there (the
-    // arrival exemption already carries the gate) and it is a daemon-injected
-    // callback, so not running it keeps an arrival's marker window free of
-    // foreign code — matching insertShouldFloat, which short-circuits it for the
-    // same reason.
-    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId, screenId);
-    // A window the state ALREADY holds is exempt from the cap: it consumes no
-    // new slot, and refusing its RE-ANNOUNCE broke every mode transition whose
-    // strict seed filled the state to exactly the cap — each of the effect's
-    // follow-up windowOpened calls hit tiledWindowCount >= maxWin and PURGED
-    // the window from the seed order, so the order could never resolve and its
-    // timeout chain stayed armed for the session. (The insert-time float/focus
-    // sync is skipped either way: insertWindow returns false for a contained
-    // window, and seeded windows get that sync separately in the strict-seed
-    // path.) insertWindow below no-ops safely on a contained window.
-    const bool alreadyHeld = state && state->containsWindow(windowId);
-    if (state && !alreadyHeld && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
-        qCDebug(PhosphorTileEngine::lcTileEngine)
-            << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
-        // Purge this window from pending initial orders so the order doesn't
-        // leak waiting for a window that will never be inserted. Shared
-        // helper, not a bare removeAll: an order emptied here must also drop
-        // its generation/strict entries or its timeout chain stays armed.
-        purgeFromPendingOrders(windowId);
-        return;
-    }
-
     const bool inserted = insertWindow(windowId, screenId);
 
     if (inserted) {

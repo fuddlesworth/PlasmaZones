@@ -161,6 +161,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="isDesktopSwitch" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="True if the change is due to desktop/activity switch (effect should skip geometry restore/re-notification)."/>
             </arg>
+            <arg name="screenDesktops" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="screenId to virtual desktop (int) the announced set was RESOLVED AGAINST. This signal is asynchronous while the compositor's own desktopChanged is not, so an announce can arrive after the user has switched again, describing a desktop that is no longer current. Without this stamp the receiver cannot tell such an announce from a fresh one — its own last-reported desktop already equals the live one — and would install a managed set for one desktop while filtering windows by another. Receivers compare against what they last reported per screen and DROP a mismatch, relying on the next announce rather than queuing the dropped one for replay."/>
+            </arg>
         </signal>
 
         <signal name="activeLayoutsChanged">

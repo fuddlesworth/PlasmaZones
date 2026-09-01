@@ -64,8 +64,12 @@ p_add_test(test_localized_context_substitution core/test_localized_context_subst
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp)
-target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Needs the FakeScreenProvider: the mis-keyed free-geometry guard only engages
+# with real output geometry behind the ScreenManager (it fails open otherwise).
+add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_lifecycle COMMAND test_wts_lifecycle)
 
 add_executable(test_wts_session core/windowtracking/test_wts_session.cpp)
@@ -91,7 +95,11 @@ add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Qt6::Gui named explicitly, matching test_wts_lifecycle: both targets compile
+# FakeScreenProvider.cpp, which uses QScreen. It resolved transitively through
+# plasmazones_core before, so the two targets disagreed about a dependency they
+# share.
+target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
 add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp)
@@ -1084,6 +1092,16 @@ add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
 target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
+
+# Pure-logic test for the desktop-switch pre-autotile restore decision
+# (tilinghandler/pretiledecisions.h) — the truth table over
+# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
+# pinning the cross-screen decline that keeps a bucket rect from another
+# monitor moving the window there. Same header-only reach as the scroll test.
+add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
+target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently

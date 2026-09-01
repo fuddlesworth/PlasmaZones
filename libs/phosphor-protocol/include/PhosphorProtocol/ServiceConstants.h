@@ -470,6 +470,28 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       cannot tell a user verb from an insert-driven reflow, and it dropped
 //       the fullscreen whenever an unrelated window merely opened and slid the
 //       strip.
+
+//       Tiling managedScreensChanged ALSO gains a third argument in this same
+//       step, screenDesktops (a{sv}) — the screenId to virtual-desktop map the
+//       announced set was RESOLVED AGAINST. One bump, not two: both changes
+//       land in the SAME unreleased cycle, which is the case the fold-in rule
+//       at v5 spells out ("Do NOT split it back into one bump per change"), and
+//       no released peer ever speaks an intermediate version.
+//
+//       A CHANGED REQUIRED SIGNAL this time rather than a new one, and its two
+//       pairings fail as silently as the rest: an old effect cannot marshal the
+//       third argument and simply stops receiving the signal, which is the
+//       managed-set announcement the whole tiling seam is built on, while an
+//       old daemon marshals nothing extra and silently keeps the race the
+//       argument exists to close.
+//
+//       The race: the announce is asynchronous while the compositor's own
+//       desktopChanged is not, so it can arrive after the user has switched
+//       again. The effect cannot detect that on its own — by then its
+//       last-reported desktop already equals the live one, so a stale announce
+//       is indistinguishable from a fresh one, and it would install a managed
+//       set computed for one desktop while filtering windows by another. The
+//       stamp makes the announce self-describing.
 inline constexpr int ApiVersion = 9;
 inline constexpr int MinPeerApiVersion = 9;
 

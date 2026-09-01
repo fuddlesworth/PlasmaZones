@@ -850,6 +850,17 @@ private:
     /// per-output virtual desktops). Deduplicates against m_lastScreenDesktop and
     /// only fires when the daemon service is registered.
     void reportScreenDesktop(const QString& screenId, int desktop);
+
+    /// What this effect last told the daemon each screen's desktop is.
+    ///
+    /// The authority for rejecting a managedScreensChanged announce that the
+    /// compositor has already outrun: the announce carries the desktops it was
+    /// resolved against, and a disagreement with this map means a newer switch
+    /// happened while it was in flight.
+    const QHash<QString, int>& lastReportedScreenDesktops() const
+    {
+        return m_lastScreenDesktop;
+    }
     QString getWindowScreenId(KWin::EffectWindow* w) const;
     /// getWindowScreenId for a caller that has already resolved the window id.
     /// The engine-authoritative scroll override is keyed on the window id, so
@@ -3599,8 +3610,6 @@ private Q_SLOTS:
     /// and parses. A 50ms single-shot debounce coalesces the burst into a
     /// single fetch at the trailing edge.
     void slotRulesChanged();
-
-private:
 };
 
 } // namespace PlasmaZones

@@ -401,8 +401,8 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     return adjustGeometryToScreen(geo);
 }
 
-std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                                       bool exactOnly) const
+std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId,
+                                                                       const QString& screenId) const
 {
     if (windowId.isEmpty()) {
         return std::nullopt;
@@ -411,42 +411,99 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // per-screen free geometry. (The legacy per-engine m_unmanagedGeometries store
     // is no longer consulted — two parallel stores drifted and leaked the zone/tile
     // rect into float.) Free geometry is shared across modes, so snap and autotile
-    // resolve the same value; prefer this screen's remembered spot, then any other
-    // screen's (cross-screen validated).
-    // The non-exact default is DELIBERATE cross-instance float-back sharing
-    // (free positions only, never zone/tile slots — those reads are exact-only
-    // via peekExact); callers with a per-window contract pass exactOnly.
-    // Accept only records that can actually answer: peek's same-instance branch
-    // honours the predicate too, so a window whose OWN record is free-geometry-less
-    // (a bare engine-slot partial) falls through to the appId bucket instead of
-    // shadowing a sibling's usable float-back — the cross-instance sharing the
-    // non-exact default documents. exactOnly passes an empty appId, so for those
-    // callers the predicate only turns a contentless own-record hit into the
-    // same nullopt it produced before.
-    const QString appId = exactOnly ? QString() : currentAppIdFor(windowId);
+    // resolve the same value for a given screen.
+    // PER-WINDOW, always. An empty appId keeps peek on its same-instance branch,
+    // so a window with no usable record of its own gets nullopt rather than a
+    // same-app sibling's rect. This used to be opt-in behind an exactOnly flag
+    // that defaulted to sharing, and the sharing is what discussion #1028 turned
+    // out to be: an app's bucket fills with dead instances at MaxPerApp, a live
+    // window with no record borrows a ghost's, and the absolute coordinates in
+    // it put the window on whatever monitor that ghost last occupied.
+    //
+    // "Restore to where this app last floated" was the argument for sharing. It
+    // is a convenience with a bad failure mode, and every caller here is asking
+    // the per-window question instead. A window with nothing on record simply
+    // stays where it is, which is the least surprising outcome — the wording
+    // the autotile path used when it opted out on its own.
+    const QString appId;
     const auto rec = m_placementStore.peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
         return p.anyFreeGeometry().isValid();
     });
     if (!rec) {
         return std::nullopt;
     }
-    const QRect exact = rec->freeGeometryFor(screenId);
-    if (exact.isValid()) {
-        return validateGeometryForScreen(exact, screenId, screenId);
+    // Resolve an EMPTY screenId to the record's own screen rather than looking
+    // up the empty key, which can never hit.
+    //
+    // The callers reach this with an empty id far more often than the name
+    // suggests: WindowTrackingAdaptor's two pre-tile entry points derive it
+    // from screenForWindow(), which answers through the window's owning
+    // SnapState and returns empty for any window snap does not track — every
+    // autotile-only and scroll-only window. With the cross-screen fallback
+    // gone, an empty key is a guaranteed miss, so those windows' float-back
+    // silently stopped working for reasons that had nothing to do with their
+    // geometry. Falling back to the record's own screen asks the question the
+    // caller meant; a record with no screen either still yields nullopt below.
+    const QString resolvedScreen = screenId.isEmpty() ? rec->screenId : screenId;
+    if (resolvedScreen.isEmpty()) {
+        return std::nullopt;
     }
-    // Deterministic cross-screen fallback (shared with anyFreeGeometry()) — a
-    // raw QHash walk here picked a different float-back screen run to run.
-    const QString fallbackScreen = rec->anyFreeGeometryScreenId();
-    if (!fallbackScreen.isEmpty()) {
-        return validateGeometryForScreen(rec->freeGeometryFor(fallbackScreen), fallbackScreen, screenId);
+    // THIS SCREEN only. There is no cross-screen fallback: a position remembered
+    // on another monitor is not a float-back for this one. The fallback used to
+    // re-centre such a rect onto screenId, which sounds harmless and is not —
+    // it silently relocates a window the user put here, and it only ever
+    // guessed, since a window that has never floated on this screen has no
+    // remembered spot here to return to. A caller that finds nothing leaves the
+    // window where it is, which is both honest and the least surprising
+    // outcome.
+    //
+    // The re-centring in validateGeometryForScreen is still reachable through
+    // its other callers; what is gone is this function MANUFACTURING a
+    // cross-screen case to feed it. Passing screenId on both sides keeps the
+    // on-screen sanity check (a remembered rect can be off-canvas after a
+    // resolution change) without any cross-screen adjustment.
+    const QRect exact = rec->freeGeometryFor(resolvedScreen);
+    if (!exact.isValid()) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    // Do not trust the KEY. A record can be mis-keyed — a rect filed under one
+    // screen while its coordinates describe another — and the sanity check
+    // below cannot catch that, because isGeometryOnScreen asks whether a rect
+    // is on ANY screen and a mis-keyed rect is: the wrong one. It would come
+    // back verbatim and move the window there, which is exactly the
+    // cross-screen restore this function no longer does. Records written
+    // before the guard in recordFreeGeometry exist on disk in user sessions,
+    // so the read has to defend itself.
+    if (!geometryOverlapsScreen(exact, resolvedScreen)) {
+        qCWarning(lcPlacement) << "validatedUnmanagedGeometry: record for" << windowId << "is filed under"
+                               << resolvedScreen << "but" << exact << "does not lie there — ignoring";
+        return std::nullopt;
+    }
+    return validateGeometryForScreen(exact, resolvedScreen, resolvedScreen);
 }
 
 void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                                                bool overwrite)
 {
     if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    // The pair must agree. This map is keyed by screen and holds ABSOLUTE
+    // coordinates, so filing a rect under a screen it does not lie on makes the
+    // key a lie — and float restore, which is screen-local, then hands that rect
+    // back for the wrong monitor and moves the window there. Mis-filing is
+    // permanent until the record is evicted, so refusing is the safer
+    // direction. Note it does NOT simply "self-heal on the next capture" on the
+    // pre-tile path: the capture being refused is the one taken as the window
+    // is tiled, and the engine-tiled guard below then refuses every later
+    // capture for as long as it stays tiled — so one refusal can mean no
+    // float-back for that whole tiled life. That is why the predicate has to be
+    // exactly right rather than merely conservative. Warn rather than drop
+    // silently: a mismatch means the caller's screenId and geometry came from
+    // different moments, and the caller is what needs fixing.
+    if (!geometryOverlapsScreen(geometry, screenId)) {
+        qCWarning(lcPlacement) << "recordFreeGeometry: refusing" << geometry << "for" << windowId << "under" << screenId
+                               << "— the geometry does not lie on that screen";
         return;
     }
     // INVARIANT (WindowPlacement::freeGeometryByScreen): this map holds ONLY a
@@ -578,7 +635,25 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     p.windowId = windowId;
     p.appId = appId;
     p.screenId = screenId;
-    p.freeGeometryByScreen.insert(screenId, geometry);
+    // Same key/geometry agreement guard recordFreeGeometry runs, because this
+    // is the OTHER live writer into the shared free-geometry map — the comment
+    // over there calling itself the "single write point" is not true of this
+    // tree. The caller pairs the effect's close-time screen with the
+    // last-reported frame shadow, i.e. two sources sampled at two moments,
+    // which is exactly the mis-key shape.
+    //
+    // It gates ONLY the geometry insert, never the whole function: the screen
+    // adoption, the owning-engine slot synthesis and the pure-float sibling
+    // collapse below are why this path exists, and an early return would
+    // forfeit all three to fix a field none of them reads. geometryOverlapsScreen
+    // fails OPEN with no ScreenManager, so an embedder without one keeps
+    // today's behaviour instead of silently losing every close capture.
+    if (geometryOverlapsScreen(geometry, screenId)) {
+        p.freeGeometryByScreen.insert(screenId, geometry);
+    } else {
+        qCWarning(lcPlacement) << "recordFloatingClose: refusing" << geometry << "for" << windowId << "under"
+                               << screenId << "— the geometry does not lie on that screen; recording the rest";
+    }
     // Preserve the existing record's per-engine slots and context. Carrying a
     // non-empty engine map is what makes the store merge adopt the new screenId
     // (a geometry-only partial, like recordFreeGeometry, would leave the stale
@@ -1090,6 +1165,11 @@ int WindowTrackingService::lastUsedDesktop() const
 
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 {
+    // The assert has a release-build partner, unlike a bare one: with no snap
+    // state, snapAllStates() is empty and lastUsedZoneClass() answers empty, so
+    // the oldClass guard below returns before the loop and the loop itself
+    // null-checks each store. The assert is the debug-build shout; the early
+    // return is what makes a release build safe.
     Q_ASSERT(hasSnapState());
     // Last-used is per-key: retag every store whose last-used class matches the one
     // the representative currently reports (the class of the window that was

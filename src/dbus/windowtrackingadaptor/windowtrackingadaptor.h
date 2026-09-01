@@ -800,16 +800,21 @@ public:
     /// the layout assigned to that screen's (desktop, activity) context, the
     /// same id the windowless context cascade stamps.
     ///
-    /// EVERY per-window resolver must go through this rather than the bare
-    /// buildRuleQueryForWindow free function. Seven of them share one
+    /// This is the hint-bearing helper the snap engine's exclusion-query
+    /// provider uses (enginewiring.cpp, its only caller). It is NOT the
+    /// enforcement point for uniform stamping — the per-window resolvers call
+    /// the bare buildRuleQueryForWindow and stamp their context through
+    /// stampScreenContext, which is the mechanism that actually keeps them
+    /// consistent.
+    ///
+    /// The stamping matters because SIX resolvers share one
     /// RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
     /// revision), and resolveCached returns the cached actions WITHOUT
-    /// consulting the query on a hit — so whichever of those seven touches a
+    /// consulting the query on a hit — so whichever of those six touches a
     /// window first fixes the context every later one reuses for that window's
-    /// lifetime. (The other two consumers do not share it:
-    /// shouldRestoreSizeOnUnsnap calls the uncached resolve(), and the snap
-    /// engine's exclusion-query provider feeds SnapEngine's separate
-    /// exclusion evaluator.)
+    /// lifetime. (The remaining resolvers do not share it: shouldRestoreSizeOnUnsnap
+    /// calls the uncached resolve(), and shouldFloatByRule, scrollOpenRuleParams,
+    /// tabColorRuleParams and dropIndicatorRuleParams opt out.)
     ///
     /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
     /// and unhinted paths resolve different screens, so the ORDER matters too.
@@ -1546,6 +1551,15 @@ public:
      */
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
 
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    ///
+    /// Public so TilingAdaptor can stamp managedScreensChanged with the
+    /// per-screen desktop the announced set was resolved against. A pure
+    /// query — the router state it reads lives on WTA, which is why the
+    /// caller cannot answer it itself.
+    int currentDesktopForScreen(const QString& screenId) const;
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
@@ -1597,9 +1611,6 @@ private:
      *        disabled-context gates and last-used-zone tracking.
      */
     int currentDesktop() const;
-    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
-    /// desktops, #648), falling back to the global currentDesktop().
-    int currentDesktopForScreen(const QString& screenId) const;
 
     // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits

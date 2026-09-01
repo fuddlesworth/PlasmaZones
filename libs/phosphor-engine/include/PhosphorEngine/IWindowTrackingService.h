@@ -159,17 +159,25 @@ public:
     /// The window's remembered UNMANAGED (free/float-back) geometry, resolved
     /// FOR @p screenId, or nullopt when no record can answer.
     ///
-    /// "Validated" describes the POSITION, not the size. The implementation
-    /// prefers the spot remembered for @p screenId and otherwise falls back to
-    /// one remembered on another screen, re-centring that rect on @p screenId
-    /// (its absolute coordinates belong to the screen it was captured on, so
-    /// only the SIZE carries over). So a non-null answer is not evidence the
-    /// window was ever free on this screen.
+    /// "Validated" describes the POSITION, not the size: the answer is the spot
+    /// remembered for @p screenId, sanity-checked against the live screen
+    /// layout so a rect left off-canvas by a resolution change is pulled back.
     ///
-    /// @p exactOnly restricts the lookup to the window's OWN record. The
-    /// default admits a same-app SIBLING's free geometry, which is deliberate
-    /// cross-instance float-back sharing for free positions; pass exactOnly
-    /// when the contract is per-window.
+    /// SCREEN-LOCAL. A spot remembered on another monitor is not a float-back
+    /// for this one, so there is no cross-screen fallback — a non-null answer
+    /// IS evidence the window was free on this screen. Callers that find
+    /// nothing leave the window where it is.
+    ///
+    /// The lookup is restricted to the window's OWN record. It used to take an
+    /// exactOnly flag defaulting to FALSE, which admitted a same-app SIBLING's
+    /// free geometry as cross-instance float-back sharing. Every caller of this
+    /// function asks a per-window question — "put THIS window back where IT
+    /// was" — and for that the share is not a convenience but a teleport: an
+    /// app's bucket fills with dead instances (MaxPerApp), a live window with no
+    /// record of its own borrows a ghost's, and it lands wherever that ghost
+    /// last was, on whatever monitor. Discussion #1028 is that bug. Two of the
+    /// three engines had already opted out and written down why; the flag is
+    /// gone so the remaining paths cannot drift back.
     ///
     /// The SIZE is whatever the compositor last reported and is never bounded
     /// here. A caller minting a SIZING INTENT out of it (a Fixed column width,
@@ -177,8 +185,26 @@ public:
     /// untrusted input from a compositor and, through the injected service,
     /// from an embedder. Callers that only re-place a window at a remembered
     /// spot need no such bound.
-    virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                            bool exactOnly = false) const = 0;
+    virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const = 0;
+
+    /// Does @p geometry plausibly belong to the coordinate space @p screenId
+    /// names?
+    ///
+    /// The same predicate validatedUnmanagedGeometry applies to its own answer,
+    /// exposed because it is NOT the only reader of the shared free-geometry
+    /// map. A caller that reaches a rect through the placement store directly
+    /// — the engines' reopen and release paths do, via takeForReopen — gets no
+    /// validation from that route and hands the rect straight to a geometry
+    /// apply. A mis-keyed record then teleports the window to whatever monitor
+    /// the coordinates describe, which is the failure the read guard exists to
+    /// stop; those callers need the same check rather than their own copy of
+    /// it.
+    ///
+    /// Not a substitute for an is-this-on-any-screen rescue test: this asks
+    /// whether the rect belongs to THIS key, so a rect sitting squarely on a
+    /// different monitor answers false. Fails OPEN when the screen cannot be
+    /// resolved, so an embedder with no screen manager keeps its behaviour.
+    virtual bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const = 0;
 
     /// Record a window's SHARED free/float geometry (the single float-back store —
     /// the placement record's freeGeometryByScreen). This is the ONE writer all

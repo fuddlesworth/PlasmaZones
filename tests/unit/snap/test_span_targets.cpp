@@ -51,6 +51,11 @@ public:
     QHash<QString, QStringList> spanOfWindow; // windowId -> zoneIds
     QHash<QString, QRect> zoneGeo; // "zone|screen" -> rect
     QVector<QPair<QStringList, QString>> multiZoneAssignments; // recorded (zoneIds, screen) commits
+    // Recorded separately, because the two are DIFFERENT commits: a span that
+    // retracts to one remaining zone lands here, not in multiZoneAssignments.
+    // This override used to discard its arguments, which made a single-zone
+    // commit invisible to every assertion in this file.
+    QVector<QPair<QString, QString>> singleZoneAssignments; // recorded (zoneId, screen) commits
     QVector<QPair<QString, bool>> snapIntents; // recorded recordSnapIntent calls
 
     QStringList zonesForWindow(const QString& w) const override
@@ -96,8 +101,9 @@ public:
     {
         return {};
     }
-    void assignWindowToZone(const QString&, const QString&, const QString&, int) override
+    void assignWindowToZone(const QString&, const QString& zoneId, const QString& screen, int) override
     {
+        singleZoneAssignments.append({zoneId, screen});
     }
     void assignWindowToZones(const QString&, const QStringList& zoneIds, const QString& screen, int) override
     {
@@ -166,7 +172,14 @@ public:
     {
         return {};
     }
-    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool = false) const override
+    /// Stub: the fake has no screen manager, so it fails OPEN exactly as the
+    /// real service does in that case. Tests that need the refusal drive it
+    /// through a FakeScreenProvider-backed service instead.
+    bool geometryBelongsToScreen(const QRect&, const QString&) const override
+    {
+        return true;
+    }
+    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {
         return std::nullopt;
     }
@@ -316,6 +329,7 @@ private Q_SLOTS:
     void invalidDirection_reportsInvalidDirection();
     void emptyWindowId_reportsInvalidWindow();
     void engineSpan_growCommitsAndAppliesGeometry();
+    void engineSpan_shrinkCommitsAndAppliesGeometry();
 };
 
 void TestSpanTargets::grow_right_addsAdjacentZoneOnly()
@@ -412,15 +426,25 @@ void TestSpanTargets::shrink_afterVerticalGrow_pressingUp_removesBottomZone()
 void TestSpanTargets::singleZoneAtBoundary_reportsNoAdjacentZone()
 {
     // A single-zone span at the left screen edge can neither grow left nor
-    // shrink; the boundary is a hard stop (span never crosses outputs).
+    // shrink: there is no zone to the left of it in this screen's layout.
+    // (This fixture seeds one screen only, so it does not pin the separate
+    // never-crosses-outputs rule — nothing here passes a second screen.)
+    //
+    // Uses the FEEDBACK resolver so the OSD's side of a failure is covered.
+    // Every other failing slot in this file builds its resolver with an empty
+    // callback, which means a regression that reports a failed span as a
+    // success, or emits nothing at all, passes the whole file.
     SpanFixture f(quadrants());
     f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0]};
 
-    auto resolver = f.makeResolver();
+    auto resolver = f.makeFeedbackResolver();
     const SpanTargetResult result =
         resolver.getSpanTargetForWindow(QStringLiteral("w1"), QStringLiteral("left"), kScreen);
 
     QVERIFY(!result.success);
+    QVERIFY2(!f.feedbackSuccess, "a refused span must tell the OSD it failed");
+    QCOMPARE(f.feedbackReason, QStringLiteral("no_adjacent_zone"));
+    QCOMPARE(f.feedbackSource, f.zoneIds[0]);
     QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
     QCOMPARE(result.sourceZoneId, f.zoneIds[0]);
 }
@@ -788,6 +812,52 @@ void TestSpanTargets::engineSpan_growCommitsAndAppliesGeometry()
     QCOMPARE(geoSpy.at(0).at(5).toString(), f.zoneIds[0]);
     QCOMPARE(geoSpy.at(0).at(6).toString(), kScreen);
     QCOMPARE(geoSpy.at(0).at(7).toBool(), false);
+
+    QCOMPARE(f.wts.snapIntents, (QVector<QPair<QString, bool>>{{QStringLiteral("w1"), true}}));
+}
+
+void TestSpanTargets::engineSpan_shrinkCommitsAndAppliesGeometry()
+{
+    // The RETRACTION half, which had no engine-level coverage at all: the grow
+    // path above was the only slot that went through SnapEngine, so a shrink
+    // that resolved correctly but committed nothing — no assignment, no
+    // geometry, no intent — passed every test in this file, because the
+    // resolver-level shrink slots only inspect the returned SpanTargetResult.
+    SpanFixture f(quadrants());
+    f.wts.spanOfWindow[QStringLiteral("w1")] = {f.zoneIds[0], f.zoneIds[1]};
+
+    PhosphorSnapEngine::SnapEngine engine(f.registry.get(), &f.wts, nullptr, nullptr);
+    QSignalSpy feedbackSpy(&engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback);
+    QSignalSpy geoSpy(&engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested);
+
+    PhosphorEngine::NavigationContext ctx;
+    ctx.windowId = QStringLiteral("w1");
+    ctx.screenId = kScreen;
+    // Pressing back toward the span's own origin retracts it.
+    engine.spanFocusedInDirection(QStringLiteral("left"), ctx);
+
+    QCOMPARE(feedbackSpy.count(), 1);
+    QCOMPARE(feedbackSpy.at(0).at(0).toBool(), true);
+    QCOMPARE(feedbackSpy.at(0).at(1).toString(), QStringLiteral("span"));
+    QCOMPARE(feedbackSpy.at(0).at(2).toString(), QStringLiteral("shrink:left"));
+
+    // Committed as an assignment for the SURVIVING member, not left as a
+    // resolver answer nobody applied. A retraction down to ONE zone commits
+    // through the single-zone path, not the multi-zone one — pinned here
+    // because it is exactly the shape the resolver-level shrink tests cannot
+    // see, and the two paths are not interchangeable.
+    QCOMPARE(f.wts.multiZoneAssignments.size(), 0);
+    QCOMPARE(f.wts.singleZoneAssignments.size(), 1);
+    QCOMPARE(f.wts.singleZoneAssignments.first().first, f.zoneIds[0]);
+    QCOMPARE(f.wts.singleZoneAssignments.first().second, kScreen);
+
+    // And the SMALLER geometry is applied — a shrink that kept the union rect
+    // would leave the window covering the zone it just gave up.
+    QCOMPARE(geoSpy.count(), 1);
+    QCOMPARE(geoSpy.at(0).at(0).toString(), QStringLiteral("w1"));
+    QCOMPARE(geoSpy.at(0).at(3).toInt(), 960);
+    QCOMPARE(geoSpy.at(0).at(4).toInt(), 540);
+    QCOMPARE(geoSpy.at(0).at(6).toString(), kScreen);
 
     QCOMPARE(f.wts.snapIntents, (QVector<QPair<QString, bool>>{{QStringLiteral("w1"), true}}));
 }

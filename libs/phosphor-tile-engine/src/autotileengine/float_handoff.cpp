@@ -458,13 +458,7 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // A pending seed position or post-retile focus naming a window another
     // engine now owns must not replay on this screen's next applyTiling.
     purgeFromPendingOrders(canonical);
-    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
-        if (fit.value() == canonical) {
-            fit = m_pendingFocusByScreen.erase(fit);
-        } else {
-            ++fit;
-        }
-    }
+    purgePendingFocusForWindow(canonical);
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)
@@ -490,10 +484,32 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         return;
     }
 
+    // MEMBERSHIP, not just a non-null state: stateForWindow resolves through the
+    // reverse key map, which a refused insert can leave pointing at a state that
+    // does not hold the window. TilingState::setFloating no-ops for an unheld
+    // window, so without this the write below silently did nothing while the
+    // logging and the windowFloatingStateSynced emission at the tail still
+    // announced a float that never happened — the effect's float cache then
+    // latched at "floating" and never came back (Discussion #1028).
     PhosphorTiles::TilingState* state = stateForWindow(windowId);
-    if (!state) {
+    if (!state || !state->containsWindow(windowId)) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << (shouldFloat ? "floatWindow" : "unfloatWindow") << "- window not tracked=" << windowId;
+        // Refusing is not enough on its own: the key that misrouted this call
+        // here is still in the reverse map, so isWindowTracked keeps answering
+        // true and the adaptor keeps choosing this engine over the adoption
+        // handoff — turning the silent wrong write this guard was added to stop
+        // into a silent permanent refusal. Drop the key (and the per-window
+        // caches that follow it, matching every other sweep in this engine) so
+        // the NEXT dispatch routes through adoption instead.
+        const auto keyIt = m_states.windowKeys().constFind(windowId);
+        if (keyIt != m_states.windowKeys().constEnd()) {
+            m_states.removeWindow(windowId);
+            m_windowMinSizes.remove(windowId);
+            m_autotileFloatedWindows.remove(windowId);
+            m_overflow.clearOverflow(windowId);
+            purgeFromPendingOrders(windowId);
+        }
         return;
     }
 
@@ -501,6 +517,86 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << (shouldFloat ? "floatWindow: already floating" : "unfloatWindow: not floating") << "-" << windowId;
         return;
+    }
+
+    // An unfloat that the very next retile would UNDO is refused here instead of
+    // being performed and silently reversed. retileAfterOperation below runs
+    // synchronously, so applyTiling's overflow pass runs before this call
+    // returns; the caller then reads the float state back, still sees
+    // "floating", and retries — the effect's unminimize path does exactly that,
+    // up to kAutotileMaxUnfloatRetries, and every attempt costs a full unfloat +
+    // retile + refloat with the batch signals to match.
+    //
+    // The test is POSITIONAL, not a bare capacity check, because the overflow
+    // pass evicts by position rather than by which window moved. applyOverflow
+    // floats state->tiledWindows()[i] for i >= cap, and unfloating restores this
+    // window at its own m_windowOrder position — so it lands at index
+    // "however many tiled windows sort before it". Only when that index is
+    // already at the cap does the pass re-float THIS window, making the unfloat
+    // a no-op that can never converge. Below the cap the pass evicts a
+    // different window and the unfloat genuinely succeeds, which is the
+    // behaviour an unminimize wants; refusing there would strand a window the
+    // engine could perfectly well tile.
+    //
+    // The refusal MARKS the window as overflow, which is what makes recovery
+    // real rather than merely claimed: recoverIfRoom only ever returns windows
+    // in m_overflow, and a minimize-float cleared that marker on its way in. So
+    // without the mark the window would sit floating with nothing to bring it
+    // back.
+    if (!shouldFloat) {
+        const QString unfloatScreen = m_states.keyForWindow(windowId).screenId;
+        // The CAP, deliberately, and NOT the pass's own min(cap, zones.size()).
+        // retileScreen runs recalculateLayout BEFORE applyTiling, and the
+        // recalc sizes the zone vector to min(tiledCount, cap) counting the
+        // windows tiled AFTER this unfloat. So on the success path the pass
+        // compares against min(tiledCount + 1, cap), which wouldSortAt (built
+        // only from windows already tiled) can reach only when it reaches the
+        // cap itself.
+        //
+        // Reading calculatedZones() HERE reads the pre-unfloat count instead,
+        // which equals tiledCount below the cap. Any window sorting after every
+        // tiled one then has wouldSortAt == zones.size() and is refused however
+        // empty the screen is: two tiled windows under a cap of eight would
+        // refuse the third. The unminimize path sorts at the end, so that
+        // misfires on the very case this refusal was written for.
+        //
+        // The one thing the cap does not predict is a FAILED recalc, where the
+        // stale shorter vector stands and the pass can still re-float a window
+        // admitted here. That costs one retry of an already-transient failure,
+        // much the cheaper of the two errors.
+        //
+        // NOT COVERED BY A UNIT TEST, deliberately, and worth knowing before
+        // touching this line. The engine harness wires no ScreenManager, so
+        // recalculateLayout fails on the geometry check for every test in the
+        // suite and the zone vector never grows. That harness therefore models
+        // only the recalc-FAILURE path, in which the clamped form looks correct
+        // and the cap form looks wrong, i.e. exactly backwards from production.
+        // The suite passed with the clamped form in place. Reason about this
+        // from retileScreen's recalc-then-apply order, not from a green run.
+        const int cap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
+        const int myIndex = state->windowIndex(windowId);
+        int wouldSortAt = 0;
+        for (const QString& tiled : state->tiledWindows()) {
+            const int idx = state->windowIndex(tiled);
+            if (idx >= 0 && myIndex >= 0 && idx < myIndex) {
+                ++wouldSortAt;
+            }
+        }
+        if (wouldSortAt >= cap) {
+            qCInfo(PhosphorTileEngine::lcTileEngine)
+                << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— it would land at tiled position"
+                << wouldSortAt << "with a cap of" << cap
+                << ", so the retile would re-float it; keeping it floating and queued for recovery";
+            // Queue it for the recovery pass. Without this the window is
+            // floating but absent from m_overflow, which is the one set
+            // recoverIfRoom consults, so nothing would ever bring it back.
+            m_overflow.markOverflow(windowId, unfloatScreen);
+            // Re-announce the state the window is ACTUALLY in. The caller asked
+            // for false and is getting true, so without this it would keep
+            // believing its request was lost.
+            Q_EMIT windowFloatingStateSynced(windowId, true, unfloatScreen);
+            return;
+        }
     }
 
     state->setFloating(windowId, shouldFloat);

@@ -298,18 +298,20 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     }
     // ONE resolver, shared with the WTA twin (WindowTrackingAdaptor::
     // applyGeometryForFloat): validatedUnmanagedGeometry reads the unified
-    // placement record — this screen's remembered spot first, then the
-    // deterministic cross-screen fallback — and cross-screen-validates the
-    // rect. The previous open-coded peek here skipped that validation, so a
-    // rect captured on another monitor was applied with raw coordinates.
+    // placement record for THIS screen and validates that the rect's
+    // coordinates actually lie there. The previous open-coded peek here skipped
+    // that validation, so a rect captured on another monitor was applied with
+    // raw coordinates.
     //
-    // The resolver's appId-FIFO fallback is DELIBERATE (unlike the exact-only
-    // pre-float zone read in resolveUnfloatGeometry): a record-less instance
-    // floating for the first time restores to where its app last floated — the
-    // cross-instance float-back share that collapsePureFloatSiblings manages.
-    // A shared free position is a sensible default; a shared ZONE assignment
-    // is not. A window with no free geometry on record anywhere simply stays
-    // where it is; the next move while floating captures a real free position.
+    // The lookup is per-window and screen-local. It does NOT borrow a same-app
+    // sibling's rect, and there is no cross-screen fallback: both were removed
+    // in discussion #1028, where an app's bucket filling with dead instances at
+    // MaxPerApp meant a live window with no record of its own inherited a
+    // ghost's absolute coordinates and was moved to whatever monitor that ghost
+    // last occupied. "Restore to where this app last floated" reads like a
+    // sensible default and has a bad failure mode. A window with no free
+    // geometry on record for this screen simply stays where it is; the next
+    // move while floating captures a real free position.
     const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)

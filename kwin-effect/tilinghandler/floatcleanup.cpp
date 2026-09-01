@@ -217,7 +217,7 @@ void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
     // Spawn frame read BEFORE the release: cleanupAutotileTracking (inside
     // releaseWindowTracking) clears the pre-tile bucket with the rest of
     // the tracking.
-    const QRectF spawnGeo = findPreTileGeometry(windowId);
+    const QRectF spawnGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
     qCInfo(lcEffect) << "Flags-settle eviction:" << windowId << "no longer tileable, releasing from" << screenId;
     releaseWindowTracking(windowId, screenId);
     if (spawnGeo.isValid() && !w->isUserMove() && !w->isUserResize()) {
@@ -376,10 +376,11 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // call would move one compositor write across that work, which is a
     // behaviour change dressed as a cleanup.
     // Membership through forgetWindowedFullscreen like every other site, so
-    // the ledger has one writer. The remove's RESULT is still the gate: the
-    // compositor call must fire only when this pass is the one that owned the
-    // claim, or a second cleanup for the same window would re-issue
-    // setFullScreen(false) against a window that has since re-entered
+    // the ledger has one writer. MEMBERSHIP is the gate — checked before the
+    // pair, since forgetWindowedFullscreen returns void and has no result to
+    // branch on: the compositor call must fire only when this pass is the one
+    // that owned the claim, or a second cleanup for the same window would
+    // re-issue setFullScreen(false) against a window that has since re-entered
     // fullscreen on its own.
     if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
         forgetWindowedFullscreen(windowId);

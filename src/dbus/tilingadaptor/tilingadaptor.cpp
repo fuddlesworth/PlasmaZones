@@ -323,7 +323,47 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             if (m_lifecycleEngines.isEmpty()) {
                 return;
             }
-            Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
+            // Stamp the announce with the desktop each screen was resolved
+            // against. The receiver needs it to reject a late announce (see
+            // the signal's doc); read here, at emit time, so it describes the
+            // set actually being sent rather than whatever was current when
+            // the announce was first queued.
+            const QStringList announced = combinedManagedScreens();
+            QVariantMap screenDesktops;
+            if (m_windowTrackingAdaptor) {
+                // Stamp every screen the daemon can resolve a desktop for, NOT
+                // just the announced (still-managed) ones. The receiver's
+                // destructive half — the demote/pre-tile-restore pass — is
+                // driven by the REMOVED set, i.e. precisely the screens absent
+                // from `announced`. Stamping only the survivors left those
+                // screens unstamped, and the receiver compares just the keys it
+                // was given, so the announce whose whole effect is the restore
+                // was the one announce that could never be rejected as stale.
+                // In the limiting case (switching to a desktop where nothing is
+                // managed) `announced` is empty, the map was empty, and the
+                // receiver skipped its staleness gate outright.
+                //
+                // The cost is a wider gate: the receiver rejects on ANY key
+                // that disagrees, so with per-output desktops (#648) a screen
+                // uninvolved in this switch can now veto an announce whose
+                // managed screens were all in agreement. That is deliberate.
+                // Rejection converges (the daemon re-announces for the desktop
+                // the effect has since reported) while a missed rejection does
+                // not, and the announce this stamp exists to make rejectable
+                // is the one that runs the destructive restore pass.
+                QStringList stampable = announced;
+                if (m_screenManager) {
+                    for (const QString& screenId : m_screenManager->effectiveScreenIds()) {
+                        if (!stampable.contains(screenId)) {
+                            stampable.append(screenId);
+                        }
+                    }
+                }
+                for (const QString& screenId : std::as_const(stampable)) {
+                    screenDesktops.insert(screenId, m_windowTrackingAdaptor->currentDesktopForScreen(screenId));
+                }
+            }
+            Q_EMIT managedScreensChanged(announced, desktopSwitch, screenDesktops);
             relayEnabledChanged();
             // Retry opens parked during the flip (see m_unclaimedOpens):
             // engines have their post-flip screen sets by now. Insertion
@@ -388,6 +428,12 @@ void TilingAdaptor::relayScrollTabStrips(const QString& screenId, const QString&
     // here" from the map shape alone (see the header doc). An empty string is
     // treated the same way: it carries no columns either.
     const bool retracts = stripsJson.isEmpty() || stripsJson == QLatin1String("[]");
+    // NOT change-gated, deliberately, unlike the paint-override relay below.
+    // The gate lives upstream in the scroll engine (m_lastTabStripPayload in
+    // engine_apply.cpp), which only emits on a real model change, so a second
+    // gate here could only ever duplicate that one. The cache below is for
+    // REPLAY (a freshly loaded effect asking what it missed), not for
+    // suppression. testRelayEmitsAndCachesPerScreen pins the repeat emission.
     if (retracts) {
         m_lastScrollTabStrips.remove(screenId);
     } else {
@@ -492,9 +538,13 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
         m_lastScrollTabColorsRelay.remove(windowId);
         return;
     }
-    // Change-gated like every other relay here: the effect compares and
-    // drops an unchanged map, so an unchanged one must not cross the bus at
-    // all (a window with no rule retitles as often as a terminal does).
+    // Change-gated HERE because nothing upstream gates this one: the params are
+    // recomputed per relay from the rule set, so an unchanged map would cross
+    // the bus every time (a window with no rule retitles as often as a terminal
+    // does) and the effect would compare and drop it. Note relayScrollTabStrips
+    // deliberately does NOT gate — the scroll engine already emits only on a
+    // real model change there, so a second gate could only duplicate it. The
+    // two differ on purpose.
     const QVariantMap colors = m_windowTrackingAdaptor->tabColorRuleParams(windowId);
     const auto it = m_lastScrollTabColorsRelay.constFind(windowId);
     if (it != m_lastScrollTabColorsRelay.constEnd() && *it == colors) {

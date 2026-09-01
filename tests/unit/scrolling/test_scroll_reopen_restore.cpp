@@ -200,11 +200,11 @@ private Q_SLOTS:
     {
         // The live-instance probe at engine level: after t2 consumes t1's
         // floating record (re-bound to the live t2), a THIRD instance must
-        // not steal it — t2 would be left recordless. Probe wired with
-        // production's extractInstanceId keying.
+        // not steal it — t2 would be left recordless. The fake wires the
+        // probe in its constructor with production's extractInstanceId
+        // keying, so nothing to arm here.
         QObject owner;
         FakeStickyWindowTracking tracker;
-        tracker.wireLiveInstanceProbe();
         ScrollEngine* engine = makeEngine(&owner, &tracker);
         const QString screen = QLatin1String(Screen);
 
@@ -315,7 +315,6 @@ private Q_SLOTS:
         // different, living window, not this one's history.
         QObject owner;
         FakeStickyWindowTracking tracker;
-        tracker.wireLiveInstanceProbe();
         ScrollEngine* engine = makeEngine(&owner, &tracker);
         const QString screen = QLatin1String(Screen);
         engine->setScrollingModeResolver([&](const QString& rec, int, const QString&) {

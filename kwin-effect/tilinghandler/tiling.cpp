@@ -282,14 +282,32 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             applyFloatCleanup(floatWindowId);
 
             // Restore pre-autotile geometry from the effect's local cache.
-            // Scan all screen buckets (all-bucket reader policy — a VS
-            // config change can re-key the window's screen without moving
-            // its geometry bucket). Exact resolve, matching the tile lambda's
-            // deliberate policy: a fuzzy hit would teleport a same-app
-            // SIBLING onto this window's restored rect.
+            // preTileRestoreRectFor keeps the all-bucket reader policy — a VS
+            // config change can re-key the window's screen without moving its
+            // geometry bucket, and that rect is still applicable — while
+            // degrading a rect from ANOTHER output to size-only, which would
+            // otherwise move the window to that monitor. Exact resolve,
+            // matching the tile lambda's deliberate policy: a fuzzy hit would
+            // teleport a same-app SIBLING onto this window's restored rect.
             KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
+            if (!floatWin) {
+                // Both misses below are LOGGED. applyFloatCleanup above has
+                // already run unconditionally, so the window is genuinely
+                // floated and untiled either way — it just stays at its tile
+                // rect. That state is coherent and looks exactly like a restore
+                // that worked, so without a line here the journal cannot tell
+                // the two apart. The tile arm logs every one of its drops for
+                // the same reason.
+                qCWarning(lcEffect) << "Autotile batch float: no live window for" << floatWindowId << "on" << screenId
+                                    << "— floated without restoring its pre-tile geometry";
+            }
             if (floatWin) {
-                if (const QRectF savedGeo = findPreTileGeometry(floatWindowId); savedGeo.isValid()) {
+                const QRectF savedGeo = preTileRestoreRectFor(floatWindowId, screenId, floatWin->frameGeometry());
+                if (!savedGeo.isValid()) {
+                    qCWarning(lcEffect) << "Autotile batch float: no applicable pre-tile rect for" << floatWindowId
+                                        << "on" << screenId << "— floated, but left at its tile rect";
+                }
+                if (savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the
@@ -392,7 +410,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
         if (indices.size() <= 1) {
-            if (indices.size() == 1 && entries[indices[0]].candidates.size() > 1) {
+            // No candidates.size() > 1 term: the map only admits entries with
+            // a non-empty candidate vector, and Entry::candidates is only ever
+            // assigned when that vector already has more than one element, so
+            // the test could never be false here.
+            if (indices.size() == 1) {
                 Entry& e = entries[indices[0]];
                 QPoint targetCenter = e.geometry.center();
                 KWin::EffectWindow* best = nullptr;
@@ -986,6 +1008,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             const QSet<QString>& newSet = screenIt.value();
             const QSet<QString> previous = TilingStateHelpers::tiledOnScreen(m_border, screenId);
+            // No resolution-failure exclusion is needed here, which is worth
+            // recording because it is not obvious. The three disambiguation
+            // drops above never leave a tracked window out of newSet: the
+            // all-claimed drop fires precisely because every candidate was
+            // taken by an exact entry, the trailing-entry drop assigns every
+            // candidate it has (n = qMin(entries, candidates)), and the
+            // double-resolve drop discards the SECOND entry for a window the
+            // first already claimed. In each case the WINDOWS are all in
+            // newSet and only surplus ENTRIES are dropped, so an id in
+            // `untiled` is a window the daemon genuinely stopped tiling.
+            // That holds globally; newSet here is one SCREEN's bucket, so a
+            // window whose claiming entry landed on a different screen does
+            // appear in the old screen's `untiled`. It has moved, and untiling
+            // it on the screen it left is the right answer.
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 // Exact resolve only: findWindowById's appId fuzzy fallback
@@ -1635,16 +1671,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
-            // The rect this entry actually OFFERED the client, which is not
-            // snap.geometry whenever the size-continuity pass below re-centres
-            // a Wayland client's held size inside its column. The commanded
-            // rect at the tail of this lambda records what we asked for, and
-            // recording the raw column instead makes the counter-assert
-            // compare the centred commit against a rect that was never
-            // offered — they differ BY CONSTRUCTION for exactly the
-            // population that pass exists for, so it would yank such a client
-            // back into its column on repeat. Null when this entry took no
-            // committing path.
+            // The rect this entry actually OFFERED the client, recorded as the
+            // commanded rect at the tail of this lambda so the counter-assert
+            // compares the client's commit against what was really asked for.
+            //
+            // Only the MAXIMIZED-TO-EDGES arm reaches the record: the
+            // size-continuity pass excludes that state (it holds a declared
+            // rect), and the consumer requires it, so the two are mutually
+            // exclusive and the re-centred column never lands here. Null when
+            // this entry took no committing path.
             QRect scrollDeliveredRect;
             {
                 // Stored as the column's strip POSITION and SIZE, not as a
@@ -2093,9 +2128,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
                                           << "holding=" << committedSize << "offer=" << geo;
                     }
-                    // AFTER the re-centring, so this is the rect the apply
-                    // below actually offers.
-                    scrollDeliveredRect = geo;
                 }
                 // DROP THE OFFERED-COLUMN ENTRY for every declared-rect state,
                 // which is the same set the size-continuity guard above

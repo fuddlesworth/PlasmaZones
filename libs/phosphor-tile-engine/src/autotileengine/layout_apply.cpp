@@ -364,18 +364,23 @@ void AutotileEngine::applyTiling(const QString& screenId)
 
     // zones.size() may be less than windows.size() when maxWindows caps the layout.
     // Only the first zones.size() windows receive tiled geometries; the rest are untouched.
-    if (zones.isEmpty()) {
-        qCDebug(PhosphorTileEngine::lcTileEngine)
-            << "AutotileEngine::applyTiling: no zones calculated for screen" << screenId;
-        return;
-    }
-    if (zones.size() > windows.size()) {
-        qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size() << "vs" << zones.size();
-        return;
-    }
-
-    const int tileCount = zones.size();
+    //
+    // The overflow pass runs BEFORE the bails below, and never above the cap,
+    // because it is the only thing enforcing maxWindows: nothing refuses an
+    // over-cap window at insert time (onWindowAdded says why). A recalc that
+    // produced no zones — a screen with no algorithm yet, or one whose retile
+    // ran off a previous zone layout after the recalc failed — would otherwise
+    // leave the whole over-cap set tiled until some later retile happened to
+    // succeed.
+    //
+    // tileCount is min(cap, zones) rather than the zone count outright. zones
+    // is whatever recalculateLayout last succeeded with, and retileScreen calls
+    // applyTiling even when a recalc FAILS, so a stale vector can describe more
+    // zones than the current cap allows — a cap lowered by a SetMaxWindows rule
+    // followed by a failed recalc would otherwise keep the over-cap windows
+    // tiled against a count nothing re-derives.
+    const int overflowCap = std::min(effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones);
+    const int tileCount = zones.isEmpty() ? overflowCap : std::min(overflowCap, static_cast<int>(zones.size()));
 
     // Auto-float overflow windows that exceed maxWindows cap.
     // Daemon's windowFloatingChanged handler restores their pre-autotile geometry.
@@ -385,6 +390,53 @@ void AutotileEngine::applyTiling(const QString& screenId)
         state->setFloating(wid, true);
     }
 
+    // Anything the pass just floated still has to reach subscribers, or the
+    // effect never restores its pre-tile geometry and the daemon's float mirror
+    // drifts from this state. Shared by BOTH early returns below: the overflow
+    // pass runs above them, so either one can leave a float unannounced.
+    const auto announceFloatOnlyBatch = [&]() {
+        if (newlyOverflowed.isEmpty()) {
+            return;
+        }
+        QJsonArray floatOnly;
+        for (const QString& wid : std::as_const(newlyOverflowed)) {
+            QJsonObject obj;
+            obj[QLatin1String("windowId")] = wid;
+            obj[QLatin1String("floating")] = true;
+            obj[QLatin1String("screenId")] = screenId;
+            floatOnly.append(obj);
+        }
+        Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(floatOnly).toJson(QJsonDocument::Compact)));
+        Q_EMIT windowsBatchFloated(newlyOverflowed, screenId);
+    };
+
+    if (zones.isEmpty()) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "AutotileEngine::applyTiling: no zones calculated for screen" << screenId;
+        announceFloatOnlyBatch();
+        // The pending focus is deliberately LEFT IN PLACE. Both bails here are
+        // the transient-failure paths their comments describe (no algorithm
+        // yet, or a stale zone vector after a failed recalc), and the drain is
+        // per-screen — so the intended consumer is this same screen's next
+        // SUCCESSFUL applyTiling, not some unrelated retile. Dropping it would
+        // silently lose a focus request seeded just before an output change,
+        // for a window that is still on this screen.
+        return;
+    }
+    if (zones.size() > windows.size()) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size() << "vs" << zones.size();
+        // Same obligation as the arm above, and reachable for the same reason:
+        // retileScreen calls applyTiling unconditionally after a FAILED
+        // recalculateLayout ("applying previous zone layout"), so a stale zone
+        // vector can outnumber a shrunken tiled list — windows closing while
+        // the screen geometry is invalid mid-output-change. Returning here
+        // without announcing left the float this pass performed invisible.
+        // Pending focus left in place for the same reason as the arm above.
+        announceFloatOnlyBatch();
+        return;
+    }
+
     // Build batch JSON and emit once to avoid race when effect applies many geometries.
     // Flag monocle-style layouts where all zones share identical geometry,
     // so the KWin effect can set maximize state on stacked windows.
@@ -392,9 +444,14 @@ void AutotileEngine::applyTiling(const QString& screenId)
     // fallbacks (tiny screens) — maximize is appropriate in both cases since
     // windows are stacked identically.
     // Requires >= 2 zones: a single window is just normal tiling, not monocle.
-    const bool useMonocleMode = tileCount >= 2 && std::all_of(zones.begin() + 1, zones.end(), [&](const QRect& z) {
-                                    return z == zones[0];
-                                });
+    // Bounded by tileCount, not zones.end(): tileCount can now be smaller than
+    // the zone vector (a stale layout outliving a lowered cap), and only the
+    // first tileCount zones are actually applied below — judging monocle on
+    // zones nothing tiles would answer for a layout that is not on screen.
+    const bool useMonocleMode =
+        tileCount >= 2 && std::all_of(zones.begin() + 1, zones.begin() + tileCount, [&](const QRect& z) {
+            return z == zones[0];
+        });
 
     // Overlap layouts declare a deterministic z-order for the tiled stack
     // (every bundled overlap layout stacks the last tiled index on top;
@@ -437,9 +494,12 @@ void AutotileEngine::applyTiling(const QString& screenId)
         }
         arr.append(obj);
     }
-    // Include overflow windows in the batch with "floating" flag so the effect
-    // can restore their pre-autotile geometry in one pass, instead of receiving
-    // individual D-Bus windowFloatingChanged + applyGeometryRequested per window.
+    // Include overflow windows in the batch with a "floating" flag, so the
+    // effect learns about them in one pass instead of receiving individual
+    // D-Bus windowFloatingChanged + applyGeometryRequested per window. The
+    // entry carries no geometry — only windowId/floating/screenId — so it flags
+    // the float and the effect resolves the pre-autotile rect from its own
+    // store.
     for (const QString& wid : std::as_const(newlyOverflowed)) {
         QJsonObject obj;
         obj[QLatin1String("windowId")] = wid;
@@ -676,7 +736,13 @@ void AutotileEngine::backfillWindows()
         if (!state) {
             continue;
         }
-        const int maxWin = effectiveMaxWindows(screenId);
+        // Clamped to MaxZones like the engine's two other cap computations
+        // (recalculateLayout and applyTiling's overflowCap). Under Unlimited
+        // effectiveMaxWindows returns a huge sentinel, so an unclamped gate let
+        // this loop backfill past MaxZones — and applyTiling's overflow pass,
+        // which does clamp, then floated the excess straight back out, an
+        // insert-then-float churn with the batch signals to match.
+        const int maxWin = std::min(effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones);
         if (state->tiledWindowCount() >= maxWin) {
             continue;
         }

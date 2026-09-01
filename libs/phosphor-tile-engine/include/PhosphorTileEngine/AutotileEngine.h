@@ -1593,6 +1593,17 @@ private:
     void cleanupCanonical(const QString& anyWindowId);
 
     /**
+     * @brief Drop any pending post-retile focus naming this window.
+     *
+     * Every path that stops managing a window owes this, or applyTiling's
+     * drain emits activateWindowRequested for a window this engine no longer
+     * holds. Shared by removeWindow, handoffRelease and the insert refusal
+     * sweep so the three cannot drift; see purgeFromPendingOrders for the
+     * pending-order half of the same obligation.
+     */
+    void purgePendingFocusForWindow(const QString& windowId);
+
+    /**
      * @brief Const-safe translation for read-only methods.
      *
      * Same as canonicalizeWindowId(), but does not mutate m_canonicalByInstance:
@@ -1821,7 +1832,8 @@ private:
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by the strict seed in setAutotileScreens() (visible windows,
     // eagerly) and by insertWindow() as remaining windows arrive; purged
-    // per-window via purgeFromPendingOrders (close, cap rejection), swept
+    // per-window via purgeFromPendingOrders (close, insert refusal, handoff
+    // release, the defer gate, the off-autotile focus arm), swept
     // by pruneStaleWindows, and reaped by the pending-order timeout — which
     // deliberately RETAINS an order holding live minimized placeholders, so
     // those entries persist until the window opens or closes.

@@ -333,8 +333,17 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         // override). Screens with per-screen algorithm overrides are unaffected by
         // this global change and are handled by updateEngineScreens() when the
         // layoutAssigned signal fires from applyEntry().
+        //
+        // A raised cap is the EXCEPTION to that filter. Overflow recovery now
+        // runs in retileScreen (OverflowManager::recoverIfRoom) rather than in
+        // backfillWindows — backfill used to re-adopt those windows only
+        // because they were phantoms, absent from the state while keyed to the
+        // screen, and they are genuine floating members now. So a screen whose
+        // algorithm did not change still needs a retile to unfloat what the old
+        // cap pushed out, and the algorithm filter would skip exactly that.
+        const bool capRaised = m_config->maxWindows > oldMaxWindows;
         for (const QString& screen : m_autotileScreens) {
-            if (effectiveAlgorithmId(screen) == newId) {
+            if (capRaised || effectiveAlgorithmId(screen) == newId) {
                 scheduleRetileForScreen(screen);
             }
         }

@@ -59,7 +59,14 @@ void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const 
     const QString restoreScreen = record.screenId.isEmpty() ? screenId : record.screenId;
     const QRect freeGeo = record.freeGeometryFor(restoreScreen);
     const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-    if (freeGeo.isValid() && restorePosition) {
+    // Do not trust the KEY. This reads the shared free-geometry map directly
+    // rather than through validatedUnmanagedGeometry, so it gets none of that
+    // resolver's validation — and the rect goes straight out as an absolute
+    // geometry to apply. A record filed under one screen whose coordinates
+    // describe another would teleport the window to that monitor, which is
+    // exactly what the comment above says this restore must never do.
+    if (freeGeo.isValid() && restorePosition
+        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
     }
 }
@@ -212,12 +219,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
-        // exactOnly: a column width is a PER-WINDOW contract, and the
-        // non-exact default admits a same-app SIBLING's record (the interface
-        // documents that sharing as being for free POSITIONS). Minting one
-        // window's sizing intent out of another instance's remembered rect
-        // opens the column at a size this window never asked for.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true)) {
+        // A column width is a PER-WINDOW contract, and the resolver is
+        // per-window by construction — there is no sharing mode to opt out of.
+        // That matters here specifically: minting one window's sizing intent
+        // out of another instance's remembered rect would open the column at a
+        // size this window never asked for.
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
             // The tracked geometry is a PHYSICAL rect from the compositor, so
             // it has to be decoded by role. Reading .width() unconditionally
             // would, on a vertical strip, feed the client's cross extent into

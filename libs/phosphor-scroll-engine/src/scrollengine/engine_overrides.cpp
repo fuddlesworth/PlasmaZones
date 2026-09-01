@@ -571,12 +571,11 @@ bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& 
         || ruleWindowHeightFraction(overrides).has_value()) {
         return false;
     }
-    // exactOnly: a tile height is a PER-WINDOW contract, and the non-exact
-    // default admits a same-app SIBLING's record (the interface documents that
-    // sharing as being for free POSITIONS). Minting one window's sizing intent
-    // out of another instance's remembered rect gives it a height it never
-    // asked for.
-    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
+    // A tile height is a PER-WINDOW contract, and the resolver is per-window by
+    // construction — there is no sharing mode to opt out of. That matters here
+    // specifically: minting one window's sizing intent out of another
+    // instance's remembered rect would give it a height it never asked for.
+    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         // Not the common case for a genuine spawn — the effect records the
         // pre-tile geometry before it announces the open — but a window the

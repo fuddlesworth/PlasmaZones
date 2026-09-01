@@ -419,6 +419,10 @@ public:
     /// and append to its deferred windowed-fullscreen release list rather than
     /// releasing inline, because that release must land AFTER the managed-set
     /// write.
+    ///
+    /// NOT slots, despite the names around them: both take non-const reference
+    /// out-parameters, which no queued or direct connection can supply, and
+    /// their only callers are plain calls from slotScreensChanged.
     void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
                                        QStringList& windowedFsToRelease,
                                        QHash<QString, QRectF>& windowedFsPreTileRestore);
@@ -1019,22 +1023,11 @@ public Q_SLOTS:
     void slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
-    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
-    /// The two halves of slotScreensChanged's removed-screens pass, split out
-    /// because they reach opposite conclusions about the same event and were
-    /// the reason the slot ran to 775 lines. A screen leaves the managed set
-    /// either because the DESKTOP changed (the windows stay owned by that
-    /// desktop's live session, so demote and remember) or because autotile was
-    /// genuinely turned off for it (nothing owns them now, so untrack and
-    /// restore). Both take the caller's `windows` snapshot and append to its
-    /// deferred windowed-fullscreen release list rather than releasing inline,
-    /// because that release must land AFTER the managed-set write.
-    ///
-    /// NOT slots, despite living beside them: both take non-const reference
-    /// out-parameters, which no queued or direct connection can supply, and
-    /// their only callers are plain calls from slotScreensChanged. They sit in
-    /// the private section below with the other screenschanged.cpp helpers, so
-    /// the slots block does not advertise as connectable something that is not.
+    /// @param screenDesktops screenId -> desktop the announced set was resolved
+    ///        against. A desktop-switch announce whose stamp disagrees with what
+    ///        this effect last reported has been overtaken by a newer switch and
+    ///        is dropped — see announceMatchesReportedDesktops.
+    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
     void slotScrollingScreensChanged(const QStringList& screenIds);
     /// The strip @p screenId is showing has been replaced (desktop or activity
     /// switch, sticky-pin change). Retires the strip-scoped paint state this
@@ -1341,6 +1334,19 @@ private:
      *        bucket the rect was found under (unchanged when not found).
      */
     QRectF findPreTileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
+
+    /**
+     * @brief The pre-autotile rect to APPLY for a window now sitting on @p screenId.
+     *
+     * findPreTileGeometry answers a rect from any bucket; this decides what may
+     * safely be done with it. A rect from the same OUTPUT (virtual-screen
+     * re-keys included) comes back whole. A rect from another output is
+     * degraded to its SIZE at @p currentFrame's position, because the extents
+     * are coordinate-space-independent while the origin is not — applying one
+     * whole moves the window to that monitor. Invalid when nothing is stored,
+     * or when a degrade was needed and @p currentFrame is unusable.
+     */
+    QRectF preTileRestoreRectFor(const QString& windowId, const QString& screenId, const QRectF& currentFrame) const;
 
     /**
      * @brief Async daemon-side pre-tile geometry restore for a desktop-switch

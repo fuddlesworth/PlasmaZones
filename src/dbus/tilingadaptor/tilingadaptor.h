@@ -127,8 +127,10 @@ public:
     void relayScrollTabStrips(const QString& screenId, const QString& stripsJson);
     /// Per-screen tab-indicator PAINT overrides resolved from context rules
     /// (a Set tab style / colour rule scoped to a screen, desktop or
-    /// activity): tabStyle, gapsBetweenTabs, cornerRadius and the three colours,
-    /// keyed by WindowPaintKeys / WindowColorKeys spellings. Only the keys a
+    /// activity): the ScrollTab paint keys, keyed by WindowPaintKeys /
+    /// WindowColorKeys spellings. That is tabStyle, gapsBetweenTabs,
+    /// cornerRadius, the three colours and the five font keys — eleven in all,
+    /// as ServiceConstants.h describes the same map. Only the keys a
     /// rule actually set are present. An EMPTY map clears the screen (the
     /// cache entry is dropped, the signal carries the empty map so the effect
     /// falls back to the global settings). Change-gated: the daemon resolves
@@ -362,8 +364,15 @@ Q_SIGNALS:
      *
      * @param screenIds List of screen IDs currently engine-managed
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
+     * @param screenDesktops screenId -> virtual desktop (int) the announced set
+     *        was RESOLVED AGAINST. See the interface XML for why the stamp is
+     *        required rather than informational: without it a receiver cannot
+     *        distinguish a late announce for the desktop it just left from a
+     *        fresh one for the desktop it is on. Every screen the daemon can
+     *        resolve a desktop for is stamped, not only the announced ones —
+     *        the receiver's destructive pass is driven by the REMOVED set.
      */
-    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
 
     /**
      * @brief Emitted when any screen's rules-visible active layout changes

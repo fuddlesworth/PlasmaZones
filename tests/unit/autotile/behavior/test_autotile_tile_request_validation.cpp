@@ -251,6 +251,49 @@ private Q_SLOTS:
         // above would pass vacuously on the two tiled ones.
         QCOMPARE(floatingCount, 1);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // The ZONES-EMPTY arm of applyTiling, which is a SECOND wire producer
+    // added by the overflow rework and reached by a different path: the
+    // overflow pass now runs above the zones-empty bail, and that arm emits a
+    // float-ONLY batch of its own. Every slot in this file seeds calculated
+    // zones before retiling, so nothing exercised that emission — its entries
+    // carry no x/y/width/height at all, which is a shape the validator had
+    // never been asked about.
+    // ─────────────────────────────────────────────────────────────────────
+    void applyTiling_zonesEmptyOverflowBatchIsValid()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-4");
+        engine.setAutotileScreens({screenName});
+        engine.config()->maxWindows = 2;
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        QSignalSpy batchFloatSpy(&engine, &AutotileEngine::windowsBatchFloated);
+
+        // Zones deliberately NOT seeded: no algorithm is wired in this harness,
+        // so recalculateLayout bails and the vector stays empty — which is the
+        // arm under test.
+        engine.windowOpened(QStringLiteral("win-3"), screenName);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(tiledSpy.count() >= 1, "the zones-empty arm must still announce the float it performed");
+        const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
+        QCOMPARE(entries.size(), 1);
+        QVERIFY2(entries.first().validationError().isEmpty(), qPrintable(entries.first().validationError()));
+        QVERIFY(entries.first().floating);
+        QCOMPARE(entries.first().windowId, QStringLiteral("win-3"));
+        QCOMPARE(entries.first().screenId, screenName);
+
+        // The batch signal rides with it — the effect needs both, and the
+        // effect's own restore is driven by this one.
+        QVERIFY(batchFloatSpy.count() >= 1);
+        QVERIFY(batchFloatSpy.last().at(0).toStringList().contains(QStringLiteral("win-3")));
+    }
 };
 
 QTEST_MAIN(TestAutotileTileRequestValidation)
