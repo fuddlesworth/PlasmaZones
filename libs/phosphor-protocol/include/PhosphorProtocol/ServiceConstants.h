@@ -440,8 +440,38 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       previous strip's position and keeps doing it. A silent wrong answer is
 //       exactly what the handshake exists to refuse, and it is the reason a
 //       signal-only addition is not treated as harmlessly additive here.
-inline constexpr int ApiVersion = 8;
-inline constexpr int MinPeerApiVersion = 8;
+//
+//   v9: Scrolling gains leaveNativeFullscreenRequested (s), a screen-scoped
+//       signal the daemon emits from the keyboard shortcut gate immediately
+//       BEFORE dispatching a strip verb, telling the compositor to release the
+//       OWN fullscreen of every scroll-tracked tile on that screen. Such a tile
+//       refuses every geometry commit through the effect's fullscreen bail
+//       while the engine goes on scrolling and PARKING its column, so the two
+//       owners drift apart for the whole hold. The wheel chord already did this
+//       for itself inside the effect, but the keyboard half originates in the
+//       daemon and could not.
+//
+//       ANOTHER new REQUIRED signal, so it takes a step of its own for exactly
+//       the reason v8 did: v8 shipped in 3.4.4, and the
+//       fold-into-the-unreleased-cycle rule does not reach across a release.
+//       Its failure mode is the silent kind as well. A daemon that emits it to
+//       an effect with no such slot, or an effect waiting on a daemon that
+//       never emits it, matches every other signature on the interface and
+//       errors nowhere. The strip simply goes on scrolling and parking a column
+//       whose window the compositor is refusing to move, which is the bug this
+//       signal exists to close.
+//
+//       A SIGNAL rather than a field on the geometry batch, which is what the
+//       gap note in the wheel path originally anticipated. The exit has to land
+//       BEFORE the relayout, so the verb's batch is built against a window the
+//       compositor will accept, and a batch field arrives carrying the very
+//       geometry it was supposed to precede. Gating on the batch's own
+//       strip-motion fields was measured wrong for a second reason: a batch
+//       cannot tell a user verb from an insert-driven reflow, and it dropped
+//       the fullscreen whenever an unrelated window merely opened and slid the
+//       strip.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze
