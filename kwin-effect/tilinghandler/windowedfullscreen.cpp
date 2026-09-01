@@ -398,6 +398,12 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // first answer has settled, so a fast double-click toggles twice. The echo
     // cannot reach this arm, because an echo of the effect's own write arrives
     // only after the reply has cleared the flight entry.
+    //
+    // ONE press is remembered, not a queue, so a triple-click inside a single
+    // round trip nets to two toggles. That is the intended ceiling: the point
+    // is to keep a double-click from being swallowed, not to replay an
+    // arbitrary backlog against a state each press was aimed at from a
+    // different starting point.
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
@@ -405,8 +411,18 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
         if (inFlight) {
             m_maximizeToggleInFlight[windowId].pendingPress = true;
         }
+        // Entry presence is logged separately from the live/expired answer,
+        // because the case where they disagree is the one worth reading in a
+        // report: a flight that expired with a press already recorded keeps
+        // its entry while answering false here, so this press is neither
+        // coalesced nor dispatched. (An expiry with no recorded press erases
+        // the entry, so both read false there.) The press is deliberately not
+        // recorded in that case — the reply may still land tens of seconds
+        // later, and honouring it then would toggle the window long after the
+        // user gave up on the click.
         qCInfo(lcEffect) << "Maximize interception: KWin already agrees with the engine for" << windowId
-                         << "— no toggle dispatched (coalesced press:" << inFlight << ")";
+                         << "— no toggle dispatched (coalesced press:" << inFlight
+                         << "flight entry standing:" << m_maximizeToggleInFlight.contains(windowId) << ")";
         return true;
     }
     qCInfo(lcEffect) << "Maximize interception: claiming" << windowId << "on" << screenId << "— dispatching toggle ("
@@ -533,10 +549,14 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         }
         // The one outcome that leaves the user's click visibly unhonoured, and
         // until now the only record of it was the window snapping back.
-        qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
-                            << (reply.isError() ? "— D-Bus error:" : "— strip reported no change")
-                            << (reply.isError() ? reply.error().message() : QString())
-                            << "; restoring KWin's bit to the engine's state";
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
+                                << "— D-Bus error:" << reply.error().message()
+                                << "; restoring KWin's bit to the engine's state";
+        } else {
+            qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
+                                << "— strip reported no change; restoring KWin's bit to the engine's state";
+        }
         // Refused, so put the bit back where the ENGINE has it — membership,
         // never the pre-click value and never the user's request. This is the
         // cancel the interception used to do unconditionally, now paid only on

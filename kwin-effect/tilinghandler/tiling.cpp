@@ -1563,7 +1563,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // user's exit.
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
-                    qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
                     if (m_effect->m_daemonGate.serviceRegistered) {
                         // Marker armed + reply-gated inside the helper: the
                         // flag-off echo above consumes it on success, and a
@@ -2080,6 +2079,29 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // AFTER the re-centring, so this is the rect the apply
                     // below actually offers.
                     scrollDeliveredRect = geo;
+                }
+                // DROP THE OFFERED-COLUMN ENTRY for every declared-rect state,
+                // which is the same set the size-continuity guard above
+                // excludes. Taking that exemption means nothing refreshes the
+                // entry for the length of the episode, and the entry is not
+                // read only by the guard above: the reactive centring pass in
+                // window_connections.cpp reads it on every frame-geometry
+                // change with no declared-rect exclusion of its own, so a
+                // stale entry there centres the window inside a column it no
+                // longer occupies. Windowed fullscreen removes the entry on
+                // enter for exactly this reason, and the monocle arm at the
+                // bottom of this lambda already drops it on every batch, but
+                // nothing removed it for a column that is merely maximized to
+                // edges. The predicate covers all three anyway so it reads as
+                // the one set the size-continuity guard above excludes, and
+                // the monocle leg is a harmless earlier repeat of a removal
+                // that batch performs regardless.
+                //
+                // Removing an absent key costs nothing, so no isWaylandClient
+                // term is needed: an entry is only ever written for one.
+                if (isScrollingScreen(snap.screenId)
+                    && (snap.isMaximizedToEdges || snap.isMonocle || snap.isWindowedFullscreen)) {
+                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 }
                 // A maximized-to-edges column takes the exemption above, so it
                 // never reaches that assignment — but it is the ONE Wayland
@@ -2768,12 +2790,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // now would capture the pre-commit rect. That substitution
                     // is safe because the rect recorded is the one this
                     // entry actually DELIVERED, captured after the
-                    // size-continuity pass. Recording the raw column instead
-                    // was not safe: that pass exists precisely because Wayland
-                    // clients do settle at a size other than the column
-                    // offered, and it does not exclude maximized ones, so the
-                    // counter-assert would have compared the centred commit
-                    // against a rect that was never offered.
+                    // size-continuity pass. For a maximized column that is the
+                    // column rect unchanged: the pass EXCLUDES the three
+                    // declared-rect states, so no centred commit can reach
+                    // this record and the commanded rect is what the client
+                    // was offered. The exclusion is what makes the two agree.
+                    // Without it the pass would hand a client's own smaller
+                    // answer forward, and the counter-assert would compare the
+                    // centred commit against a rect that was never offered.
                     // Not armed mid-gesture, matching the X11 leg's own
                     // deferred-commit predicate: countering a live drag or
                     // resize would fight the user's hand.

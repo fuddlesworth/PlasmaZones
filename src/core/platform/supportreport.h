@@ -170,7 +170,7 @@ private:
     static QString sectionCompositorBridge(const Snapshot& snapshot);
     static QString sectionSession();
     static QString sectionLogs(int sinceMinutes);
-    static QString sectionEffectLogs(int sinceMinutes, bool bridgeRegistered);
+    static QString sectionCompositorLogs(int sinceMinutes, bool bridgeRegistered);
 };
 
 } // namespace PlasmaZones

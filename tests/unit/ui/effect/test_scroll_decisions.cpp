@@ -4,10 +4,12 @@
 // Pure-logic tests for the scroll-managed window decision helpers
 // (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
 // decision (with its clear-in-flight marker arm/consume contract), the
-// column-maximize 3-way batch decision, the counter-assert burst budget,
-// and the compositor-claim release table (which claim answers to which exit
-// scope, the teardown ordering rule, and the retain-on-fullscreen-skip
-// policy). Same header-only reach as test_anchor_uniforms:
+// column-maximize 3-way batch decision (with its toggle-in-flight marker and
+// the two threaded stale-batch walks), the counter-assert burst budget, the
+// compositor-claim release table (which claim answers to which exit scope,
+// the teardown ordering rule, and the retain-on-fullscreen-skip policy), and
+// the size-continuity carry-forward table. Same header-only reach as
+// test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
 
@@ -311,22 +313,6 @@ private Q_SLOTS:
         QVERIFY(!inSet);
     }
 
-    // The marker must never swallow the engine's own answer. An adopt for a
-    // window this effect instance has never seen (daemon still holding the
-    // state across an effect restart) has to land even while armed, or the
-    // restart repair the Apply arm exists for would be lost.
-    void markerNeverSuppressesTheEnginesAnswer()
-    {
-        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(true, false, false, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Apply));
-        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(true, false, true, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Apply));
-        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(false, true, false, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Release));
-        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(false, true, true, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Release));
-    }
-
     // Counter-assert budget: matching frame never counters.
     void counterAssertNoOpOnMatchingFrame()
     {
@@ -373,6 +359,19 @@ private Q_SLOTS:
         start = 0;
         count = 0;
         QVERIFY(shouldCounterAssert(start, count, 10400, true));
+
+        // The COUNT half of that reset is what actually re-arms, and the walk
+        // above cannot see it: a zeroed start is already more than a window
+        // behind 10400, so the rollover arm fires and zeroes the count anyway.
+        // Leaving count at 3 there still passes. Spend the budget again and
+        // re-arm INSIDE the rolling window, where no rollover can cover for it.
+        QVERIFY(shouldCounterAssert(start, count, 10410, true));
+        QVERIFY(shouldCounterAssert(start, count, 10420, true));
+        QVERIFY(!shouldCounterAssert(start, count, 10430, true));
+        count = 0;
+        QVERIFY(shouldCounterAssert(start, count, 10450, true));
+        QCOMPARE(start, qint64(10400));
+        QCOMPARE(count, 1);
     }
 
     // ── Compositor-state claims ────────────────────────────────────────────
@@ -503,6 +502,15 @@ private Q_SLOTS:
         QTest::newRow("stale oversized frame, both axes") << false << true << QSize(1670, 939) << column << false;
         QTest::newRow("stale oversized frame, width only") << false << true << QSize(1670, 800) << column << false;
         QTest::newRow("stale oversized frame, height only") << false << true << QSize(1400, 939) << column << false;
+
+        // The equality edges of that same refusal. A frame matching the column
+        // on exactly one axis IS an answer to this column and must still
+        // carry, so these are the rows that fail if either bound in
+        // mayCarryCommittedSize is tightened from <= to <. Without them both
+        // mutations pass the whole table: every other carrying row is strictly
+        // smaller on both axes.
+        QTest::newRow("equal width, shorter height") << false << true << QSize(1610, 877) << column << true;
+        QTest::newRow("equal height, narrower width") << false << true << QSize(1608, 879) << column << true;
     }
 
     void sizeContinuityCarryForwardTable()

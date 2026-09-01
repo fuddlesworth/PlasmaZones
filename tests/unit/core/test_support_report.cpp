@@ -3,10 +3,10 @@
 
 /**
  * @file test_support_report.cpp
- * @brief Unit tests for the SupportReport class (core/supportreport.h)
+ * @brief Unit tests for the SupportReport class (core/platform/supportreport.h)
  *
- * Tests verify redaction logic, file reading, sinceMinutes handling,
- * and overall report structure.
+ * Tests verify redaction logic, file reading, sinceMinutes handling, overall
+ * report structure, compositor bridge state, and the placement-modes summary.
  */
 
 #include <QTest>
@@ -79,6 +79,7 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("## Environment")));
         QVERIFY(report.contains(QStringLiteral("## Screens")));
         QVERIFY(report.contains(QStringLiteral("## Config")));
+        QVERIFY(report.contains(QStringLiteral("## Rules")));
         QVERIFY(report.contains(QStringLiteral("## Layouts")));
         QVERIFY(report.contains(QStringLiteral("## Placement Modes")));
         QVERIFY(report.contains(QStringLiteral("## Compositor Bridge")));
@@ -271,12 +272,54 @@ private Q_SLOTS:
 
     void testGenerate_sanitizesDetailsTag()
     {
-        // If any section content contains </details>, it must be escaped so
-        // it doesn't prematurely close the collapsible block in GitHub Markdown.
-        // We can't inject content into a null-dependency report, but we can verify
-        // the final closing tag is present and only appears once.
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
-        // Count occurrences of the real closing tag — should be exactly 1
+        // A literal </details> in section content would prematurely close the
+        // collapsible block in GitHub Markdown. generateFromSnapshot escapes
+        // the whole body before appending the real closing tag, so a snapshot
+        // field that renders verbatim is enough to drive it: bridgeName lands
+        // in the Compositor Bridge section unescaped.
+        //
+        // Driving it through real content is the point. Counting the closing
+        // tag in a null-dependency report passed with the escaping deleted
+        // outright, because nothing in that report could contaminate it.
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = true;
+        snap.bridgeName = QStringLiteral("kwin</details>injected");
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+
+        // Escaped where it was rendered.
+        QVERIFY(report.contains(QStringLiteral("kwin&lt;/details&gt;injected")));
+        // And the only surviving real closing tag is the block's own, so the
+        // collapsible section still closes exactly once.
+        const QRegularExpression re(QStringLiteral("</details>"));
+        auto matches = re.globalMatch(report);
+        int count = 0;
+        while (matches.hasNext()) {
+            matches.next();
+            count++;
+        }
+        QCOMPARE(count, 1);
+        QVERIFY(report.endsWith(QStringLiteral("</details>\n")));
+    }
+
+    void testGenerate_sanitizesDetailsTag_caseAndSpacing()
+    {
+        // An HTML parser closes on </DETAILS> and </details > too, and the
+        // content here is whatever a user typed into a rule name or a config
+        // value, so the sanitizer is case-insensitive and slack about interior
+        // whitespace rather than an exact literal match.
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = true;
+        snap.bridgeName = QStringLiteral("a</DETAILS>b</details >c");
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+
+        // Both the absence of the raw forms AND the presence of the escaped
+        // ones: asserting absence alone would pass vacuously if bridgeName
+        // ever stopped reaching the output at all.
+        QVERIFY(!report.contains(QStringLiteral("</DETAILS>")));
+        QVERIFY(!report.contains(QStringLiteral("</details >")));
+        QVERIFY(report.contains(QStringLiteral("a&lt;/details&gt;b&lt;/details&gt;c")));
         const QRegularExpression re(QStringLiteral("</details>"));
         auto matches = re.globalMatch(report);
         int count = 0;

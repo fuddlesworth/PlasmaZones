@@ -289,8 +289,15 @@ void TestScrollEngineVerbs::absoluteWidthAndHeightIntents()
     // 1px column at relayout, which is the hazard the boundary comment
     // names, and nothing drove this arm before.
     engine->setColumnWidth(ColumnWidth::makeProportion(0.0), QStringLiteral("S1"));
+    // Asserted as a SUCCESS, so the pair below reads as "first applied, second
+    // refused as idempotent" rather than "both floored".
+    QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(state->strip().columns().at(state->strip().activeColumnIndex()).width.proportion, MinColumnWidthFraction);
+    const int beforeRefusal = feedback.count();
     engine->setColumnWidth(ColumnWidth::makeProportion(-2.0), QStringLiteral("S1"));
+    // Pinned so `last()` cannot silently read the previous call's record if
+    // this one ever stops emitting.
+    QCOMPARE(feedback.count(), beforeRefusal + 1);
     // A second floored value compares equal to the stored one, so the verb
     // refuses rather than re-applying — the same idempotence contract the
     // exact-repeat case above pins.
@@ -660,8 +667,9 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
     engine->minimizeColumnWidth(QStringLiteral("S1"));
     engine->resetStripToDefaults(QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 14);
+    QCOMPARE(feedback.count(), 15);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));
@@ -1085,6 +1093,12 @@ void TestScrollEngineVerbs::focusOntoAForeignModeNeighbourDefersToTheDaemon()
 // the user is not looking at. What the test fixes in place is that it must
 // stay OBSERVABLE — the feedback names the floating window that actually holds
 // focus, so the OSD can say which window it means.
+//
+// CHARACTERIZATION, not evidence for a fix: the guard, the token and the
+// source slot all pre-date the logging that made this refusal readable. The
+// test exists so the refusal cannot be quietly turned into an action or lose
+// the name it reports, not to demonstrate that the logging works. Logging
+// needs no test.
 void TestScrollEngineVerbs::windowedFullscreenRefusesWhileTheFloatLayerHoldsFocus()
 {
     QObject owner;
@@ -1115,12 +1129,23 @@ void TestScrollEngineVerbs::windowedFullscreenRefusesWhileTheFloatLayerHoldsFocu
     QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|b")));
     QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
 
+    // A SECOND press while still floating is refused the same way, so the
+    // refusal is a standing property of the state rather than a one-shot.
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
     // Handing focus back to the strip makes the very same press work, which is
     // what identifies the float focus as the whole cause.
     engine->setWindowFloat(QStringLiteral("app|c"), false, QStringLiteral("S1"));
     QVERIFY(!state->floatingHasFocus());
     const QString active = state->strip().activeWindowId();
+    // Pinned: an empty id would let isWindowedFullscreen decide the assertion
+    // below instead of the behaviour under test.
+    QVERIFY(!active.isEmpty());
     engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 3);
     QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("on"));
     QVERIFY(state->strip().isWindowedFullscreen(active));

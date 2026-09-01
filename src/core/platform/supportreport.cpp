@@ -38,7 +38,14 @@ static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
 
 QString SupportReport::redactHomePath(const QString& input)
 {
-    const QString home = QDir::homePath();
+    // A trailing slash has to come off before the lookahead is built, or the
+    // pattern demands a SECOND separator and matches nothing: "/home/u/"
+    // followed by (?=[/\s]|$) never matches "/home/u/.config". QDir::homePath()
+    // cleans the path today, so this is belt and braces against a future
+    // caller or a platform that does not.
+    QString home = QDir::homePath();
+    while (home.size() > 1 && home.endsWith(QLatin1Char('/')))
+        home.chop(1);
     if (home.isEmpty() || home == QLatin1String("/"))
         return input;
 
@@ -520,7 +527,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(output.split(QLatin1Char('\n')))));
 }
 
-QString SupportReport::sectionEffectLogs(int sinceMinutes, bool bridgeRegistered)
+QString SupportReport::sectionCompositorLogs(int sinceMinutes, bool bridgeRegistered)
 {
     // The KWin effect runs inside the kwin_wayland process, so its journal
     // entries are tagged "kwin_wayland", not "plasmazonesd" — sectionLogs()
@@ -564,7 +571,18 @@ QString SupportReport::sectionEffectLogs(int sinceMinutes, bool bridgeRegistered
     // list of effect message prefixes rots exactly the way the old comment
     // did — silently, with the failure looking like success. capLogLines
     // already bounds the section at MaxLogLines, so the size is contained.
-    const QStringList lines = QString::fromUtf8(rawOutput).split(QLatin1Char('\n'));
+    //
+    // Whitespace-only output takes the same early return as the sibling
+    // section. journalctl can answer with a bare newline, which is not caught
+    // by the isEmpty test above and would otherwise render an empty fence that
+    // reads exactly like a captured-but-silent effect.
+    const QString output = QString::fromUtf8(rawOutput);
+    if (output.trimmed().isEmpty())
+        return QStringLiteral("*(no kwin_wayland journal in the last %1 minutes — %2)*\n")
+            .arg(sinceMinutes)
+            .arg(quietSuffix);
+
+    const QStringList lines = output.split(QLatin1Char('\n'));
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(lines)));
 }
 
@@ -573,6 +591,14 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     sinceMinutes = (sinceMinutes <= 0) ? DefaultSinceMinutes : qMin(sinceMinutes, MaxSinceMinutes);
 
     QString report;
+    // ABOVE the collapsible block, because the one line that has to be read
+    // before posting is no use hidden inside it. Said here rather than only in
+    // the collector script's help, since this Markdown is often pasted on its
+    // own by a caller who never ran the script.
+    report += QStringLiteral(
+        "*Home paths in this report are redacted. It still records your machine hostname in the log "
+        "lines, the class and title of tracked windows, and the match patterns from your window "
+        "rules. Look it over before you post it.*\n\n");
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
 
     report += QStringLiteral("## Version\n");
@@ -616,12 +642,17 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Compositor Logs (last %1 minutes)\n").arg(sinceMinutes);
-    report += sectionEffectLogs(sinceMinutes, snapshot.hasBridgeInfo && snapshot.bridgeRegistered);
+    report += sectionCompositorLogs(sinceMinutes, snapshot.hasBridgeInfo && snapshot.bridgeRegistered);
     report += QLatin1Char('\n');
 
     // Sanitize any literal </details> in section content that would prematurely
     // close the collapsible block when rendered in GitHub Issues/Discussions.
-    report.replace(QStringLiteral("</details>"), QStringLiteral("&lt;/details&gt;"));
+    // Case-insensitive and slack about interior whitespace, because an HTML
+    // parser closes on </DETAILS> and </details > just as readily, and the
+    // content here is whatever a user put in a rule name or a config value.
+    static const QRegularExpression closingDetails(QStringLiteral("</\\s*details\\s*>"),
+                                                   QRegularExpression::CaseInsensitiveOption);
+    report.replace(closingDetails, QStringLiteral("&lt;/details&gt;"));
 
     report += QStringLiteral("</details>\n");
 
