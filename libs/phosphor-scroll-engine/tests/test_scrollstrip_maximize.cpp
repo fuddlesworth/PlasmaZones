@@ -60,6 +60,7 @@ private Q_SLOTS:
     void widthAndHeightVerbsClearMaximizeToEdges();
     void equalizeClearsTheActiveColumnsMaximizeToEdges();
     void maximizeToEdgesIgnoresCenteringAndRestoresTheHeightIntent();
+    void maximizeToEdgesLandsOnTheRawAreaUnderMainAxisCentering();
 };
 
 // The geometry contract of the maximize-to-edges flag: the column resolves
@@ -534,6 +535,42 @@ void TestScrollStripMaximize::maximizeToEdgesIgnoresCenteringAndRestoresTheHeigh
     // And the 300px intent survives the round trip untouched.
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 300);
+}
+
+// The MAIN-axis twin of the slot above, and the live "maximize with centering
+// on is still broken" report. The cross-axis centre policy above is
+// centerShortColumns; this one is centerFocusedColumn, which places the column
+// by moving the VIEW rather than by moving the column within its area.
+//
+// The two halves of the maximized position have to agree on which area the
+// column is centred in. relayout already shifts a flagged column low by the
+// outer gap so an anchor of "sits at the strip cursor" lands it on the raw
+// area, so the anchor policy must centre it in the RAW extent too. Centring it
+// in the gapped extent instead spent the gap a second time and the column
+// resolved a full outer gap off the low edge of the output, which is what the
+// user saw: a maximized window hanging past the screen edge.
+//
+// ASYMMETRIC main-axis inset, for the reason the slot above gives: under a
+// symmetric one the two candidate answers are arithmetically identical and the
+// fixture could not tell them apart.
+void TestScrollStripMaximize::maximizeToEdgesLandsOnTheRawAreaUnderMainAxisCentering()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::Always;
+    params.rawWorkArea = params.workArea;
+    // MAIN-axis inset only: the cross axis is the sibling slot's concern, and
+    // leaving it alone keeps a cross-axis regression from being reported here.
+    params.workArea =
+        Ax::vertical() ? params.rawWorkArea.adjusted(0, 20, 0, -60) : params.rawWorkArea.adjusted(20, 0, -60, 0);
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    // The policy owns the view, so re-apply it the way applyLayout does before
+    // reading the geometry back.
+    strip.updateViewForFocus(params);
+
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), params.rawWorkArea);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripMaximize)

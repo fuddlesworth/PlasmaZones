@@ -331,8 +331,18 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int colMain = columnExtentPx(m_columns.at(columnIndex), params);
-    return (mainExtent(params) - colMain) / 2;
+    const Column& col = m_columns.at(columnIndex);
+    const int colMain = columnExtentPx(col, params);
+    // A maximized-to-edges column is centred in the extent it RESOLVES
+    // against, which is the raw work area, not the gapped one. relayout
+    // already shifts such a column low by the outer gap so that an anchor of
+    // "column sits at the strip cursor" lands it on the raw area exactly, so
+    // centring it in the gapped extent here would subtract that same gap a
+    // second time and hang the column off the low edge of the output. With
+    // the flag off nothing changes: the column resolves against the gapped
+    // work area and takes no shift.
+    const int centringExtent = col.maximizedToEdges ? params.axis.mainSize(rawAreaFor(params)) : mainExtent(params);
+    return (centringExtent - colMain) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params)
