@@ -37,8 +37,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
     // Helper: create a "__restore__" entry that tells the KWin effect to move
     // the window back to its pre-tile geometry instead of snapping it to a zone.
     auto tryAppendRestore = [this, &result](const ResnapEntry* entry) {
-        // No screen validation needed — resnap restores to the exact captured geometry.
-        auto preTile = m_windowTracker->validatedUnmanagedGeometry(entry->windowId, QString());
+        // The ENTRY's screen, not an empty string. Empty made every lookup miss
+        // the screen-local rect and fall through to the old cross-screen
+        // fallback, which returned another monitor's rect with no adjustment at
+        // all — the resnap restore's own version of the cross-screen teleport.
+        // With the fallback gone an empty screen would simply never answer.
+        auto preTile = m_windowTracker->validatedUnmanagedGeometry(entry->windowId, entry->screenId);
         if (preTile && preTile->isValid()) {
             ZoneAssignmentEntry restoreEntry;
             restoreEntry.windowId = entry->windowId;

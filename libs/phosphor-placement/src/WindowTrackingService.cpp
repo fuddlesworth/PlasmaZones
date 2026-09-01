@@ -433,17 +433,25 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     if (!rec) {
         return std::nullopt;
     }
+    // THIS SCREEN only. There is no cross-screen fallback: a position remembered
+    // on another monitor is not a float-back for this one. The fallback used to
+    // re-centre such a rect onto screenId, which sounds harmless and is not —
+    // it silently relocates a window the user put here, and it only ever
+    // guessed, since a window that has never floated on this screen has no
+    // remembered spot here to return to. A caller that finds nothing leaves the
+    // window where it is, which is both honest and the least surprising
+    // outcome.
+    //
+    // The re-centring in validateGeometryForScreen is still reachable through
+    // its other callers; what is gone is this function MANUFACTURING a
+    // cross-screen case to feed it. Passing screenId on both sides keeps the
+    // on-screen sanity check (a remembered rect can be off-canvas after a
+    // resolution change) without any cross-screen adjustment.
     const QRect exact = rec->freeGeometryFor(screenId);
-    if (exact.isValid()) {
-        return validateGeometryForScreen(exact, screenId, screenId);
+    if (!exact.isValid()) {
+        return std::nullopt;
     }
-    // Deterministic cross-screen fallback (shared with anyFreeGeometry()) — a
-    // raw QHash walk here picked a different float-back screen run to run.
-    const QString fallbackScreen = rec->anyFreeGeometryScreenId();
-    if (!fallbackScreen.isEmpty()) {
-        return validateGeometryForScreen(rec->freeGeometryFor(fallbackScreen), fallbackScreen, screenId);
-    }
-    return std::nullopt;
+    return validateGeometryForScreen(exact, screenId, screenId);
 }
 
 void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,

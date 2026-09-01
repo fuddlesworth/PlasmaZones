@@ -544,6 +544,45 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screen), QRect(100, 100, 800, 600));
     }
 
+    void testValidatedUnmanagedGeometry_isScreenLocal()
+    {
+        // "Float restore is screen-local by doctrine" — the phrase is
+        // test_window_placement_store's, and the resolver used to contradict it
+        // with a cross-screen fallback that re-centred another monitor's rect
+        // onto the asking screen. That relocated a window the user had put
+        // here, off a rect that only ever guessed: a window which has never
+        // floated on this screen has no remembered spot here to return to.
+        // Nothing is the honest answer, and it leaves the window alone.
+        const QString windowId = QStringLiteral("firefox|screen-local");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->setWindowFloating(windowId, true);
+        m_service->recordFreeGeometry(windowId, screen, QRect(100, 100, 800, 600), /*overwrite=*/true);
+
+        QVERIFY2(m_service->validatedUnmanagedGeometry(windowId, screen).has_value(),
+                 "the screen the rect was captured on must answer");
+        QVERIFY2(!m_service->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2")).has_value(),
+                 "a rect remembered on DP-1 is not a float-back for DP-2");
+    }
+
+    void testValidatedUnmanagedGeometry_isPerWindow()
+    {
+        // No cross-instance share either. An app's bucket fills with dead
+        // instances (MaxPerApp), so a live window with no record of its own
+        // would otherwise be handed a ghost's remembered spot — discussion
+        // #1028. Every caller of this resolver asks a per-window question.
+        const QString recorded = QStringLiteral("konsole|has-a-record");
+        const QString sibling = QStringLiteral("konsole|no-record");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->setWindowFloating(recorded, true);
+        m_service->recordFreeGeometry(recorded, screen, QRect(120, 140, 640, 480), /*overwrite=*/true);
+
+        QVERIFY(m_service->validatedUnmanagedGeometry(recorded, screen).has_value());
+        QVERIFY2(!m_service->validatedUnmanagedGeometry(sibling, screen).has_value(),
+                 "a same-app sibling's float-back is not this window's");
+    }
+
     void testRecordFreeGeometry_firstCaptureWins_whenNotOverwrite()
     {
         // overwrite=false is the production capture path: the FIRST captured free

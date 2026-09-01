@@ -159,12 +159,14 @@ public:
     /// The window's remembered UNMANAGED (free/float-back) geometry, resolved
     /// FOR @p screenId, or nullopt when no record can answer.
     ///
-    /// "Validated" describes the POSITION, not the size. The implementation
-    /// prefers the spot remembered for @p screenId and otherwise falls back to
-    /// one remembered on another screen, re-centring that rect on @p screenId
-    /// (its absolute coordinates belong to the screen it was captured on, so
-    /// only the SIZE carries over). So a non-null answer is not evidence the
-    /// window was ever free on this screen.
+    /// "Validated" describes the POSITION, not the size: the answer is the spot
+    /// remembered for @p screenId, sanity-checked against the live screen
+    /// layout so a rect left off-canvas by a resolution change is pulled back.
+    ///
+    /// SCREEN-LOCAL. A spot remembered on another monitor is not a float-back
+    /// for this one, so there is no cross-screen fallback — a non-null answer
+    /// IS evidence the window was free on this screen. Callers that find
+    /// nothing leave the window where it is.
     ///
     /// The lookup is restricted to the window's OWN record. It used to take an
     /// exactOnly flag defaulting to FALSE, which admitted a same-app SIBLING's
