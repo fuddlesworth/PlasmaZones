@@ -32,6 +32,8 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -158,7 +160,28 @@ QString WindowTrackingAdaptor::findEmptyZone()
 
 PhosphorProtocol::ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
 {
-    return getZoneGeometryForScreen(zoneId, QString());
+    // The D-Bus contract for this overload is "primary screen". Resolve that
+    // screen here and pass its identifier: WindowTrackingService::zoneGeometry()
+    // answers INVALID for an empty screen id rather than guessing the primary,
+    // because every internal caller means a specific monitor and a wrong guess
+    // moves the window to it.
+    //
+    // The screen manager is asked first, because it is the authority the
+    // service resolves the id against and it may front a provider other than
+    // Qt's. physicalScreenFor({}) is that manager's own "primary output" answer
+    // and returns the TRACKED entry, so the identifier handed back is the one
+    // the service will match on. QGuiApplication is the fallback for a service
+    // wired without a screen manager.
+    QString primaryId;
+    if (auto* mgr = m_service->screenManager()) {
+        primaryId = mgr->physicalScreenFor(QString()).identifier;
+    }
+    if (primaryId.isEmpty()) {
+        if (QScreen* primary = QGuiApplication::primaryScreen()) {
+            primaryId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
+        }
+    }
+    return getZoneGeometryForScreen(zoneId, primaryId);
 }
 
 PhosphorProtocol::ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId,
