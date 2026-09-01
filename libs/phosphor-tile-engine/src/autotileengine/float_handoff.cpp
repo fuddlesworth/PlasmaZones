@@ -490,8 +490,15 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         return;
     }
 
+    // MEMBERSHIP, not just a non-null state: stateForWindow resolves through the
+    // reverse key map, which a refused insert can leave pointing at a state that
+    // does not hold the window. TilingState::setFloating no-ops for an unheld
+    // window, so without this the write below silently did nothing while the
+    // logging and the windowFloatingStateSynced emission at the tail still
+    // announced a float that never happened — the effect's float cache then
+    // latched at "floating" and never came back (Discussion #1028).
     PhosphorTiles::TilingState* state = stateForWindow(windowId);
-    if (!state) {
+    if (!state || !state->containsWindow(windowId)) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << (shouldFloat ? "floatWindow" : "unfloatWindow") << "- window not tracked=" << windowId;
         return;

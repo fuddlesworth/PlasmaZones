@@ -337,6 +337,26 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     if (preSeeded) {
         cleanupPendingOrderIfResolved(screenId);
     }
+    // Membership-verified, because every addWindow above can refuse (the split
+    // tree's MaxRuntimeTreeDepth ceiling). Keying and returning true on a
+    // refusal left a phantom key: isWindowTracked answered true for a window no
+    // TilingState held, so the daemon routed the window's float traffic here
+    // instead of through the adoption handoff, and setWindowFloat then wrote
+    // into a state that silently ignored it (TilingState::setFloating no-ops for
+    // an unheld window) while still announcing the float. Leave no trace
+    // instead, exactly as handoffReceive's own refusal arm does.
+    if (!state->containsWindow(windowId)) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "insertWindow: state refused" << windowId << "on" << screenId << "- window left unmanaged";
+        // windowOpened keys the reverse map before calling in here, so the
+        // sweep has to drop that key too — the same cleanup the defer gate and
+        // claimCrossScreenReopen run for their own refusals.
+        m_states.removeWindow(windowId);
+        m_windowMinSizes.remove(windowId);
+        m_autotileFloatedWindows.remove(windowId);
+        purgeFromPendingOrders(windowId);
+        return false;
+    }
     m_states.setKeyForWindow(windowId, currentKey);
     return true;
 }

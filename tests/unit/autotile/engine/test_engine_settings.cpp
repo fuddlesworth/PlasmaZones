@@ -91,9 +91,13 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // All three opened windows must now tile: raising the cap from 2 to 4
-        // backfills the previously-overflowed win3. >= 2 would also pass if the
-        // backfill did nothing, so assert the exact count the regression targets.
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // recovers the previously-overflowed win3. >= 2 would also pass if the
+        // recovery did nothing, so assert the exact count the regression targets.
+        // QTRY_, because an over-cap window is a real overflow-floated member of
+        // the state now (not an unmanaged phantom backfillWindows re-adopts), so
+        // its recovery rides OverflowManager::recoverIfRoom on the settings
+        // retile timer rather than landing synchronously in refreshConfigFromSettings.
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -409,7 +413,8 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // QTRY_: recovery rides the settings retile timer (see testMaxWindowsIncrease_triggersBackfill).
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
     }
 
     void testOverflowBehavior_floatToUnlimited_combinedWithMaxIncrease_singleBackfill()
@@ -436,7 +441,8 @@ private Q_SLOTS:
         engine.refreshConfigFromSettings();
         QCoreApplication::processEvents();
 
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // QTRY_: recovery rides the settings retile timer (see testMaxWindowsIncrease_triggersBackfill).
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
         QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         QCOMPARE(engine.config()->maxWindows, 4);
     }

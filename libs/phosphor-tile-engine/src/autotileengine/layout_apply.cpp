@@ -364,18 +364,15 @@ void AutotileEngine::applyTiling(const QString& screenId)
 
     // zones.size() may be less than windows.size() when maxWindows caps the layout.
     // Only the first zones.size() windows receive tiled geometries; the rest are untouched.
-    if (zones.isEmpty()) {
-        qCDebug(PhosphorTileEngine::lcTileEngine)
-            << "AutotileEngine::applyTiling: no zones calculated for screen" << screenId;
-        return;
-    }
-    if (zones.size() > windows.size()) {
-        qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size() << "vs" << zones.size();
-        return;
-    }
-
-    const int tileCount = zones.size();
+    //
+    // The overflow pass runs BEFORE this bail, off the cap rather than off the
+    // zone count, because it is the only thing enforcing maxWindows: nothing
+    // refuses an over-cap window at insert time (onWindowAdded says why). A
+    // recalc that produced no zones — invalid screen geometry mid-output-change,
+    // a screen with no algorithm yet — would otherwise leave the whole
+    // over-cap set tiled until some later retile happened to succeed.
+    const int overflowCap = std::min(effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones);
+    const int tileCount = zones.isEmpty() ? overflowCap : zones.size();
 
     // Auto-float overflow windows that exceed maxWindows cap.
     // Daemon's windowFloatingChanged handler restores their pre-autotile geometry.
@@ -383,6 +380,32 @@ void AutotileEngine::applyTiling(const QString& screenId)
     QStringList newlyOverflowed = m_overflow.applyOverflow(screenId, windows, tileCount);
     for (const QString& wid : std::as_const(newlyOverflowed)) {
         state->setFloating(wid, true);
+    }
+
+    if (zones.isEmpty()) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "AutotileEngine::applyTiling: no zones calculated for screen" << screenId;
+        // Anything the pass just floated still has to reach subscribers, or the
+        // effect never restores its pre-tile geometry and the daemon's float
+        // mirror drifts from this state.
+        if (!newlyOverflowed.isEmpty()) {
+            QJsonArray floatOnly;
+            for (const QString& wid : std::as_const(newlyOverflowed)) {
+                QJsonObject obj;
+                obj[QLatin1String("windowId")] = wid;
+                obj[QLatin1String("floating")] = true;
+                obj[QLatin1String("screenId")] = screenId;
+                floatOnly.append(obj);
+            }
+            Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(floatOnly).toJson(QJsonDocument::Compact)));
+            Q_EMIT windowsBatchFloated(newlyOverflowed, screenId);
+        }
+        return;
+    }
+    if (zones.size() > windows.size()) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size() << "vs" << zones.size();
+        return;
     }
 
     // Build batch JSON and emit once to avoid race when effect applies many geometries.

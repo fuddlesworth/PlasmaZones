@@ -55,6 +55,48 @@ private Q_SLOTS:
         QVERIFY(state->isFloating(QStringLiteral("win-3")));
     }
 
+    // Discussion #1028: a window OPENING while the tiled set is already at
+    // maxWindows used to be refused outright by onWindowAdded — left untracked
+    // and unfloated, but with the reverse-map key windowOpened had already
+    // written still in place. That phantom key made isWindowTracked answer true
+    // for a window no TilingState held, so the daemon drove float traffic
+    // straight into a state that silently ignored it: the minimize float and
+    // the unminimize unfloat both became no-ops for the rest of the session.
+    void testOverflow_windowOpenedPastCapIsTrackedAndFloated()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("TestScreen");
+        engine.config()->maxWindows = 2;
+
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state != nullptr);
+        // No algorithm is wired in this harness, so seed the zones the way the
+        // sibling overflow tests do — applyTiling's overflow pass runs off the
+        // calculated zone count.
+        state->setCalculatedZones({QRect(0, 0, 500, 500), QRect(500, 0, 500, 500)});
+
+        engine.windowOpened(QStringLiteral("win-3"), screenName);
+        QCoreApplication::processEvents();
+
+        QVERIFY(state->containsWindow(QStringLiteral("win-3")));
+        QVERIFY(state->isFloating(QStringLiteral("win-3")));
+        QCOMPARE(state->tiledWindowCount(), 2);
+
+        // The float bit must round-trip: this is the minimize/unminimize edge
+        // the daemon drives through setWindowFloat.
+        engine.unfloatWindow(QStringLiteral("win-3"));
+        QCoreApplication::processEvents();
+        engine.floatWindow(QStringLiteral("win-3"));
+        QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("win-3")));
+    }
+
     void testOverflow_emitsFloatingSignal()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
