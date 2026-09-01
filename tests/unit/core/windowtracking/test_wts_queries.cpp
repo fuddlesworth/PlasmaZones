@@ -29,6 +29,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces/interfaces.h"
@@ -42,6 +43,7 @@
 #include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "FakeScreenProvider.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
@@ -415,6 +417,57 @@ private Q_SLOTS:
         QVERIFY(baseline.isValid());
         QVERIFY(inset.isValid());
         QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    void testZoneGeometry_unresolvableScreenIsInvalidNotPrimary()
+    {
+        // With a screen manager wired, a screen id the manager cannot resolve
+        // (empty, or a monitor that is gone) must answer an INVALID rect. The
+        // old primary-screen fallback recomputed the zone against the primary
+        // monitor and handed back a perfectly valid-looking frame, and every
+        // caller only checks isValid() — so a snapped window on the secondary
+        // monitor was silently moved onto the primary one. Same-sized outputs
+        // make the two rects differ only by the output origin, which is exactly
+        // what made it invisible.
+        //
+        // The manager tracks a real two-output topology, so the hazard this
+        // guard exists for is actually present: physicalScreenFor("") maps an
+        // empty id onto the PRIMARY output by design (the historical
+        // findByIdOrName contract its other callers rely on), and that is
+        // asserted below. Without the refusal in the service, an empty id would
+        // therefore be measured against DP-1 and answer a valid frame.
+        //
+        // DP-2's frame is the positive control: a resolvable id still answers a
+        // real rect on the output it names, so the refusal below is the empty /
+        // unknown id being rejected and not the whole path being dead.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        // The hazard: an empty id is NOT unresolvable to the screen manager, it
+        // resolves to the primary output. That is what made the old fallback
+        // silent.
+        QCOMPARE(screenMgr.physicalScreenFor(QString()).name, QStringLiteral("DP-1"));
+        QVERIFY(screenMgr.physicalScreenFor(QStringLiteral("DP-2")).isValid());
+        QVERIFY(!screenMgr.physicalScreenFor(QStringLiteral("Gone:Monitor:0")).isValid());
+
+        const auto service =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, &screenMgr, nullptr);
+
+        // Positive control on the SECOND output: the frame lands inside DP-2,
+        // which is exactly what a primary-screen stand-in could not produce.
+        const QRect onDp2 = service->zoneGeometry(m_zoneIds[0], QStringLiteral("DP-2"));
+        QVERIFY(onDp2.isValid());
+        QVERIFY(QRect(1920, 0, 1920, 1080).contains(onDp2));
+        QVERIFY(service->multiZoneGeometry({m_zoneIds[0], m_zoneIds[1]}, QStringLiteral("DP-2")).isValid());
+
+        QVERIFY(!service->zoneGeometry(m_zoneIds[0], QString()).isValid());
+        QVERIFY(!service->zoneGeometry(m_zoneIds[0], QStringLiteral("Gone:Monitor:0")).isValid());
+        QVERIFY(!service->multiZoneGeometry({m_zoneIds[0], m_zoneIds[1]}, QString()).isValid());
+        QVERIFY(!service->multiZoneGeometry({m_zoneIds[0], m_zoneIds[1]}, QStringLiteral("Gone:Monitor:0")).isValid());
     }
 
     void testZoneGeometry_noInsetWhenBorderOff()
