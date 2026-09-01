@@ -168,6 +168,17 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // its old zone and clamp it onto that zone's output.
             m_tileTargetZones.remove(windowId);
             m_centeredWaylandZones.remove(windowId);
+            // The tiled FACT goes too. This screen has left the managed set,
+            // but TilingStateHelpers would still record the window as tiled, so
+            // the IsTiled rule field stays true and a tiled-scoped border or
+            // title-bar rule keeps applying to a window this handler no longer
+            // manages — with no invalidateRuleCacheForStateChange for the flip.
+            // Both sibling arms clear it (they reach the shared call below);
+            // this one returns above that, so it has to clear its own. Unlike
+            // the two maximize ledgers, whose debt the fullscreen-exit repair
+            // in slotWindowFullScreenChanged eventually pays, nothing else pays
+            // this one short of the next genuine toggle.
+            clearWindowTiledAllScreens(windowId);
             continue;
         }
         // Capture tracked-ness BEFORE demoting: it is the only
@@ -275,7 +286,17 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // away on the grounds that the call inside it does nothing.
             if (m_maximizedToEdgesWindows.contains(windowId)) {
                 releaseMaximizedToEdges(windowId, w);
-            } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                // Requested maximize, and a fullscreen/gesture guard, matching
+                // this arm's two twins. Without the fullscreen term a window
+                // with fullscreen REQUESTED but not yet committed reaches here
+                // — the pass's earlier fullscreen `continue` filters on the
+                // committed bit only, where floatcleanup uses the
+                // requested-OR-committed union — and applyMaximizeSuppressed
+                // then moveResizes a presenting surface to its restore rect,
+                // with the geometry apply below keyed on the requested bit and
+                // so not bailing either.
+            } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+                       && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
                 applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
             }
             // Snap-out: leaving tile-managed sizing.
@@ -476,7 +497,10 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
                 continue;
             }
             const QPoint zoneCenter = it.value().center();
-            const auto* output = KWin::effects->screenAt(zoneCenter);
+            // Guarded like every other KWin::effects use in this file (see the
+            // single-model note in slotScreensChanged); a null pointer resolves
+            // the entry through the window's own screen instead.
+            const auto* output = KWin::effects ? KWin::effects->screenAt(zoneCenter) : nullptr;
             const QString entryScreen =
                 output ? m_effect->resolveEffectiveScreenId(zoneCenter, output) : m_effect->getWindowScreenId(mw);
             if (removed.contains(entryScreen)) {
@@ -612,6 +636,19 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                     if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
                         ++entryCounts[entry.appId][entry.screenId];
                     }
+                }
+                // One model for the pointer in this lambda. The loop below
+                // guards KWin::effects before calling screenAt(), so reading
+                // stackingOrder() off it unguarded here left the two lines
+                // contradicting each other: if the guard's premise held, this
+                // had already crashed; if this was safe, the guard was dead.
+                // The guard is the redundant half — nothing can dispatch a
+                // queued reply after KWin::effects is gone, because aboutToQuit
+                // stops the event loop before the effect is destroyed and there
+                // is no nested event loop anywhere in this tree — but the file
+                // should still state one position rather than both.
+                if (!KWin::effects) {
+                    return;
                 }
                 const auto allWindows = KWin::effects->stackingOrder();
                 for (const auto& entry : entries) {
@@ -797,6 +834,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         }
     }
 
+    // Same single-model point as the reply lambda above: this function guards
+    // KWin::effects at its later repaint sites, so the walk here is guarded too
+    // rather than leaving the file arguing with itself about whether the
+    // pointer can be null on a signal path.
+    if (!KWin::effects) {
+        return;
+    }
     const auto windows = KWin::effects->stackingOrder();
 
     if (!removed.isEmpty()) {
@@ -860,16 +904,32 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // without the other.
         if (m_maximizedToEdgesWindows.contains(it.key())) {
             releaseMaximizedToEdges(it.key(), w);
-        } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                   && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+            // REQUESTED bits on both axes, never the committed ones. This
+            // project is Wayland-only, where the committed bit trails a client
+            // round-trip — and this arm runs ONE loop body after
+            // releaseWindowedFullscreenState called setFullScreen(false), i.e.
+            // inside the exit gap where the requested bit already reads false
+            // and the committed one is still true. Testing isFullScreen() here
+            // made the clear structurally certain to skip for the exact and
+            // only population this loop serves, so KWin re-asserted the
+            // maximize-area rect and defeated the restore two lines below
+            // (discussion #461). The maximize axis lags the same way in both
+            // directions, and requestedMaximizeMode is what the ledger-owning
+            // releaseMaximizedToEdges and unmaximizeMonocleWindow already read.
+        } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+                   && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
             // The fullscreen and gesture pair every sibling maximize write in
             // this tree carries: maximize() has no fullscreen conditional and
             // would moveResize a presenting surface down to its restore rect,
             // and mid-gesture it snaps the window under the user's pointer.
             //
-            // Unlike releaseMaximizedToEdges, which skips on the same
-            // conditions and RETAINS membership so a later arm pays the bit,
-            // this is the non-member arm and holds no ledger, so a skip here
+            // releaseMaximizedToEdges skips on the fullscreen and gesture
+            // conditions and RETAINS membership, so a later arm pays the bit.
+            // (It has no committed-fullscreen term either — the claim that it
+            // "skips on the same conditions" was what put an isFullScreen()
+            // test in this arm and in pretilegeometry.cpp's twin, where it made
+            // the clear unreachable.) This is the non-member arm and holds no
+            // ledger, so a skip here
             // is permanent rather than deferred.
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }

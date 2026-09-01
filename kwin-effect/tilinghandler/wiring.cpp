@@ -176,13 +176,20 @@ void TilingHandler::loadSettings()
                 if (queryGeneration != m_screenQueryGeneration) {
                     return;
                 }
+                // Cleared BEFORE the teardown bail, not after. Every other exit
+                // from this handler clears the flag and drains the deferred
+                // routes; returning with it still set left m_deferredWindowRoutes
+                // and m_pendingFreshWindows undrained forever, because the
+                // scheduler that would retry them is itself gated on this flag
+                // being false. Compositor-teardown only, so effectively benign,
+                // but it was the one arm that broke the file's own invariant.
+                m_initialScreenQueryPending = false;
                 // Compositor teardown: a D-Bus reply can land after KWin::effects
                 // is gone (the daemon-loss handler documents the same case), and
                 // the stacking-order walk below would deref the null.
                 if (!KWin::effects) {
                     return;
                 }
-                m_initialScreenQueryPending = false;
                 // A managedScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
                 // transition handling — the raw assignment below would clobber it
@@ -615,6 +622,12 @@ void TilingHandler::fetchScrollTabPaintOverrides()
                                 << reply.error().message();
             return;
         }
+        // Teardown guard, matching the managedScreens reply handler above. The
+        // slots below reach outputForScreenId, which dereferences
+        // KWin::effects->screens() without a check of its own.
+        if (!KWin::effects) {
+            return;
+        }
         const QVariantMap byScreen = reply.value();
         for (auto it = byScreen.constBegin(); it != byScreen.constEnd(); ++it) {
             // A nested a{sv} arrives QDBusArgument-wrapped; toMap() on it is
@@ -663,6 +676,11 @@ void TilingHandler::fetchScrollTabStrips()
             }
             qCWarning(lcEffect) << "scrollTabStrips: query failed, daemon may not be running:"
                                 << reply.error().message();
+            return;
+        }
+        // Teardown guard, matching the managedScreens reply handler above (see
+        // the paint-overrides fetch for why these two slots need it).
+        if (!KWin::effects) {
             return;
         }
         const QVariantMap strips = reply.value();

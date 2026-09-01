@@ -237,6 +237,18 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                                           << "— rect" << restoreRect << "is not on" << capturedScreenId << g;
                         return;
                     }
+                } else if (KWin::effects && !KWin::effects->screenAt(restoreRect.center())) {
+                    // outputForScreenId answers null when the captured screen
+                    // was unplugged during this D-Bus round trip — which is
+                    // exactly when a stale absolute rect is most likely, and the
+                    // guard above then does not run at all. Fall back to the
+                    // origin validation the INGEST side of this same data
+                    // already performs: a rect whose centre is on no connected
+                    // output would park the window where nothing can show it.
+                    qCDebug(lcEffect) << "Desktop switch: declining daemon pre-tile rect for" << windowId << "— rect"
+                                      << restoreRect << "is on no connected output (captured screen" << capturedScreenId
+                                      << "is gone)";
+                    return;
                 }
 
                 // Suppress the VS-crossing detectors across the synchronous
@@ -260,9 +272,17 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // the exact split m_maximizedToEdgesWindows' contract forbids.
                 if (m_maximizedToEdgesWindows.contains(windowId)) {
                     releaseMaximizedToEdges(windowId, safeW);
-                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                           && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
-                           && !safeW->isUserResize()) {
+                    // REQUESTED maximize, matching releaseMaximizedToEdges and
+                    // the twin in screenschanged.cpp. The committed bit lags a
+                    // client round-trip on Wayland in both directions, so a
+                    // maximize requested but not yet committed would read as
+                    // "not maximized" and skip the clear, letting KWin
+                    // re-assert the maximize-area rect over the restore below.
+                    // The fullscreen union is correct HERE (no setFullScreen
+                    // precedes this arm) and is deliberately kept.
+                } else if (KWin::Window* kw = safeW->window(); kw
+                           && kw->requestedMaximizeMode() != KWin::MaximizeRestore && !kw->isRequestedFullScreen()
+                           && !kw->isFullScreen() && !safeW->isUserMove() && !safeW->isUserResize()) {
                     // The fullscreen and gesture pair every sibling maximize
                     // write in this tree carries: maximize() has no fullscreen
                     // conditional and would moveResize a presenting surface
