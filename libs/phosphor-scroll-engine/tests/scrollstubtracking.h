@@ -47,11 +47,11 @@ public:
     /// means "no size on record", the case that falls back to the resolved
     /// default.
     QRect unmanagedGeometry;
-    /// The exactOnly flag of the last validatedUnmanagedGeometry call. Both
-    /// sizing arms must pass true (a sizing intent is a per-window contract,
-    /// and the non-exact default admits a same-app sibling's record), which
-    /// is otherwise unobservable from here.
-    mutable bool lastExactOnly = false;
+    /// Counts validatedUnmanagedGeometry calls. The per-window contract a
+    /// sizing intent needs is now structural — the resolver has no appId
+    /// fallback left to opt out of — so what is worth observing here is that
+    /// the sizing arms consult the record at all.
+    mutable int unmanagedGeometryCalls = 0;
 
     QObject* asQObject() override
     {
@@ -158,9 +158,9 @@ public:
         const int sep = anyWindowId.indexOf(QLatin1Char('|'));
         return sep > 0 ? anyWindowId.left(sep) : QString();
     }
-    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool exactOnly) const override
+    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {
-        lastExactOnly = exactOnly;
+        ++unmanagedGeometryCalls;
         if (!unmanagedGeometry.isValid()) {
             return std::nullopt;
         }

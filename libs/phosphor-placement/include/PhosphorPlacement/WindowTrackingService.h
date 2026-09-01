@@ -388,10 +388,8 @@ public:
      *
      * @param windowId        Full window ID
      * @param screenId        Screen where the window currently is (for cross-screen adjustment)
-     * @param exactOnly       If true, skip the appId fallback (strict per-instance lookup)
      */
-    std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                    bool exactOnly = false) const override;
+    std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const override;
 
     /// Write the window's shared free/float geometry into the unified record (the
     /// single float-back store). See IWindowTrackingService::recordFreeGeometry.

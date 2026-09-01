@@ -60,7 +60,7 @@ bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
     // by appId) would block the fresh per-instance capture and freeze
     // float-restore at ancient coordinates". A per-window question deserves a
     // per-window answer.
-    return m_service->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true).has_value();
+    return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
 }
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
@@ -146,7 +146,7 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     // window there. The two engines with the same per-window contract
     // (autotile.cpp, the scroll engine's lifecycle restore) already pass
     // exactOnly for this reason.
-    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         return false;
     }

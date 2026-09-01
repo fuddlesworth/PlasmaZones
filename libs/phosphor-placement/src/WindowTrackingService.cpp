@@ -401,8 +401,8 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     return adjustGeometryToScreen(geo);
 }
 
-std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                                       bool exactOnly) const
+std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId,
+                                                                       const QString& screenId) const
 {
     if (windowId.isEmpty()) {
         return std::nullopt;
@@ -413,17 +413,20 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // rect into float.) Free geometry is shared across modes, so snap and autotile
     // resolve the same value; prefer this screen's remembered spot, then any other
     // screen's (cross-screen validated).
-    // The non-exact default is DELIBERATE cross-instance float-back sharing
-    // (free positions only, never zone/tile slots — those reads are exact-only
-    // via peekExact); callers with a per-window contract pass exactOnly.
-    // Accept only records that can actually answer: peek's same-instance branch
-    // honours the predicate too, so a window whose OWN record is free-geometry-less
-    // (a bare engine-slot partial) falls through to the appId bucket instead of
-    // shadowing a sibling's usable float-back — the cross-instance sharing the
-    // non-exact default documents. exactOnly passes an empty appId, so for those
-    // callers the predicate only turns a contentless own-record hit into the
-    // same nullopt it produced before.
-    const QString appId = exactOnly ? QString() : currentAppIdFor(windowId);
+    // PER-WINDOW, always. An empty appId keeps peek on its same-instance branch,
+    // so a window with no usable record of its own gets nullopt rather than a
+    // same-app sibling's rect. This used to be opt-in behind an exactOnly flag
+    // that defaulted to sharing, and the sharing is what discussion #1028 turned
+    // out to be: an app's bucket fills with dead instances at MaxPerApp, a live
+    // window with no record borrows a ghost's, and the absolute coordinates in
+    // it put the window on whatever monitor that ghost last occupied.
+    //
+    // "Restore to where this app last floated" was the argument for sharing. It
+    // is a convenience with a bad failure mode, and every caller here is asking
+    // the per-window question instead. A window with nothing on record simply
+    // stays where it is, which is the least surprising outcome — the wording
+    // the autotile path used when it opted out on its own.
+    const QString appId;
     const auto rec = m_placementStore.peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
         return p.anyFreeGeometry().isValid();
     });

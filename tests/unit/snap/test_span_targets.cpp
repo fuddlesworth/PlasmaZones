@@ -166,7 +166,7 @@ public:
     {
         return {};
     }
-    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool = false) const override
+    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {
         return std::nullopt;
     }

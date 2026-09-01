@@ -166,10 +166,16 @@ public:
     /// only the SIZE carries over). So a non-null answer is not evidence the
     /// window was ever free on this screen.
     ///
-    /// @p exactOnly restricts the lookup to the window's OWN record. The
-    /// default admits a same-app SIBLING's free geometry, which is deliberate
-    /// cross-instance float-back sharing for free positions; pass exactOnly
-    /// when the contract is per-window.
+    /// The lookup is restricted to the window's OWN record. It used to take an
+    /// exactOnly flag defaulting to FALSE, which admitted a same-app SIBLING's
+    /// free geometry as cross-instance float-back sharing. Every caller of this
+    /// function asks a per-window question — "put THIS window back where IT
+    /// was" — and for that the share is not a convenience but a teleport: an
+    /// app's bucket fills with dead instances (MaxPerApp), a live window with no
+    /// record of its own borrows a ghost's, and it lands wherever that ghost
+    /// last was, on whatever monitor. Discussion #1028 is that bug. Two of the
+    /// three engines had already opted out and written down why; the flag is
+    /// gone so the remaining paths cannot drift back.
     ///
     /// The SIZE is whatever the compositor last reported and is never bounded
     /// here. A caller minting a SIZING INTENT out of it (a Fixed column width,
@@ -177,8 +183,7 @@ public:
     /// untrusted input from a compositor and, through the injected service,
     /// from an embedder. Callers that only re-place a window at a remembered
     /// spot need no such bound.
-    virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                            bool exactOnly = false) const = 0;
+    virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const = 0;
 
     /// Record a window's SHARED free/float geometry (the single float-back store —
     /// the placement record's freeGeometryByScreen). This is the ONE writer all

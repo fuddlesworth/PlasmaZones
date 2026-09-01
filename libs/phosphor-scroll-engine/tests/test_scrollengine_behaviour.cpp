@@ -618,7 +618,9 @@ void TestScrollEngineBehaviour::clientDecidedHeightBoundsAndDeclinesUnusableClie
     // area's cross extent rather than persisted as an intent no column can
     // hold, and a degenerate one is DECLINED so the tile keeps the context
     // default instead of becoming a standing 1px sliver. Also pins the
-    // per-window contract: a sizing intent must be read exactOnly, or it can
+    // per-window contract: a sizing intent reads the window's OWN record. The
+    // resolver now has no appId fallback at all, so this is structural, but the
+    // sizing arm must still consult it, or it can
     // be minted from a same-app sibling's remembered rect.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
@@ -636,7 +638,7 @@ void TestScrollEngineBehaviour::clientDecidedHeightBoundsAndDeclinesUnusableClie
     // The whole point of the bound is that the STORED intent is sane.
     QCOMPARE(s1->strip().windowHeightIntent(QStringLiteral("app|huge")),
              WindowHeight::makeFixed(ScrollTestUtils::kCrossExtent));
-    QVERIFY2(tracker->lastExactOnly, "a sizing intent must be read exactOnly");
+    QVERIFY2(tracker->unmanagedGeometryCalls > 0, "a sizing intent must consult the placement record");
 
     // No record at all: the tile falls back to the context default, which
     // under ClientDecides is the even split, and nothing is pinned.

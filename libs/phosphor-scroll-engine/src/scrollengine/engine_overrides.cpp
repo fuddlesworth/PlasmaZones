@@ -576,7 +576,7 @@ bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& 
     // sharing as being for free POSITIONS). Minting one window's sizing intent
     // out of another instance's remembered rect gives it a height it never
     // asked for.
-    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
+    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         // Not the common case for a genuine spawn — the effect records the
         // pre-tile geometry before it announces the open — but a window the

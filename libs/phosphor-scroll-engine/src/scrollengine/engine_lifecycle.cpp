@@ -217,7 +217,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // documents that sharing as being for free POSITIONS). Minting one
         // window's sizing intent out of another instance's remembered rect
         // opens the column at a size this window never asked for.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true)) {
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
             // The tracked geometry is a PHYSICAL rect from the compositor, so
             // it has to be decoded by role. Reading .width() unconditionally
             // would, on a vertical strip, feed the client's cross extent into
