@@ -445,10 +445,6 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int viewMain = mainExtent(params);
-    const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
-    const int activeMainPos = columnStripPos(targetIdx, params);
-
     // A maximized-to-edges column has exactly ONE correct position under every
     // focus policy: the raw work area it resolves against. Its extent IS the
     // raw main extent, which is strictly larger than the gapped viewport
@@ -468,6 +464,10 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     if (m_columns.at(targetIdx).maximizedToEdges) {
         return centeredAnchorFor(targetIdx, params);
     }
+
+    const int viewMain = mainExtent(params);
+    const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
+    const int activeMainPos = columnStripPos(targetIdx, params);
 
     bool center = isCenteringActiveColumn(params);
 
