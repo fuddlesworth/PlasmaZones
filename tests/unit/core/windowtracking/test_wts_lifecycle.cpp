@@ -24,6 +24,7 @@
 #include <QString>
 #include <QStringList>
 #include <QRect>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <memory>
 
@@ -191,6 +192,14 @@ private Q_SLOTS:
         int predicateCallCount = 0;
         QString lastScreenId;
         int lastDesktop = -1;
+        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
+        // from the slot on failure, so a clear written at the end is skipped
+        // exactly when it matters — leaving the fixture-owned service holding a
+        // callback that captures this slot's locals by reference, to be invoked
+        // or destroyed after they are gone.
+        const auto clearPredicate = qScopeGuard([this] {
+            m_service->setShouldTrackPredicate({});
+        });
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
             lastScreenId = screenId;
@@ -229,10 +238,6 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
         QVERIFY(stateSpy.count() >= 1);
-
-        // The predicate captures this slot's locals by reference — clear it
-        // before they go out of scope so nothing can call it afterwards.
-        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_predicateAcceptsEnabledContext()
@@ -245,6 +250,14 @@ private Q_SLOTS:
         int predicateCallCount = 0;
         QString lastScreenId;
         int lastDesktop = -1;
+        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
+        // from the slot on failure, so a clear written at the end is skipped
+        // exactly when it matters — leaving the fixture-owned service holding a
+        // callback that captures this slot's locals by reference, to be invoked
+        // or destroyed after they are gone.
+        const auto clearPredicate = qScopeGuard([this] {
+            m_service->setShouldTrackPredicate({});
+        });
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
             lastScreenId = screenId;
@@ -262,10 +275,6 @@ private Q_SLOTS:
         QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
         QCOMPARE(lastDesktop, 1);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-
-        // The predicate captures this slot's locals by reference — clear it
-        // before they go out of scope so nothing can call it afterwards.
-        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_persistsWhenPredicateUnset()
@@ -278,6 +287,11 @@ private Q_SLOTS:
         // confirm the unset-equivalent persist-everything behaviour is
         // restored. Catches a future bug where the setter only stores
         // non-empty functions, or where clearing leaks the prior predicate.
+        // The clear here is the SUBJECT of this test, not teardown: it is the
+        // second half of the round-trip described above, so it must stay an
+        // explicit call. (The other predicate slots use a scope guard, because
+        // there the clear is genuinely cleanup that a failing assertion would
+        // otherwise skip.)
         m_service->setShouldTrackPredicate([](const QString&, int) {
             return false;
         });
@@ -758,6 +772,11 @@ private Q_SLOTS:
         // holds — the exact no-steal exclusion the store's own unit tests
         // exercise with a hand-rolled probe.
         PhosphorEngine::WindowRegistry registry;
+        // RAII: a failing assertion below would otherwise leave the
+        // fixture-owned service pointing at this slot's stack registry.
+        const auto clearRegistry = qScopeGuard([this] {
+            m_service->setWindowRegistry(nullptr);
+        });
         m_service->setWindowRegistry(&registry);
         registry.upsert(QStringLiteral("live-uuid"), PhosphorEngine::WindowMetadata{});
 
@@ -785,7 +804,6 @@ private Q_SLOTS:
         QCOMPARE(consumed->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
         // The live window's record is untouched.
         QVERIFY(m_service->placementStore().peekExact(QStringLiteral("term|live-uuid")).has_value());
-        m_service->setWindowRegistry(nullptr);
     }
 
     void testRecordFloatingClose_synthSlotKeyedOnOwningModeEngine()
@@ -796,6 +814,10 @@ private Q_SLOTS:
         // reopen accepts read strictly their own slot, so a snap-keyed (or
         // absent) verdict re-tiles a window that closed floating. Deleting
         // either half of the fix fails this test.
+        // RAII, same reason as the predicate guards above.
+        const auto clearResolver = qScopeGuard([this] {
+            m_service->setModeEngineIdResolver({});
+        });
         m_service->setModeEngineIdResolver([](const QString&, const QString& screenId) -> QString {
             return screenId == QStringLiteral("DP-1") ? QString(PhosphorEngine::WindowPlacement::scrollingEngineId())
                                                       : QString(PhosphorEngine::WindowPlacement::snapEngineId());
@@ -831,8 +853,6 @@ private Q_SLOTS:
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
         QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::autotileEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
-
-        m_service->setModeEngineIdResolver({});
     }
 
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()

@@ -98,6 +98,78 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    // The magnitude ceilings, which are the half that guards UNDEFINED
+    // BEHAVIOUR rather than policy: a consumer builds a QRect from these
+    // fields, and QRect's x/y/w/h constructor computes x + w - 1 before any
+    // isValid()/width>0 check the consumer writes can run. Both wire structs
+    // share the constants for that reason, so both are pinned here.
+    void testWireMagnitudeBounds()
+    {
+        {
+            TileRequestEntry e;
+            e.windowId = QStringLiteral("w");
+            e.screenId = QStringLiteral("s");
+            e.width = MaxWireExtent + 1;
+            e.height = 100;
+            QVERIFY2(e.validationError().contains(QStringLiteral("implausible size")),
+                     "an extent past the ceiling must be refused before the consumer builds a QRect");
+        }
+        {
+            TileRequestEntry e;
+            e.windowId = QStringLiteral("w");
+            e.screenId = QStringLiteral("s");
+            e.width = 100;
+            e.height = 100;
+            e.x = MaxWireOrigin + 1;
+            QVERIFY(e.validationError().contains(QStringLiteral("implausible origin")));
+        }
+        {
+            // A far-off-screen PARK origin is legal and must stay so: the
+            // scrolling engine parks columns entirely outside their output, and
+            // an over-strict validator here has already broken every vertical
+            // park once.
+            TileRequestEntry e;
+            e.windowId = QStringLiteral("w");
+            e.screenId = QStringLiteral("s");
+            e.width = 100;
+            e.height = 100;
+            e.x = -20000;
+            e.y = -20000;
+            QVERIFY2(e.validationError().isEmpty(), "a legitimate off-screen park must not be rejected");
+        }
+        {
+            WindowGeometryEntry g;
+            g.windowId = QStringLiteral("w");
+            g.width = MaxWireExtent + 1;
+            g.height = 100;
+            QVERIFY(g.validationError().contains(QStringLiteral("implausible size")));
+        }
+        {
+            WindowGeometryEntry g;
+            g.windowId = QStringLiteral("w");
+            g.x = -(MaxWireOrigin + 1);
+            g.width = 100;
+            g.height = 100;
+            QVERIFY2(g.validationError().contains(QStringLiteral("implausible origin")),
+                     "the bound is on MAGNITUDE, so a large negative origin is refused too");
+        }
+        {
+            WindowGeometryEntry g;
+            g.windowId = QStringLiteral("w");
+            g.x = 100;
+            g.y = 100;
+            g.width = 800;
+            g.height = 600;
+            QVERIFY(g.validationError().isEmpty());
+        }
+        {
+            WindowGeometryEntry g;
+            g.width = 800;
+            g.height = 600;
+            QVERIFY2(!g.validationError().isEmpty(), "an empty windowId is refused");
+        }
+    }
+
     void testTileRequestValidationFloatingZeroSize()
     {
         TileRequestEntry e;

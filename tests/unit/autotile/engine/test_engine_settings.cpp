@@ -183,16 +183,23 @@ private Q_SLOTS:
         QVERIFY(gridAlgo);
         QVERIFY(gridAlgo->defaultMaxWindows() != settings.autotileMaxWindows());
 
+        // Armed before the switch, since the switch is what starts the guard.
+        QSignalSpy persistSpy(&engine, &AutotileEngine::settingsPersistRequested);
+
         // Make grid the default algorithm and land on it.
         settings.setDefaultAutotileAlgorithm(QLatin1String("grid"));
         engine.setAlgorithm(QLatin1String("grid"));
         QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
 
-        // The switch arms the write-back guard timer (single-shot, 500ms), which
-        // suppresses the maxWindows re-read. The clobber only bites on a LATER
-        // refresh once that guard has lapsed, so wait it out — otherwise the test
-        // passes for the wrong reason and never exercises the fallback.
-        QTest::qWait(600);
+        // The switch arms the write-back guard timer, which suppresses the
+        // maxWindows re-read. The clobber only bites on a LATER refresh once
+        // that guard has lapsed, so wait for the guard's OWN completion signal
+        // rather than sleeping past a hard-coded interval. A fixed qWait is
+        // coupled to the production constant in the FALSE-PASS direction: raise
+        // the interval, or load the machine, and the guard has not lapsed, the
+        // clobber path is never exercised, and the test passes for exactly the
+        // reason this comment warns about — silently.
+        QVERIFY(persistSpy.wait(5000));
 
         // A refresh with the algorithm unchanged (grid stays the default) must not
         // pull maxWindows down to the global key. The global still holds its schema
