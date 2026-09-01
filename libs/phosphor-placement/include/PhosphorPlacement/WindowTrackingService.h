@@ -1035,8 +1035,17 @@ private:
     /// isGeometryOnScreen asks whether a rect is on ANY screen, which cannot
     /// tell a rect filed under the right screen from one filed under the wrong
     /// one — both are "on a screen". This asks the question the per-screen free
-    /// geometry map is keyed on. Same area-overlap semantics and thresholds, so
-    /// the two answers cannot disagree about what "on" means.
+    /// geometry map is keyed on.
+    ///
+    /// The two deliberately DIVERGE in three ways, so do not assume one can
+    /// stand in for the other. This one resolves a virtual screen id to its
+    /// physical output (a floating rect is not confined to one subdivision),
+    /// where isGeometryOnScreen iterates effective ids including the virtual
+    /// sub-screens. This one clamps its thresholds to the window's own size, so
+    /// a window smaller than the 100px floor still passes when it lies wholly
+    /// on its screen; isGeometryOnScreen keeps the flat floor its rescue
+    /// question wants. And this one has no QGuiApplication fallback: with no
+    /// ScreenManager it fails open rather than answering from QScreen.
     ///
     /// Fails OPEN (true) when the screen cannot be resolved: an unknown or
     /// not-yet-configured screen must not silently discard a capture, and an

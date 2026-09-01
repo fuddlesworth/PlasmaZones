@@ -355,6 +355,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         m_windowMinSizes.remove(windowId);
         m_autotileFloatedWindows.remove(windowId);
         purgeFromPendingOrders(windowId);
+        // The last two match removeWindow and handoffRelease, which are the
+        // canonical unmanage paths: a stale OverflowManager entry would lie to
+        // the capture discriminator and the drag preview until the screen's
+        // next recoverIfRoom, and a surviving pending focus would make
+        // applyTiling emit activateWindowRequested for a window this engine
+        // just refused.
+        m_overflow.clearOverflow(windowId);
+        purgePendingFocusForWindow(windowId);
         return false;
     }
     m_states.setKeyForWindow(windowId, currentKey);
@@ -405,6 +413,17 @@ void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
     }
 }
 
+void AutotileEngine::purgePendingFocusForWindow(const QString& windowId)
+{
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == windowId) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
+        }
+    }
+}
+
 void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
@@ -415,13 +434,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
     purgeFromPendingOrders(windowId);
     // A pending post-retile focus for a window that just closed must not
     // survive to activate a dead id on its screen's next retile.
-    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
-        if (fit.value() == windowId) {
-            fit = m_pendingFocusByScreen.erase(fit);
-        } else {
-            ++fit;
-        }
-    }
+    purgePendingFocusForWindow(windowId);
 
     const TilingStateKey key = m_states.takeWindow(windowId);
     if (key.screenId.isEmpty()) {

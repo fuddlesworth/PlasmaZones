@@ -387,6 +387,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             claimedByExact.insert(e.window);
         }
     }
+    // Windows this batch failed to RESOLVE, as opposed to windows the daemon
+    // stopped tiling. The three disambiguation drops below are resolution
+    // failures: the daemon still holds those windows as tiled, so they must not
+    // fall into onComplete's untiled diff, which sheds tracking and hands back
+    // the title-bar-hidden state and the KWin maximize bit. Nothing re-tiles
+    // them afterwards — the engine emits on change, so no later batch is
+    // guaranteed — which made a same-appId resolve failure silently un-tile a
+    // live window. The "window not found" drop is NOT collected here: that one
+    // is a genuinely gone window and SHOULD untile.
+    QSet<QString> droppedButLive;
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
@@ -420,6 +430,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the claimed-set diagnostics exist to surface.
                     qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
                                         << "claimed by exact entries — dropping";
+                    droppedButLive.insert(e.windowId);
                 }
             }
             continue;
@@ -459,6 +470,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         if (n < sortedIndices.size()) {
             qCWarning(lcEffect) << "Autotile: only" << n << "unclaimed candidates for" << sortedIndices.size()
                                 << "entries — trailing entries dropped";
+            for (int i = n; i < sortedIndices.size(); ++i) {
+                droppedButLive.insert(entries[sortedIndices[i]].windowId);
+            }
         }
         for (int i = 0; i < n; ++i) {
             entries[sortedIndices[i]].window = candidates[i];
@@ -504,6 +518,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         if (applied.contains(e.window)) {
             qCWarning(lcEffect) << "Autotile: two batch entries resolved to one window — dropping the second for"
                                 << e.windowId;
+            droppedButLive.insert(e.windowId);
             continue;
         }
         applied.insert(e.window);
@@ -959,7 +974,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
     auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies,
-                       scrollOnlyBatch, immediateViewScreens]() {
+                       scrollOnlyBatch, immediateViewScreens, droppedButLive]() {
         if (m_tileStaggerGeneration != gen) {
             return;
         }
@@ -989,7 +1004,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             const QSet<QString>& newSet = screenIt.value();
             const QSet<QString> previous = TilingStateHelpers::tiledOnScreen(m_border, screenId);
-            const QSet<QString> untiled = previous - newSet;
+            // Subtract the resolution failures alongside the resolved set. A
+            // window this batch could not disambiguate is still tiled as far as
+            // the daemon is concerned, so shedding its tracking here would hand
+            // back state nothing restores. See droppedButLive at the resolve.
+            const QSet<QString> untiled = previous - newSet - droppedButLive;
             for (const QString& wid : untiled) {
                 // Exact resolve only: findWindowById's appId fuzzy fallback
                 // could hand back a same-app SIBLING for a gone id, and the

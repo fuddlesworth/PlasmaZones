@@ -819,6 +819,29 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     if (!isAutotileScreen(screenId) || (!isMigrationArrival && !shouldTileWindow(windowId))) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
                                                   << "isAutotile=" << isAutotileScreen(screenId);
+        // windowOpened keys the reverse map BEFORE calling in here, so this
+        // return has to sweep that key exactly as the defer gate and
+        // claimCrossScreenReopen sweep theirs — otherwise isWindowTracked
+        // answers true for a window no TilingState holds, the daemon's float
+        // dispatch skips the adoption handoff, and setWindowFloat writes into a
+        // state that ignores it. That is the #1028 stranding, reached through
+        // this gate rather than the cap gate that used to sit below.
+        //
+        // The membership test is LOAD-BEARING, not defensive. shouldTileWindow
+        // answers false for a window floating in a current-context state, which
+        // is every window the overflow pass floated out — so those windows take
+        // this same return on their next re-announce. An unconditional sweep
+        // here would untrack every one of them.
+        const auto keyIt = m_states.windowKeys().constFind(windowId);
+        if (keyIt != m_states.windowKeys().constEnd()) {
+            const PhosphorTiles::TilingState* held = m_states.stateForKey(keyIt.value());
+            if (!held || !held->containsWindow(windowId)) {
+                m_states.removeWindow(windowId);
+                m_windowMinSizes.remove(windowId);
+                m_autotileFloatedWindows.remove(windowId);
+                purgeFromPendingOrders(windowId);
+            }
+        }
         return;
     }
 

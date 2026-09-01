@@ -476,11 +476,16 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // The pair must agree. This map is keyed by screen and holds ABSOLUTE
     // coordinates, so filing a rect under a screen it does not lie on makes the
     // key a lie — and float restore, which is screen-local, then hands that rect
-    // back for the wrong monitor and moves the window there. Refusing loses one
-    // capture and self-heals on the next; mis-filing is permanent until the
-    // record is evicted. Warn rather than drop silently: a mismatch means the
-    // caller's screenId and geometry came from different moments, and the
-    // caller is what needs fixing.
+    // back for the wrong monitor and moves the window there. Mis-filing is
+    // permanent until the record is evicted, so refusing is the safer
+    // direction. Note it does NOT simply "self-heal on the next capture" on the
+    // pre-tile path: the capture being refused is the one taken as the window
+    // is tiled, and the engine-tiled guard below then refuses every later
+    // capture for as long as it stays tiled — so one refusal can mean no
+    // float-back for that whole tiled life. That is why the predicate has to be
+    // exactly right rather than merely conservative. Warn rather than drop
+    // silently: a mismatch means the caller's screenId and geometry came from
+    // different moments, and the caller is what needs fixing.
     if (!geometryOverlapsScreen(geometry, screenId)) {
         qCWarning(lcPlacement) << "recordFreeGeometry: refusing" << geometry << "for" << windowId << "under" << screenId
                                << "— the geometry does not lie on that screen";
@@ -615,7 +620,25 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     p.windowId = windowId;
     p.appId = appId;
     p.screenId = screenId;
-    p.freeGeometryByScreen.insert(screenId, geometry);
+    // Same key/geometry agreement guard recordFreeGeometry runs, because this
+    // is the OTHER live writer into the shared free-geometry map — the comment
+    // over there calling itself the "single write point" is not true of this
+    // tree. The caller pairs the effect's close-time screen with the
+    // last-reported frame shadow, i.e. two sources sampled at two moments,
+    // which is exactly the mis-key shape.
+    //
+    // It gates ONLY the geometry insert, never the whole function: the screen
+    // adoption, the owning-engine slot synthesis and the pure-float sibling
+    // collapse below are why this path exists, and an early return would
+    // forfeit all three to fix a field none of them reads. geometryOverlapsScreen
+    // fails OPEN with no ScreenManager, so an embedder without one keeps
+    // today's behaviour instead of silently losing every close capture.
+    if (geometryOverlapsScreen(geometry, screenId)) {
+        p.freeGeometryByScreen.insert(screenId, geometry);
+    } else {
+        qCWarning(lcPlacement) << "recordFloatingClose: refusing" << geometry << "for" << windowId << "under"
+                               << screenId << "— the geometry does not lie on that screen; recording the rest";
+    }
     // Preserve the existing record's per-engine slots and context. Carrying a
     // non-empty engine map is what makes the store merge adopt the new screenId
     // (a geometry-only partial, like recordFreeGeometry, would leave the stale

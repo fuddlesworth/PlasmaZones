@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "placementlogging.h"
@@ -619,12 +620,35 @@ bool WindowTrackingService::geometryOverlapsScreen(const QRect& geometry, const 
     if (!mgr) {
         return true;
     }
-    const QRect screenGeo = mgr->screenGeometry(screenId);
+    // Resolve containment against the PHYSICAL output, even when the key names
+    // a virtual screen. Virtual screens subdivide ONE output and share its
+    // coordinate space, so the question here — do these coordinates belong to
+    // the space this key names — is answered by the output. screenGeometry()
+    // returns the VS SUB-RECT for a virtual id, and a floating window is by
+    // definition not engine-managed, so nothing constrains it to stay inside
+    // one subdivision: validating against the sub-rect turns a routine, legal
+    // position into a refusal. The guard's actual purpose is catching a rect
+    // filed under the wrong MONITOR, and two virtual screens on one output are
+    // not two monitors, so widening to the output loses none of its value.
+    const QString containmentId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
+        : screenId;
+    const QRect screenGeo = mgr->screenGeometry(containmentId);
     if (!screenGeo.isValid()) {
         return true;
     }
     const QRect intersection = geometry.intersected(screenGeo);
-    return intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight;
+    // Thresholds CLAMPED to the window's own size. MinVisibleWidth/Height were
+    // written for isGeometryOnScreen's rescue question ("is any part of this
+    // visible anywhere"), where a flat 100px floor is the right answer. The
+    // question here is different, and an unclamped floor refuses every window
+    // smaller than 100x100 that is sitting entirely and correctly on its own
+    // screen — which silently drops the float-back capture for every small
+    // utility, palette and dialog window, and then refuses to read any such
+    // record already on disk.
+    const int requiredWidth = std::min(MinVisibleWidth, geometry.width());
+    const int requiredHeight = std::min(MinVisibleHeight, geometry.height());
+    return intersection.width() >= requiredWidth && intersection.height() >= requiredHeight;
 }
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const

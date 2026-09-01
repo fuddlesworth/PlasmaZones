@@ -23,6 +23,7 @@
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QLoggingCategory>
 #include <QTimer>
 
@@ -710,11 +711,45 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // disagree with. A newer announce always follows (the daemon re-announces
     // for the desktop the effect has since reported), so dropping converges
     // rather than stalling.
+    // Invalidate any in-flight loadSettings property reply BEFORE the staleness
+    // gate below, not after. A dropped announce still means a newer screen set
+    // exists, so a property reply dispatched before it must not be allowed to
+    // land afterwards and assign m_managedScreens raw — that reply path lacks
+    // the full per-screen transition handling. The bump is idempotent and has
+    // no other effect on the drop path.
+    ++m_screensSignalGeneration;
+
     if (isDesktopSwitch && !screenDesktops.isEmpty()) {
         QHash<QString, int> announcedDesktops;
         announcedDesktops.reserve(screenDesktops.size());
         for (auto it = screenDesktops.constBegin(); it != screenDesktops.constEnd(); ++it) {
-            announcedDesktops.insert(it.key(), it.value().toInt());
+            // An a{sv} value arrives either already demarshalled (the property
+            // Get path) or still wrapped in a QDBusVariant (a signal delivered
+            // without a registered argument type), and this gate is fed
+            // exclusively by the SIGNAL. Without the unwrap, toInt() on a
+            // wrapped value yields 0 for every entry, every key mismatches, and
+            // every desktop-switch announce is dropped. Same one-level unwrap
+            // state.cpp:717 and scrollbehaviourparse.h:50 perform.
+            QVariant value = it.value();
+            if (value.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
+                value = qvariant_cast<QDBusVariant>(value).variant();
+            }
+            // Skip an unparseable entry rather than inserting 0, which is not a
+            // valid desktop and would mismatch every reported one.
+            bool ok = false;
+            const int desktop = value.toInt(&ok);
+            if (!ok || desktop < 1) {
+                continue;
+            }
+            // The daemon stamps ENGINE screen ids, which are virtual
+            // ("<phys>/vs:N") on a subdivided output, while the effect reports
+            // desktops keyed by PHYSICAL id only. Comparing the raw keys finds
+            // nothing in common on such a setup, so the gate silently accepts
+            // everything. Normalise to the physical id, which is safe because
+            // the daemon resolves a virtual screen's desktop through its
+            // physical parent — every child of one output carries the same
+            // desktop by construction.
+            announcedDesktops.insert(PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()), desktop);
         }
         if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops,
                                                                             m_effect->lastReportedScreenDesktops())) {
@@ -723,10 +758,6 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             return;
         }
     }
-
-    // Invalidate any in-flight loadSettings property reply — this signal
-    // carries a newer screen set (see m_screensSignalGeneration doc).
-    ++m_screensSignalGeneration;
 
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_managedScreens - newScreens;

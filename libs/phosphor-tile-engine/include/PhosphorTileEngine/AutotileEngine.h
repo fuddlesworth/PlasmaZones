@@ -1593,6 +1593,17 @@ private:
     void cleanupCanonical(const QString& anyWindowId);
 
     /**
+     * @brief Drop any pending post-retile focus naming this window.
+     *
+     * Every path that stops managing a window owes this, or applyTiling's
+     * drain emits activateWindowRequested for a window this engine no longer
+     * holds. Shared by removeWindow, handoffRelease and the insert refusal
+     * sweep so the three cannot drift; see purgeFromPendingOrders for the
+     * pending-order half of the same obligation.
+     */
+    void purgePendingFocusForWindow(const QString& windowId);
+
+    /**
      * @brief Const-safe translation for read-only methods.
      *
      * Same as canonicalizeWindowId(), but does not mutate m_canonicalByInstance:

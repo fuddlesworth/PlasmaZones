@@ -458,13 +458,7 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // A pending seed position or post-retile focus naming a window another
     // engine now owns must not replay on this screen's next applyTiling.
     purgeFromPendingOrders(canonical);
-    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
-        if (fit.value() == canonical) {
-            fit = m_pendingFocusByScreen.erase(fit);
-        } else {
-            ++fit;
-        }
-    }
+    purgePendingFocusForWindow(canonical);
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)
@@ -501,6 +495,21 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     if (!state || !state->containsWindow(windowId)) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << (shouldFloat ? "floatWindow" : "unfloatWindow") << "- window not tracked=" << windowId;
+        // Refusing is not enough on its own: the key that misrouted this call
+        // here is still in the reverse map, so isWindowTracked keeps answering
+        // true and the adaptor keeps choosing this engine over the adoption
+        // handoff — turning the silent wrong write this guard was added to stop
+        // into a silent permanent refusal. Drop the key (and the per-window
+        // caches that follow it, matching every other sweep in this engine) so
+        // the NEXT dispatch routes through adoption instead.
+        const auto keyIt = m_states.windowKeys().constFind(windowId);
+        if (keyIt != m_states.windowKeys().constEnd()) {
+            m_states.removeWindow(windowId);
+            m_windowMinSizes.remove(windowId);
+            m_autotileFloatedWindows.remove(windowId);
+            m_overflow.clearOverflow(windowId);
+            purgeFromPendingOrders(windowId);
+        }
         return;
     }
 

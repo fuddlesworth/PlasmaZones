@@ -4,6 +4,7 @@
 #include <PhosphorProtocol/AutotileTypes.h>
 #include <PhosphorProtocol/BridgeTypes.h>
 #include <PhosphorProtocol/DragTypes.h>
+#include <PhosphorProtocol/WindowTypes.h>
 
 #include <QDebug>
 #include <QLatin1String>
@@ -101,14 +102,11 @@ QString TileRequestEntry::validationError() const
     // and visualX/visualY, which this boundary already clamps for the same
     // reason.
     //
-    // Deliberately generous, and deliberately NOT a screen-bounds check: the
-    // scrolling engine parks off-screen columns entirely outside their
-    // screen rect, so a legitimate park origin sits far outside every output.
-    // An over-strict validator here has already broken that once, dropping
-    // every vertical park at its own validationError. These limits are orders
-    // of magnitude past any real display and only catch garbling.
-    constexpr int kMaxWireExtent = 100000;
-    constexpr int kMaxWireOrigin = 1000000;
+    // The ceilings live in WindowTypes.h so this wire and WindowGeometryEntry's
+    // validator cannot drift apart; the rationale for their size, and for their
+    // deliberately NOT being a screen-bounds check, is written up there.
+    constexpr int kMaxWireExtent = MaxWireExtent;
+    constexpr int kMaxWireOrigin = MaxWireOrigin;
     if (width > kMaxWireExtent || height > kMaxWireExtent) {
         return QStringLiteral("TileRequestEntry: implausible size (windowId=%1 w=%2 h=%3)")
             .arg(windowId)

@@ -73,23 +73,23 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // the window travelled. Re-home instead: drop the stale entry and let the
     // capture below file a fresh one under the current output. Still exactly
     // one entry per window, which is what the all-bucket reader needs.
-    QString heldBucket;
-    if (findPreTileGeometry(windowId, &heldBucket).isValid()) {
-        if (PhosphorIdentity::VirtualScreenId::samePhysical(heldBucket, screenId)) {
+    //
+    // The stale entry is only IDENTIFIED here, never dropped here. Three
+    // unconditional guards sit between this point and the single insertion
+    // below (snap-owned, own-minimize-float, not-floating), so dropping on the
+    // spot and then bailing out of one of them would leave the window with NO
+    // free-geometry memory at all rather than a stale-but-real one — and
+    // nothing re-files it, so findPreTileGeometry answers invalid for the rest
+    // of the window's life. Removal is deferred to the commit, keeping the
+    // "exactly one entry per window" invariant without ever passing through
+    // zero.
+    QString staleBucket;
+    if (findPreTileGeometry(windowId, &staleBucket).isValid()) {
+        if (PhosphorIdentity::VirtualScreenId::samePhysical(staleBucket, screenId)) {
             return;
         }
-        qCDebug(lcEffect) << "Pre-autotile geometry for" << windowId << "re-homed from" << heldBucket << "to"
-                          << screenId;
-        auto bucketIt = m_preTileGeometries.find(heldBucket);
-        if (bucketIt != m_preTileGeometries.end()) {
-            bucketIt->remove(windowId);
-            // Drop the bucket when it empties, matching the const-scan
-            // reasoning above: a stray empty per-screen hash is a slow leak
-            // across a long session of monitor changes.
-            if (bucketIt->isEmpty()) {
-                m_preTileGeometries.erase(bucketIt);
-            }
-        }
+    } else {
+        staleBucket.clear();
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -133,6 +133,23 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return;
+    }
+    // Drop-then-insert as one unit: every guard that could bail has now been
+    // passed, so the window is never left without an entry. See the deferral
+    // note at the scan above.
+    if (!staleBucket.isEmpty()) {
+        qCDebug(lcEffect) << "Pre-autotile geometry for" << windowId << "re-homed from" << staleBucket << "to"
+                          << screenId;
+        auto bucketIt = m_preTileGeometries.find(staleBucket);
+        if (bucketIt != m_preTileGeometries.end()) {
+            bucketIt->remove(windowId);
+            // Drop the bucket when it empties, matching the const-scan
+            // reasoning above: a stray empty per-screen hash is a slow leak
+            // across a long session of monitor changes.
+            if (bucketIt->isEmpty()) {
+                m_preTileGeometries.erase(bucketIt);
+            }
+        }
     }
     m_preTileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;

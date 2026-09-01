@@ -182,6 +182,20 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                                    const QString& zoneId, const QString& screenId, bool sizeOnly)
 {
+    // Magnitude bound BEFORE either QRect construction below. QRect's
+    // x/y/w/h constructor computes `x + w - 1`, which is signed overflow and
+    // undefined for a garbled payload — and it happens inside the constructor,
+    // so the `isValid()` and `width > 0` guards further down run too late to be
+    // a defence. Same ceilings the tile wire applies, shared from WindowTypes.h.
+    // Deliberately magnitude only, not a screen-bounds test: legitimate parked
+    // columns sit far outside every output.
+    if (qAbs(width) > PhosphorProtocol::MaxWireExtent || qAbs(height) > PhosphorProtocol::MaxWireExtent
+        || qAbs(x) > PhosphorProtocol::MaxWireOrigin || qAbs(y) > PhosphorProtocol::MaxWireOrigin) {
+        qCWarning(lcEffect) << "slotApplyGeometryRequested: implausible geometry for" << windowId << x << y << width
+                            << height << "— dropping";
+        return;
+    }
+
     KWin::EffectWindow* w = findWindowById(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
@@ -358,7 +372,18 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         pending.append(p);
     };
     for (const auto& entry : geometries) {
-        if (entry.windowId.isEmpty() || entry.width <= 0 || entry.height <= 0) {
+        // validationError() BEFORE the size test and before any toRect(): it
+        // bounds the magnitudes, and the QRect construction inside toRect()
+        // overflows before a `<= 0` check can see anything. The size test stays
+        // as this consumer's own policy (a zero extent is meaningless here),
+        // which the shared validator deliberately leaves to the caller.
+        if (const QString invalid = entry.validationError(); !invalid.isEmpty()) {
+            qCWarning(lcEffect) << "slotApplyGeometriesBatch: dropping entry —" << invalid;
+            continue;
+        }
+        if (entry.width <= 0 || entry.height <= 0) {
+            qCWarning(lcEffect) << "slotApplyGeometriesBatch: dropping" << entry.windowId << "with non-positive size"
+                                << entry.width << "x" << entry.height;
             continue;
         }
         if (KWin::EffectWindow* window = windowMap.value(entry.windowId)) {
