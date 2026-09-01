@@ -62,6 +62,7 @@ while [[ $# -gt 0 ]]; do
             echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
             echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
             echo "  kwin-effects.txt Enabled/loaded KWin desktop effects (kwinrc [Plugins] + live D-Bus state)"
+            echo "  kwin-rules.txt   KWin's own window rules (kwinrulesrc, window titles redacted)"
             exit 0
             ;;
         *)
@@ -160,6 +161,7 @@ This report ships in an archive with the raw files behind the summaries above:
 - `data/` with user layouts, algorithms, shaders and animation profiles
 - `journal.log` and `kwin-effect.log` with the raw journal lines
 - `kglobalaccel.txt` with the effective shortcut bindings and `kwin-effects.txt` with the enabled/loaded KWin effects
+- `kwin-rules.txt` with KWin's own window rules, which move and re-desktop windows independently of PlasmaZones (window titles redacted)
 EOF
 
 # 2. Config directory (redact home paths in text files)
@@ -222,7 +224,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # journal logs below) or claimed by the DATA_DIR tree; a config-dir
         # entry with the same name must not fight them for the slot.
         case "$rel" in
-            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|kwin-effects.txt|data|data/*)
+            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|kwin-effects.txt|kwin-rules.txt|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac
@@ -401,6 +403,32 @@ fi
 } | redact_home > "$STAGING/kwin-effects.txt" || true
 # Nothing captured (no kwinrc, no busctl) → drop the blank file.
 [[ -s "$STAGING/kwin-effects.txt" ]] || rm -f "$STAGING/kwin-effects.txt"
+
+# 7. KWin window rules
+# KWin's own rules move, resize and re-desktop windows underneath PlasmaZones,
+# so a placement complaint can have nothing to do with PlasmaZones at all. The
+# desktop fields are the ones that repay the capture: Rules::applyDesktops
+# clears the membership list and repopulates it only from desktop IDs that still
+# resolve, so a rule holding stale desktop UUIDs silently makes its windows
+# on-all-desktops — and an empty list is exactly what isOnAllDesktops() means.
+# A rule carrying position/size alongside that relocates the window in the same
+# stroke, which reads as PlasmaZones throwing windows around.
+#
+# The title= VALUES are dropped. This archive is meant to be attachable to a
+# public issue (the whole reason home paths are redacted), and a window title
+# carries document names, URLs and contact names, while the fields that diagnose
+# a placement rule — wmclass, the desktop/position/size values and their *rule
+# policy numbers — carry none. titlematch/titlerule are kept so a triager can
+# still see that a title match exists and how it is applied.
+{
+    KWIN_RULES_RC="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrulesrc"
+    if [[ -f "$KWIN_RULES_RC" ]]; then
+        sed -E 's/^(title|Title)=.*/\1=<redacted>/' "$KWIN_RULES_RC"
+    fi
+} | redact_home > "$STAGING/kwin-rules.txt" || true
+# No kwinrulesrc (the common case — the user has never made a KWin rule) → drop
+# the blank file rather than shipping a puzzling empty one.
+[[ -s "$STAGING/kwin-rules.txt" ]] || rm -f "$STAGING/kwin-rules.txt"
 
 # ─── Create archive ──────────────────────────────────────────────────────────
 
