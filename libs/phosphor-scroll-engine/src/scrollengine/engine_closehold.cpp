@@ -15,6 +15,34 @@ namespace PhosphorScrollEngine {
 // is a self-contained state machine (m_closeReflowHoldUntil /
 // m_closeReflowFlushScheduled / m_closeReflowClock, all declared together in
 // ScrollEngine.h).
+//
+// THREE arms defer, and the third is what makes the other two work.
+// scheduleRetileForScreen's queued apply (engine_core.cpp) consults the hold
+// because the engine's own signal fan-out goes around it: windowClosed emits
+// placementChanged from its own last line, the daemon wires that signal
+// synchronously to its tiled-count gate, and a close ALWAYS moves the count.
+// The gate re-derives the engine screen set and pushes it back through
+// setActiveScreens; the set is identical across a close, and that branch
+// retiles every screen unconditionally. So before the third arm every close
+// reflowed the strip one event-loop turn later through that path while both
+// other arms sat holding.
+//
+// Swallowing a retile loses nothing. The flush below applies with the same
+// default focusWindowAfter the retile would have passed, so it IS that apply,
+// one hold later — which is equally true of the config, per-screen and
+// min-size retiles that reach the same guard.
+//
+// A screen that LEAVES the scrolling set, or the engine entirely, drops its
+// entries: setActiveScreens' removal loop and pruneStatesForRemovedScreen both
+// sweep, so a deadline never outlives the strip it was holding. The mode-exit
+// half of that is hygiene rather than a live defect, and it is worth being
+// exact about which: the removal tears the context state down and releases its
+// windows, so a retile swallowed on re-entry by a leftover deadline would have
+// had an empty strip to lay out, and the windows repopulate it through
+// windowOpened, which bypasses the hold by design. Swept because every other
+// per-screen arm on that path is, and because the entry otherwise outlives the
+// only strip it means anything for. An armed flush timer holds only the id and
+// re-reads both containers, so dropping the entries just makes it a no-op.
 
 void ScrollEngine::startCloseReflowHold(const QString& screenId)
 {

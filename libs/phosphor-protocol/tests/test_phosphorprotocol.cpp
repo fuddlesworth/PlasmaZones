@@ -302,14 +302,20 @@ private Q_SLOTS:
         // per-window state for a strip that is no longer on screen, with
         // nothing about the pairing erroring.
         //
-        // v9 widens Tiling.managedScreensChanged with the per-screen desktop
-        // map the announced set was resolved against, and takes its own step
-        // because v8 had already shipped in 3.4.5. Both failure modes are the
-        // silent kind: an old effect cannot marshal the third argument and
-        // simply stops receiving the managed-set announcement the tiling seam
-        // is built on, while an old daemon sends no stamp and leaves the effect
-        // unable to tell a late announce for the desktop it just left from a
-        // fresh one for the desktop it is on.
+        // v9 adds Scrolling.leaveNativeFullscreenRequested for the same reason
+        // and with the same failure mode. A daemon emitting it to an effect
+        // with no such slot, or an effect waiting on a daemon that never emits
+        // it, breaks no signature and errors nowhere: the strip just goes on
+        // scrolling and parking a column whose window the compositor refuses to
+        // move. It takes its own step because v8 shipped in 3.4.4.
+        // v9 ALSO widens Tiling.managedScreensChanged with the per-screen
+        // desktop map the announced set was resolved against — one bump for
+        // both, since they land in the same unreleased cycle. Same silent
+        // failure modes: an old effect cannot marshal the third argument and
+        // stops receiving the managed-set announcement the tiling seam is built
+        // on, while an old daemon sends no stamp and leaves the effect unable
+        // to tell a late announce for the desktop it just left from a fresh one
+        // for the desktop it is on.
         QCOMPARE(Service::ApiVersion, 9);
         QCOMPARE(Service::MinPeerApiVersion, 9);
     }

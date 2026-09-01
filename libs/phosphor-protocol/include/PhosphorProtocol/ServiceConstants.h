@@ -440,28 +440,58 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       previous strip's position and keeps doing it. A silent wrong answer is
 //       exactly what the handshake exists to refuse, and it is the reason a
 //       signal-only addition is not treated as harmlessly additive here.
-//   v9: org.plasmazones.Tiling managedScreensChanged gains a third argument,
-//       screenDesktops (a{sv}) — the screenId to virtual-desktop map the
-//       announced set was RESOLVED AGAINST.
 //
-//       A CHANGED REQUIRED SIGNAL, and it takes a step of its own rather than
-//       folding into v8 because v8 SHIPPED in 3.4.5 — the fold-in rule above
-//       applies only within an unreleased cycle.
+//   v9: Scrolling gains leaveNativeFullscreenRequested (s), a screen-scoped
+//       signal the daemon emits from the keyboard shortcut gate immediately
+//       BEFORE dispatching a strip verb, telling the compositor to release the
+//       OWN fullscreen of every scroll-tracked tile on that screen. Such a tile
+//       refuses every geometry commit through the effect's fullscreen bail
+//       while the engine goes on scrolling and PARKING its column, so the two
+//       owners drift apart for the whole hold. The wheel chord already did this
+//       for itself inside the effect, but the keyboard half originates in the
+//       daemon and could not.
 //
-//       Required, and for the reason the ledger head names: an old effect
-//       paired with a new daemon fails to marshal the third argument and
-//       simply stops receiving the signal, which is the managed-set
-//       announcement the whole tiling seam is built on. The reverse pairing
-//       marshals nothing extra and silently keeps the race the argument
-//       exists to close.
+//       ANOTHER new REQUIRED signal, so it takes a step of its own for exactly
+//       the reason v8 did: v8 shipped in 3.4.4, and the
+//       fold-into-the-unreleased-cycle rule does not reach across a release.
+//       Its failure mode is the silent kind as well. A daemon that emits it to
+//       an effect with no such slot, or an effect waiting on a daemon that
+//       never emits it, matches every other signature on the interface and
+//       errors nowhere. The strip simply goes on scrolling and parking a column
+//       whose window the compositor is refusing to move, which is the bug this
+//       signal exists to close.
 //
-//       The race: this signal is asynchronous while the compositor's own
-//       desktopChanged is not, so an announce can arrive after the user has
-//       switched again. The effect cannot detect that on its own — by then
-//       its last-reported desktop already equals the live one, so a stale
-//       announce is indistinguishable from a fresh one, and it would install
-//       a managed set computed for one desktop while filtering windows by
-//       another. The stamp makes the announce self-describing.
+//       A SIGNAL rather than a field on the geometry batch, which is what the
+//       gap note in the wheel path originally anticipated. The exit has to land
+//       BEFORE the relayout, so the verb's batch is built against a window the
+//       compositor will accept, and a batch field arrives carrying the very
+//       geometry it was supposed to precede. Gating on the batch's own
+//       strip-motion fields was measured wrong for a second reason: a batch
+//       cannot tell a user verb from an insert-driven reflow, and it dropped
+//       the fullscreen whenever an unrelated window merely opened and slid the
+//       strip.
+
+//       Tiling managedScreensChanged ALSO gains a third argument in this same
+//       step, screenDesktops (a{sv}) — the screenId to virtual-desktop map the
+//       announced set was RESOLVED AGAINST. One bump, not two: both changes
+//       land in the SAME unreleased cycle, which is the case the fold-in rule
+//       at v5 spells out ("Do NOT split it back into one bump per change"), and
+//       no released peer ever speaks an intermediate version.
+//
+//       A CHANGED REQUIRED SIGNAL this time rather than a new one, and its two
+//       pairings fail as silently as the rest: an old effect cannot marshal the
+//       third argument and simply stops receiving the signal, which is the
+//       managed-set announcement the whole tiling seam is built on, while an
+//       old daemon marshals nothing extra and silently keeps the race the
+//       argument exists to close.
+//
+//       The race: the announce is asynchronous while the compositor's own
+//       desktopChanged is not, so it can arrive after the user has switched
+//       again. The effect cannot detect that on its own — by then its
+//       last-reported desktop already equals the live one, so a stale announce
+//       is indistinguishable from a fresh one, and it would install a managed
+//       set computed for one desktop while filtering windows by another. The
+//       stamp makes the announce self-describing.
 inline constexpr int ApiVersion = 9;
 inline constexpr int MinPeerApiVersion = 9;
 

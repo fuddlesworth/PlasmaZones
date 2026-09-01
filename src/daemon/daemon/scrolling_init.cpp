@@ -21,6 +21,7 @@
 #include "helpers.h"
 
 #include "daemon/controllers/shortcutmanager.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -90,6 +91,30 @@ void Daemon::connectScrollingShortcuts()
         }
         // Gate passed — only now touch engine state.
         scroll->setActiveScreenHint(screenId);
+        // Every keyboard strip verb funnels through here, which is why the
+        // fullscreen release sits at the GATE rather than on the verbs: a verb
+        // added to the table below inherits it, and one that forgot it would be
+        // invisible. The wheel chord does the same thing for itself inside the
+        // effect (TilingHandler::leaveNativeFullscreenTiles); this is the same
+        // release for the half of the vocabulary that never reaches it.
+        //
+        // A scroll-tracked tile holding its OWN fullscreen refuses every
+        // geometry commit through the effect's fullscreen bail, while the engine
+        // below goes on scrolling and PARKING its column. The model and the
+        // screen then disagree for the whole hold.
+        //
+        // BEFORE the verb, so the exit is already in flight when the relayout is
+        // built. Fire-and-forget by construction — it is a signal, and the
+        // compositor is the only party that can answer "is anything fullscreen
+        // here", so the daemon does not ask and does not wait.
+        //
+        // Unconditional for a screen that passed the gate. Conditioning it would
+        // mean the daemon keeping its own copy of per-window fullscreen state
+        // purely to suppress a signal whose receiver already no-ops when there
+        // is nothing to release.
+        if (m_scrollingAdaptor) {
+            Q_EMIT m_scrollingAdaptor->leaveNativeFullscreenRequested(screenId);
+        }
         if (outScreenId) {
             *outScreenId = screenId;
         }
