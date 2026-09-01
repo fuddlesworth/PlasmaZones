@@ -545,7 +545,16 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // back.
     if (!shouldFloat) {
         const QString unfloatScreen = m_states.keyForWindow(windowId).screenId;
-        const int cap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
+        // The SAME count applyOverflow will use, not the bare cap. The pass
+        // takes min(cap, zones) whenever a zone vector exists, and retileScreen
+        // runs applyTiling even when recalculateLayout FAILS, so a stale vector
+        // can be shorter than the cap. Comparing against the cap alone would
+        // let a request with zones.size() <= wouldSortAt < cap through, and the
+        // pass would re-float it on arrival, which is the unconverging retry
+        // this refusal exists to prevent.
+        const int overflowCap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
+        const QVector<QRect> zones = state->calculatedZones();
+        const int cap = zones.isEmpty() ? overflowCap : std::min(overflowCap, static_cast<int>(zones.size()));
         const int myIndex = state->windowIndex(windowId);
         int wouldSortAt = 0;
         for (const QString& tiled : state->tiledWindows()) {
@@ -557,7 +566,7 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         if (wouldSortAt >= cap) {
             qCInfo(PhosphorTileEngine::lcTileEngine)
                 << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— it would land at tiled position"
-                << wouldSortAt << "with a cap of" << cap
+                << wouldSortAt << "with a tile count of" << cap
                 << ", so the retile would re-float it; keeping it floating and queued for recovery";
             // Queue it for the recovery pass. Without this the window is
             // floating but absent from m_overflow, which is the one set

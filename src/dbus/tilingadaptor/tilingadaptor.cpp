@@ -342,6 +342,15 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
                 // In the limiting case (switching to a desktop where nothing is
                 // managed) `announced` is empty, the map was empty, and the
                 // receiver skipped its staleness gate outright.
+                //
+                // The cost is a wider gate: the receiver rejects on ANY key
+                // that disagrees, so with per-output desktops (#648) a screen
+                // uninvolved in this switch can now veto an announce whose
+                // managed screens were all in agreement. That is deliberate.
+                // Rejection converges (the daemon re-announces for the desktop
+                // the effect has since reported) while a missed rejection does
+                // not, and the announce this stamp exists to make rejectable
+                // is the one that runs the destructive restore pass.
                 QStringList stampable = announced;
                 if (m_screenManager) {
                     for (const QString& screenId : m_screenManager->effectiveScreenIds()) {

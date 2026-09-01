@@ -43,11 +43,13 @@ namespace PlasmaZones::PreTileDecisions {
 /// so comparing them raw finds nothing in common and the gate silently accepts
 /// everything. slotScreensChanged normalises to the physical id before calling.
 ///
-/// An empty `announced` accepts vacuously (the loop has nothing to check), and
-/// so does one whose keys the reported map does not carry. The caller skips the
-/// gate entirely for a wholly empty stamp, but it does reach here with a
-/// partially matching stamp, so vacuous acceptance is a real production
-/// outcome and not merely a theoretical one.
+/// Two inputs accept vacuously: an empty `announced` (the loop has nothing to
+/// check) and one whose keys are wholly disjoint from `reported` (every lookup
+/// misses). Both are reachable from production. The caller's non-empty test is
+/// on the RAW wire map, not on this one, and its build loop drops entries whose
+/// value is unparseable or below 1, so a non-empty wire map can still arrive
+/// here empty. A stamp that only PARTIALLY overlaps `reported` is not vacuous:
+/// the overlapping keys are checked and can still reject.
 inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced, const QHash<QString, int>& reported)
 {
     for (auto it = announced.constBegin(); it != announced.constEnd(); ++it) {

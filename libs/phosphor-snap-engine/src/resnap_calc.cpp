@@ -481,9 +481,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             entry.targetGeometry = geo;
             // Both fields stamped, even though this one's only caller copies
             // into a struct that carries neither. Every producer in this file
-            // stamps the screen; two of them (the zone-number and
-            // layout-fallback arms) leave the desktop unset because they have
-            // no desktop in hand, so this is the fuller of the two shapes. Both values are authoritative here — the
+            // stamps the screen. The two arms of
+            // calculateResnapFromAutotileOrder (the recorded-zone pass and the
+            // positional fallback) leave the desktop unset, because that
+            // function takes no desktop parameter and so has none in hand.
+            // This is the fuller of the two shapes. Both values are authoritative here — the
             // geometry above is resolved against this same screenId, and desktopFilter is what the occupancy set was
             // built from — and an unstamped entry is a trap for whoever routes this producer through emitBatchedResnap
             // later: serializeZoneAssignments omits an empty stamp, and the

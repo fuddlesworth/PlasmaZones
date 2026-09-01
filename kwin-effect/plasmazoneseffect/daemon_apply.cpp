@@ -35,6 +35,8 @@
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 
+#include <cstdlib>
+
 namespace PlasmaZones {
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
@@ -189,8 +191,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // a defence. Same ceilings the tile wire applies, shared from WindowTypes.h.
     // Deliberately magnitude only, not a screen-bounds test: legitimate parked
     // columns sit far outside every output.
-    if (qAbs(width) > PhosphorProtocol::MaxWireExtent || qAbs(height) > PhosphorProtocol::MaxWireExtent
-        || qAbs(x) > PhosphorProtocol::MaxWireOrigin || qAbs(y) > PhosphorProtocol::MaxWireOrigin) {
+    // Widened before the absolute value: qAbs(INT_MIN) is itself undefined in
+    // int and in practice yields INT_MIN back, which is negative, so every
+    // comparison here would be false and the guard would fail OPEN on exactly
+    // the payload it exists to stop. Mirrors WindowGeometryEntry's validator.
+    if (std::abs(static_cast<qint64>(width)) > PhosphorProtocol::MaxWireExtent
+        || std::abs(static_cast<qint64>(height)) > PhosphorProtocol::MaxWireExtent
+        || std::abs(static_cast<qint64>(x)) > PhosphorProtocol::MaxWireOrigin
+        || std::abs(static_cast<qint64>(y)) > PhosphorProtocol::MaxWireOrigin) {
         qCWarning(lcEffect) << "slotApplyGeometryRequested: implausible geometry for" << windowId << x << y << width
                             << height << "— dropping";
         return;

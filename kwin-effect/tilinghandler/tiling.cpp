@@ -1018,6 +1018,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // first already claimed. In each case the WINDOWS are all in
             // newSet and only surplus ENTRIES are dropped, so an id in
             // `untiled` is a window the daemon genuinely stopped tiling.
+            // That holds globally; newSet here is one SCREEN's bucket, so a
+            // window whose claiming entry landed on a different screen does
+            // appear in the old screen's `untiled`. It has moved, and untiling
+            // it on the screen it left is the right answer.
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 // Exact resolve only: findWindowById's appId fuzzy fallback
