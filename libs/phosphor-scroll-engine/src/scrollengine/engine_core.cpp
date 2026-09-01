@@ -278,6 +278,12 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // lifecycle edges like its order twin, or the seed sits armed and
         // re-anchors a view the user has since moved, several transitions later.
         m_pendingInitialFocus.remove(screenId);
+        // The close-settle hold goes with the strip it was holding, on the
+        // same terms pruneStatesForRemovedScreen drops it for a departed
+        // output (engine_closehold.cpp documents why it is hygiene here
+        // rather than a live defect).
+        m_closeReflowHoldUntil.remove(screenId);
+        m_closeReflowFlushScheduled.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -1425,19 +1431,12 @@ void ScrollEngine::scheduleRetileForScreen(const QString& screenId)
         [this, screenId]() {
             if (m_pendingRetiles.remove(screenId) && m_scrollingScreens.contains(screenId)) {
                 // Close-settle hold, THIRD arm — and the one that made the
-                // other two look broken. windowClosed emits placementChanged
-                // from its own last line; the daemon's tiled-count gate is
-                // wired to that signal synchronously, and a close ALWAYS moves
-                // the count, so it re-derives the engine screen set and pushes
-                // it back through setActiveScreens. The set is identical, and
-                // that branch retiles every screen unconditionally — landing
-                // here, one event-loop turn after the close, to reflow the
-                // strip the hold had just deferred. Two arms held the reflow
-                // and the engine's own fan-out did it anyway.
-                //
-                // Swallowing the retile loses nothing: the flush this re-arms
-                // calls applyLayout with the same default focusWindowAfter,
-                // so it IS this apply, one hold later.
+                // other two look broken: the daemon's tiled-count gate turns
+                // every close's own placementChanged into an identical-set
+                // re-push, which lands here one turn later to reflow the strip
+                // the hold had just deferred. Swallowing it loses nothing; the
+                // flush is this same apply, one hold later. engine_closehold.cpp
+                // carries the full account.
                 if (deferForCloseReflowHold(screenId)) {
                     return;
                 }

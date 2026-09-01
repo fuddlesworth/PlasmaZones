@@ -1451,19 +1451,12 @@ private:
     /// (a file dialog handing back to its parent) reflows over the corpse as
     /// it always did — best-effort degradation to the pre-hold behaviour,
     /// not a correctness bug. Three paths defer: windowClosed, windowFocused
-    /// and scheduleRetileForScreen's queued apply.
-    ///
-    /// That third one is not a nicety, it is what makes the other two work.
-    /// windowClosed emits placementChanged from its own last line; the daemon
-    /// wires that signal synchronously to its tiled-count gate, and a close
-    /// always moves the count, so the gate re-derives the engine screen set
-    /// and pushes it back through setActiveScreens. The set is identical, and
-    /// that branch retiles every screen unconditionally — so before the fix
-    /// every close reflowed the strip one event-loop turn later through this
-    /// path while both other arms sat holding. A config/per-screen change or
-    /// a min-size report that lands mid-hold is swallowed the same way and
-    /// replayed by the flush, which applies with the identical default
-    /// focusWindowAfter.
+    /// and scheduleRetileForScreen's queued apply — that third one being what
+    /// makes the other two work, since the daemon turns every close's own
+    /// placementChanged into an identical-set re-push that retiles anyway.
+    /// engine_closehold.cpp carries the full account, including why the
+    /// config, per-screen and min-size retiles that reach the same guard lose
+    /// nothing by being replayed from the flush.
     int m_closeReflowDelayMs = 0;
     /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
     /// guard that keeps one timer per screen however many closes land inside
