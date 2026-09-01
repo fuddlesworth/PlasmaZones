@@ -7669,19 +7669,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="374"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="522"/>
         <source>Session restore</source>
-        <translation type="unfinished"></translation>
+        <translation>Восстановление сеанса</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="376"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Возвращать окна на их виртуальный рабочий стол</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
         <source>logout</source>
-        <translation type="unfinished"></translation>
+        <translation>выход из системы</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="524"/>
@@ -13649,7 +13649,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation type="unfinished"></translation>
+        <translation>После повторного входа каждое окно возвращается на тот рабочий стол, где оно было. Без этого все окна открываются на том рабочем столе, который показан при входе.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>
@@ -21601,7 +21601,7 @@
         <translation>Вкладка окна, которое требует внимания.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="696"/>
         <source>Untitled window</source>
         <translation>Окно без заголовка</translation>
     </message>
