@@ -166,6 +166,13 @@ public:
     {
         return {};
     }
+    /// Stub: the fake has no screen manager, so it fails OPEN exactly as the
+    /// real service does in that case. Tests that need the refusal drive it
+    /// through a FakeScreenProvider-backed service instead.
+    bool geometryBelongsToScreen(const QRect&, const QString&) const override
+    {
+        return true;
+    }
     std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {
         return std::nullopt;

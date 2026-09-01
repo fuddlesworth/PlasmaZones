@@ -187,6 +187,25 @@ public:
     /// spot need no such bound.
     virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const = 0;
 
+    /// Does @p geometry plausibly belong to the coordinate space @p screenId
+    /// names?
+    ///
+    /// The same predicate validatedUnmanagedGeometry applies to its own answer,
+    /// exposed because it is NOT the only reader of the shared free-geometry
+    /// map. A caller that reaches a rect through the placement store directly
+    /// — the engines' reopen and release paths do, via takeForReopen — gets no
+    /// validation from that route and hands the rect straight to a geometry
+    /// apply. A mis-keyed record then teleports the window to whatever monitor
+    /// the coordinates describe, which is the failure the read guard exists to
+    /// stop; those callers need the same check rather than their own copy of
+    /// it.
+    ///
+    /// Not a substitute for an is-this-on-any-screen rescue test: this asks
+    /// whether the rect belongs to THIS key, so a rect sitting squarely on a
+    /// different monitor answers false. Fails OPEN when the screen cannot be
+    /// resolved, so an embedder with no screen manager keeps its behaviour.
+    virtual bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const = 0;
+
     /// Record a window's SHARED free/float geometry (the single float-back store —
     /// the placement record's freeGeometryByScreen). This is the ONE writer all
     /// float-back captures route through (effect pre-tile/pre-snap capture, drag

@@ -59,7 +59,14 @@ void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const 
     const QString restoreScreen = record.screenId.isEmpty() ? screenId : record.screenId;
     const QRect freeGeo = record.freeGeometryFor(restoreScreen);
     const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-    if (freeGeo.isValid() && restorePosition) {
+    // Do not trust the KEY. This reads the shared free-geometry map directly
+    // rather than through validatedUnmanagedGeometry, so it gets none of that
+    // resolver's validation — and the rect goes straight out as an absolute
+    // geometry to apply. A record filed under one screen whose coordinates
+    // describe another would teleport the window to that monitor, which is
+    // exactly what the comment above says this restore must never do.
+    if (freeGeo.isValid() && restorePosition
+        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
     }
 }

@@ -391,6 +391,16 @@ public:
      */
     std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const override;
 
+    /// @copydoc PhosphorEngine::IWindowTrackingService::geometryBelongsToScreen
+    ///
+    /// Forwards to the private geometryOverlapsScreen, which is where the
+    /// semantics (physical-output resolution, size-clamped thresholds,
+    /// fail-open) are documented.
+    bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const override
+    {
+        return geometryOverlapsScreen(geometry, screenId);
+    }
+
     /// Write the window's shared free/float geometry into the unified record (the
     /// single float-back store). See IWindowTrackingService::recordFreeGeometry.
     void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,

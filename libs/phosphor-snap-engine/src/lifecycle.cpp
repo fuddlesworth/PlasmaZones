@@ -511,7 +511,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // per-window RestorePosition rule) for ALL floated windows: when off,
                 // the window comes back floating but stays where KWin placed it.
                 Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
-                if (restoreFloatedPosition && freeGeo.isValid()) {
+                // Key not trusted: this read came from the placement store
+                // directly, not through validatedUnmanagedGeometry, so nothing
+                // has checked that the rect's coordinates actually describe
+                // restoreScreen. A mis-keyed record applied here lands the
+                // window on whatever monitor it was really captured on, while
+                // the floating-on-screen tracking says restoreScreen — the
+                // visible/state desync the comment at the read warns about.
+                if (restoreFloatedPosition && freeGeo.isValid()
+                    && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)

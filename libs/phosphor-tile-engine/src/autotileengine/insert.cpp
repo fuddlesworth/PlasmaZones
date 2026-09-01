@@ -297,7 +297,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     // the two candidates cannot diverge here anyway.)
                     const bool restorePosition =
                         !m_restorePositionPredicate || m_restorePositionPredicate(windowId, screenId);
-                    if (freeGeo.isValid() && restorePosition) {
+                    // Key not trusted: freeGeometryFor was read off the record
+                    // directly, so validatedUnmanagedGeometry's mis-key guard
+                    // never ran. The comment above notes a rect for another
+                    // screen would teleport the window to a third monitor with
+                    // the state saying otherwise; this is the check that makes
+                    // that true rather than merely intended.
+                    if (freeGeo.isValid() && restorePosition
+                        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                     }
                     qCInfo(PhosphorTileEngine::lcTileEngine)
