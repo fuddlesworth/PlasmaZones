@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Extra windows past the tiling limit float instead of being left behind**: with tiling on, opening more windows than the layout's window limit left the extra ones wherever the compositor had put them rather than floating them, which is what the overflow setting says should happen. Those windows were also invisible to the rest of PlasmaZones, so minimizing one and restoring it did nothing, the window held its place in the layout the whole time it was minimized, and focus follows mouse stopped working for the rest of the session because PlasmaZones went on believing the window was floating. The window limit is now applied by the same pass that floats overflow windows, so an extra window floats as it opens and returns to the layout when room frees up ([#1030](https://github.com/fuddlesworth/PlasmaZones/pull/1030)).
+
 ## [3.4.5] - 2026-08-31
 
 ### Added
