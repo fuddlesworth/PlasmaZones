@@ -61,6 +61,7 @@ private Q_SLOTS:
     void equalizeClearsTheActiveColumnsMaximizeToEdges();
     void maximizeToEdgesIgnoresCenteringAndRestoresTheHeightIntent();
     void maximizeToEdgesLandsOnTheRawAreaUnderMainAxisCentering();
+    void maximizeToEdgesLandsOnTheRawAreaWhenFocusArrivesFromTheTrailingSide();
 };
 
 // The geometry contract of the maximize-to-edges flag: the column resolves
@@ -226,16 +227,6 @@ void TestScrollStripMaximize::maximizeToEdgesStillHonoursTheClientMinimum()
 // per-output view slide. On a column the size of the screen that shows up as
 // two animations playing at once. The invariant that forbids it is here: a
 // maximized column's main position moves by exactly the view's own travel.
-
-// The maximize-to-edges rect is shifted low by the outer gap on EVERY frame,
-// not only while the column covers the viewport. The batch's viewDelta is
-// differenced from the view coordinate alone, so a shift that appears and
-// disappears with coverage is motion the effect is never told about: it
-// differences the window's live rect against viewDelta, finds an outer gap of
-// residual, and runs a second per-window spring for it beside the one-spring-
-// per-output view slide. On a column the size of the screen that shows up as
-// two animations playing at once. The invariant that forbids it is here: a
-// maximized column's main position moves by exactly the view's own travel.
 void TestScrollStripMaximize::scrollingPastAMaximizedColumnMovesItByExactlyTheViewDelta()
 {
     ScrollLayoutParams params = defaultParams();
@@ -286,10 +277,6 @@ void TestScrollStripMaximize::scrollingPastAMaximizedColumnMovesItByExactlyTheVi
 // Un-maximizing is "stop overriding": the stored width intent was never
 // touched, so one toggle out re-renders exactly the pre-toggle rects with no
 // pre-maximize slot involved.
-
-// Un-maximizing is "stop overriding": the stored width intent was never
-// touched, so one toggle out re-renders exactly the pre-toggle rects with no
-// pre-maximize slot involved.
 void TestScrollStripMaximize::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
 {
     ScrollLayoutParams params = defaultParams();
@@ -306,26 +293,6 @@ void TestScrollStripMaximize::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), before);
 }
-
-// D3: any width or height verb on a flagged column drops the flag first and
-// reports the drop as a change, so a verb that would otherwise refuse still
-// visibly un-maximizes.
-//
-// EVERY clearing site in this file is driven, not a representative sample: the
-// contract is spelled out per verb across a dozen sites, so a slot that drove
-// four of them left deleting the clear from the other eight green. The one
-// site this fixture cannot reach is the per-member drop inside
-// equalizeVisibleColumnWidths' write loop: the fixture sets a 20px outer gap,
-// so a flagged column renders at the RAW main extent, fills the viewport
-// alone, and the verb's two-fully-visible-columns gate refuses before the loop
-// runs. It IS reachable with zero outer gap, where the raw extent equals the
-// viewport (see scrollstrip_sizing.cpp's note on that loop). The
-// active-column drop above it is covered below.
-//
-// Each step asserts the GEOMETRY as well as the verdict, this file's rule: the
-// fixture gives the raw area a 20px outer gap on every side, so a column that
-// is still flagged renders WIDER than the gapped work area and a
-// verdict-only pass cannot hide a flag that was reported dropped and was not.
 
 // D3: any width or height verb on a flagged column drops the flag first and
 // reports the drop as a change, so a verb that would otherwise refuse still
@@ -461,11 +428,6 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
 // separate site from the loop's per-member one: without it a flagged column
 // measures at the raw extent, never appears among the fully visible columns,
 // and the verb refused outright instead of equalizing.
-
-// The active column's drop inside equalizeVisibleColumnWidths, which is a
-// separate site from the loop's per-member one: without it a flagged column
-// measures at the raw extent, never appears among the fully visible columns,
-// and the verb refused outright instead of equalizing.
 void TestScrollStripMaximize::equalizeClearsTheActiveColumnsMaximizeToEdges()
 {
     ScrollLayoutParams params = defaultParams();
@@ -569,6 +531,43 @@ void TestScrollStripMaximize::maximizeToEdgesLandsOnTheRawAreaUnderMainAxisCente
     // The policy owns the view, so re-apply it the way applyLayout does before
     // reading the geometry back.
     strip.updateViewForFocus(params);
+
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), params.rawWorkArea);
+}
+
+// The same raw-versus-gapped question with the centring policy OFF, which is
+// where it survived the fix above. A maximized column's extent is the RAW main
+// extent, so it is strictly wider than the gapped viewport and the pin arm's
+// over-wide branch owns it. That branch pins to a viewport edge measured in
+// GAPPED coordinates, and it has two directions. Arriving from the leading
+// side asks for a zero offset, which the clamp cannot narrow for a column this
+// wide, so that direction lands correctly. Arriving from the TRAILING side
+// asks for viewMain - colMain, which put the column its two main-axis insets
+// together off the low edge of the output.
+//
+// Focus therefore has to arrive from the trailing side here, and the inset is
+// asymmetric for this file's usual reason: under a symmetric one the two
+// candidate answers coincide.
+void TestScrollStripMaximize::maximizeToEdgesLandsOnTheRawAreaWhenFocusArrivesFromTheTrailingSide()
+{
+    ScrollLayoutParams params = defaultParams();
+    // The policy that does NOT move the view for the focused column, so the
+    // pin arm rather than the centring arm decides the anchor.
+    params.centerFocusedColumn = CenterFocusedColumn::Never;
+    params.rawWorkArea = params.workArea;
+    params.workArea =
+        Ax::vertical() ? params.rawWorkArea.adjusted(0, 20, 0, -60) : params.rawWorkArea.adjusted(20, 0, -60, 0);
+
+    // Two columns so focus can arrive at the maximized one from its trailing
+    // neighbour. "a" is inserted first and so sits leadward of "b".
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    // Maximize "a", then leave it and come back from the trailing side.
+    QVERIFY(strip.focusAdjacentColumn(-1, params));
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY(strip.focusAdjacentColumn(1, params));
+    QVERIFY(strip.focusAdjacentColumn(-1, params));
 
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")), params.rawWorkArea);
 }

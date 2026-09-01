@@ -449,6 +449,26 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
     const int activeMainPos = columnStripPos(targetIdx, params);
 
+    // A maximized-to-edges column has exactly ONE correct position under every
+    // focus policy: the raw work area it resolves against. Its extent IS the
+    // raw main extent, which is strictly larger than the gapped viewport
+    // whenever an outer gap is set, so without this the Never arm below takes
+    // its over-wide branch and pins the column to a viewport edge measured in
+    // GAPPED coordinates — spending the outer gap a second time on top of
+    // relayout's unconditional shift, exactly the way the centering policy did
+    // before centeredAnchorFor was taught the difference. Only the
+    // TRAILING-side arrival (targetIdx < prevIdx) missed: the leading-side one
+    // asks for a zero offset, and the clamp below cannot narrow that, since a
+    // maximized column's own extent puts maxViewOffset above its strip
+    // position by construction. That is what the regression slot drives.
+    //
+    // centeredAnchorFor IS that one answer, not a stand-in for it: with colMain
+    // equal to the centring extent it reduces to a zero anchor, and a zero
+    // anchor is what relayout's outer-gap shift lands on the raw rect.
+    if (m_columns.at(targetIdx).maximizedToEdges) {
+        return centeredAnchorFor(targetIdx, params);
+    }
+
     bool center = isCenteringActiveColumn(params);
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
@@ -511,11 +531,14 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     int pos = activeMainPos - oldViewOffset;
     if (colMain >= viewMain) {
         // Exactly the viewport's length along the strip, never longer:
-        // columnWidthPx caps every column at the work area, so this is the
-        // equality case and both arms resolve to the same zero offset. Kept
-        // as a branch because the cap lives in another function and a future
-        // width kind that opted out of it would land here needing the
-        // entering-edge pin.
+        // columnExtentPx caps every column that reaches here at the work area,
+        // so this is the equality case and both arms resolve to the same zero
+        // offset. The one kind that is NOT capped, a maximized-to-edges
+        // column, returned above rather than reaching this arm, because for it
+        // the two arms differ and the trailing-side one is wrong. Kept as a
+        // branch because the cap lives in another function and a future width
+        // kind that opted out of it would land here needing the entering-edge
+        // pin.
         pos = (prevIdx >= 0 && targetIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
