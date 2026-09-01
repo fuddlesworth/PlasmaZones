@@ -714,18 +714,23 @@ public:
     /**
      * @brief Get geometry for a zone on a specific screen
      * @param zoneId PhosphorZones::Zone UUID string
-     * @param screenId Screen identifier (empty = primary)
+     * @param screenId Screen identifier. With a screen manager wired this must
+     *        name a resolvable output: an empty or unknown id answers an invalid
+     *        rect rather than measuring the zone against the primary monitor
+     *        (see frameScreenIdResolves in navigation.cpp). Without a screen
+     *        manager there is nothing to resolve against and the primary screen
+     *        is used.
      * @return PhosphorZones::Zone geometry in pixels, or invalid QRect if not found
      */
-    QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const override;
+    QRect zoneGeometry(const QString& zoneId, const QString& screenId) const override;
 
     /**
      * @brief Get combined geometry for multiple zones on a specific screen
      * @param zoneIds List of zone UUID strings
-     * @param screenId Screen identifier (empty = primary)
+     * @param screenId Screen identifier, resolved exactly as zoneGeometry() does.
      * @return Union of all zone geometries, or invalid QRect if none found
      */
-    QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId = QString()) const;
+    QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
     /**
      * @brief Populate the resnap buffer for all screens independently.

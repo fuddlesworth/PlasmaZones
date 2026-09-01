@@ -76,7 +76,11 @@ add_executable(test_wts_session core/windowtracking/test_wts_session.cpp)
 target_link_libraries(test_wts_session PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_session COMMAND test_wts_session)
 
-add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp)
+# FakeScreenProvider compile-in: the zone-geometry screen-resolution cases need
+# a tracked multi-output topology that resolves an empty screen id to a primary.
+add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_queries PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 

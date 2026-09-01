@@ -633,7 +633,10 @@ public Q_SLOTS:
     /**
      * @brief Get geometry for a specific zone ID on a specific screen
      * @param zoneId PhosphorZones::Zone UUID string
-     * @param screenId Screen ID (empty = primary screen)
+     * @param screenId Screen ID. It must name a resolvable output: an empty or
+     *        unknown id yields an all-zero rect rather than the zone measured
+     *        against the primary monitor. Callers that mean the primary screen
+     *        want the getZoneGeometry() overload, which resolves it by name.
      * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
     PhosphorProtocol::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);

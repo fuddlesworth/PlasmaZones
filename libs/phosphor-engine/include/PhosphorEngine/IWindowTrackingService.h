@@ -241,7 +241,11 @@ public:
         Q_UNUSED(screenId)
         clearFreeGeometry(windowId);
     }
-    virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
+    /// Frame for @p zoneId measured against @p screenId. The id is REQUIRED:
+    /// an implementation backed by a screen manager answers an invalid rect for
+    /// an empty or unresolvable id rather than standing the primary output in,
+    /// because callers only check isValid() and a wrong monitor moves the window.
+    virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;
 
