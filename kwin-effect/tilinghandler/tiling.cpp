@@ -1698,6 +1698,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // only its size, to centre a differently-sized commit
                     // within it.
                     placement.columnSize = snap.geometry.size();
+                    // Mirrors the commit path, which is the only thing this may
+                    // be derived from. The three declared-rect states are
+                    // exactly the set the size-continuity guard below excludes
+                    // and the set whose m_scrollOfferedColumn entry is dropped,
+                    // so for a Wayland client nothing centres a smaller commit
+                    // and the window sits at the column origin. A declared rect
+                    // is the raw work area besides, so a client that accepts it
+                    // resolves zero offsets either way.
+                    //
+                    // The Wayland term is NOT redundant. applyWindowGeometry
+                    // pre-centres every X11 tile through constrainTileGeometry
+                    // with no declared-rect exemption, so an X11 client with
+                    // size hints IS committed centred inside a maximized column
+                    // and the draw has to follow it there. Dropping that term
+                    // trades this bug for its mirror image on X11.
+                    placement.centreInColumn = !(snap.isMaximizedToEdges || snap.isMonocle || snap.isWindowedFullscreen)
+                        || !snap.window->isWaylandClient();
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
                     visualDeltaChanged =
                         (vit == m_effect->m_scrollVisualDelta.constEnd() || !(vit.value() == placement));

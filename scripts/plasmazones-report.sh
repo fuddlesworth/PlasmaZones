@@ -65,7 +65,8 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "The archive is meant to be attached to a bug report. Home paths are redacted,"
             echo "but it still records your machine hostname in the journal lines, the class and"
-            echo "title of tracked windows, and the match patterns from your window rules."
+            echo "title of tracked windows, the match patterns from your window rules, and the"
+            echo "manufacturer, model and serial number your monitors report over EDID."
             echo "Look it over before you post it."
             exit 0
             ;;
@@ -89,8 +90,8 @@ HOME="${HOME:-}"
 if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR="${TMPDIR:-/tmp}"
 fi
-mkdir -p "$OUTPUT_DIR"
-OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
+mkdir -p -- "$OUTPUT_DIR"
+OUTPUT_DIR=$(cd -- "$OUTPUT_DIR" && pwd)
 
 # python3 is required for JSON parsing and home-path redaction. Check up
 # front with a clear error: a missing interpreter failing mid-pipeline
@@ -260,10 +261,10 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # are the likeliest to embed home paths, and an extensionless text
         # config copied verbatim would leak them into a report meant for
         # public attachment. grep -I detects binary content.
-        if grep -Iq . "$f" 2>/dev/null; then
+        if grep -Iq . -- "$f" 2>/dev/null; then
             redact_home "$f" > "$STAGING/$rel"
         else
-            cp "$f" "$STAGING/$rel"
+            cp -- "$f" "$STAGING/$rel"
         fi
     done
 fi
@@ -287,10 +288,10 @@ if [[ -d "$DATA_DIR" ]]; then
         # config-dir loop: an allowlist misses real text formats (a
         # user-authored .luau algorithm, for one) and would ship them with
         # home paths intact.
-        if grep -Iq . "$f" 2>/dev/null; then
+        if grep -Iq . -- "$f" 2>/dev/null; then
             redact_home "$f" > "$STAGING/data/$rel"
         else
-            cp "$f" "$STAGING/data/$rel"
+            cp -- "$f" "$STAGING/data/$rel"
         fi
     done
 fi

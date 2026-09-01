@@ -24,7 +24,23 @@ class TestSupportReport : public QObject
 {
     Q_OBJECT
 
+    /// One null-dependency report at the default window, shared by every slot
+    /// that only inspects the report's STRUCTURE.
+    ///
+    /// Each generate() shells out to journalctl twice, so regenerating it per
+    /// slot paid that cost eight times over for eight assertions about static
+    /// headings. Shared safely because none of these slots mutates anything
+    /// the report is built from; the slots that need a different sinceMinutes,
+    /// or that drive a crafted Snapshot, still build their own.
+    QString m_structureReport;
+
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        m_structureReport = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        QVERIFY(!m_structureReport.isEmpty());
+    }
 
     void testRedactHomePath_replacesHomeDir()
     {
@@ -69,10 +85,64 @@ private Q_SLOTS:
         QCOMPARE(result, input);
     }
 
+    // An XDG dir pointed OUTSIDE home carries no home prefix, so the home rule
+    // cannot reach it and every config path in the report would otherwise ship
+    // as an absolute path — which routinely names the user.
+    void testRedactHomePath_xdgDirOutsideHome()
+    {
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", QByteArray("/srv/elsewhere/cfg"));
+        const QString result =
+            SupportReport::redactHomePath(QStringLiteral("read /srv/elsewhere/cfg/plasmazones/config.json ok"));
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, QStringLiteral("read $XDG_CONFIG_HOME/plasmazones/config.json ok"));
+    }
+
+    // Nesting: with the XDG dir INSIDE home, the more specific prefix has to
+    // win. Substituting home first would leave "~/cfg" and the XDG rule could
+    // then never match, which is why the set is applied longest-first.
+    void testRedactHomePath_nestedXdgPrefersTheLongerPrefix()
+    {
+        const QString home = QDir::homePath();
+        if (home.isEmpty() || home == QLatin1String("/"))
+            QSKIP("No usable home directory for this case");
+
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", (home + QStringLiteral("/cfg")).toUtf8());
+        const QString result = SupportReport::redactHomePath(home + QStringLiteral("/cfg/plasmazones/config.json"));
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, QStringLiteral("$XDG_CONFIG_HOME/plasmazones/config.json"));
+    }
+
+    // A relative XDG value is invalid per spec but reachable, and it would
+    // otherwise compile to an unanchored word that rewrites that token
+    // anywhere it appears in any log line.
+    void testRedactHomePath_ignoresRelativeXdgDir()
+    {
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", QByteArray("cfg"));
+        const QString input = QStringLiteral("loaded cfg for the cfg/plasmazones tree");
+        const QString result = SupportReport::redactHomePath(input);
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, input);
+    }
+
     void testGenerate_returnsMarkdown()
     {
         // Generate with all nulls — should still produce valid structure
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("<details>")));
         QVERIFY(report.contains(QStringLiteral("</details>")));
         QVERIFY(report.contains(QStringLiteral("## Version")));
@@ -95,7 +165,7 @@ private Q_SLOTS:
     {
         // Default Snapshot has hasBridgeInfo=false (daemon not running, or the
         // blocking generate() convenience overload which can't reach the bridge).
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("compositor bridge state unavailable")));
     }
 
@@ -153,19 +223,19 @@ private Q_SLOTS:
 
     void testGenerate_nullScreenManager()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("screen info unavailable")));
     }
 
     void testGenerate_nullLayoutManager()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("layout info unavailable")));
     }
 
     void testGenerate_nullAutotileEngine()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("autotile engine not available")));
         QVERIFY(report.contains(QStringLiteral("scrolling engine not available")));
         QVERIFY(report.contains(QStringLiteral("per-screen mode resolution unavailable")));
@@ -201,20 +271,20 @@ private Q_SLOTS:
 
     void testGenerate_containsTimestamp()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**Generated:**")));
     }
 
     void testGenerate_containsVersionInfo()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**PlasmaZones:**")));
         QVERIFY(report.contains(VERSION_STRING));
     }
 
     void testGenerate_containsEnvironmentInfo()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**Qt:**")));
         QVERIFY(report.contains(QStringLiteral("**OS:**")));
         QVERIFY(report.contains(QStringLiteral("**Kernel:**")));

@@ -786,7 +786,7 @@ void TestScrollEngineVerbs::registryMinimizedStateGatesTheLayerVerbs()
     // ("app|b" → "b"), and upsert never freezes canonical ids, so the
     // engine's tracked ids are untouched.
     QObject owner;
-    ScrollEngine* engine = threeWindows(&owner);
+    ScrollEngine* engine = providerThreeWindows(&owner);
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
     auto* registry = new PhosphorEngine::WindowRegistry(&owner);

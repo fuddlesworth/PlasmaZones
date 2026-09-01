@@ -36,32 +36,91 @@ static constexpr int MaxLogLines = 2000;
 static constexpr int MaxSinceMinutes = 120;
 static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
 
+/// One prefix substitution: an anchored path pattern and what replaces it.
+struct PathRedaction
+{
+    QRegularExpression pattern;
+    QString replacement;
+};
+
+/// Strip trailing separators so the lookahead in buildRedactions() can demand
+/// exactly one. "/home/u/" followed by (?=[/\s]|$) would need a SECOND
+/// separator and never match "/home/u/.config", silently disabling redaction.
+static QString cleanPrefix(QString path)
+{
+    while (path.size() > 1 && path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    return path;
+}
+
+/// The prefixes worth substituting, LONGEST FIRST.
+///
+/// Home alone is not enough. XDG_CONFIG_HOME and XDG_DATA_HOME are ordinarily
+/// under it, where the home rule already covers them, but they can be pointed
+/// anywhere — and when they are, every config and data path in the report is an
+/// absolute path outside home that nothing rewrites. Those paths routinely
+/// carry a username.
+///
+/// Longest first because the prefixes can nest: with XDG_CONFIG_HOME inside
+/// home, substituting home first would leave "~/cfg" and the XDG rule would
+/// then never match. Sorting by descending length makes the most specific
+/// prefix win, which is the one that tells a reader the most.
+static QList<PathRedaction> buildRedactions()
+{
+    QList<PathRedaction> out;
+    QStringList seen;
+    const auto add = [&out, &seen](const QString& raw, const QString& token) {
+        const QString path = cleanPrefix(raw);
+        // "/" would rewrite every absolute path in the report to the token.
+        //
+        // Non-absolute is refused too. The XDG spec requires an absolute path
+        // and ignores anything else, but a stray relative value is reachable,
+        // and it would compile to a bare unanchored word: XDG_CONFIG_HOME=cfg
+        // rewrites the token "cfg" anywhere it appears in any log line.
+        if (path.isEmpty() || path == QLatin1String("/") || !path.startsWith(QLatin1Char('/')))
+            return;
+        // Deduped on the PATH, not the token. The tokens are distinct by
+        // construction so a token check never fires, and two variables pointing
+        // at the SAME directory would otherwise add two identical patterns
+        // whose order std::sort decides arbitrarily, making the substituted
+        // name vary between runs. First wins, which is the most specific.
+        if (seen.contains(path))
+            return;
+        seen.append(path);
+        out.append({QRegularExpression(QRegularExpression::escape(path) + QStringLiteral("(?=[/\\s]|$)")), token});
+    };
+
+    add(qEnvironmentVariable("XDG_CONFIG_HOME"), QStringLiteral("$XDG_CONFIG_HOME"));
+    add(qEnvironmentVariable("XDG_DATA_HOME"), QStringLiteral("$XDG_DATA_HOME"));
+    add(QDir::homePath(), QStringLiteral("~"));
+
+    std::sort(out.begin(), out.end(), [](const PathRedaction& a, const PathRedaction& b) {
+        return a.pattern.pattern().size() > b.pattern.pattern().size();
+    });
+    return out;
+}
+
 QString SupportReport::redactHomePath(const QString& input)
 {
-    // A trailing slash has to come off before the lookahead is built, or the
-    // pattern demands a SECOND separator and matches nothing: "/home/u/"
-    // followed by (?=[/\s]|$) never matches "/home/u/.config". QDir::homePath()
-    // cleans the path today, so this is belt and braces against a future
-    // caller or a platform that does not.
-    QString home = QDir::homePath();
-    while (home.size() > 1 && home.endsWith(QLatin1Char('/')))
-        home.chop(1);
-    if (home.isEmpty() || home == QLatin1String("/"))
+    // Cached per-thread: this runs per line over as many as 2000 log lines, and
+    // generateFromSnapshot runs off the main thread via QtConcurrent::run, so a
+    // plain `static` would be a data race. Keyed on the environment the set was
+    // built from, so a caller that changes HOME or an XDG var mid-process gets
+    // a rebuilt set rather than a stale one.
+    thread_local QString cachedKey;
+    thread_local QList<PathRedaction> redactions;
+    const QString key = QDir::homePath() + QLatin1Char('\0') + qEnvironmentVariable("XDG_CONFIG_HOME")
+        + QLatin1Char('\0') + qEnvironmentVariable("XDG_DATA_HOME");
+    if (cachedKey != key) {
+        cachedKey = key;
+        redactions = buildRedactions();
+    }
+    if (redactions.isEmpty())
         return input;
 
-    // Match home path when followed by a separator (/ or end-of-string),
-    // preventing partial matches (e.g., /home/user must not match /home/username).
-    // Cache the compiled regex per-thread — redactHomePath is called per-line on
-    // potentially 2000+ log lines, and generateFromSnapshot runs off the main thread
-    // via QtConcurrent::run, so plain `static` would be a data race.
-    thread_local QString cachedHome;
-    thread_local QRegularExpression re;
-    if (cachedHome != home) {
-        cachedHome = home;
-        re = QRegularExpression(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
-    }
     QString result = input;
-    result.replace(re, QStringLiteral("~"));
+    for (const PathRedaction& r : std::as_const(redactions))
+        result.replace(r.pattern, r.replacement);
     return result;
 }
 
@@ -597,8 +656,9 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     // own by a caller who never ran the script.
     report += QStringLiteral(
         "*Home paths in this report are redacted. It still records your machine hostname in the log "
-        "lines, the class and title of tracked windows, and the match patterns from your window "
-        "rules. Look it over before you post it.*\n\n");
+        "lines, the class and title of tracked windows, the match patterns from your window rules, "
+        "and the manufacturer, model and serial number your monitors report over EDID. Look it over "
+        "before you post it.*\n\n");
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
 
     report += QStringLiteral("## Version\n");
