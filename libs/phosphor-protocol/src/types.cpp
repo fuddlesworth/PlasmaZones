@@ -109,7 +109,14 @@ QString TileRequestEntry::validationError() const
     // deliberately NOT being a screen-bounds check, is written up there.
     constexpr int kMaxWireExtent = MaxWireExtent;
     constexpr int kMaxWireOrigin = MaxWireOrigin;
-    if (width > kMaxWireExtent || height > kMaxWireExtent) {
+    // Magnitude, not just the upper bound. A NEGATIVE extent passes an
+    // unsigned-looking `>` test, and the consumer's QRect(x, y, w, h) computes
+    // x + w - 1, which overflows for w == INT_MIN whatever x is. The `< 0`
+    // return above catches it on this path today, and mirroring the sibling
+    // validators here means a later edit to that guard cannot silently reopen
+    // the hole.
+    if (std::abs(static_cast<qint64>(width)) > kMaxWireExtent
+        || std::abs(static_cast<qint64>(height)) > kMaxWireExtent) {
         return QStringLiteral("TileRequestEntry: implausible size (windowId=%1 w=%2 h=%3)")
             .arg(windowId)
             .arg(width)

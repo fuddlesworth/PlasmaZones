@@ -191,7 +191,7 @@ This report ships in an archive with the raw files behind the summaries above:
 - `kglobalaccel.txt` with the effective shortcut bindings and `kwin-effects.txt` with the enabled/loaded KWin effects
 - `kwin-rules.txt` with KWin's own window rules, which move and re-desktop windows independently of PlasmaZones (window titles, rule descriptions and client machine names redacted)
 
-Each of the last three is written only when the query behind it returned something, so a missing one means there was nothing to record.
+`journal.log`, `kwin-effect.log`, `kglobalaccel.txt`, `kwin-effects.txt` and `kwin-rules.txt` are each written only when there was something to record and the redaction step succeeded. A missing one means it had nothing in it or could not be cleaned of home paths.
 
 Text files have home and XDG paths replaced with `~`, `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME`. Non-text files such as shader pack previews are left out, because their embedded metadata can carry paths that redaction cannot reach. When anything is omitted that way, its name is listed in `binary-files-omitted.txt`. If that file is not in this archive, nothing was omitted.
 EOF

@@ -545,16 +545,35 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // back.
     if (!shouldFloat) {
         const QString unfloatScreen = m_states.keyForWindow(windowId).screenId;
-        // The SAME count applyOverflow will use, not the bare cap. The pass
-        // takes min(cap, zones) whenever a zone vector exists, and retileScreen
-        // runs applyTiling even when recalculateLayout FAILS, so a stale vector
-        // can be shorter than the cap. Comparing against the cap alone would
-        // let a request with zones.size() <= wouldSortAt < cap through, and the
-        // pass would re-float it on arrival, which is the unconverging retry
-        // this refusal exists to prevent.
-        const int overflowCap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
-        const QVector<QRect> zones = state->calculatedZones();
-        const int cap = zones.isEmpty() ? overflowCap : std::min(overflowCap, static_cast<int>(zones.size()));
+        // The CAP, deliberately, and NOT the pass's own min(cap, zones.size()).
+        // retileScreen runs recalculateLayout BEFORE applyTiling, and the
+        // recalc sizes the zone vector to min(tiledCount, cap) counting the
+        // windows tiled AFTER this unfloat. So on the success path the pass
+        // compares against min(tiledCount + 1, cap), which wouldSortAt (built
+        // only from windows already tiled) can reach only when it reaches the
+        // cap itself.
+        //
+        // Reading calculatedZones() HERE reads the pre-unfloat count instead,
+        // which equals tiledCount below the cap. Any window sorting after every
+        // tiled one then has wouldSortAt == zones.size() and is refused however
+        // empty the screen is: two tiled windows under a cap of eight would
+        // refuse the third. The unminimize path sorts at the end, so that
+        // misfires on the very case this refusal was written for.
+        //
+        // The one thing the cap does not predict is a FAILED recalc, where the
+        // stale shorter vector stands and the pass can still re-float a window
+        // admitted here. That costs one retry of an already-transient failure,
+        // much the cheaper of the two errors.
+        //
+        // NOT COVERED BY A UNIT TEST, deliberately, and worth knowing before
+        // touching this line. The engine harness wires no ScreenManager, so
+        // recalculateLayout fails on the geometry check for every test in the
+        // suite and the zone vector never grows. That harness therefore models
+        // only the recalc-FAILURE path, in which the clamped form looks correct
+        // and the cap form looks wrong, i.e. exactly backwards from production.
+        // The suite passed with the clamped form in place. Reason about this
+        // from retileScreen's recalc-then-apply order, not from a green run.
+        const int cap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
         const int myIndex = state->windowIndex(windowId);
         int wouldSortAt = 0;
         for (const QString& tiled : state->tiledWindows()) {
@@ -566,7 +585,7 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         if (wouldSortAt >= cap) {
             qCInfo(PhosphorTileEngine::lcTileEngine)
                 << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— it would land at tiled position"
-                << wouldSortAt << "with a tile count of" << cap
+                << wouldSortAt << "with a cap of" << cap
                 << ", so the retile would re-float it; keeping it floating and queued for recovery";
             // Queue it for the recovery pass. Without this the window is
             // floating but absent from m_overflow, which is the one set
