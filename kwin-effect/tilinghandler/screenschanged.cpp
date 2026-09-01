@@ -423,16 +423,31 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // windows raised to front) when re-entering autotile mode.
     // Only save windows on the current desktop — other desktops' windows
     // are not being toggled and their stacking order is irrelevant here.
-    for (const QString& screenId : removed) {
-        QStringList autotileOrder;
+    //
+    // ONE window pass with a set lookup, not screen-major nesting. The
+    // screen-major form re-resolved getWindowScreenId and getWindowId for every
+    // (screen, window) pair, and both are lookups rather than field reads — the
+    // desktop-switch block later in this file was rewritten away from exactly
+    // that shape, its comment quantifying the cost as tens of thousands of
+    // resolves on a large session. Stacking order is preserved because the
+    // window loop is still walked in order; only the grouping changed.
+    {
+        QHash<QString, QStringList> orderByScreen;
         for (KWin::EffectWindow* w : windows) {
-            if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
-                autotileOrder.append(m_effect->getWindowId(w));
+            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                || !w->isOnCurrentActivity()) {
+                continue;
             }
+            const QString screenId = m_effect->getWindowScreenId(w);
+            if (!removed.contains(screenId)) {
+                continue;
+            }
+            orderByScreen[screenId].append(m_effect->getWindowId(w));
         }
-        if (!autotileOrder.isEmpty()) {
-            m_savedAutotileStackingOrder[screenId] = autotileOrder;
+        for (auto it = orderByScreen.constBegin(); it != orderByScreen.constEnd(); ++it) {
+            if (!it.value().isEmpty()) {
+                m_savedAutotileStackingOrder[it.key()] = it.value();
+            }
         }
     }
 

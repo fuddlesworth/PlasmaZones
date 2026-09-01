@@ -719,7 +719,17 @@ void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()
 
     std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
-    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    // A CAPTURING callback, unlike the rest of this file, which builds every
+    // resolver with an empty one. This path's stated contract is that the
+    // resolver emits NO feedback here and the caller emits the boundary message
+    // itself, so without an observer a regression that starts emitting — a
+    // duplicate OSD for one keypress — is invisible to the whole suite.
+    int feedbackCalls = 0;
+    SnapNavigationTargetResolver resolver(
+        &wts, layoutManager.get(), &adj,
+        [&feedbackCalls](bool, const QString&, const QString&, const QString&, const QString&, const QString&) {
+            ++feedbackCalls;
+        });
     resolver.setCrossSurfaceResolver(&cross);
 
     const auto result =
@@ -731,6 +741,7 @@ void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()
     QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
     QVERIFY(result.zoneId.isEmpty());
     QCOMPARE(result.sourceZoneId, QStringLiteral("z-a"));
+    QVERIFY2(feedbackCalls == 0, "the resolver defers boundary feedback to its caller and must stay silent here");
 }
 
 void TestSnapCrossSurface::reassignDesktop_restampsAssignedWindowKeepingZone()
