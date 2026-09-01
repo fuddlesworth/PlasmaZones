@@ -29,6 +29,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
 #include "core/interfaces/interfaces.h"
@@ -415,6 +416,25 @@ private Q_SLOTS:
         QVERIFY(baseline.isValid());
         QVERIFY(inset.isValid());
         QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    void testZoneGeometry_unresolvableScreenIsInvalidNotPrimary()
+    {
+        // With a screen manager wired, a screen id the manager cannot resolve
+        // (empty, or a monitor that is gone) must answer an INVALID rect. The
+        // old primary-screen fallback recomputed the zone against the primary
+        // monitor and handed back a perfectly valid-looking frame, and every
+        // caller only checks isValid() — so a snapped window on the secondary
+        // monitor was silently moved onto the primary one. Same-sized outputs
+        // make the two rects differ only by the output origin, which is exactly
+        // what made it invisible.
+        PhosphorScreens::ScreenManager screenMgr;
+        const auto service =
+            std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, &screenMgr, nullptr);
+
+        QVERIFY(!service->zoneGeometry(m_zoneIds[0], QString()).isValid());
+        QVERIFY(!service->zoneGeometry(m_zoneIds[0], QStringLiteral("Gone:Monitor:0")).isValid());
+        QVERIFY(!service->multiZoneGeometry({m_zoneIds[0], m_zoneIds[1]}, QString()).isValid());
     }
 
     void testZoneGeometry_noInsetWhenBorderOff()

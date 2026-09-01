@@ -262,7 +262,21 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Resolve physical screen (virtual IDs resolve to their backing physical output)
+    // Resolve physical screen (virtual IDs resolve to their backing physical output).
+    //
+    // When a screen manager is present, an empty or unresolvable screenId answers
+    // INVALID, never the primary screen. Every caller here computes a window frame
+    // and only checks isValid(), so a primary-screen fallback does not degrade
+    // gracefully: it recomputes the zone against the wrong monitor and the window
+    // is moved onto that monitor. On same-sized outputs the rect differs only by
+    // the output origin, so nothing downstream can tell the two apart. SnapEngine's
+    // calculateSnapToLastZone states this contract outright for the disk-restore
+    // case, which lands an empty lastUsedScreenId and is supposed to end in noSnap.
+    // Callers that genuinely mean the primary screen resolve it and pass its id
+    // (WindowTrackingAdaptor::getZoneGeometry does exactly that).
+    //
+    // With no screen manager at all there is nothing to resolve against, so the
+    // primary screen stands in as before.
     QScreen* screen =
         m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
@@ -290,6 +304,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
+    // Same resolution rule as zoneGeometry() above: with a screen manager present,
+    // an unresolvable screenId answers invalid rather than falling back to primary.
     QScreen* screen =
         m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
     if (!screen) {
