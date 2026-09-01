@@ -132,9 +132,15 @@ QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const ScrollVisualPlacement
     // with this uses frameGeometry().toRect(), so reading the same way is what
     // keeps the drawn and committed centring identical on a fractional-scale
     // output, where the two differ by a pixel.
+    //
+    // A tile whose column is DECLARED state has no centring at all, because
+    // the commit path does none for it: see ScrollVisualPlacement. The offsets
+    // are zero for a client that took the full rect anyway, so this only
+    // changes the refusing client, which the commit leaves at the column
+    // origin.
     const QRect r = frameRect.toRect();
-    const int offsetX = qMax(0, placement.columnSize.width() - r.width()) / 2;
-    const int offsetY = qMax(0, placement.columnSize.height() - r.height()) / 2;
+    const int offsetX = placement.centreInColumn ? qMax(0, placement.columnSize.width() - r.width()) / 2 : 0;
+    const int offsetY = placement.centreInColumn ? qMax(0, placement.columnSize.height() - r.height()) / 2 : 0;
     // The translation to APPLY, not the destination: every consumer adds this
     // to a rect it already has, so the shape matches what the stored delta
     // used to hand them.

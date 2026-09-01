@@ -59,9 +59,15 @@ while [[ $# -gt 0 ]]; do
             echo "  ...              Remaining config-dir files (quick layouts, settings profiles, etc.)"
             echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
-            echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
+            echo "  kwin-effect.log  Recent kwin_wayland journal entries (the effect runs inside it)"
             echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
             echo "  kwin-effects.txt Enabled/loaded KWin desktop effects (kwinrc [Plugins] + live D-Bus state)"
+            echo ""
+            echo "The archive is meant to be attached to a bug report. Home paths are redacted,"
+            echo "but it still records your machine hostname in the journal lines, the class and"
+            echo "title of tracked windows, the match patterns from your window rules, and the"
+            echo "manufacturer, model and serial number your monitors report over EDID."
+            echo "Look it over before you post it."
             exit 0
             ;;
         *)
@@ -71,13 +77,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Bind HOME once, before anything expands it. Under `set -u` an unset HOME is
+# a fatal error at the first bare $HOME, which is the CONFIG_DIR default below
+# — three lines above the guard written to warn about exactly that case, so the
+# warning could never fire. Binding it to a defined empty string keeps the
+# guard reachable: every HOME-derived path then fails its own -d or -f test and
+# is skipped, and redact_home takes its passthrough arm.
+HOME="${HOME:-}"
+
 # Resolve output directory to an absolute path so the final message
 # remains useful regardless of later CWD changes.
 if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR="${TMPDIR:-/tmp}"
 fi
-mkdir -p "$OUTPUT_DIR"
-OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
+mkdir -p -- "$OUTPUT_DIR"
+OUTPUT_DIR=$(cd -- "$OUTPUT_DIR" && pwd)
 
 # python3 is required for JSON parsing and home-path redaction. Check up
 # front with a clear error: a missing interpreter failing mid-pipeline
@@ -97,13 +111,18 @@ call_dbus() {
     # exposes complex D-Bus types — which /PlasmaZones does. That crash can
     # discard buffered stdout, losing the report entirely. busctl (systemd)
     # is unaffected and present on every systemd distro, so it is the default.
+    # 90s, well above busctl's own 25s default. The daemon collects the journal
+    # inside this call (three journalctl attempts per section, each bounded at
+    # 12s), so a slow journal can legitimately take over a minute, and the
+    # default would abandon a healthy daemon and report it as not running.
+    local bus_timeout=(--timeout=90)
     if command -v busctl &>/dev/null; then
         local raw
-        if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
+        if raw=$(busctl --user "${bus_timeout[@]}" --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
             # Parse busctl JSON output: {"type":"s","data":["..."]}
             python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["data"][0])' <<< "$raw"
         else
-            raw=$(busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
+            raw=$(busctl --user "${bus_timeout[@]}" call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
@@ -143,7 +162,9 @@ fi
 # ─── Build archive staging directory ──────────────────────────────────────────
 
 STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
-trap 'rm -rf "$STAGING"' EXIT
+# INT and TERM as well as EXIT: the staging dir holds journal text, and a
+# Ctrl-C partway through collection should not leave it behind.
+trap 'rm -rf "$STAGING"' EXIT INT TERM
 
 # 1. Markdown report from daemon (already redacted)
 # Use printf to avoid heredoc delimiter collision if the report contains the delimiter.
@@ -163,6 +184,15 @@ This report ships in an archive with the raw files behind the summaries above:
 EOF
 
 # 2. Config directory (redact home paths in text files)
+# Strip a trailing slash before anything builds a pattern from HOME. The
+# redaction lookahead below requires a separator AFTER the match, so a HOME of
+# "/home/u/" would demand two and never match "/home/u/.config", silently
+# disabling redaction everywhere. The C++ side is immune because
+# QDir::homePath() cleans the path for it.
+while [[ ${#HOME} -gt 1 && "$HOME" == */ ]]; do
+    HOME="${HOME%/}"
+done
+
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
 # Guard against empty or root HOME (e.g., running from a systemd service without User=,
 # or running as root where HOME=/ would mangle every absolute path).
@@ -222,7 +252,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # journal logs below) or claimed by the DATA_DIR tree; a config-dir
         # entry with the same name must not fight them for the slot.
         case "$rel" in
-            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|kwin-effects.txt|data|data/*)
+            report.md|journal.log|journal.raw|kwin-effect.log|kwin-effect.raw|kglobalaccel.txt|kwin-effects.txt|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac
@@ -231,10 +261,10 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # are the likeliest to embed home paths, and an extensionless text
         # config copied verbatim would leak them into a report meant for
         # public attachment. grep -I detects binary content.
-        if grep -Iq . "$f" 2>/dev/null; then
+        if grep -Iq . -- "$f" 2>/dev/null; then
             redact_home "$f" > "$STAGING/$rel"
         else
-            cp "$f" "$STAGING/$rel"
+            cp -- "$f" "$STAGING/$rel"
         fi
     done
 fi
@@ -258,10 +288,10 @@ if [[ -d "$DATA_DIR" ]]; then
         # config-dir loop: an allowlist misses real text formats (a
         # user-authored .luau algorithm, for one) and would ship them with
         # home paths intact.
-        if grep -Iq . "$f" 2>/dev/null; then
+        if grep -Iq . -- "$f" 2>/dev/null; then
             redact_home "$f" > "$STAGING/data/$rel"
         else
-            cp "$f" "$STAGING/data/$rel"
+            cp -- "$f" "$STAGING/data/$rel"
         fi
     done
 fi
@@ -291,8 +321,9 @@ if command -v journalctl &>/dev/null; then
         local out err exit_code=0
         # Capture stdout and stderr separately so journalctl warnings
         # (e.g., "No entries") don't pollute the log output.
-        err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
-        # Ensure temp file is cleaned up even if the script is killed mid-function.
+        # Inside $STAGING so the EXIT trap covers it too: a RETURN trap does not
+        # fire on a signal, and this function is called up to five times.
+        err=$(mktemp "$STAGING/pz-journal-err.XXXXXX")
         trap 'rm -f "$err"; trap - RETURN' RETURN
         out=$(_jctl "$scope" "$@" \
             --since "$JOURNAL_SINCE min ago" \
@@ -316,17 +347,35 @@ if command -v journalctl &>/dev/null; then
     # Truncate to the most recent MaxLogLines (the entries around a failure),
     # then redact via temp file to avoid SIGPIPE. tail keeps the newest lines,
     # matching capLogLines() in src/core/platform/supportreport.cpp.
+    #
+    # Guarded as a unit: under `set -e` a write failure here (a full disk, a
+    # redactor that will not start) would abort the whole run after the report
+    # and the config tree are already staged, and the EXIT trap would then
+    # delete all of it. One missing diagnostics file is worth far less than the
+    # archive, so the section warns and the run continues. The redacted file is
+    # dropped on failure rather than shipped half-written.
     if [[ -n "${JOURNAL:-}" ]]; then
-        printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
-        tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
+        if ! { printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw" \
+            && tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"; }; then
+            echo "Warning: could not collect the plasmazonesd journal" >&2
+            rm -f "$STAGING/journal.log"
+        fi
         rm -f "$STAGING/journal.raw"
     fi
 
-    # KWin effect logs: the effect runs inside the kwin_wayland process, so its
-    # journal is tagged "kwin_wayland", not "plasmazonesd". Filter to PlasmaZones
-    # lines (every effect log category contains "plasmazones"). Without this a
+    # Compositor logs: the effect runs inside the kwin_wayland process, so its
+    # journal is tagged "kwin_wayland", not "plasmazonesd". Without this a
     # non-loading effect — the most common "drags/shortcuts do nothing" cause —
     # leaves no trace in the archive.
+    #
+    # The whole window is kept. This used to grep for "plasmazones" on the
+    # premise that every effect log category contains it, but KWin installs its
+    # own message handler and does not print the category, so effect lines
+    # arrive bare and only the ones quoting a PlasmaZones window id matched.
+    # Measured on a live session, that dropped 77% of them, and an archive with
+    # no kwin-effect.log at all was read as "the effect logged nothing". The
+    # tail below already bounds the file. See the matching note in
+    # src/core/platform/supportreport.cpp.
     KWIN_JOURNAL=$(collect_journal --user -t kwin_wayland)
     if [[ -z "${KWIN_JOURNAL:-}" ]]; then
         KWIN_JOURNAL=$(collect_journal --user --identifier=kwin_wayland)
@@ -337,11 +386,20 @@ if command -v journalctl &>/dev/null; then
         KWIN_JOURNAL=$(collect_journal --system -t kwin_wayland)
     fi
     if [[ -n "${KWIN_JOURNAL:-}" ]]; then
-        printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw"
-        grep -i plasmazones "$STAGING/kwin-effect.raw" 2>/dev/null \
-            | tail -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
+        # Staged through a file for the plasmazonesd path's stated reason: with
+        # printf as the pipeline's producer, tail closing early kills it with
+        # SIGPIPE and pipefail turns that into a failure the old `|| true` had
+        # to swallow — which also swallowed a genuine redact_home failure and
+        # shipped a partially redacted file. Guarded as a unit for the same
+        # reason as the sibling above: a failure warns rather than taking the
+        # whole archive down with it.
+        if ! { printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw" \
+            && tail -n "$MAX_LOG_LINES" "$STAGING/kwin-effect.raw" | redact_home > "$STAGING/kwin-effect.log"; }; then
+            echo "Warning: could not collect the kwin_wayland journal" >&2
+            rm -f "$STAGING/kwin-effect.log"
+        fi
         rm -f "$STAGING/kwin-effect.raw"
-        # grep matched nothing → drop the empty file rather than ship a blank.
+        # Nothing in the window → drop the empty file rather than ship a blank.
         [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"
     fi
 fi
@@ -408,7 +466,13 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ARCHIVE_NAME="plasmazones-report-${TIMESTAMP}.tar.gz"
 ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_NAME"
 
-tar -czf "$ARCHIVE_PATH" -C "$STAGING" .
+# The default output dir is $TMPDIR, where this name is guessable, so drop
+# anything already sitting at the path first: tar follows an existing symlink
+# and would write through it. The archive carries window titles, rule patterns
+# and the whole config, so it is created owner-only rather than at whatever the
+# ambient umask allows.
+rm -f "$ARCHIVE_PATH"
+(umask 077; tar -czf "$ARCHIVE_PATH" -C "$STAGING" .)
 
 echo "Support report archive created:"
 echo "  $ARCHIVE_PATH"

@@ -1070,9 +1070,12 @@ add_test(NAME test_shader_timing COMMAND test_shader_timing)
 
 # Pure-logic test for the scroll-managed window decision helpers
 # (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
-# decision with its clear-in-flight marker contract (full 16-row truth
-# table) and the counter-assert burst budget (rate limit, rollover,
-# fresh-batch re-arm). Same header-only reach as the anchor test.
+# decision and the maximize-to-edges 3-way decision (a 16-row truth table
+# each, plus their in-flight marker walks), the counter-assert burst budget
+# (rate limit, rollover, fresh-batch re-arm), the compositor-claim release
+# table with its teardown order and fullscreen-skip retention, and the
+# size-continuity carry-forward table. Same header-only reach as the anchor
+# test.
 add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
 target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)

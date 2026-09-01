@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QSize>
 #include <QtGlobal>
 
 /// Pure decision logic for the scroll-managed window mechanisms in
@@ -33,6 +34,29 @@ struct WfsDecision
     /// so a completed clear cannot latch the adopt guard.
     bool consumeClearMarker = false;
 };
+
+/// The arm's name, for the batch consumer's log line.
+///
+/// A switch with no default rather than an array indexed by the enum: a new
+/// arm is then a compiler warning here instead of a silently wrong label (or,
+/// with an array, a read past the end). Same reasoning as the labelled
+/// no-default arms in the strip's height resolver.
+inline const char* wfsActionName(WfsAction action)
+{
+    switch (action) {
+    case WfsAction::None:
+        return "None";
+    case WfsAction::Adopt:
+        return "Adopt";
+    case WfsAction::DeferredReconcile:
+        return "DeferredReconcile";
+    case WfsAction::Refresh:
+        return "Refresh";
+    case WfsAction::Release:
+        return "Release";
+    }
+    return "?";
+}
 
 /// The 5-way windowed-fullscreen batch decision over its four inputs.
 /// @p flagOnWire      the batch entry's isWindowedFullscreen
@@ -168,6 +192,43 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
         return true;
     }
     return false;
+}
+
+/// Whether the scroll size-continuity cache may carry a client's committed
+/// size forward as this batch's offer, instead of offering the column rect.
+///
+/// The cache (`m_scrollOfferedColumn`) exists to end a few-pixel size
+/// renegotiation with clients that enforce their own geometry: once such a
+/// client has answered for a given column SIZE, the batch offers the size it
+/// actually holds, centred in the column, which is a pure move it cannot
+/// renegotiate. Extracted here because the whole defect it caused was a
+/// MISSING TERM in an inline guard, which is the one shape a truth table
+/// catches and a reviewer does not.
+///
+/// @p declaredRect  the column's rect is DECLARED state — maximize-to-edges,
+///                  monocle, or windowed fullscreen. Never carried forward:
+///                  in those the gap between the declared rect and the
+///                  client's preference is the whole point of the state, so
+///                  honouring the client commits a maximized window at its
+///                  pre-maximize size in the middle of the screen. (The
+///                  mechanism's own premise — that the difference is a few
+///                  pixels of renegotiation — is simply false for them.)
+/// @p columnAnswered  a cache entry exists whose SIZE equals this column's.
+/// @p committed     the client's current frame size.
+/// @p column        this batch's column size.
+///
+/// A committed size LARGER than the column on either axis is refused too: it
+/// is not an answer to this column but a stale frame from a bigger one the
+/// client has not been reconfigured out of yet. That is reachable on the
+/// un-maximize batch — the column is back at its stored width while the client
+/// still holds the raw work area — where carrying it forward would commit the
+/// maximized size at the restored column's origin.
+inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const QSize& committed, const QSize& column)
+{
+    if (declaredRect || !columnAnswered || committed.isEmpty() || committed == column) {
+        return false;
+    }
+    return committed.width() <= column.width() && committed.height() <= column.height();
 }
 
 // ── Compositor-state claims ────────────────────────────────────────────────

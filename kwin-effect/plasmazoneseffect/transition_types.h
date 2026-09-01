@@ -569,10 +569,33 @@ struct ScrollVisualPlacement
     /// The column rect this tile was handed. Only the size is read: it is
     /// what a smaller committed frame is centred within.
     QSize columnSize;
+    /// Does the COMMIT path centre a smaller frame inside that column?
+    ///
+    /// The resolver has to draw the window where it was actually committed, so
+    /// this records what the commit did rather than what the column is. Two
+    /// commit-side centrings exist and they cover different populations. An
+    /// X11 tile is pre-centred by constrainTileGeometry (drag_snap.cpp) on
+    /// every apply, with no declared-rect exemption, so it stays true there. A
+    /// Wayland tile is centred only by the size-continuity pass and the
+    /// reactive pass in window_connections.cpp, and both are keyed on
+    /// m_scrollOfferedColumn, whose entry is dropped for the three
+    /// declared-rect states (maximized to edges, monocle, windowed fullscreen).
+    ///
+    /// For a declared rect the column IS the raw work area, so there is
+    /// nothing to centre within. A client that accepts it resolves both
+    /// offsets to zero anyway; one that refuses and commits smaller is left at
+    /// the column origin by the commit path, and centring it in the draw put
+    /// the pixels in the middle of the screen while input landed at the origin.
+    bool centreInColumn = true;
 
+    /// The flag is part of the comparison because this operator is the change
+    /// gate for the relocation map's damage. A maximize toggle on a column that
+    /// already spanned the work area changes neither position nor size, so
+    /// leaving the flag out would write the new centring with no repaint and
+    /// hold the old drawn position until an unrelated batch.
     bool operator==(const ScrollVisualPlacement& o) const
     {
-        return stripPos == o.stripPos && columnSize == o.columnSize;
+        return stripPos == o.stripPos && columnSize == o.columnSize && centreInColumn == o.centreInColumn;
     }
 };
 
