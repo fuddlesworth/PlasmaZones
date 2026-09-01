@@ -331,8 +331,18 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int colMain = columnExtentPx(m_columns.at(columnIndex), params);
-    return (mainExtent(params) - colMain) / 2;
+    const Column& col = m_columns.at(columnIndex);
+    const int colMain = columnExtentPx(col, params);
+    // A maximized-to-edges column is centred in the extent it RESOLVES
+    // against, which is the raw work area, not the gapped one. relayout
+    // already shifts such a column low by the outer gap so that an anchor of
+    // "column sits at the strip cursor" lands it on the raw area exactly, so
+    // centring it in the gapped extent here would subtract that same gap a
+    // second time and hang the column off the low edge of the output. With
+    // the flag off nothing changes: the column resolves against the gapped
+    // work area and takes no shift.
+    const int centringExtent = col.maximizedToEdges ? params.axis.mainSize(rawAreaFor(params)) : mainExtent(params);
+    return (centringExtent - colMain) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params)
@@ -435,6 +445,26 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
+    // A maximized-to-edges column has exactly ONE correct position under every
+    // focus policy: the raw work area it resolves against. Its extent IS the
+    // raw main extent, which is strictly larger than the gapped viewport
+    // whenever an outer gap is set, so without this the Never arm below takes
+    // its over-wide branch and pins the column to a viewport edge measured in
+    // GAPPED coordinates — spending the outer gap a second time on top of
+    // relayout's unconditional shift, exactly the way the centering policy did
+    // before centeredAnchorFor was taught the difference. Only the
+    // TRAILING-side arrival (targetIdx < prevIdx) missed: the leading-side one
+    // asks for a zero offset, and the clamp below cannot narrow that, since a
+    // maximized column's own extent puts maxViewOffset above its strip
+    // position by construction. That is what the regression slot drives.
+    //
+    // centeredAnchorFor IS that one answer, not a stand-in for it: with colMain
+    // equal to the centring extent it reduces to a zero anchor, and a zero
+    // anchor is what relayout's outer-gap shift lands on the raw rect.
+    if (m_columns.at(targetIdx).maximizedToEdges) {
+        return centeredAnchorFor(targetIdx, params);
+    }
+
     const int viewMain = mainExtent(params);
     const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
     const int activeMainPos = columnStripPos(targetIdx, params);
@@ -501,11 +531,14 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     int pos = activeMainPos - oldViewOffset;
     if (colMain >= viewMain) {
         // Exactly the viewport's length along the strip, never longer:
-        // columnWidthPx caps every column at the work area, so this is the
-        // equality case and both arms resolve to the same zero offset. Kept
-        // as a branch because the cap lives in another function and a future
-        // width kind that opted out of it would land here needing the
-        // entering-edge pin.
+        // columnExtentPx caps every column that reaches here at the work area,
+        // so this is the equality case and both arms resolve to the same zero
+        // offset. The one kind that is NOT capped, a maximized-to-edges
+        // column, returned above rather than reaching this arm, because for it
+        // the two arms differ and the trailing-side one is wrong. Kept as a
+        // branch because the cap lives in another function and a future width
+        // kind that opted out of it would land here needing the entering-edge
+        // pin.
         pos = (prevIdx >= 0 && targetIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
