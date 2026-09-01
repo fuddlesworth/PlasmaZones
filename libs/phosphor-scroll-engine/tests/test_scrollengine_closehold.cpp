@@ -47,6 +47,7 @@ private Q_SLOTS:
     void zeroDelayReflowsImmediately();
     void holdDefersReflowUntilExpiry();
     void secondClosePushesTheDeadline();
+    void identicalSetRetileCannotBreakTheHold();
 };
 
 void TestScrollEngineCloseHold::zeroDelayReflowsImmediately()
@@ -119,6 +120,42 @@ void TestScrollEngineCloseHold::secondClosePushesTheDeadline()
     QTest::qWait(300);
     QCOMPARE(tiled.count(), 0);
     // One flush serves both closes once the pushed deadline passes.
+    QTRY_VERIFY_WITH_TIMEOUT(tiled.count() >= 1, 1000);
+}
+
+// Regression: the hold's two original arms both defer, and the strip reflowed
+// anyway, because windowClosed emits placementChanged from its own last line
+// and the DAEMON wires that signal synchronously back into setActiveScreens.
+// The set is unchanged by a close, and that branch retiles every screen
+// unconditionally through scheduleRetileForScreen — one queued turn later, well
+// inside the hold. Reproduced here by wiring the same fan-out the daemon does;
+// the other cases in this file run on a bare engine and so never saw it.
+void TestScrollEngineCloseHold::identicalSetRetileCannotBreakTheHold()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->closeReflowDelayMs = 250;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->refreshConfigFromSettings();
+
+    // The daemon's tiled-count gate: any placement change re-derives the engine
+    // screen set and pushes it back. A close always moves the count, so the
+    // gate never suppresses it, and the pushed set is identical.
+    QObject::connect(engine, &PhosphorEngine::PlacementEngineBase::placementChanged, engine, [engine](const QString&) {
+        engine->setActiveScreens({kS1});
+    });
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QTest::qWait(50);
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->windowClosed(QStringLiteral("app|a"));
+    // The re-push's queued retile lands on the next turn. It must be swallowed
+    // by the hold, not applied — this is the assertion the bug failed.
+    QTest::qWait(100);
+    QCOMPARE(tiled.count(), 0);
+    // And the flush still delivers the one reflow once the hold expires.
     QTRY_VERIFY_WITH_TIMEOUT(tiled.count() >= 1, 1000);
 }
 
