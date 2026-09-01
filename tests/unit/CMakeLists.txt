@@ -91,7 +91,11 @@ add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Qt6::Gui named explicitly, matching test_wts_lifecycle: both targets compile
+# FakeScreenProvider.cpp, which uses QScreen. It resolved transitively through
+# plasmazones_core before, so the two targets disagreed about a dependency they
+# share.
+target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
 add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp)

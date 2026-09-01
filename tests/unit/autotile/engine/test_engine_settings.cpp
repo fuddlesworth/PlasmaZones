@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <cmath>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -122,7 +123,11 @@ private Q_SLOTS:
         cmSaved.splitRatio = 0.35;
         cmSaved.masterCount = 3;
         engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = cmSaved;
-        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, masterStackRatio));
+        // Epsilon compare, not qFuzzyCompare: masterStackRatio is read straight
+        // out of the engine config, and qFuzzyCompare returns FALSE when either
+        // side is exactly 0.0 — so a future default of 0 would turn this into a
+        // confusing failure that has nothing to do with what it tests.
+        QVERIFY(std::abs(engine.config()->splitRatio - masterStackRatio) < 1e-9);
 
         engine.setAlgorithm(QLatin1String("centered-master"));
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
@@ -284,6 +289,25 @@ private Q_SLOTS:
 
         QVERIFY(!engine.algorithm().isEmpty());
         QCOMPARE(state->windowCount(), 1);
+
+        // Surviving the round trip is necessary but not sufficient: the
+        // assertions above hold equally if saveState and loadState are empty
+        // stubs, so on their own they cannot tell "no delegate means no-op"
+        // from "these functions never do anything". Installing a delegate and
+        // showing the SAME calls now reach it is what separates the two.
+        int saves = 0;
+        int loads = 0;
+        engine.setPersistenceDelegate(
+            [&saves] {
+                ++saves;
+            },
+            [&loads] {
+                ++loads;
+            });
+        engine.saveState();
+        engine.loadState();
+        QCOMPARE(saves, 1);
+        QCOMPARE(loads, 1);
     }
 
     void testPersistenceDelegate_invokesCallbacks()
