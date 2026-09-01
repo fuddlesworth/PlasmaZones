@@ -1078,6 +1078,16 @@ target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
 
+# Pure-logic test for the desktop-switch pre-autotile restore decision
+# (tilinghandler/pretiledecisions.h) — the truth table over
+# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
+# pinning the cross-screen decline that keeps a bucket rect from another
+# monitor moving the window there. Same header-only reach as the scroll test.
+add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
+target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.

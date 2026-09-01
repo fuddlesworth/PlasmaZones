@@ -7,6 +7,7 @@
 // removed-screens pass) and it accounted for most of that file.
 
 #include "tilinghandler.h"
+#include "pretiledecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
@@ -213,14 +214,36 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // a previous switch (now untracked, user may have moved it)
         // would otherwise be re-teleported to the stale rect on every
         // later switch onto this desktop.
-        const QRectF savedGeo = findPreTileGeometry(windowId);
-        if (savedGeo.isValid() && wasTracked && wasWindowedFs) {
+        //
+        // The all-bucket lookup answers a rect from ANY monitor's bucket, and
+        // the rects are in absolute compositor coordinates, so a rect keyed
+        // under a different OUTPUT does not merely restore a size — it moves
+        // the window to that output. On a desktop switch that reads to the
+        // user as the window being thrown to another monitor: drag a window
+        // onto this screen, switch away and back through a desktop that
+        // tracked it, and the stale bucket flings it to the monitor it came
+        // from. Decline that rect instead, exactly as the sibling
+        // desktop-move path does (restorePreTileForDesktopMove documents the
+        // same coordinate-space reasoning, and savePreTileForDesktopMove
+        // stamps the bucket screen precisely so it can be compared here).
+        // A rect from THIS screen's bucket still applies, which is the
+        // un-tiling this pass exists to do.
+        QString savedGeoBucket;
+        const QRectF savedGeo = findPreTileGeometry(windowId, &savedGeoBucket);
+        using PlasmaZones::PreTileDecisions::PreTileRestore;
+        const PreTileRestore restore = PlasmaZones::PreTileDecisions::resolvePreTileRestore(
+            savedGeo.isValid(), savedGeoBucket == screenId, wasTracked, wasWindowedFs);
+        if (restore == PreTileRestore::DeclineCrossScreen) {
+            qCDebug(lcEffect) << "Desktop switch: declining cross-screen pre-autotile rect for" << windowId
+                              << "bucket=" << savedGeoBucket << "current=" << screenId;
+        }
+        if (restore == PreTileRestore::QueueForWindowedFullscreen) {
             // The apply below would bail inside applyWindowGeometry on
             // the still-requested fullscreen state (membership is
             // already forgotten, so the exemption no longer fires).
             // Queue it for after the deferred release drops the state.
             windowedFsPreTileRestore.insert(windowId, savedGeo);
-        } else if (savedGeo.isValid() && wasTracked) {
+        } else if (restore == PreTileRestore::Apply) {
             // applyWindowGeometry's moveResize, and the maximize-state
             // clear below, emit windowFrameGeometryChanged
             // synchronously; suppress the VS-crossing detectors
@@ -277,7 +300,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // VS crossing (the daemon-fallback arm of this same
             // if/else chain re-seeds for exactly this reason).
             m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
-        } else if (wasTracked) {
+        } else if (restore == PreTileRestore::AskDaemon) {
             // No local bucket entry but the window WAS tile-managed
             // here: it was snap-managed when it entered autotile, so
             // saveAndRecordPreTileGeometry deliberately stored
@@ -286,6 +309,14 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // fetch it async and restore once the reply lands.
             // Without this the window stays parked at its tiled
             // frame. Gated on wasTracked: see the capture above.
+            //
+            // NOT reached when the local rect was declined just above as
+            // belonging to another monitor. This fallback is the
+            // "snap-managed on entry, so nothing was ever stored locally"
+            // case, not a second chance at a cross-monitor rect — and it
+            // would grant exactly that: the daemon resolves the geometry
+            // against screenForWindow(), its own possibly-stale tracked
+            // screen, so it can hand back the very rect this pass refused.
             requestDaemonPreTileRestore(w, windowId, screenId);
         }
     }
