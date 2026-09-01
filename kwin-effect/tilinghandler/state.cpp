@@ -160,6 +160,22 @@ bool TilingHandler::isManagedScreen(const QString& screenId) const
     return m_managedScreens.contains(screenId);
 }
 
+void TilingHandler::slotLeaveNativeFullscreenRequested(const QString& screenId)
+{
+    // The keyboard twin of the wheel chord's own call. The daemon emits this
+    // immediately before dispatching a strip verb, so the exit lands ahead of
+    // the relayout rather than racing it.
+    //
+    // No screen filtering here: leaveNativeFullscreenTiles already selects by
+    // m_notifiedWindowScreens, so a screen this process holds no tiles for
+    // selects nothing. Guarding on isScrollingScreen as well would only add a
+    // second answer to the same question, which can disagree.
+    if (screenId.isEmpty()) {
+        return;
+    }
+    leaveNativeFullscreenTiles(screenId);
+}
+
 void TilingHandler::slotScrollEffectBehaviourChanged(const QVariantMap& behaviour)
 {
     applyScrollEffectBehaviour(behaviour);
@@ -1003,6 +1019,23 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     }
     const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
     qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
+    leaveNativeFullscreenTiles(screenId);
+    // One verb per notch. The engine owns the step SIZE, so a two-notch event
+    // is two single steps rather than one double-sized one, which keeps the
+    // strip's own animation identical to scrolling those notches separately.
+    for (int i = 0; i < steps; ++i) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
+                                                       QString(verb), {screenId, step}, QString(verb));
+    }
+    return true;
+}
+
+// Leaves the OWN fullscreen (a client F11, a video going fullscreen) of every
+// scroll-tracked tile on `screenId`, so a user strip verb never runs against a
+// window whose geometry the compositor is refusing. No-op when the screen holds
+// no such tile, which is the overwhelmingly common case.
+void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
+{
     // Scrolling a strip that holds a natively-fullscreen tile LEAVES that
     // fullscreen first.
     //
@@ -1016,21 +1049,20 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // one wheel notch at a time, the same window's target walked (8,54) ->
     // (1924,54) -> the park (1932,2176), each answered "fullscreen, skipping".
     //
-    // Done HERE, at the wheel dispatch, rather than in the batch apply: a batch
-    // cannot tell a user scroll from an insert-driven reflow, and gating the
-    // exit on the batch's own strip-motion fields (viewDelta / scrollEdge /
-    // hasVisualPos) dropped the fullscreen whenever an unrelated window merely
-    // OPENED and slid the strip — measured. This site is the scroll itself, so
-    // it carries no such ambiguity.
+    // Called from the VERB DISPATCH — the wheel chord here in the effect, and
+    // the daemon's keyboard shortcut gate over
+    // Scrolling.leaveNativeFullscreenRequested — rather than from the batch
+    // apply. A batch cannot tell a user verb from an insert-driven reflow, and
+    // gating the exit on the batch's own strip-motion fields (viewDelta /
+    // scrollEdge / hasVisualPos) dropped the fullscreen whenever an unrelated
+    // window merely OPENED and slid the strip — measured. A dispatch site
+    // carries no such ambiguity: something the user pressed is what reaches it.
     //
-    // Exits before the verb goes out, so the engine's own relayout for this
-    // notch already places a window the compositor will accept, rather than the
-    // exit racing a batch that was built against the fullscreen.
-    //
-    // KNOWN GAP: the keyboard navigation verbs reach the engine in-process and
-    // never pass through here, so a keyboard scroll still leaves the hold in
-    // place. Closing that needs the engine to mark a batch as user-driven,
-    // which is a wire change and is deliberately not folded in here.
+    // Both callers exit BEFORE their verb goes out, so the engine's own
+    // relayout already places a window the compositor will accept, rather than
+    // the exit racing a batch that was built against the fullscreen. That
+    // ordering is why this is a separate signal rather than a flag on the
+    // batch: a flag arrives with the geometry it was supposed to precede.
     //
     // SELECTED first, ACTED on second, and never with m_notifiedWindows under
     // an open iterator. setFullScreen emits windowFrameGeometryChanged and
@@ -1080,7 +1112,7 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
         if (!kwFs) {
             continue;
         }
-        qCInfo(lcEffect) << "Wheel scroll on a strip holding a fullscreen tile — leaving fullscreen for" << tiledId;
+        qCInfo(lcEffect) << "Strip verb on a screen holding a fullscreen tile — leaving fullscreen for" << tiledId;
         {
             // Own inGeometryApply bracket, exactly as releaseWindowedFullscreenState
             // takes one around the same call: none of the handlers that answer
@@ -1132,14 +1164,6 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
         // them bare. Once per scroll, not once per window.
         m_effect->updateAllDecorations();
     }
-    // One verb per notch. The engine owns the step SIZE, so a two-notch event
-    // is two single steps rather than one double-sized one, which keeps the
-    // strip's own animation identical to scrolling those notches separately.
-    for (int i = 0; i < steps; ++i) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
-                                                       QString(verb), {screenId, step}, QString(verb));
-    }
-    return true;
 }
 
 void TilingHandler::resetWheelAccumulators()

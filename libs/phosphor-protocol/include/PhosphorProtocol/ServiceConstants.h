@@ -284,6 +284,25 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       scrollTabPaintOverrides / scrollTabPaintOverridesChanged,
 //       scrollTabColors / scrollTabColorsChanged).
 //
+//       org.plasmazones.Scrolling GAINED leaveNativeFullscreenRequested, a
+//       screen-scoped signal the daemon emits from the keyboard shortcut gate
+//       immediately BEFORE dispatching a strip verb, telling the compositor to
+//       release the OWN fullscreen of every scroll-tracked tile on that screen.
+//       Such a tile refuses every geometry commit through the effect's
+//       fullscreen bail while the engine goes on scrolling and PARKING its
+//       column, so the two owners drift apart for the whole hold. The wheel
+//       chord already did this for itself inside the effect; the keyboard half
+//       originates in the daemon and could not.
+//
+//       A SIGNAL rather than a field on the geometry batch, which is what the
+//       gap note in the wheel path originally anticipated. The exit has to land
+//       BEFORE the relayout, so the verb's batch is built against a window the
+//       compositor will accept — a batch field arrives with the very geometry it
+//       was supposed to precede. Gating on the batch's own strip-motion fields
+//       was also measured wrong for a second reason: a batch cannot tell a user
+//       verb from an insert-driven reflow, and it dropped the fullscreen
+//       whenever an unrelated window merely opened and slid the strip.
+//
 //       org.plasmazones.Overlay GAINED setWindowThumbnailDmabuf, the zero-copy
 //       thumbnail path. A false reply routes the caller back to the existing
 //       setSnapAssistThumbnail, which is what makes it safe for a peer to try

@@ -524,6 +524,29 @@ Q_SIGNALS:
     /// drag or a burst of opens emits per step.
     void stripChanged(const QString& screenId);
 
+    /// A user strip verb is about to run on @p screenId, so the compositor must
+    /// leave the OWN fullscreen of every scroll-tracked tile there first.
+    ///
+    /// A tile in its own fullscreen (a client F11, a video going fullscreen —
+    /// NOT the windowed-fullscreen feature, whose members are committed at their
+    /// column rect on purpose) refuses every geometry commit through the
+    /// effect's fullscreen bail. The engine cannot see that, so it goes on
+    /// scrolling and PARKING that column while the screen still shows the
+    /// fullscreen window, and the two owners stay split for the whole hold.
+    ///
+    /// Emitted from the keyboard shortcut gate immediately BEFORE the verb is
+    /// dispatched, which is the whole point of a separate signal rather than a
+    /// flag on the geometry batch: the exit has to land first, so the relayout
+    /// the verb produces is built against a window the compositor will accept.
+    /// A flag would arrive with the geometry it was meant to precede.
+    ///
+    /// Emitted unconditionally for any scrolling screen whose verb passed the
+    /// gate, whether or not a tile is actually fullscreen — only the compositor
+    /// knows that, and the receiver no-ops in the common case. The wheel chord
+    /// has no need of it: it originates inside the effect and calls the same
+    /// code path directly.
+    void leaveNativeFullscreenRequested(const QString& screenId);
+
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
     /// scrollView's step reader (setViewScrollStepProvider).

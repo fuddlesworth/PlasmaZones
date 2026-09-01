@@ -579,6 +579,19 @@ public:
     bool handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
                           Qt::MouseButtons buttons);
 
+    /// Leaves the OWN fullscreen (a client F11, a video going fullscreen — NOT
+    /// the windowed-fullscreen feature) of every scroll-tracked tile on
+    /// @p screenId. A tile in that state refuses every geometry commit through
+    /// applyWindowGeometry's fullscreen bail while the engine goes on scrolling
+    /// and PARKING its column, so the two owners drift apart for the whole hold.
+    ///
+    /// Called from the two USER-VERB dispatch sites and nowhere else: the wheel
+    /// chord above, and the daemon's keyboard shortcut gate arriving over
+    /// Scrolling.leaveNativeFullscreenRequested. Both call it BEFORE their verb
+    /// goes out. Not callable from the batch apply — see the site comment for
+    /// the measurement that rules that out.
+    void leaveNativeFullscreenTiles(const QString& screenId);
+
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
 
@@ -1044,6 +1057,13 @@ public Q_SLOTS:
     /// @p epoch is compared and nothing else — never parsed, never checked
     /// against KWin's own current desktop. @p debugLabel is logged only.
     void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
+
+    /// The daemon is about to dispatch a keyboard strip verb on @p screenId and
+    /// needs any natively-fullscreen tile there released first. Thin: defers
+    /// wholly to leaveNativeFullscreenTiles, which the wheel chord calls
+    /// directly. Safe on a screen this process does not manage, and on one
+    /// holding no fullscreen tile — both are a no-op inside.
+    void slotLeaveNativeFullscreenRequested(const QString& screenId);
 
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 

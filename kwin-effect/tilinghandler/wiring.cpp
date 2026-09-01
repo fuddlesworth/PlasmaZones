@@ -116,6 +116,13 @@ void TilingHandler::connectSignals()
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,
                 SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
 
+    // Keyboard strip verbs originate in the daemon and never pass through
+    // handleWheelChord, so the daemon says out loud what the wheel path does
+    // for itself. See leaveNativeFullscreenTiles.
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("leaveNativeFullscreenRequested"), this,
+                SLOT(slotLeaveNativeFullscreenRequested(QString)));
+
     // The scroll cap's blocked-window list, on its own signal because it fires
     // on every relayout that moves the answer while the map above fires when
     // settings or rules change.
