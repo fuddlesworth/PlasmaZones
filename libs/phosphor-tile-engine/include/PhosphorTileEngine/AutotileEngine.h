@@ -1832,7 +1832,8 @@ private:
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by the strict seed in setAutotileScreens() (visible windows,
     // eagerly) and by insertWindow() as remaining windows arrive; purged
-    // per-window via purgeFromPendingOrders (close, cap rejection), swept
+    // per-window via purgeFromPendingOrders (close, insert refusal, handoff
+    // release, the defer gate, the off-autotile focus arm), swept
     // by pruneStaleWindows, and reaped by the pending-order timeout — which
     // deliberately RETAINS an order holding live minimized placeholders, so
     // those entries persist until the window opens or closes.

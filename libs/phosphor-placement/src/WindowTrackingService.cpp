@@ -411,8 +411,7 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // per-screen free geometry. (The legacy per-engine m_unmanagedGeometries store
     // is no longer consulted — two parallel stores drifted and leaked the zone/tile
     // rect into float.) Free geometry is shared across modes, so snap and autotile
-    // resolve the same value; prefer this screen's remembered spot, then any other
-    // screen's (cross-screen validated).
+    // resolve the same value for a given screen.
     // PER-WINDOW, always. An empty appId keeps peek on its same-instance branch,
     // so a window with no usable record of its own gets nullopt rather than a
     // same-app sibling's rect. This used to be opt-in behind an exactOnly flag

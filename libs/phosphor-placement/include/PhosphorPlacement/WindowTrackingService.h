@@ -381,13 +381,22 @@ public:
 
     /**
      * @brief Look up a window's free (unmanaged) geometry from the unified
-     *        WindowPlacementStore, with appId fallback, and validate it.
+     *        WindowPlacementStore and validate it.
      *
-     * Combines the windowId lookup, appId fallback, and cross-screen validation
-     * into a single call. Returns nullopt if no geometry is recorded.
+     * PER-WINDOW and SCREEN-LOCAL. It does not fall back to a same-app
+     * sibling's record, and it does not answer from another screen: both were
+     * removed in discussion #1028, where a live window with no record of its
+     * own inherited a dead instance's absolute coordinates and was moved to
+     * whatever monitor that instance last occupied. A window with nothing on
+     * record for this screen gets nullopt and should be left where it is.
+     *
+     * The rect is also checked against the screen it is filed under, because
+     * the key alone cannot be trusted — see geometryBelongsToScreen, which the
+     * other readers of this store share.
      *
      * @param windowId        Full window ID
-     * @param screenId        Screen where the window currently is (for cross-screen adjustment)
+     * @param screenId        Screen to resolve against; empty resolves to the
+     *                        record's own screen
      */
     std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const override;
 

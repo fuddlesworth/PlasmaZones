@@ -797,16 +797,21 @@ public:
     /// the layout assigned to that screen's (desktop, activity) context, the
     /// same id the windowless context cascade stamps.
     ///
-    /// EVERY per-window resolver must go through this rather than the bare
-    /// buildRuleQueryForWindow free function. Seven of them share one
+    /// This is the hint-bearing helper the snap engine's exclusion-query
+    /// provider uses (enginewiring.cpp, its only caller). It is NOT the
+    /// enforcement point for uniform stamping — the per-window resolvers call
+    /// the bare buildRuleQueryForWindow and stamp their context through
+    /// stampScreenContext, which is the mechanism that actually keeps them
+    /// consistent.
+    ///
+    /// The stamping matters because SIX resolvers share one
     /// RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
     /// revision), and resolveCached returns the cached actions WITHOUT
-    /// consulting the query on a hit — so whichever of those seven touches a
+    /// consulting the query on a hit — so whichever of those six touches a
     /// window first fixes the context every later one reuses for that window's
-    /// lifetime. (The other two consumers do not share it:
-    /// shouldRestoreSizeOnUnsnap calls the uncached resolve(), and the snap
-    /// engine's exclusion-query provider feeds SnapEngine's separate
-    /// exclusion evaluator.)
+    /// lifetime. (The remaining resolvers do not share it: shouldRestoreSizeOnUnsnap
+    /// calls the uncached resolve(), and shouldFloatByRule, scrollOpenRuleParams,
+    /// tabColorRuleParams and dropIndicatorRuleParams opt out.)
     ///
     /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
     /// and unhinted paths resolve different screens, so the ORDER matters too.

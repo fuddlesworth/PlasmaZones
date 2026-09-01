@@ -419,6 +419,12 @@ void TilingAdaptor::relayScrollTabStrips(const QString& screenId, const QString&
     // here" from the map shape alone (see the header doc). An empty string is
     // treated the same way: it carries no columns either.
     const bool retracts = stripsJson.isEmpty() || stripsJson == QLatin1String("[]");
+    // NOT change-gated, deliberately, unlike the paint-override relay below.
+    // The gate lives upstream in the scroll engine (m_lastTabStripPayload in
+    // engine_apply.cpp), which only emits on a real model change, so a second
+    // gate here could only ever duplicate that one. The cache below is for
+    // REPLAY (a freshly loaded effect asking what it missed), not for
+    // suppression. testRelayEmitsAndCachesPerScreen pins the repeat emission.
     if (retracts) {
         m_lastScrollTabStrips.remove(screenId);
     } else {
@@ -523,9 +529,13 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
         m_lastScrollTabColorsRelay.remove(windowId);
         return;
     }
-    // Change-gated like every other relay here: the effect compares and
-    // drops an unchanged map, so an unchanged one must not cross the bus at
-    // all (a window with no rule retitles as often as a terminal does).
+    // Change-gated HERE because nothing upstream gates this one: the params are
+    // recomputed per relay from the rule set, so an unchanged map would cross
+    // the bus every time (a window with no rule retitles as often as a terminal
+    // does) and the effect would compare and drop it. Note relayScrollTabStrips
+    // deliberately does NOT gate — the scroll engine already emits only on a
+    // real model change there, so a second gate could only duplicate it. The
+    // two differ on purpose.
     const QVariantMap colors = m_windowTrackingAdaptor->tabColorRuleParams(windowId);
     const auto it = m_lastScrollTabColorsRelay.constFind(windowId);
     if (it != m_lastScrollTabColorsRelay.constEnd() && *it == colors) {
