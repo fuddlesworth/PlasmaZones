@@ -309,6 +309,14 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // one genuine pass-through: the user took it out of the strip, so its
     // maximize is KWin's business and the engine has no column to act on.
     if (!isTiledWindow(windowId)) {
+        // Logged because it is indistinguishable from a broken maximize at the
+        // screen: the user's click falls through to KWin, which maximizes to
+        // its own area rather than to the strip's, and nothing else records
+        // that PlasmaZones declined. The common cause is legitimate (the window
+        // is floated, or its desktop resolves to no engine at all), but it is
+        // exactly the confusion a support report has to be able to settle.
+        qCInfo(lcEffect) << "Maximize interception: declining" << windowId
+                         << "— not a tiled window, KWin keeps the request";
         return false;
     }
     // The screen the strip placed it on, not wherever it sits this instant.
@@ -320,6 +328,8 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
         screenId = m_effect->getWindowScreenId(w);
     }
     if (!isScrollingScreen(screenId)) {
+        qCInfo(lcEffect) << "Maximize interception: declining" << windowId << "— screen" << screenId
+                         << "is not in scrolling mode, KWin keeps the request";
         return false;
     }
     KWin::Window* kw = w->window();
@@ -336,6 +346,8 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // strip's rect; that is the better half of the trade, because with no
     // daemon there is no batch coming to impose one.
     if (!m_effect->m_daemonGate.serviceRegistered) {
+        qCWarning(lcEffect) << "Maximize interception: declining" << windowId
+                            << "— no daemon to answer, KWin's own maximize will fight the strip's rect";
         return false;
     }
     // DISPATCH WITHOUT WRITING THE BIT. What KWin just did to the window
@@ -386,14 +398,35 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // first answer has settled, so a fast double-click toggles twice. The echo
     // cannot reach this arm, because an echo of the effect's own write arrives
     // only after the reply has cleared the flight entry.
+    //
+    // ONE press is remembered, not a queue, so a triple-click inside a single
+    // round trip nets to two toggles. That is the intended ceiling: the point
+    // is to keep a double-click from being swallowed, not to replay an
+    // arbitrary backlog against a state each press was aimed at from a
+    // different starting point.
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
-        if (maximizeToggleInFlight(windowId)) {
+        const bool inFlight = maximizeToggleInFlight(windowId);
+        if (inFlight) {
             m_maximizeToggleInFlight[windowId].pendingPress = true;
         }
+        // Entry presence is logged separately from the live/expired answer,
+        // because the case where they disagree is the one worth reading in a
+        // report: a flight that expired with a press already recorded keeps
+        // its entry while answering false here, so this press is neither
+        // coalesced nor dispatched. (An expiry with no recorded press erases
+        // the entry, so both read false there.) The press is deliberately not
+        // recorded in that case — the reply may still land tens of seconds
+        // later, and honouring it then would toggle the window long after the
+        // user gave up on the click.
+        qCInfo(lcEffect) << "Maximize interception: KWin already agrees with the engine for" << windowId
+                         << "— no toggle dispatched (coalesced press:" << inFlight
+                         << "flight entry standing:" << m_maximizeToggleInFlight.contains(windowId) << ")";
         return true;
     }
+    qCInfo(lcEffect) << "Maximize interception: claiming" << windowId << "on" << screenId << "— dispatching toggle ("
+                     << (engineState == KWin::MaximizeFull ? "un-maximize" : "maximize") << ")";
     dispatchMaximizeToEdgesToggle(screenId, windowId);
     return true;
 }
@@ -513,6 +546,16 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         });
         if (!reply.isError() && reply.value()) {
             return;
+        }
+        // The one outcome that leaves the user's click visibly unhonoured, and
+        // until now the only record of it was the window snapping back.
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
+                                << "— D-Bus error:" << reply.error().message()
+                                << "; restoring KWin's bit to the engine's state";
+        } else {
+            qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
+                                << "— strip reported no change; restoring KWin's bit to the engine's state";
         }
         // Refused, so put the bit back where the ENGINE has it — membership,
         // never the pre-click value and never the user's request. This is the
@@ -940,9 +983,14 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     const auto geomGuard = qScopeGuard([this, prevInApply] {
         m_effect->m_daemonGate.inGeometryApply = prevInApply;
     });
-    ++m_suppressFullScreenChanged;
-    kw->setFullScreen(false);
-    --m_suppressFullScreenChanged;
+    // Through the helper, not a hand-rolled ++/--: its own note spells out why
+    // the bracket has to be RAII, and this was one of the last two copies that
+    // was not. An early return added between the pair leaks the increment, and
+    // the failure is silent and permanent — isSuppressingFullScreenChanged()
+    // then answers true for the rest of the session, so slotWindowFullScreenChanged
+    // stops seeing a client leaving fullscreen on its own and windowed
+    // fullscreen never reconciles again.
+    applyFullScreenSuppressed(kw, false);
 }
 
 void TilingHandler::dispatchWindowedFullscreenClear(const QString& windowId)

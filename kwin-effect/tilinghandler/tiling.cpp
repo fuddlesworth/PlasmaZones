@@ -1496,6 +1496,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (wfs.consumeClearMarker) {
                     m_windowedFsClearInFlight.remove(snap.windowId);
                 }
+                // Every arm but the steady-state Refresh is a STATE CHANGE the
+                // user can see, and the whole block was silent: entering,
+                // adopting after an effect restart, reconciling a client's own
+                // exit and releasing all looked identical from a log. Refresh
+                // is excluded because it runs on every batch of every member
+                // and would drown the category.
+                if (wfs.action != ScrollDecisions::WfsAction::None
+                    && wfs.action != ScrollDecisions::WfsAction::Refresh) {
+                    qCInfo(lcEffect) << "Windowed fullscreen:" << ScrollDecisions::wfsActionName(wfs.action) << "for"
+                                     << snap.windowId << "at" << snap.geometry
+                                     << "(wire flag=" << snap.isWindowedFullscreen << "member=" << inSet
+                                     << "kwinRequestedFs=" << kwFs->isRequestedFullScreen() << ")";
+                }
                 if (wfs.action == ScrollDecisions::WfsAction::Adopt) {
                     // Adopt-on-batch: also the effect-restart path, where the
                     // daemon still holds the flag for a window this effect
@@ -1553,7 +1566,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // user's exit.
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
-                    qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
                     if (m_effect->m_daemonGate.serviceRegistered) {
                         // Marker armed + reply-gated inside the helper: the
                         // flag-off echo above consumes it on success, and a
@@ -1577,9 +1589,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Skipping it drops membership with the request standing,
                     // and the pending ack then commits fullscreen ownerless.
                     if (kwFs->isFullScreen() || kwFs->isRequestedFullScreen()) {
-                        ++m_suppressFullScreenChanged;
-                        kwFs->setFullScreen(false);
-                        --m_suppressFullScreenChanged;
+                        // Through the helper for its stated RAII reason — this
+                        // was the other hand-rolled copy of the bracket. A leak
+                        // here is silent and permanent, and it disables the
+                        // very slot that notices a client leaving windowed
+                        // fullscreen by itself.
+                        applyFullScreenSuppressed(kwFs, false);
                     }
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
@@ -1686,6 +1701,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // only its size, to centre a differently-sized commit
                     // within it.
                     placement.columnSize = snap.geometry.size();
+                    // Mirrors the commit path, which is the only thing this may
+                    // be derived from. The three declared-rect states are
+                    // exactly the set the size-continuity guard below excludes
+                    // and the set whose m_scrollOfferedColumn entry is dropped,
+                    // so for a Wayland client nothing centres a smaller commit
+                    // and the window sits at the column origin. A declared rect
+                    // is the raw work area besides, so a client that accepts it
+                    // resolves zero offsets either way.
+                    //
+                    // The Wayland term is NOT redundant. applyWindowGeometry
+                    // pre-centres every X11 tile through constrainTileGeometry
+                    // with no declared-rect exemption, so an X11 client with
+                    // size hints IS committed centred inside a maximized column
+                    // and the draw has to follow it there. Dropping that term
+                    // trades this bug for its mirror image on X11.
+                    placement.centreInColumn = !(snap.isMaximizedToEdges || snap.isMonocle || snap.isWindowedFullscreen)
+                        || !snap.window->isWaylandClient();
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
                     visualDeltaChanged =
                         (vit == m_effect->m_scrollVisualDelta.constEnd() || !(vit.value() == placement));
@@ -1987,12 +2019,33 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // Inert for a window that accepts its column: the sizes match,
                 // so the offer is the column rect unchanged and every branch
                 // below sees exactly what it saw before.
+                //
+                // A MAXIMIZED-TO-EDGES column is exempt, alongside monocle and
+                // windowed fullscreen and for the same reason: in all three the
+                // rect is DECLARED state, and honouring the client's own
+                // smaller answer instead defeats the state outright. The
+                // mechanism above exists to stop a size renegotiation that is
+                // only a few pixels wide; here the gap is the whole difference
+                // between the raw work area and whatever the client prefers, so
+                // "offer the size it actually holds, centred" commits a
+                // maximized window at its pre-maximize size in the middle of
+                // the screen.
+                //
+                // It is also self-sustaining once entered, which is what made
+                // this present as "maximize sometimes does nothing". The first
+                // batch after the toggle finds no entry for the new column
+                // size, offers the full raw area and records it; a client that
+                // answers smaller then makes EVERY later batch for that column
+                // read columnUnchanged and re-issue the shrunken centred rect,
+                // and the entry is deliberately never removed. Since a maximized
+                // column's batches arrive on any focus change or scroll tick,
+                // the full-width frame is typically gone before the user sees it.
                 // Null unless this batch is a plain strip entry that reaches
                 // the record below; see the capture site for why the two are
                 // separated.
                 QRect stripOfferedColumn;
                 if (isScrollingScreen(snap.screenId) && !snap.isMonocle && !snap.isWindowedFullscreen
-                    && snap.window->isWaylandClient()) {
+                    && !snap.isMaximizedToEdges && snap.window->isWaylandClient()) {
                     const QSize columnSize = geo.size();
                     const QSize committedSize = snap.window->frameGeometry().toRect().size();
                     const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
@@ -2017,7 +2070,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // The commanded-rect sibling already guards the same three
                     // cases; this is the missing half of that pairing.
                     stripOfferedColumn = geo;
-                    if (columnUnchanged && !committedSize.isEmpty() && committedSize != columnSize) {
+                    // The whole carry-forward decision, truth-tabled in
+                    // scrolldecisions.h. declaredRect is false here by
+                    // construction — the enclosing guard already excluded all
+                    // three declared-rect states — but it is passed rather than
+                    // hardcoded so the predicate stays complete on its own
+                    // terms and the table documents why they are excluded.
+                    if (ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged, committedSize,
+                                                               columnSize)) {
                         // Centred the same way the paint resolver centres
                         // (scrollVisualTranslationFor), so the drawn and
                         // committed positions agree: same toRect() rounding on
@@ -2038,6 +2098,48 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                     // AFTER the re-centring, so this is the rect the apply
                     // below actually offers.
+                    scrollDeliveredRect = geo;
+                }
+                // DROP THE OFFERED-COLUMN ENTRY for every declared-rect state,
+                // which is the same set the size-continuity guard above
+                // excludes. Taking that exemption means nothing refreshes the
+                // entry for the length of the episode, and the entry is not
+                // read only by the guard above: the reactive centring pass in
+                // window_connections.cpp reads it on every frame-geometry
+                // change with no declared-rect exclusion of its own, so a
+                // stale entry there centres the window inside a column it no
+                // longer occupies. Windowed fullscreen removes the entry on
+                // enter for exactly this reason, and the monocle arm at the
+                // bottom of this lambda already drops it on every batch, but
+                // nothing removed it for a column that is merely maximized to
+                // edges. The predicate covers all three anyway so it reads as
+                // the one set the size-continuity guard above excludes, and
+                // the monocle leg is a harmless earlier repeat of a removal
+                // that batch performs regardless.
+                //
+                // Removing an absent key costs nothing, so no isWaylandClient
+                // term is needed: an entry is only ever written for one.
+                if (isScrollingScreen(snap.screenId)
+                    && (snap.isMaximizedToEdges || snap.isMonocle || snap.isWindowedFullscreen)) {
+                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
+                }
+                // A maximized-to-edges column takes the exemption above, so it
+                // never reaches that assignment — but it is the ONE Wayland
+                // population the counter-assert exists for (KWin's own
+                // maximize-area re-assert is its external mover), and the arm
+                // at the bottom of this lambda refuses to record a commanded
+                // rect while this is null. Without this the counter would be
+                // permanently disarmed for exactly the windows it protects.
+                //
+                // The rect is `geo` unchanged, and that is now the honest
+                // record: the sibling arm's warning about recording "the raw
+                // column instead" was written when the size-continuity pass
+                // did NOT exclude maximized columns, so the delivered rect
+                // could be a centred commit the counter had never offered.
+                // With the exemption in place the column rect IS what gets
+                // delivered, so the two agree by construction.
+                if (isScrollingScreen(snap.screenId) && snap.isMaximizedToEdges && !snap.isMonocle
+                    && !snap.isWindowedFullscreen && snap.window->isWaylandClient()) {
                     scrollDeliveredRect = geo;
                 }
 
@@ -2708,12 +2810,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // now would capture the pre-commit rect. That substitution
                     // is safe because the rect recorded is the one this
                     // entry actually DELIVERED, captured after the
-                    // size-continuity pass. Recording the raw column instead
-                    // was not safe: that pass exists precisely because Wayland
-                    // clients do settle at a size other than the column
-                    // offered, and it does not exclude maximized ones, so the
-                    // counter-assert would have compared the centred commit
-                    // against a rect that was never offered.
+                    // size-continuity pass. For a maximized column that is the
+                    // column rect unchanged: the pass EXCLUDES the three
+                    // declared-rect states, so no centred commit can reach
+                    // this record and the commanded rect is what the client
+                    // was offered. The exclusion is what makes the two agree.
+                    // Without it the pass would hand a client's own smaller
+                    // answer forward, and the counter-assert would compare the
+                    // centred commit against a rect that was never offered.
                     // Not armed mid-gesture, matching the X11 leg's own
                     // deferred-commit predicate: countering a live drag or
                     // resize would fight the user's hand.

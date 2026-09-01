@@ -36,25 +36,91 @@ static constexpr int MaxLogLines = 2000;
 static constexpr int MaxSinceMinutes = 120;
 static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
 
+/// One prefix substitution: an anchored path pattern and what replaces it.
+struct PathRedaction
+{
+    QRegularExpression pattern;
+    QString replacement;
+};
+
+/// Strip trailing separators so the lookahead in buildRedactions() can demand
+/// exactly one. "/home/u/" followed by (?=[/\s]|$) would need a SECOND
+/// separator and never match "/home/u/.config", silently disabling redaction.
+static QString cleanPrefix(QString path)
+{
+    while (path.size() > 1 && path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    return path;
+}
+
+/// The prefixes worth substituting, LONGEST FIRST.
+///
+/// Home alone is not enough. XDG_CONFIG_HOME and XDG_DATA_HOME are ordinarily
+/// under it, where the home rule already covers them, but they can be pointed
+/// anywhere — and when they are, every config and data path in the report is an
+/// absolute path outside home that nothing rewrites. Those paths routinely
+/// carry a username.
+///
+/// Longest first because the prefixes can nest: with XDG_CONFIG_HOME inside
+/// home, substituting home first would leave "~/cfg" and the XDG rule would
+/// then never match. Sorting by descending length makes the most specific
+/// prefix win, which is the one that tells a reader the most.
+static QList<PathRedaction> buildRedactions()
+{
+    QList<PathRedaction> out;
+    QStringList seen;
+    const auto add = [&out, &seen](const QString& raw, const QString& token) {
+        const QString path = cleanPrefix(raw);
+        // "/" would rewrite every absolute path in the report to the token.
+        //
+        // Non-absolute is refused too. The XDG spec requires an absolute path
+        // and ignores anything else, but a stray relative value is reachable,
+        // and it would compile to a bare unanchored word: XDG_CONFIG_HOME=cfg
+        // rewrites the token "cfg" anywhere it appears in any log line.
+        if (path.isEmpty() || path == QLatin1String("/") || !path.startsWith(QLatin1Char('/')))
+            return;
+        // Deduped on the PATH, not the token. The tokens are distinct by
+        // construction so a token check never fires, and two variables pointing
+        // at the SAME directory would otherwise add two identical patterns
+        // whose order std::sort decides arbitrarily, making the substituted
+        // name vary between runs. First wins, which is the most specific.
+        if (seen.contains(path))
+            return;
+        seen.append(path);
+        out.append({QRegularExpression(QRegularExpression::escape(path) + QStringLiteral("(?=[/\\s]|$)")), token});
+    };
+
+    add(qEnvironmentVariable("XDG_CONFIG_HOME"), QStringLiteral("$XDG_CONFIG_HOME"));
+    add(qEnvironmentVariable("XDG_DATA_HOME"), QStringLiteral("$XDG_DATA_HOME"));
+    add(QDir::homePath(), QStringLiteral("~"));
+
+    std::sort(out.begin(), out.end(), [](const PathRedaction& a, const PathRedaction& b) {
+        return a.pattern.pattern().size() > b.pattern.pattern().size();
+    });
+    return out;
+}
+
 QString SupportReport::redactHomePath(const QString& input)
 {
-    const QString home = QDir::homePath();
-    if (home.isEmpty() || home == QLatin1String("/"))
+    // Cached per-thread: this runs per line over as many as 2000 log lines, and
+    // generateFromSnapshot runs off the main thread via QtConcurrent::run, so a
+    // plain `static` would be a data race. Keyed on the environment the set was
+    // built from, so a caller that changes HOME or an XDG var mid-process gets
+    // a rebuilt set rather than a stale one.
+    thread_local QString cachedKey;
+    thread_local QList<PathRedaction> redactions;
+    const QString key = QDir::homePath() + QLatin1Char('\0') + qEnvironmentVariable("XDG_CONFIG_HOME")
+        + QLatin1Char('\0') + qEnvironmentVariable("XDG_DATA_HOME");
+    if (cachedKey != key) {
+        cachedKey = key;
+        redactions = buildRedactions();
+    }
+    if (redactions.isEmpty())
         return input;
 
-    // Match home path when followed by a separator (/ or end-of-string),
-    // preventing partial matches (e.g., /home/user must not match /home/username).
-    // Cache the compiled regex per-thread — redactHomePath is called per-line on
-    // potentially 2000+ log lines, and generateFromSnapshot runs off the main thread
-    // via QtConcurrent::run, so plain `static` would be a data race.
-    thread_local QString cachedHome;
-    thread_local QRegularExpression re;
-    if (cachedHome != home) {
-        cachedHome = home;
-        re = QRegularExpression(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
-    }
     QString result = input;
-    result.replace(re, QStringLiteral("~"));
+    for (const PathRedaction& r : std::as_const(redactions))
+        result.replace(r.pattern, r.replacement);
     return result;
 }
 
@@ -349,7 +415,7 @@ QString SupportReport::sectionCompositorBridge(const Snapshot& snapshot)
         "**Status:** NOT CONNECTED — the KWin effect has not registered with the daemon.\n\n"
         "Window dragging, keyboard shortcuts, and snapping cannot work without it. "
         "Verify that the **PlasmaZones** effect is enabled in System Settings → Desktop Effects, "
-        "then restart the Plasma session so KWin loads it. See the KWin Effect Logs section below "
+        "then restart the Plasma session so KWin loads it. See the Compositor Logs section below "
         "for why the effect failed to load or register.\n");
 }
 
@@ -520,7 +586,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(output.split(QLatin1Char('\n')))));
 }
 
-QString SupportReport::sectionEffectLogs(int sinceMinutes, bool bridgeRegistered)
+QString SupportReport::sectionCompositorLogs(int sinceMinutes, bool bridgeRegistered)
 {
     // The KWin effect runs inside the kwin_wayland process, so its journal
     // entries are tagged "kwin_wayland", not "plasmazonesd" — sectionLogs()
@@ -540,24 +606,43 @@ QString SupportReport::sectionEffectLogs(int sinceMinutes, bool bridgeRegistered
             .arg(sinceMinutes)
             .arg(quietSuffix);
 
-    // Keep only PlasmaZones effect lines — the rest of the kwin_wayland journal
-    // is unrelated compositor noise. Every effect logging category begins with
-    // "plasmazones" (e.g. "plasmazones.effect"), and Qt's default message
-    // pattern prints the category, so a substring match catches every line.
-    QStringList kept;
-    const QStringList lines = QString::fromUtf8(rawOutput).split(QLatin1Char('\n'));
-    for (const QString& line : lines) {
-        if (line.contains(QLatin1String("plasmazones"), Qt::CaseInsensitive))
-            kept.append(line);
-    }
-
-    if (kept.isEmpty()) {
-        return QStringLiteral("*(no PlasmaZones effect log entries in the last %1 minutes — %2)*\n")
+    // The WHOLE kwin_wayland window is kept, unrelated compositor lines
+    // included, and that is deliberate.
+    //
+    // This used to keep only lines containing "plasmazones", on the premise
+    // that every effect category begins with that and "Qt's default message
+    // pattern prints the category". KWin installs its OWN message handler and
+    // does not print the category, so the premise never held in a real
+    // session: the effect's lines arrive bare ("Countering external move of
+    // scroll-managed window ...", "park reap: stamped ..."), and only the ones
+    // whose text happens to quote a PlasmaZones window id survived. Measured
+    // over three days on a live session, 6593 of 8569 effect lines — 77% —
+    // were dropped.
+    //
+    // What that cost is worse than noise. The section rendered "the effect is
+    // connected and simply logged nothing in this window" over a heavily
+    // logging effect, and a report gathered right after a reproduction was
+    // read as evidence that a code path had not run. A support report whose
+    // silence cannot be trusted is worse than one that is merely long.
+    //
+    // Nothing more selective is durable here. The pattern is KWin's to set, so
+    // the category cannot be recovered from the text, and a hand-maintained
+    // list of effect message prefixes rots exactly the way the old comment
+    // did — silently, with the failure looking like success. capLogLines
+    // already bounds the section at MaxLogLines, so the size is contained.
+    //
+    // Whitespace-only output takes the same early return as the sibling
+    // section. journalctl can answer with a bare newline, which is not caught
+    // by the isEmpty test above and would otherwise render an empty fence that
+    // reads exactly like a captured-but-silent effect.
+    const QString output = QString::fromUtf8(rawOutput);
+    if (output.trimmed().isEmpty())
+        return QStringLiteral("*(no kwin_wayland journal in the last %1 minutes — %2)*\n")
             .arg(sinceMinutes)
             .arg(quietSuffix);
-    }
 
-    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(kept)));
+    const QStringList lines = output.split(QLatin1Char('\n'));
+    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(lines)));
 }
 
 QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes)
@@ -565,6 +650,15 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     sinceMinutes = (sinceMinutes <= 0) ? DefaultSinceMinutes : qMin(sinceMinutes, MaxSinceMinutes);
 
     QString report;
+    // ABOVE the collapsible block, because the one line that has to be read
+    // before posting is no use hidden inside it. Said here rather than only in
+    // the collector script's help, since this Markdown is often pasted on its
+    // own by a caller who never ran the script.
+    report += QStringLiteral(
+        "*Home paths in this report are redacted. It still records your machine hostname in the log "
+        "lines, the class and title of tracked windows, the match patterns from your window rules, "
+        "and the manufacturer, model and serial number your monitors report over EDID. Look it over "
+        "before you post it.*\n\n");
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
 
     report += QStringLiteral("## Version\n");
@@ -607,13 +701,18 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     report += sectionLogs(sinceMinutes);
     report += QLatin1Char('\n');
 
-    report += QStringLiteral("## KWin Effect Logs (last %1 minutes)\n").arg(sinceMinutes);
-    report += sectionEffectLogs(sinceMinutes, snapshot.hasBridgeInfo && snapshot.bridgeRegistered);
+    report += QStringLiteral("## Compositor Logs (last %1 minutes)\n").arg(sinceMinutes);
+    report += sectionCompositorLogs(sinceMinutes, snapshot.hasBridgeInfo && snapshot.bridgeRegistered);
     report += QLatin1Char('\n');
 
     // Sanitize any literal </details> in section content that would prematurely
     // close the collapsible block when rendered in GitHub Issues/Discussions.
-    report.replace(QStringLiteral("</details>"), QStringLiteral("&lt;/details&gt;"));
+    // Case-insensitive and slack about interior whitespace, because an HTML
+    // parser closes on </DETAILS> and </details > just as readily, and the
+    // content here is whatever a user put in a rule name or a config value.
+    static const QRegularExpression closingDetails(QStringLiteral("</\\s*details\\s*>"),
+                                                   QRegularExpression::CaseInsensitiveOption);
+    report.replace(closingDetails, QStringLiteral("&lt;/details&gt;"));
 
     report += QStringLiteral("</details>\n");
 

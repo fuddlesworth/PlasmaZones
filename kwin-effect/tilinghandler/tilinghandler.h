@@ -1165,9 +1165,11 @@ private:
     /// Bracketed maximize-mode write, the maximize twin of
     /// applyFullScreenSuppressed: a counter rather than a bool because the
     /// batch consumer and the interception arm both nest their own brackets.
-    /// Both helpers serve in-handler and out-of-handler callers alike; the
-    /// only bracket deliberately NOT routed through this one is the monocle
-    /// apply's, which spans the geometry apply as well as the maximize.
+    /// Both helpers serve in-handler and out-of-handler callers alike. TWO
+    /// brackets are deliberately not routed through this one, and both are
+    /// monocle: the batch apply's, which spans the geometry apply as well as
+    /// the maximize, and restoreAllMonocleMaximized's, which holds one bracket
+    /// across a whole loop of writes instead of paying it per window.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
     /// Whether @p windowId is still a live tile on a SCROLLING screen, the

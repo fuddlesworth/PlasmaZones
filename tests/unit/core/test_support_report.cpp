@@ -3,10 +3,10 @@
 
 /**
  * @file test_support_report.cpp
- * @brief Unit tests for the SupportReport class (core/supportreport.h)
+ * @brief Unit tests for the SupportReport class (core/platform/supportreport.h)
  *
- * Tests verify redaction logic, file reading, sinceMinutes handling,
- * and overall report structure.
+ * Tests verify redaction logic, file reading, sinceMinutes handling, overall
+ * report structure, compositor bridge state, and the placement-modes summary.
  */
 
 #include <QTest>
@@ -24,7 +24,23 @@ class TestSupportReport : public QObject
 {
     Q_OBJECT
 
+    /// One null-dependency report at the default window, shared by every slot
+    /// that only inspects the report's STRUCTURE.
+    ///
+    /// Each generate() shells out to journalctl twice, so regenerating it per
+    /// slot paid that cost eight times over for eight assertions about static
+    /// headings. Shared safely because none of these slots mutates anything
+    /// the report is built from; the slots that need a different sinceMinutes,
+    /// or that drive a crafted Snapshot, still build their own.
+    QString m_structureReport;
+
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        m_structureReport = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        QVERIFY(!m_structureReport.isEmpty());
+    }
 
     void testRedactHomePath_replacesHomeDir()
     {
@@ -69,29 +85,87 @@ private Q_SLOTS:
         QCOMPARE(result, input);
     }
 
+    // An XDG dir pointed OUTSIDE home carries no home prefix, so the home rule
+    // cannot reach it and every config path in the report would otherwise ship
+    // as an absolute path — which routinely names the user.
+    void testRedactHomePath_xdgDirOutsideHome()
+    {
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", QByteArray("/srv/elsewhere/cfg"));
+        const QString result =
+            SupportReport::redactHomePath(QStringLiteral("read /srv/elsewhere/cfg/plasmazones/config.json ok"));
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, QStringLiteral("read $XDG_CONFIG_HOME/plasmazones/config.json ok"));
+    }
+
+    // Nesting: with the XDG dir INSIDE home, the more specific prefix has to
+    // win. Substituting home first would leave "~/cfg" and the XDG rule could
+    // then never match, which is why the set is applied longest-first.
+    void testRedactHomePath_nestedXdgPrefersTheLongerPrefix()
+    {
+        const QString home = QDir::homePath();
+        if (home.isEmpty() || home == QLatin1String("/"))
+            QSKIP("No usable home directory for this case");
+
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", (home + QStringLiteral("/cfg")).toUtf8());
+        const QString result = SupportReport::redactHomePath(home + QStringLiteral("/cfg/plasmazones/config.json"));
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, QStringLiteral("$XDG_CONFIG_HOME/plasmazones/config.json"));
+    }
+
+    // A relative XDG value is invalid per spec but reachable, and it would
+    // otherwise compile to an unanchored word that rewrites that token
+    // anywhere it appears in any log line.
+    void testRedactHomePath_ignoresRelativeXdgDir()
+    {
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", QByteArray("cfg"));
+        const QString input = QStringLiteral("loaded cfg for the cfg/plasmazones tree");
+        const QString result = SupportReport::redactHomePath(input);
+        if (previous.isEmpty())
+            qunsetenv("XDG_CONFIG_HOME");
+        else
+            qputenv("XDG_CONFIG_HOME", previous);
+
+        QCOMPARE(result, input);
+    }
+
     void testGenerate_returnsMarkdown()
     {
         // Generate with all nulls — should still produce valid structure
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("<details>")));
         QVERIFY(report.contains(QStringLiteral("</details>")));
         QVERIFY(report.contains(QStringLiteral("## Version")));
         QVERIFY(report.contains(QStringLiteral("## Environment")));
         QVERIFY(report.contains(QStringLiteral("## Screens")));
         QVERIFY(report.contains(QStringLiteral("## Config")));
+        QVERIFY(report.contains(QStringLiteral("## Rules")));
         QVERIFY(report.contains(QStringLiteral("## Layouts")));
         QVERIFY(report.contains(QStringLiteral("## Placement Modes")));
         QVERIFY(report.contains(QStringLiteral("## Compositor Bridge")));
         QVERIFY(report.contains(QStringLiteral("## Session State")));
         QVERIFY(report.contains(QStringLiteral("## Recent Logs")));
-        QVERIFY(report.contains(QStringLiteral("## KWin Effect Logs")));
+        // Renamed from "KWin Effect Logs": the section is no longer filtered
+        // down to effect lines, because KWin prints no logging category and the
+        // substring filter that assumed otherwise was dropping most of them.
+        QVERIFY(report.contains(QStringLiteral("## Compositor Logs")));
     }
 
     void testGenerate_bridgeUnavailable_whenNoBridgeInfo()
     {
         // Default Snapshot has hasBridgeInfo=false (daemon not running, or the
         // blocking generate() convenience overload which can't reach the bridge).
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("compositor bridge state unavailable")));
     }
 
@@ -118,7 +192,7 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("**Status:** connected")));
         // Match the rendered lines specifically — a bare "kwin" substring is
         // also produced by the unrelated "no kwin_wayland journal" message in
-        // the KWin Effect Logs section, so it would pass even if the
+        // the Compositor Logs section, so it would pass even if the
         // compositor name were never rendered.
         QVERIFY(report.contains(QStringLiteral("**Compositor:** kwin")));
         QVERIFY(report.contains(QStringLiteral("**Effect protocol version:** 3")));
@@ -149,19 +223,19 @@ private Q_SLOTS:
 
     void testGenerate_nullScreenManager()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("screen info unavailable")));
     }
 
     void testGenerate_nullLayoutManager()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("layout info unavailable")));
     }
 
     void testGenerate_nullAutotileEngine()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("autotile engine not available")));
         QVERIFY(report.contains(QStringLiteral("scrolling engine not available")));
         QVERIFY(report.contains(QStringLiteral("per-screen mode resolution unavailable")));
@@ -197,20 +271,20 @@ private Q_SLOTS:
 
     void testGenerate_containsTimestamp()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**Generated:**")));
     }
 
     void testGenerate_containsVersionInfo()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**PlasmaZones:**")));
         QVERIFY(report.contains(VERSION_STRING));
     }
 
     void testGenerate_containsEnvironmentInfo()
     {
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        const QString& report = m_structureReport;
         QVERIFY(report.contains(QStringLiteral("**Qt:**")));
         QVERIFY(report.contains(QStringLiteral("**OS:**")));
         QVERIFY(report.contains(QStringLiteral("**Kernel:**")));
@@ -268,12 +342,54 @@ private Q_SLOTS:
 
     void testGenerate_sanitizesDetailsTag()
     {
-        // If any section content contains </details>, it must be escaped so
-        // it doesn't prematurely close the collapsible block in GitHub Markdown.
-        // We can't inject content into a null-dependency report, but we can verify
-        // the final closing tag is present and only appears once.
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
-        // Count occurrences of the real closing tag — should be exactly 1
+        // A literal </details> in section content would prematurely close the
+        // collapsible block in GitHub Markdown. generateFromSnapshot escapes
+        // the whole body before appending the real closing tag, so a snapshot
+        // field that renders verbatim is enough to drive it: bridgeName lands
+        // in the Compositor Bridge section unescaped.
+        //
+        // Driving it through real content is the point. Counting the closing
+        // tag in a null-dependency report passed with the escaping deleted
+        // outright, because nothing in that report could contaminate it.
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = true;
+        snap.bridgeName = QStringLiteral("kwin</details>injected");
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+
+        // Escaped where it was rendered.
+        QVERIFY(report.contains(QStringLiteral("kwin&lt;/details&gt;injected")));
+        // And the only surviving real closing tag is the block's own, so the
+        // collapsible section still closes exactly once.
+        const QRegularExpression re(QStringLiteral("</details>"));
+        auto matches = re.globalMatch(report);
+        int count = 0;
+        while (matches.hasNext()) {
+            matches.next();
+            count++;
+        }
+        QCOMPARE(count, 1);
+        QVERIFY(report.endsWith(QStringLiteral("</details>\n")));
+    }
+
+    void testGenerate_sanitizesDetailsTag_caseAndSpacing()
+    {
+        // An HTML parser closes on </DETAILS> and </details > too, and the
+        // content here is whatever a user typed into a rule name or a config
+        // value, so the sanitizer is case-insensitive and slack about interior
+        // whitespace rather than an exact literal match.
+        SupportReport::Snapshot snap;
+        snap.hasBridgeInfo = true;
+        snap.bridgeRegistered = true;
+        snap.bridgeName = QStringLiteral("a</DETAILS>b</details >c");
+        const QString report = SupportReport::generateFromSnapshot(snap, 30);
+
+        // Both the absence of the raw forms AND the presence of the escaped
+        // ones: asserting absence alone would pass vacuously if bridgeName
+        // ever stopped reaching the output at all.
+        QVERIFY(!report.contains(QStringLiteral("</DETAILS>")));
+        QVERIFY(!report.contains(QStringLiteral("</details >")));
+        QVERIFY(report.contains(QStringLiteral("a&lt;/details&gt;b&lt;/details&gt;c")));
         const QRegularExpression re(QStringLiteral("</details>"));
         auto matches = re.globalMatch(report);
         int count = 0;
