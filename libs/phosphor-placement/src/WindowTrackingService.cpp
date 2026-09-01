@@ -433,6 +433,22 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     if (!rec) {
         return std::nullopt;
     }
+    // Resolve an EMPTY screenId to the record's own screen rather than looking
+    // up the empty key, which can never hit.
+    //
+    // The callers reach this with an empty id far more often than the name
+    // suggests: WindowTrackingAdaptor's two pre-tile entry points derive it
+    // from screenForWindow(), which answers through the window's owning
+    // SnapState and returns empty for any window snap does not track — every
+    // autotile-only and scroll-only window. With the cross-screen fallback
+    // gone, an empty key is a guaranteed miss, so those windows' float-back
+    // silently stopped working for reasons that had nothing to do with their
+    // geometry. Falling back to the record's own screen asks the question the
+    // caller meant; a record with no screen either still yields nullopt below.
+    const QString resolvedScreen = screenId.isEmpty() ? rec->screenId : screenId;
+    if (resolvedScreen.isEmpty()) {
+        return std::nullopt;
+    }
     // THIS SCREEN only. There is no cross-screen fallback: a position remembered
     // on another monitor is not a float-back for this one. The fallback used to
     // re-centre such a rect onto screenId, which sounds harmless and is not —
@@ -447,7 +463,7 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // cross-screen case to feed it. Passing screenId on both sides keeps the
     // on-screen sanity check (a remembered rect can be off-canvas after a
     // resolution change) without any cross-screen adjustment.
-    const QRect exact = rec->freeGeometryFor(screenId);
+    const QRect exact = rec->freeGeometryFor(resolvedScreen);
     if (!exact.isValid()) {
         return std::nullopt;
     }
@@ -459,12 +475,12 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // cross-screen restore this function no longer does. Records written
     // before the guard in recordFreeGeometry exist on disk in user sessions,
     // so the read has to defend itself.
-    if (!geometryOverlapsScreen(exact, screenId)) {
-        qCWarning(lcPlacement) << "validatedUnmanagedGeometry: record for" << windowId << "is filed under" << screenId
-                               << "but" << exact << "does not lie there — ignoring";
+    if (!geometryOverlapsScreen(exact, resolvedScreen)) {
+        qCWarning(lcPlacement) << "validatedUnmanagedGeometry: record for" << windowId << "is filed under"
+                               << resolvedScreen << "but" << exact << "does not lie there — ignoring";
         return std::nullopt;
     }
-    return validateGeometryForScreen(exact, screenId, screenId);
+    return validateGeometryForScreen(exact, resolvedScreen, resolvedScreen);
 }
 
 void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,

@@ -331,7 +331,26 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             const QStringList announced = combinedManagedScreens();
             QVariantMap screenDesktops;
             if (m_windowTrackingAdaptor) {
-                for (const QString& screenId : announced) {
+                // Stamp every screen the daemon can resolve a desktop for, NOT
+                // just the announced (still-managed) ones. The receiver's
+                // destructive half — the demote/pre-tile-restore pass — is
+                // driven by the REMOVED set, i.e. precisely the screens absent
+                // from `announced`. Stamping only the survivors left those
+                // screens unstamped, and the receiver compares just the keys it
+                // was given, so the announce whose whole effect is the restore
+                // was the one announce that could never be rejected as stale.
+                // In the limiting case (switching to a desktop where nothing is
+                // managed) `announced` is empty, the map was empty, and the
+                // receiver skipped its staleness gate outright.
+                QStringList stampable = announced;
+                if (m_screenManager) {
+                    for (const QString& screenId : m_screenManager->effectiveScreenIds()) {
+                        if (!stampable.contains(screenId)) {
+                            stampable.append(screenId);
+                        }
+                    }
+                }
+                for (const QString& screenId : std::as_const(stampable)) {
                     screenDesktops.insert(screenId, m_windowTrackingAdaptor->currentDesktopForScreen(screenId));
                 }
             }
