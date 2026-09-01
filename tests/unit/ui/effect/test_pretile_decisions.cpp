@@ -137,6 +137,13 @@ private Q_SLOTS:
         QTest::newRow("untracked, no rect") << false << false << false << e(PreTileRestore::None);
         QTest::newRow("untracked, rect") << true << false << false << e(PreTileRestore::None);
         QTest::newRow("untracked, rect, windowed fs") << true << false << true << e(PreTileRestore::None);
+        // The eighth combination. Untracked short-circuits before the windowed-
+        // fullscreen term is read, so this row is equivalent to the first by
+        // construction — which is precisely why it belongs here: the table
+        // claims to be total over three booleans, and a reader checking that
+        // claim should find all 2^3 rows rather than having to re-derive which
+        // one was left out and why it did not matter.
+        QTest::newRow("untracked, no rect, windowed fs") << false << false << true << e(PreTileRestore::None);
 
         // Tracked with nothing stored: the window was snap-managed when it
         // entered autotile, so the daemon's record is the only source.

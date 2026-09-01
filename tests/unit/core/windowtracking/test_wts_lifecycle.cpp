@@ -592,6 +592,25 @@ private Q_SLOTS:
         const auto still = svc->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2"));
         QVERIFY(still.has_value());
         QVERIFY2(still->x() >= 1920, "a rect that does not lie on DP-2 must not be filed under it");
+
+        // The READ guard, which the block above does NOT reach: the writer
+        // refuses the mis-key before the reader ever sees one, so driving this
+        // through recordFreeGeometry can only ever test the write point. The
+        // comment at the top of this test is about records that ALREADY EXIST
+        // on disk from before that guard shipped, and the only way to stand one
+        // up is to seed the store directly.
+        const QString legacyId = QStringLiteral("firefox|legacy-mis-keyed");
+        PhosphorEngine::WindowPlacement legacy;
+        legacy.windowId = legacyId;
+        legacy.appId = QStringLiteral("firefox");
+        legacy.screenId = QStringLiteral("DP-2");
+        // DP-1 coordinates under a DP-2 key — exactly what the old writer let
+        // through.
+        legacy.freeGeometryByScreen.insert(QStringLiteral("DP-2"), QRect(100, 100, 800, 600));
+        QVERIFY(svc->placementStore().record(legacy));
+        QVERIFY2(!svc->validatedUnmanagedGeometry(legacyId, QStringLiteral("DP-2")).has_value(),
+                 "a record already on disk with a rect that does not lie on its key screen must be refused by the "
+                 "READ, not merely by the write that no longer happens");
     }
 
     void testValidatedUnmanagedGeometry_isScreenLocal()

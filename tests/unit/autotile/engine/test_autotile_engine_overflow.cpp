@@ -242,6 +242,17 @@ private Q_SLOTS:
         engine.setAutotileScreens({});
 
         QVERIFY(!engine.isEnabled());
+        // The per-screen state must go WITH the screen. isEnabled() alone is a
+        // property of setAutotileScreens({}) and holds whether or not win-2's
+        // tracking was released, so on its own it does not test this case's
+        // name. Re-adding the screen is the observable check: the windows are
+        // gone from the engine, so nothing is left floating from the old
+        // overflow bookkeeping.
+        // stateForScreen, NOT tilingStateForScreen: the latter is the creating
+        // accessor (it materialises a state through the forKey factory), so it
+        // can never answer null and would make this assertion vacuous.
+        QVERIFY(engine.stateForScreen(screenName) == nullptr);
+        QVERIFY(!engine.isWindowTracked(QStringLiteral("win-2")));
     }
 
     void testOverflow_crossScreenMigration()
@@ -269,6 +280,19 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QVERIFY(!state1->containsWindow(QStringLiteral("win-2")));
+        // The window must ARRIVE, not merely leave. Asserting only the source
+        // side passes for a regression that drops the window on screen1 and
+        // adopts it nowhere — which is the actual failure worth catching here,
+        // since a dropped window is unmanaged rather than migrated.
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
+        QVERIFY(state2 != nullptr);
+        QVERIFY2(state2->containsWindow(QStringLiteral("win-2")),
+                 "the destination screen must adopt the migrated window");
+        // The float bit CARRIES ACROSS the migration (insertShouldFloat), so
+        // the window arrives floating rather than being re-tiled on the
+        // destination. Pinned deliberately: it is the behaviour the arrival
+        // path is written for, and a change to it would otherwise be silent.
+        QVERIFY(state2->isFloating(QStringLiteral("win-2")));
     }
 
     void testOverflow_backfillPriority()
