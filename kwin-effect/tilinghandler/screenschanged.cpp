@@ -12,6 +12,7 @@
 #include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -231,8 +232,16 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         QString savedGeoBucket;
         const QRectF savedGeo = findPreTileGeometry(windowId, &savedGeoBucket);
         using PlasmaZones::PreTileDecisions::PreTileRestore;
+        // PHYSICAL ids, not the raw screen ids. Virtual screens subdivide ONE
+        // output, so a VS re-key moves the bucket's key while leaving its
+        // coordinates perfectly valid — that is the legitimate case the
+        // all-bucket reader policy exists for (tiling.cpp's twin says so). A
+        // raw string compare would decline those and leave the window stuck at
+        // its tiled frame. What decides the question is the coordinate space,
+        // which is the OUTPUT.
         const PreTileRestore restore = PlasmaZones::PreTileDecisions::resolvePreTileRestore(
-            savedGeo.isValid(), savedGeoBucket == screenId, wasTracked, wasWindowedFs);
+            savedGeo.isValid(), PhosphorIdentity::VirtualScreenId::samePhysical(savedGeoBucket, screenId), wasTracked,
+            wasWindowedFs);
         if (restore == PreTileRestore::DeclineCrossScreen) {
             qCDebug(lcEffect) << "Desktop switch: declining cross-screen pre-autotile rect for" << windowId
                               << "bucket=" << savedGeoBucket << "current=" << screenId;

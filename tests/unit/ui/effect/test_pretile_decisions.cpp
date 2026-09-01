@@ -26,7 +26,7 @@ private Q_SLOTS:
     void restoreTruthTable_data()
     {
         QTest::addColumn<bool>("haveLocalRect");
-        QTest::addColumn<bool>("rectIsThisScreen");
+        QTest::addColumn<bool>("rectIsThisOutput");
         QTest::addColumn<bool>("wasTracked");
         QTest::addColumn<bool>("wasWindowedFs");
         QTest::addColumn<int>("expected");
@@ -51,6 +51,14 @@ private Q_SLOTS:
             << true << true << true << true << e(PreTileRestore::QueueForWindowedFullscreen);
         QTest::newRow("same-screen rect, untracked") << true << true << false << false << e(PreTileRestore::None);
 
+        // A virtual-screen re-key is NOT a cross-monitor rect. Virtual screens
+        // subdivide one output and share its coordinate space, so the caller
+        // compares PHYSICAL ids and passes true here — the rect still applies.
+        // Declining it would leave the window stuck at its tiled frame, which
+        // is the regression a raw screen-id compare would have introduced.
+        QTest::newRow("same-output rect after a VS re-key, tracked")
+            << true << true << true << false << e(PreTileRestore::Apply);
+
         // Discussion #1028 follow-up: a rect from ANOTHER monitor's bucket is
         // declined outright. Bucket rects are absolute compositor
         // coordinates, so applying one would move the window to that output —
@@ -67,12 +75,12 @@ private Q_SLOTS:
     void restoreTruthTable()
     {
         QFETCH(bool, haveLocalRect);
-        QFETCH(bool, rectIsThisScreen);
+        QFETCH(bool, rectIsThisOutput);
         QFETCH(bool, wasTracked);
         QFETCH(bool, wasWindowedFs);
         QFETCH(int, expected);
 
-        QCOMPARE(static_cast<int>(resolvePreTileRestore(haveLocalRect, rectIsThisScreen, wasTracked, wasWindowedFs)),
+        QCOMPARE(static_cast<int>(resolvePreTileRestore(haveLocalRect, rectIsThisOutput, wasTracked, wasWindowedFs)),
                  expected);
     }
 
@@ -83,7 +91,7 @@ private Q_SLOTS:
     // rect" would hand back the very rect this pass refused.
     void declineIsDistinctFromNone()
     {
-        const PreTileRestore declined = resolvePreTileRestore(/*haveLocalRect=*/true, /*rectIsThisScreen=*/false,
+        const PreTileRestore declined = resolvePreTileRestore(/*haveLocalRect=*/true, /*rectIsThisOutput=*/false,
                                                               /*wasTracked=*/true, /*wasWindowedFs=*/false);
         QVERIFY(declined != PreTileRestore::None);
         QVERIFY(declined != PreTileRestore::AskDaemon);

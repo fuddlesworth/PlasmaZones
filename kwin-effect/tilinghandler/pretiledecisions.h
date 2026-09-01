@@ -24,7 +24,9 @@ enum class PreTileRestore {
 /// The 5-way pre-tile restore decision.
 ///
 /// @p haveLocalRect   a rect was found in some screen's m_preTileGeometries bucket
-/// @p rectIsThisScreen the bucket that held it is the window's CURRENT screen
+/// @p rectIsThisOutput  the bucket that held it names the window's CURRENT OUTPUT.
+///                     Compare PHYSICAL ids: virtual screens subdivide one output
+///                     and share its coordinate space, so a VS re-key must still apply.
 /// @p wasTracked      the window was autotile-tracked on the desktop being left
 /// @p wasWindowedFs   the window held windowed fullscreen (its release is deferred)
 ///
@@ -41,10 +43,10 @@ enum class PreTileRestore {
 /// screenForWindow(), so that fallback can hand back the very rect declined
 /// here. AskDaemon is for the genuinely-empty case (the window was snap-managed
 /// when it entered autotile, so nothing was ever stored locally).
-inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool rectIsThisScreen, bool wasTracked,
+inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool rectIsThisOutput, bool wasTracked,
                                             bool wasWindowedFs)
 {
-    if (haveLocalRect && !rectIsThisScreen) {
+    if (haveLocalRect && !rectIsThisOutput) {
         return PreTileRestore::DeclineCrossScreen;
     }
     if (!wasTracked) {
