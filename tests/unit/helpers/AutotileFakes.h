@@ -182,6 +182,9 @@ public:
         // short-circuited false — i.e. NO window counted as live, which is the
         // maximally permissive branch of the steal / takeForReopen /
         // reclaim-eligible logic, and the opposite of what production does.
+        // The save path derives from the same probe (WindowPlacementStore.cpp
+        // around the reclaim-credit write), so an unwired fake silently
+        // changed what got PERSISTED too, not just what got read back.
         // An empty liveInstances set is the same "nothing is live" answer those
         // suites had before, so opting in now only ADDS live windows.
         wireLiveInstanceProbe();

@@ -383,12 +383,19 @@ public:
      * @brief Look up a window's free (unmanaged) geometry from the unified
      *        WindowPlacementStore and validate it.
      *
-     * PER-WINDOW and SCREEN-LOCAL. It does not fall back to a same-app
-     * sibling's record, and it does not answer from another screen: both were
-     * removed in discussion #1028, where a live window with no record of its
-     * own inherited a dead instance's absolute coordinates and was moved to
+     * PER-WINDOW. It does not fall back to a same-app sibling's record: that
+     * was removed in discussion #1028, where a live window with no record of
+     * its own inherited a dead instance's absolute coordinates and was moved to
      * whatever monitor that instance last occupied. A window with nothing on
-     * record for this screen gets nullopt and should be left where it is.
+     * record gets nullopt and should be left where it is.
+     *
+     * SCREEN-LOCAL when the caller names a screen: it will not search other
+     * screens for one. When the caller passes an EMPTY screenId it resolves to
+     * the record's OWN screen instead, which can therefore answer a rect for a
+     * monitor the window has since left. That is deliberate — the alternative
+     * is answering nothing at all for every window snap does not track — but a
+     * caller that knows the window's live screen should pass it rather than
+     * relying on the record.
      *
      * The rect is also checked against the screen it is filed under, because
      * the key alone cannot be trusted — see geometryBelongsToScreen, which the

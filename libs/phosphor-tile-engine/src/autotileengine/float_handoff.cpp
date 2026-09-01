@@ -519,27 +519,50 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         return;
     }
 
-    // An unfloat that has nowhere to land is refused HERE rather than performed
-    // and silently undone. retileAfterOperation below runs synchronously, so
-    // applyTiling's overflow pass sees tiledCount above the cap and re-floats
-    // the window before this call even returns. The caller then reads the float
-    // state back, still sees "floating", and retries — the effect's unminimize
-    // path does exactly that, up to kAutotileMaxUnfloatRetries, and every
-    // attempt costs a full unfloat + retile + refloat with the batch signals to
-    // match. Nothing converges, because nothing can: the screen is full.
+    // An unfloat that the very next retile would UNDO is refused here instead of
+    // being performed and silently reversed. retileAfterOperation below runs
+    // synchronously, so applyTiling's overflow pass runs before this call
+    // returns; the caller then reads the float state back, still sees
+    // "floating", and retries — the effect's unminimize path does exactly that,
+    // up to kAutotileMaxUnfloatRetries, and every attempt costs a full unfloat +
+    // retile + refloat with the batch signals to match.
     //
-    // Refusing keeps the window floating, which is the honest answer, and makes
-    // the read-back agree with reality so the retry budget is not burned. The
-    // window comes back on its own through OverflowManager::recoverIfRoom as
-    // soon as a slot frees up, which is the same path that recovers every other
-    // overflow-floated window.
+    // The test is POSITIONAL, not a bare capacity check, because the overflow
+    // pass evicts by position rather than by which window moved. applyOverflow
+    // floats state->tiledWindows()[i] for i >= cap, and unfloating restores this
+    // window at its own m_windowOrder position — so it lands at index
+    // "however many tiled windows sort before it". Only when that index is
+    // already at the cap does the pass re-float THIS window, making the unfloat
+    // a no-op that can never converge. Below the cap the pass evicts a
+    // different window and the unfloat genuinely succeeds, which is the
+    // behaviour an unminimize wants; refusing there would strand a window the
+    // engine could perfectly well tile.
+    //
+    // The refusal MARKS the window as overflow, which is what makes recovery
+    // real rather than merely claimed: recoverIfRoom only ever returns windows
+    // in m_overflow, and a minimize-float cleared that marker on its way in. So
+    // without the mark the window would sit floating with nothing to bring it
+    // back.
     if (!shouldFloat) {
         const QString unfloatScreen = m_states.keyForWindow(windowId).screenId;
         const int cap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
-        if (state->tiledWindowCount() >= cap) {
+        const int myIndex = state->windowIndex(windowId);
+        int wouldSortAt = 0;
+        for (const QString& tiled : state->tiledWindows()) {
+            const int idx = state->windowIndex(tiled);
+            if (idx >= 0 && myIndex >= 0 && idx < myIndex) {
+                ++wouldSortAt;
+            }
+        }
+        if (wouldSortAt >= cap) {
             qCInfo(PhosphorTileEngine::lcTileEngine)
-                << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— screen is at capacity ("
-                << state->tiledWindowCount() << "of" << cap << "); it stays floating until a slot frees up";
+                << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— it would land at tiled position"
+                << wouldSortAt << "with a cap of" << cap
+                << ", so the retile would re-float it; keeping it floating and queued for recovery";
+            // Queue it for the recovery pass. Without this the window is
+            // floating but absent from m_overflow, which is the one set
+            // recoverIfRoom consults, so nothing would ever bring it back.
+            m_overflow.markOverflow(windowId, unfloatScreen);
             // Re-announce the state the window is ACTUALLY in. The caller asked
             // for false and is getting true, so without this it would keep
             // believing its request was lost.

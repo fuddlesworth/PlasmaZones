@@ -414,9 +414,13 @@ void AutotileEngine::applyTiling(const QString& screenId)
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "AutotileEngine::applyTiling: no zones calculated for screen" << screenId;
         announceFloatOnlyBatch();
-        // Drain the pending focus like the full path does, or an entry named
-        // here survives to activate on some later, unrelated retile.
-        m_pendingFocusByScreen.remove(screenId);
+        // The pending focus is deliberately LEFT IN PLACE. Both bails here are
+        // the transient-failure paths their comments describe (no algorithm
+        // yet, or a stale zone vector after a failed recalc), and the drain is
+        // per-screen — so the intended consumer is this same screen's next
+        // SUCCESSFUL applyTiling, not some unrelated retile. Dropping it would
+        // silently lose a focus request seeded just before an output change,
+        // for a window that is still on this screen.
         return;
     }
     if (zones.size() > windows.size()) {
@@ -428,8 +432,8 @@ void AutotileEngine::applyTiling(const QString& screenId)
         // vector can outnumber a shrunken tiled list — windows closing while
         // the screen geometry is invalid mid-output-change. Returning here
         // without announcing left the float this pass performed invisible.
+        // Pending focus left in place for the same reason as the arm above.
         announceFloatOnlyBatch();
-        m_pendingFocusByScreen.remove(screenId);
         return;
     }
 

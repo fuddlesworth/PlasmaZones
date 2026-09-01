@@ -191,7 +191,7 @@ This report ships in an archive with the raw files behind the summaries above:
 - `kglobalaccel.txt` with the effective shortcut bindings and `kwin-effects.txt` with the enabled/loaded KWin effects
 - `kwin-rules.txt` with KWin's own window rules, which move and re-desktop windows independently of PlasmaZones (window titles, rule descriptions and client machine names redacted)
 
-Text files have home and XDG paths replaced with `~`, `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME`. Non-text files such as shader pack previews are left out, because their embedded metadata can carry paths that redaction cannot reach. Anything omitted that way is listed by name in `binary-files-omitted.txt`.
+Text files have home and XDG paths replaced with `~`, `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME`. Non-text files such as shader pack previews are left out, because their embedded metadata can carry paths that redaction cannot reach. When anything is omitted that way, its name is listed in `binary-files-omitted.txt`. If that file is not in this archive, nothing was omitted.
 EOF
 
 # 2. Config directory (redact home paths in text files)
@@ -355,7 +355,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # journal logs below) or claimed by the DATA_DIR tree; a config-dir
         # entry with the same name must not fight them for the slot.
         case "$rel" in
-            report.md|journal.log|journal.raw|kwin-effect.log|kwin-effect.raw|kglobalaccel.txt|kwin-effects.txt|kwin-rules.txt|data|data/*)
+            report.md|journal.log|journal.raw|kwin-effect.log|kwin-effect.raw|kglobalaccel.txt|kglobalaccel.raw|kwin-effects.txt|kwin-effects.raw|kwin-rules.txt|kwin-rules.raw|binary-files-omitted.txt|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac

@@ -10,6 +10,7 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <cstdlib>
 
 namespace PhosphorProtocol {
 
@@ -69,13 +70,17 @@ struct WindowGeometryEntry
         if (windowId.isEmpty()) {
             return QStringLiteral("WindowGeometryEntry: empty windowId");
         }
-        if (qAbs(width) > MaxWireExtent || qAbs(height) > MaxWireExtent) {
+        // Widened before the absolute value: qAbs(INT_MIN) is itself undefined
+        // behaviour in int, and INT_MIN is exactly the sort of value a corrupt
+        // wire payload carries.
+        if (std::abs(static_cast<qint64>(width)) > MaxWireExtent
+            || std::abs(static_cast<qint64>(height)) > MaxWireExtent) {
             return QStringLiteral("WindowGeometryEntry: implausible size (windowId=%1 w=%2 h=%3)")
                 .arg(windowId)
                 .arg(width)
                 .arg(height);
         }
-        if (qAbs(x) > MaxWireOrigin || qAbs(y) > MaxWireOrigin) {
+        if (std::abs(static_cast<qint64>(x)) > MaxWireOrigin || std::abs(static_cast<qint64>(y)) > MaxWireOrigin) {
             return QStringLiteral("WindowGeometryEntry: implausible origin (windowId=%1 x=%2 y=%3)")
                 .arg(windowId)
                 .arg(x)

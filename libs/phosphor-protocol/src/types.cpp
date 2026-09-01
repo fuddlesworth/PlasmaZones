@@ -10,6 +10,8 @@
 #include <QLatin1String>
 #include <QLoggingCategory>
 
+#include <cstdlib>
+
 namespace PhosphorProtocol {
 
 namespace {
@@ -113,7 +115,9 @@ QString TileRequestEntry::validationError() const
             .arg(width)
             .arg(height);
     }
-    if (qAbs(x) > kMaxWireOrigin || qAbs(y) > kMaxWireOrigin) {
+    // Widened before the absolute value: qAbs(INT_MIN) is itself undefined
+    // behaviour in int.
+    if (std::abs(static_cast<qint64>(x)) > kMaxWireOrigin || std::abs(static_cast<qint64>(y)) > kMaxWireOrigin) {
         return QStringLiteral("TileRequestEntry: implausible origin (windowId=%1 x=%2 y=%3)")
             .arg(windowId)
             .arg(x)

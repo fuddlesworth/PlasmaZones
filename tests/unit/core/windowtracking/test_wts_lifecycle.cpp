@@ -622,6 +622,12 @@ private Q_SLOTS:
         // through.
         legacy.freeGeometryByScreen.insert(QStringLiteral("DP-2"), QRect(100, 100, 800, 600));
         QVERIFY(svc->placementStore().record(legacy));
+        // Prove the seed actually landed. Without this the refusal below would
+        // also pass against a store that quietly dropped the record, which
+        // would test nothing at all.
+        const auto seeded = svc->placementStore().peekExact(legacyId);
+        QVERIFY(seeded.has_value());
+        QCOMPARE(seeded->freeGeometryFor(QStringLiteral("DP-2")), QRect(100, 100, 800, 600));
         QVERIFY2(!svc->validatedUnmanagedGeometry(legacyId, QStringLiteral("DP-2")).has_value(),
                  "a record already on disk with a rect that does not lie on its key screen must be refused by the "
                  "READ, not merely by the write that no longer happens");

@@ -153,8 +153,10 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
             // an app that is snapped and closed more often than it is reopened
             // grew this list for the whole session. The placement store already
             // caps per app for the same reason; this matches that posture.
-            // Dropping the OLDEST is right for a FIFO restore queue: the newest
-            // close is the best evidence of where the next window wants to go.
+            // A bounded FIFO drops at the head. consumePendingAssignment
+            // serves the OLDEST entry first, so the dropped one is the entry
+            // the next reopen would have taken; the cap is a bound on
+            // unbounded growth, not a preference for recency.
             auto& queue = m_pendingRestoreQueues[appId];
             constexpr int MaxPendingRestoresPerApp = 16;
             while (queue.size() >= MaxPendingRestoresPerApp) {
@@ -659,8 +661,14 @@ bool WindowTrackingService::geometryOverlapsScreen(const QRect& geometry, const 
     // screen — which silently drops the float-back capture for every small
     // utility, palette and dialog window, and then refuses to read any such
     // record already on disk.
-    const int requiredWidth = std::min(MinVisibleWidth, geometry.width());
-    const int requiredHeight = std::min(MinVisibleHeight, geometry.height());
+    // Half the window's own extent, capped at the flat floor. A bare
+    // min(floor, extent) would demand FULL containment for anything under the
+    // floor — a 60px palette pulled half over a monitor edge would be refused
+    // where a 200px window needs only 100px of overlap — so a small window
+    // would be held to a stricter rule than a large one, which is the opposite
+    // of the point. Halving keeps the requirement proportional at both sizes.
+    const int requiredWidth = std::min(MinVisibleWidth, std::max(1, geometry.width() / 2));
+    const int requiredHeight = std::min(MinVisibleHeight, std::max(1, geometry.height() / 2));
     return intersection.width() >= requiredWidth && intersection.height() >= requiredHeight;
 }
 

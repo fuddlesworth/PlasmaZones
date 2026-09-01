@@ -156,11 +156,12 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                 // must not be read as one: it asks whether the rect is on ANY
                 // live output, and a mis-keyed rect is — the wrong one. It
                 // therefore fails open for exactly the case that matters here.
-                // Unlike the engines' reopen paths, this key comes from the
-                // LIVE screenForWindow rather than the record's own screen, so
-                // it can genuinely select another monitor's entry, and the
-                // ZoneAssignmentEntry below would then carry a targetGeometry
-                // on one screen while targetScreenId names another.
+                // The key here is the LIVE screenForWindow, falling back to
+                // the record's own screen only when that is empty, so it can
+                // genuinely select another monitor's entry when the window has
+                // moved. The ZoneAssignmentEntry below would then carry a
+                // targetGeometry on one screen while targetScreenId names
+                // another, which is what the explicit check exists to stop.
                 if (const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen; g.isValid()
                     && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()
                     && !m_windowTrackingAdaptor->service()->geometryBelongsToScreen(g, restoreScreen)) {
