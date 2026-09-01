@@ -290,9 +290,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // matching the tile lambda's deliberate policy: a fuzzy hit would
             // teleport a same-app SIBLING onto this window's restored rect.
             KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
+            if (!floatWin) {
+                // Both misses below are LOGGED. applyFloatCleanup above has
+                // already run unconditionally, so the window is genuinely
+                // floated and untiled either way — it just stays at its tile
+                // rect. That state is coherent and looks exactly like a restore
+                // that worked, so without a line here the journal cannot tell
+                // the two apart. The tile arm logs every one of its drops for
+                // the same reason.
+                qCWarning(lcEffect) << "Autotile batch float: no live window for" << floatWindowId << "on" << screenId
+                                    << "— floated without restoring its pre-tile geometry";
+            }
             if (floatWin) {
-                if (const QRectF savedGeo = preTileRestoreRectFor(floatWindowId, screenId, floatWin->frameGeometry());
-                    savedGeo.isValid()) {
+                const QRectF savedGeo = preTileRestoreRectFor(floatWindowId, screenId, floatWin->frameGeometry());
+                if (!savedGeo.isValid()) {
+                    qCWarning(lcEffect) << "Autotile batch float: no applicable pre-tile rect for" << floatWindowId
+                                        << "on" << screenId << "— floated, but left at its tile rect";
+                }
+                if (savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the

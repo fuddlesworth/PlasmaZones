@@ -1165,6 +1165,11 @@ int WindowTrackingService::lastUsedDesktop() const
 
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 {
+    // The assert has a release-build partner, unlike a bare one: with no snap
+    // state, snapAllStates() is empty and lastUsedZoneClass() answers empty, so
+    // the oldClass guard below returns before the loop and the loop itself
+    // null-checks each store. The assert is the debug-build shout; the early
+    // return is what makes a release build safe.
     Q_ASSERT(hasSnapState());
     // Last-used is per-key: retag every store whose last-used class matches the one
     // the representative currently reports (the class of the window that was
