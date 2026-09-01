@@ -610,6 +610,23 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     return false;
 }
 
+bool WindowTrackingService::geometryOverlapsScreen(const QRect& geometry, const QString& screenId) const
+{
+    if (!geometry.isValid() || screenId.isEmpty()) {
+        return true; // Nothing to check against — fail open.
+    }
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
+    if (!mgr) {
+        return true;
+    }
+    const QRect screenGeo = mgr->screenGeometry(screenId);
+    if (!screenGeo.isValid()) {
+        return true;
+    }
+    const QRect intersection = geometry.intersected(screenGeo);
+    return intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight;
+}
+
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
     // Try virtual/effective screens first via PhosphorScreens::ScreenManager

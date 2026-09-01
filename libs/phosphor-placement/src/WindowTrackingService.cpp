@@ -451,6 +451,19 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     if (!exact.isValid()) {
         return std::nullopt;
     }
+    // Do not trust the KEY. A record can be mis-keyed — a rect filed under one
+    // screen while its coordinates describe another — and the sanity check
+    // below cannot catch that, because isGeometryOnScreen asks whether a rect
+    // is on ANY screen and a mis-keyed rect is: the wrong one. It would come
+    // back verbatim and move the window there, which is exactly the
+    // cross-screen restore this function no longer does. Records written
+    // before the guard in recordFreeGeometry exist on disk in user sessions,
+    // so the read has to defend itself.
+    if (!geometryOverlapsScreen(exact, screenId)) {
+        qCWarning(lcPlacement) << "validatedUnmanagedGeometry: record for" << windowId << "is filed under" << screenId
+                               << "but" << exact << "does not lie there — ignoring";
+        return std::nullopt;
+    }
     return validateGeometryForScreen(exact, screenId, screenId);
 }
 
@@ -458,6 +471,19 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
                                                bool overwrite)
 {
     if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    // The pair must agree. This map is keyed by screen and holds ABSOLUTE
+    // coordinates, so filing a rect under a screen it does not lie on makes the
+    // key a lie — and float restore, which is screen-local, then hands that rect
+    // back for the wrong monitor and moves the window there. Refusing loses one
+    // capture and self-heals on the next; mis-filing is permanent until the
+    // record is evicted. Warn rather than drop silently: a mismatch means the
+    // caller's screenId and geometry came from different moments, and the
+    // caller is what needs fixing.
+    if (!geometryOverlapsScreen(geometry, screenId)) {
+        qCWarning(lcPlacement) << "recordFreeGeometry: refusing" << geometry << "for" << windowId << "under" << screenId
+                               << "— the geometry does not lie on that screen";
         return;
     }
     // INVARIANT (WindowPlacement::freeGeometryByScreen): this map holds ONLY a

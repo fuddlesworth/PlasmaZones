@@ -64,8 +64,12 @@ p_add_test(test_localized_context_substitution core/test_localized_context_subst
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp)
-target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Needs the FakeScreenProvider: the mis-keyed free-geometry guard only engages
+# with real output geometry behind the ScreenManager (it fails open otherwise).
+add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_lifecycle COMMAND test_wts_lifecycle)
 
 add_executable(test_wts_session core/windowtracking/test_wts_session.cpp)

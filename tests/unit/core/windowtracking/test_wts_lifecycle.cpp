@@ -30,6 +30,8 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
+#include "FakeScreenProvider.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -542,6 +544,54 @@ private Q_SLOTS:
         const auto rec = m_service->placementStore().peek(windowId, appId);
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screen), QRect(100, 100, 800, 600));
+    }
+
+    void testValidatedUnmanagedGeometry_rejectsMisKeyedRecord()
+    {
+        // A record can be MIS-KEYED: a rect filed under one screen whose
+        // coordinates describe another. Real sessions carry them (three in the
+        // bundle from discussion #1028), written before recordFreeGeometry
+        // refused the mismatch, so the read has to defend itself.
+        //
+        // The generic sanity check cannot catch this. isGeometryOnScreen asks
+        // whether a rect is on ANY screen, and a mis-keyed rect is — the wrong
+        // one — so it came back verbatim and moved the window there. That is
+        // the cross-screen restore this resolver no longer performs, arriving
+        // through the key instead of through a fallback.
+        //
+        // Needs REAL output geometry, so this builds its own service over a
+        // FakeScreenProvider rather than using m_service (constructed with a
+        // null ScreenManager, under which the guard fails open by design).
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        auto svc = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, &manager, nullptr);
+        // Same wiring the fixture gives m_service: setWindowFloating asserts on
+        // hasSnapState().
+        auto engine = std::make_unique<SnapEngine>(m_layoutManager, svc.get(), m_zoneDetector, nullptr, nullptr);
+        engine->setEngineSettings(m_settings);
+        svc->setSnapState(engine->snapState());
+        svc->setSnapEngine(engine.get());
+
+        const QString windowId = QStringLiteral("firefox|mis-keyed");
+
+        svc->setWindowFloating(windowId, true);
+        // Honest capture on DP-2 first, to prove the guard is not simply
+        // refusing everything.
+        svc->recordFreeGeometry(windowId, QStringLiteral("DP-2"), QRect(2000, 100, 800, 600), /*overwrite=*/true);
+        QVERIFY2(svc->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2")).has_value(),
+                 "a rect that does lie on its key screen must answer");
+
+        // Now the mis-key: DP-1 coordinates filed under DP-2. The write point
+        // refuses it, so the honest DP-2 rect survives untouched.
+        svc->recordFreeGeometry(windowId, QStringLiteral("DP-2"), QRect(100, 100, 800, 600), /*overwrite=*/true);
+        const auto still = svc->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2"));
+        QVERIFY(still.has_value());
+        QVERIFY2(still->x() >= 1920, "a rect that does not lie on DP-2 must not be filed under it");
     }
 
     void testValidatedUnmanagedGeometry_isScreenLocal()

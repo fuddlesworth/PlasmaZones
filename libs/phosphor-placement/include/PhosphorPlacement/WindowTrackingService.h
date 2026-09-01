@@ -1029,6 +1029,19 @@ private:
     // only re-serializes the fields that actually changed.
     void scheduleSaveState(DirtyMask fields = DirtyAll);
     bool isGeometryOnScreen(const QRect& geometry) const;
+
+    /// Does @p geometry meaningfully overlap the screen named @p screenId?
+    ///
+    /// isGeometryOnScreen asks whether a rect is on ANY screen, which cannot
+    /// tell a rect filed under the right screen from one filed under the wrong
+    /// one — both are "on a screen". This asks the question the per-screen free
+    /// geometry map is keyed on. Same area-overlap semantics and thresholds, so
+    /// the two answers cannot disagree about what "on" means.
+    ///
+    /// Fails OPEN (true) when the screen cannot be resolved: an unknown or
+    /// not-yet-configured screen must not silently discard a capture, and an
+    /// embedder with no ScreenManager wired has no opinion to enforce.
+    bool geometryOverlapsScreen(const QRect& geometry, const QString& screenId) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
