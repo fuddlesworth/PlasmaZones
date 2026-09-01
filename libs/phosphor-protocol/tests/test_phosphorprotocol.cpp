@@ -301,8 +301,15 @@ private Q_SLOTS:
         // daemon that never announces strip identity leaves the effect holding
         // per-window state for a strip that is no longer on screen, with
         // nothing about the pairing erroring.
-        QCOMPARE(Service::ApiVersion, 8);
-        QCOMPARE(Service::MinPeerApiVersion, 8);
+        //
+        // v9 adds Scrolling.leaveNativeFullscreenRequested for the same reason
+        // and with the same failure mode. A daemon emitting it to an effect
+        // with no such slot, or an effect waiting on a daemon that never emits
+        // it, breaks no signature and errors nowhere: the strip just goes on
+        // scrolling and parking a column whose window the compositor refuses to
+        // move. It takes its own step because v8 shipped in 3.4.4.
+        QCOMPARE(Service::ApiVersion, 9);
+        QCOMPARE(Service::MinPeerApiVersion, 9);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

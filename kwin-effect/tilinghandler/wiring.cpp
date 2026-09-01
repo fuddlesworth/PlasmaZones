@@ -72,6 +72,9 @@ void TilingHandler::connectSignals()
                    QStringLiteral("scrollFocusScrollBlockedWindowsChanged"), this,
                    SLOT(slotScrollFocusScrollBlockedWindowsChanged(QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("leaveNativeFullscreenRequested"),
+                   this, SLOT(slotLeaveNativeFullscreenRequested(QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                    SLOT(slotActiveLayoutsChanged(QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The daemon and the KWin effect must be the same build**: this release changes the message they speak again, so a mismatched pair refuses to connect rather than misbehaving. Packagers should rebuild and ship both together ([#1029](https://github.com/fuddlesworth/PlasmaZones/pull/1029)).
+
+### Fixed
+
+- **Scrolling the strip from the keyboard leaves a fullscreen video too**: making a video fullscreen on a scrolling monitor and then moving along the strip with the wheel dropped the fullscreen first, but the keyboard shortcuts did not. The strip carried on scrolling and parking the column behind a window that was still covering the screen, so what PlasmaZones thought was on screen and what you could see drifted apart until you left the fullscreen yourself. Every keyboard verb that acts on the strip now leaves the fullscreen first, width and height changes included ([#1029](https://github.com/fuddlesworth/PlasmaZones/pull/1029)).
+
 ## [3.4.5] - 2026-08-31
 
 ### Added
