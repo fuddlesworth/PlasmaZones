@@ -147,7 +147,20 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
             }
             entry.zoneNumbers = zoneNumbers;
 
-            m_pendingRestoreQueues[appId].append(entry);
+            // Capped per app, oldest dropped first. consumePendingAssignment
+            // pops exactly ONE entry per reopen and pruneStaleAssignments
+            // cannot reach this map (it is appId-keyed, not windowId-keyed), so
+            // an app that is snapped and closed more often than it is reopened
+            // grew this list for the whole session. The placement store already
+            // caps per app for the same reason; this matches that posture.
+            // Dropping the OLDEST is right for a FIFO restore queue: the newest
+            // close is the best evidence of where the next window wants to go.
+            auto& queue = m_pendingRestoreQueues[appId];
+            constexpr int MaxPendingRestoresPerApp = 16;
+            while (queue.size() >= MaxPendingRestoresPerApp) {
+                queue.removeFirst();
+            }
+            queue.append(entry);
 
             qCInfo(lcPlacement) << "Persisted zone" << zoneId << "for closed window" << appId << "screen:" << screenId
                                 << "desktop:" << desktop << "layout:"

@@ -254,11 +254,39 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     const int zoneCount = zones.size();
     const int windowCount = autotileWindowOrder.size();
 
-    // Build a lookup from zone ID → zone pointer for original-zone restoration
-    QHash<QString, PhosphorZones::Zone*> zoneById;
-    for (PhosphorZones::Zone* z : zones) {
-        zoneById[z->id().toString()] = z;
+    // Zone ID → INDEX, not → pointer: every consumer below wants the index, and
+    // resolving it through zones.indexOf() was a linear scan inside the
+    // per-window loop (and again per saved zone), when the map that answers it
+    // in O(1) was already being built here.
+    QHash<QString, int> zoneIndexById;
+    for (int i = 0; i < zones.size(); ++i) {
+        zoneIndexById[zones[i]->id().toString()] = i;
     }
+    // Direct match, then a UUID re-parse — the same two-step calculateRotation
+    // performs on this identical question. The braced toString() form is what
+    // CLAUDE.md mandates and what the map above holds, but rotation's fallback
+    // is evidence someone met format drift in the wild, and a lookup that
+    // silently misses here does real damage: a preclaimed zone goes unreserved
+    // (so the positional fallback can hand it to a never-snapped window, the
+    // double-assign the seeding exists to prevent), or a window's recorded zone
+    // is not found and it drops to that fallback. One helper so the three sites
+    // cannot drift.
+    const auto zoneIndexFor = [&](const QString& zoneId) -> int {
+        const auto direct = zoneIndexById.constFind(zoneId);
+        if (direct != zoneIndexById.constEnd()) {
+            return direct.value();
+        }
+        const QUuid parsed = QUuid::fromString(zoneId);
+        if (parsed.isNull()) {
+            return -1;
+        }
+        for (int i = 0; i < zones.size(); ++i) {
+            if (zones[i]->id() == parsed) {
+                return i;
+            }
+        }
+        return -1;
+    };
 
     // Zones occupied so far — pass-2's positional fallback avoids these so a
     // never-snapped window never STEALS a zone. Pass-1 (recorded-zone restoration)
@@ -273,10 +301,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
     // reserved zone to a never-snapped window. Pass-1 still stacks a window onto a
     // reserved zone when that window ALSO recorded it (legitimate multi-window-per-zone).
     for (const QString& zid : preClaimedZoneIds) {
-        PhosphorZones::Zone* z = zoneById.value(zid);
-        if (!z)
-            continue;
-        const int idx = zones.indexOf(z);
+        const int idx = zoneIndexFor(zid);
         if (idx >= 0)
             claimedZoneIndices.insert(idx);
     }
@@ -309,10 +334,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
         QStringList validZoneIds;
         QList<int> validZoneIndices;
         for (const QString& zid : savedZones) {
-            PhosphorZones::Zone* z = zoneById.value(zid);
-            if (!z)
-                continue;
-            int idx = zones.indexOf(z);
+            const int idx = zoneIndexFor(zid);
             if (idx < 0)
                 continue;
             validZoneIds.append(zid);
@@ -335,7 +357,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             // Stamp the authoritative target screen (every entry in this
             // producer is for the single screenId parameter) so the commit
             // side skips the racy geometry.center() re-derivation — symmetric
-            // with the other three batch producers.
+            // with the other batch producers.
             entry.targetScreenId = screenId;
             result.append(entry);
             placedWindowIds.insert(windowId);
@@ -457,6 +479,17 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             entry.sourceZoneId = QString(); // Not previously snapped
             entry.targetZoneId = targetZone->id().toString();
             entry.targetGeometry = geo;
+            // Stamped like every other producer in this file, even though this
+            // one's only caller copies into a struct that carries neither
+            // field. Both values are authoritative here — the geometry above is
+            // resolved against this same screenId, and desktopFilter is what
+            // the occupancy set was built from — and an unstamped entry is a
+            // trap for whoever routes this producer through emitBatchedResnap
+            // later: serializeZoneAssignments omits an empty stamp, and the
+            // receive side then falls back to the racy geometry.center()
+            // re-derivation these stamps exist to prevent.
+            entry.targetScreenId = screenId;
+            entry.virtualDesktop = desktopFilter;
             result.append(entry);
 
             // Mark zone as occupied for subsequent iterations
@@ -532,7 +565,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         QVector<PhosphorZones::Zone*> zones = layout->zones();
         PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
 
-        // Build zone ID -> index map (with and without braces for format-agnostic matching)
+        // Build zone ID -> index map, in the braced toString() form. Other
+        // spellings are handled by the UUID re-parse below, not by this map.
         QHash<QString, int> zoneIdToIndex;
         for (int i = 0; i < zones.size(); ++i) {
             zoneIdToIndex[zones[i]->id().toString()] = i;
