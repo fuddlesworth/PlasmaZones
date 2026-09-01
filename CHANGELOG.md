@@ -11,6 +11,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Windows come back on the virtual desktop they were on**: logging out with windows spread across several desktops and logging back in put every one of them on whichever desktop was showing, so a multi-desktop layout collapsed onto one. A Wayland session carries no record of which desktop a window belonged to, and applications are simply relaunched, so nothing told PlasmaZones where they had been. PlasmaZones already stored each window's desktop with the rest of its placement, and it now uses that. A window that reopens somewhere other than its recorded desktop is sent back there before anything places it, and it takes its place in that desktop's layout when you switch to it. This works the same way whether the monitor is snapping, tiling or scrolling. Put windows back on their virtual desktop, under General → Session restore, turns this off. Each remembered window is moved at most once, and a rule that routes a window to a particular desktop still wins ([#1019](https://github.com/fuddlesworth/PlasmaZones/pull/1019)).
 
+### Fixed
+
+- **A closing window in a scrolling strip gets to finish its animation**: the remaining columns moved into the gap the moment a window closed, so the closing window played its animation over a strip that had already settled. PlasmaZones waits out that animation before moving the neighbours, and that wait was being skipped on every close. Closing a window changes how many windows a monitor holds, and that count change had the monitor's scrolling settings re-resolved, which handed the strip back to be rebuilt a moment later whether or not anything about it had changed. The rebuild now waits like the rest of the close path ([#1027](https://github.com/fuddlesworth/PlasmaZones/pull/1027)).
+
 ## [3.4.4] - 2026-08-30
 
 ### Added
