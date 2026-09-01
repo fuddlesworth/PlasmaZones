@@ -3610,8 +3610,6 @@ private Q_SLOTS:
     /// and parses. A 50ms single-shot debounce coalesces the burst into a
     /// single fetch at the trailing edge.
     void slotRulesChanged();
-
-private:
 };
 
 } // namespace PlasmaZones

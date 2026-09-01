@@ -33,12 +33,19 @@ namespace PlasmaZones::PreTileDecisions {
 /// @p announced   screenId -> desktop the announced set was resolved against
 /// @p reported    screenId -> desktop this effect last reported (m_lastScreenDesktop)
 ///
-/// A screen missing from either side is NOT a mismatch: the daemon stamps only
-/// the screens it announced, an unmanaged screen is absent by construction, and
-/// a screen the effect has never reported has nothing to disagree with. Only a
-/// screen present on both sides with DIFFERENT desktops means the announce has
-/// been overtaken. An empty stamp (a peer that sends none) accepts, so the gate
-/// cannot silently wedge the seam shut.
+/// A screen missing from either side is NOT a mismatch: a screen the effect has
+/// never reported has nothing to disagree with. Only a screen present on both
+/// sides with DIFFERENT desktops means the announce has been overtaken.
+///
+/// Keys are compared as given. The caller is responsible for handing both sides
+/// the same ID FORM — the daemon stamps engine screen ids, which are virtual on
+/// a subdivided output, while the effect reports desktops per physical screen,
+/// so comparing them raw finds nothing in common and the gate silently accepts
+/// everything. slotScreensChanged normalises to the physical id before calling.
+///
+/// An empty `announced` accepts vacuously (the loop has nothing to check). The
+/// CALLER also skips this gate entirely for an empty stamp, so that branch is
+/// unreachable from production; it is not a second line of defence.
 inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced, const QHash<QString, int>& reported)
 {
     for (auto it = announced.constBegin(); it != announced.constEnd(); ++it) {

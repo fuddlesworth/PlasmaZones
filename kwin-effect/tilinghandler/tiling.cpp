@@ -405,7 +405,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
         if (indices.size() <= 1) {
-            if (indices.size() == 1 && entries[indices[0]].candidates.size() > 1) {
+            // No candidates.size() > 1 term: the map only admits entries with
+            // a non-empty candidate vector, and Entry::candidates is only ever
+            // assigned when that vector already has more than one element, so
+            // the test could never be false here.
+            if (indices.size() == 1) {
                 Entry& e = entries[indices[0]];
                 QPoint targetCenter = e.geometry.center();
                 KWin::EffectWindow* best = nullptr;
@@ -1657,16 +1661,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
-            // The rect this entry actually OFFERED the client, which is not
-            // snap.geometry whenever the size-continuity pass below re-centres
-            // a Wayland client's held size inside its column. The commanded
-            // rect at the tail of this lambda records what we asked for, and
-            // recording the raw column instead makes the counter-assert
-            // compare the centred commit against a rect that was never
-            // offered — they differ BY CONSTRUCTION for exactly the
-            // population that pass exists for, so it would yank such a client
-            // back into its column on repeat. Null when this entry took no
-            // committing path.
+            // The rect this entry actually OFFERED the client, recorded as the
+            // commanded rect at the tail of this lambda so the counter-assert
+            // compares the client's commit against what was really asked for.
+            //
+            // Only the MAXIMIZED-TO-EDGES arm reaches the record: the
+            // size-continuity pass excludes that state (it holds a declared
+            // rect), and the consumer requires it, so the two are mutually
+            // exclusive and the re-centred column never lands here. Null when
+            // this entry took no committing path.
             QRect scrollDeliveredRect;
             {
                 // Stored as the column's strip POSITION and SIZE, not as a
@@ -2115,9 +2118,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
                                           << "holding=" << committedSize << "offer=" << geo;
                     }
-                    // AFTER the re-centring, so this is the rect the apply
-                    // below actually offers.
-                    scrollDeliveredRect = geo;
                 }
                 // DROP THE OFFERED-COLUMN ENTRY for every declared-rect state,
                 // which is the same set the size-continuity guard above
