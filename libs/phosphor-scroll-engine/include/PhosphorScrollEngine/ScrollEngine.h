@@ -1450,10 +1450,13 @@ private:
     /// its apply cannot wait), which means a close-then-immediate-open chain
     /// (a file dialog handing back to its parent) reflows over the corpse as
     /// it always did — best-effort degradation to the pre-hold behaviour,
-    /// not a correctness bug. Only windowClosed and windowFocused defer.
-    /// scheduleRetileForScreen's queued apply is outside the hold for the
-    /// same reason and on the same terms: a config/per-screen change or a
-    /// min-size report landing mid-hold reflows on its own turn.
+    /// not a correctness bug. Three paths defer: windowClosed, windowFocused
+    /// and scheduleRetileForScreen's queued apply — that third one being what
+    /// makes the other two work, since the daemon turns every close's own
+    /// placementChanged into an identical-set re-push that retiles anyway.
+    /// engine_closehold.cpp carries the full account, including why the
+    /// config, per-screen and min-size retiles that reach the same guard lose
+    /// nothing by being replayed from the flush.
     int m_closeReflowDelayMs = 0;
     /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
     /// guard that keeps one timer per screen however many closes land inside
