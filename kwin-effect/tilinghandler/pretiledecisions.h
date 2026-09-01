@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <QRectF>
+
 /// Pure decision logic for the pre-autotile geometry restore that
 /// TilingHandler::demoteWindowsForDesktopSwitch runs, extracted so the branch
 /// chain is unit-testable without a compositor: kwin-effect has no linkable
@@ -12,43 +14,62 @@
 /// site in screenschanged.cpp — this function decides, it does not act.
 namespace PlasmaZones::PreTileDecisions {
 
+/// The rect that may safely be APPLIED for a window now sitting on some output,
+/// given the rect stored in a pre-autotile bucket.
+///
+/// @p saved        the stored rect (any bucket)
+/// @p sameOutput   the bucket that held it names the window's CURRENT output.
+///                 Compare PHYSICAL ids: virtual screens subdivide one output
+///                 and share its coordinate space, so a VS re-key is `true`.
+/// @p currentFrame the window's live frame, used when the origin must be dropped
+///
+/// Bucket rects are ABSOLUTE compositor coordinates. One measured on another
+/// output therefore does not restore a size when applied whole — it MOVES the
+/// window to that output, which users read as windows being thrown across
+/// monitors (discussion #1028). The extents are coordinate-space-independent
+/// and the origin is not, so the cross-output answer keeps the size and takes
+/// the position from the live frame. Degrading rather than refusing matters:
+/// every caller's purpose is to UN-TILE the window, and refusing leaves it
+/// sitting at its tile rect still looking tiled.
+inline QRectF applicablePreTileRect(const QRectF& saved, bool sameOutput, const QRectF& currentFrame)
+{
+    if (!saved.isValid()) {
+        return {};
+    }
+    if (sameOutput) {
+        return saved;
+    }
+    if (!currentFrame.isValid()) {
+        return {};
+    }
+    return QRectF(currentFrame.topLeft(), saved.size());
+}
+
 /// What the desktop-switch demote pass does with a window's pre-autotile rect.
 enum class PreTileRestore {
     None, ///< nothing to restore, or the window was never tile-managed here
     Apply, ///< restore the local bucket rect now
     QueueForWindowedFullscreen, ///< restore it after the deferred windowed-fullscreen release
     AskDaemon, ///< no local rect: fetch the pre-snap geometry from the placement store
-    DeclineCrossScreen, ///< a rect exists but belongs to ANOTHER monitor's bucket — do nothing
 };
 
-/// The 5-way pre-tile restore decision.
+/// The 4-way pre-tile restore decision.
 ///
-/// @p haveLocalRect   a rect was found in some screen's m_preTileGeometries bucket
-/// @p rectIsThisOutput  the bucket that held it names the window's CURRENT OUTPUT.
-///                     Compare PHYSICAL ids: virtual screens subdivide one output
-///                     and share its coordinate space, so a VS re-key must still apply.
+/// @p haveLocalRect   TilingHandler::preTileRestoreRectFor answered a usable rect
 /// @p wasTracked      the window was autotile-tracked on the desktop being left
 /// @p wasWindowedFs   the window held windowed fullscreen (its release is deferred)
 ///
-/// The cross-screen term is the load-bearing one. Bucket rects are in absolute
-/// compositor coordinates, so applying one keyed under a different OUTPUT does
-/// not restore a size, it MOVES the window to that output. Users see a window
-/// dragged onto this monitor thrown back to the one it came from on the next
-/// desktop switch. The sibling desktop-move path declines for the same reason
-/// (restorePreTileForDesktopMove), and savePreTileForDesktopMove stamps the
-/// bucket screen precisely so the comparison can be made.
+/// The cross-OUTPUT question is deliberately NOT decided here. Bucket rects are
+/// absolute compositor coordinates, so one measured on another monitor would
+/// move the window there rather than restore a size — but the right answer is
+/// to keep its extents and drop its origin, not to refuse it, and that needs the
+/// window's live frame. preTileRestoreRectFor owns that, so by the time this
+/// function runs a valid rect is always safe to apply as-is.
 ///
-/// DeclineCrossScreen is distinct from None because it must NOT fall through to
-/// AskDaemon: the daemon resolves the geometry against its own possibly-stale
-/// screenForWindow(), so that fallback can hand back the very rect declined
-/// here. AskDaemon is for the genuinely-empty case (the window was snap-managed
-/// when it entered autotile, so nothing was ever stored locally).
-inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool rectIsThisOutput, bool wasTracked,
-                                            bool wasWindowedFs)
+/// AskDaemon is only for the genuinely-empty case: the window was snap-managed
+/// when it entered autotile, so nothing was ever stored locally.
+inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool wasTracked, bool wasWindowedFs)
 {
-    if (haveLocalRect && !rectIsThisOutput) {
-        return PreTileRestore::DeclineCrossScreen;
-    }
     if (!wasTracked) {
         // Every restore arm is gated on tracked-ness: the buckets survive
         // non-destructively, so a window already restored by an earlier switch

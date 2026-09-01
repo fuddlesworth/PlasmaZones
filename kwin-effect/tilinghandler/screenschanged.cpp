@@ -216,36 +216,17 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // would otherwise be re-teleported to the stale rect on every
         // later switch onto this desktop.
         //
-        // The all-bucket lookup answers a rect from ANY monitor's bucket, and
-        // the rects are in absolute compositor coordinates, so a rect keyed
-        // under a different OUTPUT does not merely restore a size — it moves
-        // the window to that output. On a desktop switch that reads to the
-        // user as the window being thrown to another monitor: drag a window
-        // onto this screen, switch away and back through a desktop that
-        // tracked it, and the stale bucket flings it to the monitor it came
-        // from. Decline that rect instead, exactly as the sibling
-        // desktop-move path does (restorePreTileForDesktopMove documents the
-        // same coordinate-space reasoning, and savePreTileForDesktopMove
-        // stamps the bucket screen precisely so it can be compared here).
-        // A rect from THIS screen's bucket still applies, which is the
-        // un-tiling this pass exists to do.
-        QString savedGeoBucket;
-        const QRectF savedGeo = findPreTileGeometry(windowId, &savedGeoBucket);
+        // preTileRestoreRectFor, not a raw findPreTileGeometry: the buckets are
+        // keyed by the output a rect was measured on, and applying one from
+        // ANOTHER output whole moves the window to that monitor rather than
+        // restoring a size — the "window thrown to the other monitor on a
+        // desktop switch" of discussion #1028. The helper hands back such a
+        // rect as size-at-current-position instead, so this pass still does the
+        // un-tiling it exists for.
+        const QRectF savedGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
         using PlasmaZones::PreTileDecisions::PreTileRestore;
-        // PHYSICAL ids, not the raw screen ids. Virtual screens subdivide ONE
-        // output, so a VS re-key moves the bucket's key while leaving its
-        // coordinates perfectly valid — that is the legitimate case the
-        // all-bucket reader policy exists for (tiling.cpp's twin says so). A
-        // raw string compare would decline those and leave the window stuck at
-        // its tiled frame. What decides the question is the coordinate space,
-        // which is the OUTPUT.
-        const PreTileRestore restore = PlasmaZones::PreTileDecisions::resolvePreTileRestore(
-            savedGeo.isValid(), PhosphorIdentity::VirtualScreenId::samePhysical(savedGeoBucket, screenId), wasTracked,
-            wasWindowedFs);
-        if (restore == PreTileRestore::DeclineCrossScreen) {
-            qCDebug(lcEffect) << "Desktop switch: declining cross-screen pre-autotile rect for" << windowId
-                              << "bucket=" << savedGeoBucket << "current=" << screenId;
-        }
+        const PreTileRestore restore =
+            PlasmaZones::PreTileDecisions::resolvePreTileRestore(savedGeo.isValid(), wasTracked, wasWindowedFs);
         if (restore == PreTileRestore::QueueForWindowedFullscreen) {
             // The apply below would bail inside applyWindowGeometry on
             // the still-requested fullscreen state (membership is

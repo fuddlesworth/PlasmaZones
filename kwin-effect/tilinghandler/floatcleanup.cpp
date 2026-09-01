@@ -217,7 +217,7 @@ void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
     // Spawn frame read BEFORE the release: cleanupAutotileTracking (inside
     // releaseWindowTracking) clears the pre-tile bucket with the rest of
     // the tracking.
-    const QRectF spawnGeo = findPreTileGeometry(windowId);
+    const QRectF spawnGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
     qCInfo(lcEffect) << "Flags-settle eviction:" << windowId << "no longer tileable, releasing from" << screenId;
     releaseWindowTracking(windowId, screenId);
     if (spawnGeo.isValid() && !w->isUserMove() && !w->isUserResize()) {

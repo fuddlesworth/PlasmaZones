@@ -282,14 +282,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             applyFloatCleanup(floatWindowId);
 
             // Restore pre-autotile geometry from the effect's local cache.
-            // Scan all screen buckets (all-bucket reader policy — a VS
-            // config change can re-key the window's screen without moving
-            // its geometry bucket). Exact resolve, matching the tile lambda's
-            // deliberate policy: a fuzzy hit would teleport a same-app
-            // SIBLING onto this window's restored rect.
+            // preTileRestoreRectFor keeps the all-bucket reader policy — a VS
+            // config change can re-key the window's screen without moving its
+            // geometry bucket, and that rect is still applicable — while
+            // degrading a rect from ANOTHER output to size-only, which would
+            // otherwise move the window to that monitor. Exact resolve,
+            // matching the tile lambda's deliberate policy: a fuzzy hit would
+            // teleport a same-app SIBLING onto this window's restored rect.
             KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
             if (floatWin) {
-                if (const QRectF savedGeo = findPreTileGeometry(floatWindowId); savedGeo.isValid()) {
+                if (const QRectF savedGeo = preTileRestoreRectFor(floatWindowId, screenId, floatWin->frameGeometry());
+                    savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the

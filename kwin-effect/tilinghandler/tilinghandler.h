@@ -1334,6 +1334,19 @@ private:
     QRectF findPreTileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
 
     /**
+     * @brief The pre-autotile rect to APPLY for a window now sitting on @p screenId.
+     *
+     * findPreTileGeometry answers a rect from any bucket; this decides what may
+     * safely be done with it. A rect from the same OUTPUT (virtual-screen
+     * re-keys included) comes back whole. A rect from another output is
+     * degraded to its SIZE at @p currentFrame's position, because the extents
+     * are coordinate-space-independent while the origin is not — applying one
+     * whole moves the window to that monitor. Invalid when nothing is stored,
+     * or when a degrade was needed and @p currentFrame is unusable.
+     */
+    QRectF preTileRestoreRectFor(const QString& windowId, const QString& screenId, const QRectF& currentFrame) const;
+
+    /**
      * @brief Async daemon-side pre-tile geometry restore for a desktop-switch
      *        orphan with no local pre-autotile bucket entry.
      *

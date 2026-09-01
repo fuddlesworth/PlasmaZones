@@ -13,10 +13,12 @@
 // permanently.
 
 #include "tilinghandler.h"
+#include "pretiledecisions.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -62,8 +64,32 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // A const scan, so a guard-bail below never inserts an empty per-screen
     // bucket (operator[] would); the bucket is created only at the genuine
     // insertion point (below).
-    if (findPreTileGeometry(windowId).isValid()) {
-        return;
+    //
+    // First-capture-wins applies WITHIN an output. Across outputs it does not:
+    // an entry measured on a monitor the window has since left describes a
+    // position that no longer means anything for it, and because this early
+    // return never expired it, that entry was pinned for the window's whole
+    // life — the reader could only ever be handed a foreign rect, however far
+    // the window travelled. Re-home instead: drop the stale entry and let the
+    // capture below file a fresh one under the current output. Still exactly
+    // one entry per window, which is what the all-bucket reader needs.
+    QString heldBucket;
+    if (findPreTileGeometry(windowId, &heldBucket).isValid()) {
+        if (PhosphorIdentity::VirtualScreenId::samePhysical(heldBucket, screenId)) {
+            return;
+        }
+        qCDebug(lcEffect) << "Pre-autotile geometry for" << windowId << "re-homed from" << heldBucket << "to"
+                          << screenId;
+        auto bucketIt = m_preTileGeometries.find(heldBucket);
+        if (bucketIt != m_preTileGeometries.end()) {
+            bucketIt->remove(windowId);
+            // Drop the bucket when it empties, matching the const-scan
+            // reasoning above: a stray empty per-screen hash is a slow leak
+            // across a long session of monitor changes.
+            if (bucketIt->isEmpty()) {
+                m_preTileGeometries.erase(bucketIt);
+            }
+        }
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -261,6 +287,38 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
             });
 }
 
+QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QString& screenId,
+                                            const QRectF& currentFrame) const
+{
+    QString bucketScreenId;
+    const QRectF saved = findPreTileGeometry(windowId, &bucketScreenId);
+    if (!saved.isValid()) {
+        return {};
+    }
+    // PHYSICAL ids: virtual screens subdivide ONE output and share its
+    // coordinate space, so a VS re-key leaves the rect perfectly applicable —
+    // that is the case the all-bucket reader policy exists for. What decides
+    // the question is the coordinate space, which is the OUTPUT.
+    const bool sameOutput = PhosphorIdentity::VirtualScreenId::samePhysical(bucketScreenId, screenId);
+    if (!sameOutput) {
+        qCDebug(lcEffect) << "Pre-autotile restore for" << windowId << "has a rect from" << bucketScreenId
+                          << "but sits on" << screenId << "— restoring size only";
+    }
+    // A rect measured on ANOTHER output. Its extents still describe this
+    // window's free-floating size, but its ORIGIN belongs to a different
+    // monitor's coordinate space, so applying it whole does not restore a
+    // size — it moves the window to that monitor. Users read that as windows
+    // being thrown across monitors (discussion #1028).
+    //
+    // Degrade rather than decline: the caller's whole purpose is to un-tile
+    // the window, and refusing outright leaves it sitting at its tile rect
+    // looking tiled. Size at the CURRENT position is what handleDragToFloat
+    // already does for the same reason ("size is coordinate-space-independent,
+    // so any bucket's rect is safe"), and it is the strictly better half of
+    // the rect to keep.
+    return PlasmaZones::PreTileDecisions::applicablePreTileRect(saved, sameOutput, currentFrame);
+}
+
 QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* bucketScreenId) const
 {
     for (auto sgIt = m_preTileGeometries.constBegin(); sgIt != m_preTileGeometries.constEnd(); ++sgIt) {
@@ -308,7 +366,10 @@ void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const 
     // move. Consumed either way: a rect that cannot be applied here has no
     // later consumer, and leaving it behind would let a much later re-add on
     // the original screen restore a rect from a session-old position.
-    if (savedIt.value().first == screenId) {
+    // PHYSICAL ids: a virtual-screen re-key names the same output and the same
+    // coordinate space, so its rect is still applicable. Only a genuine
+    // monitor boundary invalidates the origin.
+    if (PhosphorIdentity::VirtualScreenId::samePhysical(savedIt.value().first, screenId)) {
         m_preTileGeometries[screenId][windowId] = savedIt.value().second;
     } else {
         qCDebug(lcEffect) << "Desktop move: dropping cross-screen pre-autotile rect for" << windowId
