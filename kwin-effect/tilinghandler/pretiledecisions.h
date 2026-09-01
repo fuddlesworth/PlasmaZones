@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <QHash>
 #include <QRectF>
+#include <QString>
 
 /// Pure decision logic for the pre-autotile geometry restore that
 /// TilingHandler::demoteWindowsForDesktopSwitch runs, extracted so the branch
@@ -13,6 +15,40 @@
 /// side effects (moveResize, maximize clear, D-Bus dispatch) stay at the call
 /// site in screenschanged.cpp — this function decides, it does not act.
 namespace PlasmaZones::PreTileDecisions {
+
+/// Is a managedScreensChanged announce still describing the desktops the
+/// compositor is actually showing?
+///
+/// The announce is asynchronous; KWin's own desktopChanged is not. So an
+/// announce can arrive after the user has switched again, carrying a managed
+/// set computed for the desktop they just left. Acting on it installs that set
+/// while the catch-scan filters windows by the CURRENT desktop — the two halves
+/// describe different desktops, and a window on the new desktop gets tracked
+/// against the old desktop's screen set.
+///
+/// The effect cannot answer this from its own state: by the time the stale
+/// announce lands, its last-reported desktop already equals the live one, so a
+/// stale announce and a fresh one look identical. Hence the wire stamp.
+///
+/// @p announced   screenId -> desktop the announced set was resolved against
+/// @p reported    screenId -> desktop this effect last reported (m_lastScreenDesktop)
+///
+/// A screen missing from either side is NOT a mismatch: the daemon stamps only
+/// the screens it announced, an unmanaged screen is absent by construction, and
+/// a screen the effect has never reported has nothing to disagree with. Only a
+/// screen present on both sides with DIFFERENT desktops means the announce has
+/// been overtaken. An empty stamp (a peer that sends none) accepts, so the gate
+/// cannot silently wedge the seam shut.
+inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced, const QHash<QString, int>& reported)
+{
+    for (auto it = announced.constBegin(); it != announced.constEnd(); ++it) {
+        const auto mine = reported.constFind(it.key());
+        if (mine != reported.constEnd() && mine.value() != it.value()) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /// The rect that may safely be APPLIED for a window now sitting on some output,
 /// given the rect stored in a pre-autotile bucket.

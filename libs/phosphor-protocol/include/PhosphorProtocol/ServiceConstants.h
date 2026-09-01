@@ -440,8 +440,30 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       previous strip's position and keeps doing it. A silent wrong answer is
 //       exactly what the handshake exists to refuse, and it is the reason a
 //       signal-only addition is not treated as harmlessly additive here.
-inline constexpr int ApiVersion = 8;
-inline constexpr int MinPeerApiVersion = 8;
+//   v9: org.plasmazones.Tiling managedScreensChanged gains a third argument,
+//       screenDesktops (a{sv}) — the screenId to virtual-desktop map the
+//       announced set was RESOLVED AGAINST.
+//
+//       A CHANGED REQUIRED SIGNAL, and it takes a step of its own rather than
+//       folding into v8 because v8 SHIPPED in 3.4.5 — the fold-in rule above
+//       applies only within an unreleased cycle.
+//
+//       Required, and for the reason the ledger head names: an old effect
+//       paired with a new daemon fails to marshal the third argument and
+//       simply stops receiving the signal, which is the managed-set
+//       announcement the whole tiling seam is built on. The reverse pairing
+//       marshals nothing extra and silently keeps the race the argument
+//       exists to close.
+//
+//       The race: this signal is asynchronous while the compositor's own
+//       desktopChanged is not, so an announce can arrive after the user has
+//       switched again. The effect cannot detect that on its own — by then
+//       its last-reported desktop already equals the live one, so a stale
+//       announce is indistinguishable from a fresh one, and it would install
+//       a managed set computed for one desktop while filtering windows by
+//       another. The stamp makes the announce self-describing.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

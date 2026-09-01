@@ -69,6 +69,55 @@ private Q_SLOTS:
         QVERIFY(!applicablePreTileRect(QRectF(4000, 1284, 800, 628), /*sameOutput=*/false, QRectF()).isValid());
     }
 
+    // ── announceMatchesReportedDesktops ────────────────────────
+    // The managed-set announce is asynchronous; KWin's desktopChanged is not.
+
+    void announce_matchingStamp_accepted()
+    {
+        const QHash<QString, int> announced{{QStringLiteral("DP-1"), 3}};
+        const QHash<QString, int> reported{{QStringLiteral("DP-1"), 3}};
+        QVERIFY(announceMatchesReportedDesktops(announced, reported));
+    }
+
+    // The race, exactly: the announce was resolved for desktop 1, the effect
+    // has since reported 3. Acting on it would install desktop 1's managed set
+    // while every window filter below reads desktop 3.
+    void announce_overtakenByNewerSwitch_rejected()
+    {
+        const QHash<QString, int> announced{{QStringLiteral("DP-1"), 1}};
+        const QHash<QString, int> reported{{QStringLiteral("DP-1"), 3}};
+        QVERIFY(!announceMatchesReportedDesktops(announced, reported));
+    }
+
+    // Per-output virtual desktops: one screen disagreeing is enough, because
+    // the announce is a single set covering all of them.
+    void announce_oneScreenDisagrees_rejected()
+    {
+        const QHash<QString, int> announced{{QStringLiteral("DP-1"), 3}, {QStringLiteral("DP-2"), 1}};
+        const QHash<QString, int> reported{{QStringLiteral("DP-1"), 3}, {QStringLiteral("DP-2"), 2}};
+        QVERIFY(!announceMatchesReportedDesktops(announced, reported));
+    }
+
+    // A screen on only one side is not a disagreement. The daemon stamps only
+    // the screens it announced, so an unmanaged screen is absent by
+    // construction, and a screen the effect has never reported has nothing to
+    // disagree with. Treating absence as a mismatch would reject nearly every
+    // announce and wedge the seam shut.
+    void announce_partialOverlap_accepted()
+    {
+        const QHash<QString, int> announced{{QStringLiteral("DP-1"), 3}, {QStringLiteral("DP-9"), 3}};
+        const QHash<QString, int> reported{{QStringLiteral("DP-1"), 3}, {QStringLiteral("DP-2"), 1}};
+        QVERIFY(announceMatchesReportedDesktops(announced, reported));
+    }
+
+    // An empty stamp accepts. A peer that sends none must not have every
+    // announce dropped — the gate is a staleness filter, not a handshake.
+    void announce_emptyStamp_accepted()
+    {
+        QVERIFY(announceMatchesReportedDesktops({}, {{QStringLiteral("DP-1"), 3}}));
+        QVERIFY(announceMatchesReportedDesktops({}, {}));
+    }
+
     // ── resolvePreTileRestore ────────────────────────────────────────────────
 
     void restoreTruthTable_data()

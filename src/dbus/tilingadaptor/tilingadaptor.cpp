@@ -323,7 +323,19 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             if (m_lifecycleEngines.isEmpty()) {
                 return;
             }
-            Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
+            // Stamp the announce with the desktop each screen was resolved
+            // against. The receiver needs it to reject a late announce (see
+            // the signal's doc); read here, at emit time, so it describes the
+            // set actually being sent rather than whatever was current when
+            // the announce was first queued.
+            const QStringList announced = combinedManagedScreens();
+            QVariantMap screenDesktops;
+            if (m_windowTrackingAdaptor) {
+                for (const QString& screenId : announced) {
+                    screenDesktops.insert(screenId, m_windowTrackingAdaptor->currentDesktopForScreen(screenId));
+                }
+            }
+            Q_EMIT managedScreensChanged(announced, desktopSwitch, screenDesktops);
             relayEnabledChanged();
             // Retry opens parked during the flip (see m_unclaimedOpens):
             // engines have their post-flip screen sets by now. Insertion

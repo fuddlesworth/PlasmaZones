@@ -363,7 +363,12 @@ Q_SIGNALS:
      * @param screenIds List of screen IDs currently engine-managed
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */
-    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// @param screenDesktops screenId -> virtual desktop (int) the announced set
+    ///        was RESOLVED AGAINST. See the interface XML for why the stamp is
+    ///        required rather than informational: without it a receiver cannot
+    ///        distinguish a late announce for the desktop it just left from a
+    ///        fresh one for the desktop it is on.
+    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
 
     /**
      * @brief Emitted when any screen's rules-visible active layout changes

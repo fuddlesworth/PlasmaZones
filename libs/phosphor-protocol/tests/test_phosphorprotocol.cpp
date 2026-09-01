@@ -301,8 +301,17 @@ private Q_SLOTS:
         // daemon that never announces strip identity leaves the effect holding
         // per-window state for a strip that is no longer on screen, with
         // nothing about the pairing erroring.
-        QCOMPARE(Service::ApiVersion, 8);
-        QCOMPARE(Service::MinPeerApiVersion, 8);
+        //
+        // v9 widens Tiling.managedScreensChanged with the per-screen desktop
+        // map the announced set was resolved against, and takes its own step
+        // because v8 had already shipped in 3.4.5. Both failure modes are the
+        // silent kind: an old effect cannot marshal the third argument and
+        // simply stops receiving the managed-set announcement the tiling seam
+        // is built on, while an old daemon sends no stamp and leaves the effect
+        // unable to tell a late announce for the desktop it just left from a
+        // fresh one for the desktop it is on.
+        QCOMPARE(Service::ApiVersion, 9);
+        QCOMPARE(Service::MinPeerApiVersion, 9);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

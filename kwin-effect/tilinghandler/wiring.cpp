@@ -54,7 +54,7 @@ void TilingHandler::connectSignals()
                    SLOT(slotEnabledChanged(bool)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("managedScreensChanged"), this,
-                   SLOT(slotScreensChanged(QStringList, bool)));
+                   SLOT(slotScreensChanged(QStringList, bool, QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowFloatingChanged"), this,
                    SLOT(slotWindowFloatingChanged(QString, bool, QString)));
@@ -98,7 +98,7 @@ void TilingHandler::connectSignals()
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("managedScreensChanged"), this,
-                SLOT(slotScreensChanged(QStringList, bool)));
+                SLOT(slotScreensChanged(QStringList, bool, QVariantMap)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowFloatingChanged"), this,

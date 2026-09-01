@@ -694,8 +694,36 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
             });
 }
 
-void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
+void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch,
+                                       const QVariantMap& screenDesktops)
 {
+    // Drop an announce the compositor has already outrun. This signal is
+    // asynchronous while KWin's desktopChanged is not, so on a rapid switch the
+    // announce for the desktop just LEFT can arrive after the effect is already
+    // on the next one — and acting on it installs that desktop's managed set
+    // while every window filter below reads the CURRENT desktop. The two halves
+    // then describe different desktops, which is how a window on an unmanaged
+    // desktop got tracked against a managed screen's set.
+    //
+    // Only for a desktop switch: the daemon also announces on assignment,
+    // hotplug and settings changes, and those carry no desktop expectation to
+    // disagree with. A newer announce always follows (the daemon re-announces
+    // for the desktop the effect has since reported), so dropping converges
+    // rather than stalling.
+    if (isDesktopSwitch && !screenDesktops.isEmpty()) {
+        QHash<QString, int> announcedDesktops;
+        announcedDesktops.reserve(screenDesktops.size());
+        for (auto it = screenDesktops.constBegin(); it != screenDesktops.constEnd(); ++it) {
+            announcedDesktops.insert(it.key(), it.value().toInt());
+        }
+        if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops,
+                                                                            m_effect->lastReportedScreenDesktops())) {
+            qCInfo(lcEffect) << "slotScreensChanged: dropping a desktop-switch announce for" << screenDesktops
+                             << "— already on" << m_effect->lastReportedScreenDesktops();
+            return;
+        }
+    }
+
     // Invalidate any in-flight loadSettings property reply — this signal
     // carries a newer screen set (see m_screensSignalGeneration doc).
     ++m_screensSignalGeneration;

@@ -1543,6 +1543,15 @@ public:
      */
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
 
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    ///
+    /// Public so TilingAdaptor can stamp managedScreensChanged with the
+    /// per-screen desktop the announced set was resolved against. A pure
+    /// query — the router state it reads lives on WTA, which is why the
+    /// caller cannot answer it itself.
+    int currentDesktopForScreen(const QString& screenId) const;
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
@@ -1594,9 +1603,6 @@ private:
      *        disabled-context gates and last-used-zone tracking.
      */
     int currentDesktop() const;
-    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
-    /// desktops, #648), falling back to the global currentDesktop().
-    int currentDesktopForScreen(const QString& screenId) const;
 
     // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits

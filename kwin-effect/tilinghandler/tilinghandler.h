@@ -1019,7 +1019,11 @@ public Q_SLOTS:
     void slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
-    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// @param screenDesktops screenId -> desktop the announced set was resolved
+    ///        against. A desktop-switch announce whose stamp disagrees with what
+    ///        this effect last reported has been overtaken by a newer switch and
+    ///        is dropped — see announceMatchesReportedDesktops.
+    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
     /// The two halves of slotScreensChanged's removed-screens pass, split out
     /// because they reach opposite conclusions about the same event and were
     /// the reason the slot ran to 775 lines. A screen leaves the managed set
