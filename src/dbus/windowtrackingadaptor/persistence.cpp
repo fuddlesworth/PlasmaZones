@@ -48,7 +48,19 @@ bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
         return false;
     }
     const QString screenId = m_service->screenForWindow(windowId);
-    return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
+    // exactOnly, matching getValidatedPreTileGeometry. The two are a documented
+    // pair — "is there a pre-tile geometry" and "give me the pre-tile geometry" —
+    // and answering them from different record sets makes one a liar: the
+    // non-exact default admits a same-app SIBLING's free geometry, so this would
+    // report a rect the getter now refuses to hand over.
+    //
+    // Exact is also the right answer on its own terms. SnapHandler dropped its
+    // pre-check against this method for exactly the appId matching the default
+    // brings: "a stale cross-session entry from a prior window instance (keyed
+    // by appId) would block the fresh per-instance capture and freeze
+    // float-restore at ancient coordinates". A per-window question deserves a
+    // per-window answer.
+    return m_service->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true).has_value();
 }
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
