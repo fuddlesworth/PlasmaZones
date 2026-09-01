@@ -84,7 +84,10 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("## Compositor Bridge")));
         QVERIFY(report.contains(QStringLiteral("## Session State")));
         QVERIFY(report.contains(QStringLiteral("## Recent Logs")));
-        QVERIFY(report.contains(QStringLiteral("## KWin Effect Logs")));
+        // Renamed from "KWin Effect Logs": the section is no longer filtered
+        // down to effect lines, because KWin prints no logging category and the
+        // substring filter that assumed otherwise was dropping most of them.
+        QVERIFY(report.contains(QStringLiteral("## Compositor Logs")));
     }
 
     void testGenerate_bridgeUnavailable_whenNoBridgeInfo()
@@ -118,7 +121,7 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("**Status:** connected")));
         // Match the rendered lines specifically — a bare "kwin" substring is
         // also produced by the unrelated "no kwin_wayland journal" message in
-        // the KWin Effect Logs section, so it would pass even if the
+        // the Compositor Logs section, so it would pass even if the
         // compositor name were never rendered.
         QVERIFY(report.contains(QStringLiteral("**Compositor:** kwin")));
         QVERIFY(report.contains(QStringLiteral("**Effect protocol version:** 3")));

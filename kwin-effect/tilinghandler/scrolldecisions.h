@@ -35,6 +35,29 @@ struct WfsDecision
     bool consumeClearMarker = false;
 };
 
+/// The arm's name, for the batch consumer's log line.
+///
+/// A switch with no default rather than an array indexed by the enum: a new
+/// arm is then a compiler warning here instead of a silently wrong label (or,
+/// with an array, a read past the end). Same reasoning as the labelled
+/// no-default arms in the strip's height resolver.
+inline const char* wfsActionName(WfsAction action)
+{
+    switch (action) {
+    case WfsAction::None:
+        return "None";
+    case WfsAction::Adopt:
+        return "Adopt";
+    case WfsAction::DeferredReconcile:
+        return "DeferredReconcile";
+    case WfsAction::Refresh:
+        return "Refresh";
+    case WfsAction::Release:
+        return "Release";
+    }
+    return "?";
+}
+
 /// The 5-way windowed-fullscreen batch decision over its four inputs.
 /// @p flagOnWire      the batch entry's isWindowedFullscreen
 /// @p inSet           effect-side membership (m_windowedFullscreenWindows)

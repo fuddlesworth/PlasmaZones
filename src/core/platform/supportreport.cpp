@@ -349,7 +349,7 @@ QString SupportReport::sectionCompositorBridge(const Snapshot& snapshot)
         "**Status:** NOT CONNECTED — the KWin effect has not registered with the daemon.\n\n"
         "Window dragging, keyboard shortcuts, and snapping cannot work without it. "
         "Verify that the **PlasmaZones** effect is enabled in System Settings → Desktop Effects, "
-        "then restart the Plasma session so KWin loads it. See the KWin Effect Logs section below "
+        "then restart the Plasma session so KWin loads it. See the Compositor Logs section below "
         "for why the effect failed to load or register.\n");
 }
 
@@ -540,24 +540,32 @@ QString SupportReport::sectionEffectLogs(int sinceMinutes, bool bridgeRegistered
             .arg(sinceMinutes)
             .arg(quietSuffix);
 
-    // Keep only PlasmaZones effect lines — the rest of the kwin_wayland journal
-    // is unrelated compositor noise. Every effect logging category begins with
-    // "plasmazones" (e.g. "plasmazones.effect"), and Qt's default message
-    // pattern prints the category, so a substring match catches every line.
-    QStringList kept;
+    // The WHOLE kwin_wayland window is kept, unrelated compositor lines
+    // included, and that is deliberate.
+    //
+    // This used to keep only lines containing "plasmazones", on the premise
+    // that every effect category begins with that and "Qt's default message
+    // pattern prints the category". KWin installs its OWN message handler and
+    // does not print the category, so the premise never held in a real
+    // session: the effect's lines arrive bare ("Countering external move of
+    // scroll-managed window ...", "park reap: stamped ..."), and only the ones
+    // whose text happens to quote a PlasmaZones window id survived. Measured
+    // over three days on a live session, 6593 of 8569 effect lines — 77% —
+    // were dropped.
+    //
+    // What that cost is worse than noise. The section rendered "the effect is
+    // connected and simply logged nothing in this window" over a heavily
+    // logging effect, and a report gathered right after a reproduction was
+    // read as evidence that a code path had not run. A support report whose
+    // silence cannot be trusted is worse than one that is merely long.
+    //
+    // Nothing more selective is durable here. The pattern is KWin's to set, so
+    // the category cannot be recovered from the text, and a hand-maintained
+    // list of effect message prefixes rots exactly the way the old comment
+    // did — silently, with the failure looking like success. capLogLines
+    // already bounds the section at MaxLogLines, so the size is contained.
     const QStringList lines = QString::fromUtf8(rawOutput).split(QLatin1Char('\n'));
-    for (const QString& line : lines) {
-        if (line.contains(QLatin1String("plasmazones"), Qt::CaseInsensitive))
-            kept.append(line);
-    }
-
-    if (kept.isEmpty()) {
-        return QStringLiteral("*(no PlasmaZones effect log entries in the last %1 minutes — %2)*\n")
-            .arg(sinceMinutes)
-            .arg(quietSuffix);
-    }
-
-    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(kept)));
+    return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(capLogLines(lines)));
 }
 
 QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes)
@@ -607,7 +615,7 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     report += sectionLogs(sinceMinutes);
     report += QLatin1Char('\n');
 
-    report += QStringLiteral("## KWin Effect Logs (last %1 minutes)\n").arg(sinceMinutes);
+    report += QStringLiteral("## Compositor Logs (last %1 minutes)\n").arg(sinceMinutes);
     report += sectionEffectLogs(sinceMinutes, snapshot.hasBridgeInfo && snapshot.bridgeRegistered);
     report += QLatin1Char('\n');
 

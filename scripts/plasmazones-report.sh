@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ...              Remaining config-dir files (quick layouts, settings profiles, etc.)"
             echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
-            echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
+            echo "  kwin-effect.log  Recent kwin_wayland journal entries (the effect runs inside it)"
             echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
             echo "  kwin-effects.txt Enabled/loaded KWin desktop effects (kwinrc [Plugins] + live D-Bus state)"
             exit 0
@@ -322,11 +322,19 @@ if command -v journalctl &>/dev/null; then
         rm -f "$STAGING/journal.raw"
     fi
 
-    # KWin effect logs: the effect runs inside the kwin_wayland process, so its
-    # journal is tagged "kwin_wayland", not "plasmazonesd". Filter to PlasmaZones
-    # lines (every effect log category contains "plasmazones"). Without this a
+    # Compositor logs: the effect runs inside the kwin_wayland process, so its
+    # journal is tagged "kwin_wayland", not "plasmazonesd". Without this a
     # non-loading effect — the most common "drags/shortcuts do nothing" cause —
     # leaves no trace in the archive.
+    #
+    # The whole window is kept. This used to grep for "plasmazones" on the
+    # premise that every effect log category contains it, but KWin installs its
+    # own message handler and does not print the category, so effect lines
+    # arrive bare and only the ones quoting a PlasmaZones window id matched.
+    # Measured on a live session, that dropped 77% of them, and an archive with
+    # no kwin-effect.log at all was read as "the effect logged nothing". The
+    # tail below already bounds the file. See the matching note in
+    # src/core/platform/supportreport.cpp.
     KWIN_JOURNAL=$(collect_journal --user -t kwin_wayland)
     if [[ -z "${KWIN_JOURNAL:-}" ]]; then
         KWIN_JOURNAL=$(collect_journal --user --identifier=kwin_wayland)
@@ -337,11 +345,9 @@ if command -v journalctl &>/dev/null; then
         KWIN_JOURNAL=$(collect_journal --system -t kwin_wayland)
     fi
     if [[ -n "${KWIN_JOURNAL:-}" ]]; then
-        printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw"
-        grep -i plasmazones "$STAGING/kwin-effect.raw" 2>/dev/null \
+        printf '%s\n' "$KWIN_JOURNAL" \
             | tail -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
-        rm -f "$STAGING/kwin-effect.raw"
-        # grep matched nothing → drop the empty file rather than ship a blank.
+        # Nothing in the window → drop the empty file rather than ship a blank.
         [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"
     fi
 fi

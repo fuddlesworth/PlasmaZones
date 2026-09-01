@@ -1493,6 +1493,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (wfs.consumeClearMarker) {
                     m_windowedFsClearInFlight.remove(snap.windowId);
                 }
+                // Every arm but the steady-state Refresh is a STATE CHANGE the
+                // user can see, and the whole block was silent: entering,
+                // adopting after an effect restart, reconciling a client's own
+                // exit and releasing all looked identical from a log. Refresh
+                // is excluded because it runs on every batch of every member
+                // and would drown the category.
+                if (wfs.action != ScrollDecisions::WfsAction::None
+                    && wfs.action != ScrollDecisions::WfsAction::Refresh) {
+                    qCInfo(lcEffect) << "Windowed fullscreen:" << ScrollDecisions::wfsActionName(wfs.action) << "for"
+                                     << snap.windowId << "at" << snap.geometry
+                                     << "(wire flag=" << snap.isWindowedFullscreen << "member=" << inSet
+                                     << "kwinRequestedFs=" << kwFs->isRequestedFullScreen() << ")";
+                }
                 if (wfs.action == ScrollDecisions::WfsAction::Adopt) {
                     // Adopt-on-batch: also the effect-restart path, where the
                     // daemon still holds the flag for a window this effect
@@ -1574,9 +1587,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Skipping it drops membership with the request standing,
                     // and the pending ack then commits fullscreen ownerless.
                     if (kwFs->isFullScreen() || kwFs->isRequestedFullScreen()) {
-                        ++m_suppressFullScreenChanged;
-                        kwFs->setFullScreen(false);
-                        --m_suppressFullScreenChanged;
+                        // Through the helper for its stated RAII reason — this
+                        // was the other hand-rolled copy of the bracket. A leak
+                        // here is silent and permanent, and it disables the
+                        // very slot that notices a client leaving windowed
+                        // fullscreen by itself.
+                        applyFullScreenSuppressed(kwFs, false);
                     }
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);

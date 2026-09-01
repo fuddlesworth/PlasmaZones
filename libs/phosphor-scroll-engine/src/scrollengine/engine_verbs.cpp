@@ -298,10 +298,46 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(canonicalId, &key);
         if (!state || state->strip().isEmpty() || key.screenId.isEmpty()) {
+            // Logged, unlike the sibling verbs' equivalent bail. This verb is
+            // the compositor interception's dispatch target and answers a
+            // BUTTON PRESS the user watched do nothing, and false here is what
+            // makes the effect put KWin's bit back — so a refusal is a visible
+            // event with no other trace. Every other step of a maximize (the
+            // interception, the dispatch, the strip flip) was likewise silent,
+            // which is why a support report covering a live reproduction could
+            // show no maximize activity at all.
+            qCInfo(lcScrollEngine) << "toggleMaximizeToEdges: refusing" << canonicalId
+                                   << "— tracked:" << (state != nullptr)
+                                   << "stripEmpty:" << (state && state->strip().isEmpty())
+                                   << "screenId:" << key.screenId;
             return false;
         }
         const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
         const bool changed = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
+        // The RESOLVED rect, not just the flag: "did the column end up covering
+        // the raw work area" is the question a maximize report actually needs
+        // answered, and it is the one the flag alone cannot settle — the effect
+        // can still commit something narrower downstream.
+        //
+        // Explicitly gated rather than left to qCInfo's own lazy evaluation:
+        // the relayout below is a real walk and sits OUTSIDE the macro, so
+        // without the check it would run on every toggle with the category off.
+        if (lcScrollEngine().isInfoEnabled()) {
+            const int columnIdx = state->strip().columnOfWindow(canonicalId);
+            QRect resolvedRect;
+            bool resolvedToEdges = false;
+            for (const ResolvedColumn& rc : state->strip().relayout(params).columns) {
+                if (rc.columnIndex == columnIdx) {
+                    resolvedRect = rc.rect;
+                    resolvedToEdges = rc.maximizedToEdges;
+                    break;
+                }
+            }
+            qCInfo(lcScrollEngine) << "toggleMaximizeToEdges:" << canonicalId << "column" << columnIdx
+                                   << "changed=" << changed << "nowMaximized=" << resolvedToEdges << "resolvedRect"
+                                   << resolvedRect << "rawWorkArea" << params.rawWorkArea << "workArea"
+                                   << params.workArea;
+        }
         if (changed) {
             if (key == currentKeyForScreen(key.screenId)) {
                 applyLayout(key.screenId, false);
@@ -660,6 +696,13 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
     const QString screen = resolveOperationScreen(screenId);
     ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
     if (!state || state->strip().isEmpty()) {
+        // Logged for toggleMaximizeToEdges' reason: this answers a KEYPRESS,
+        // and both refusal arms are otherwise silent. The OSD feedback below
+        // is not a substitute — it is suppressed on some surfaces and never
+        // reaches a support report either way, so a user reporting "the
+        // windowed-fullscreen shortcut does nothing" left no trace to read.
+        qCInfo(lcScrollEngine) << "toggleWindowedFullscreen: refusing on" << screen
+                               << "— no scrolling state or the strip is empty";
         Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_windows"), QString(),
                                   QString(), screen);
         return;
@@ -671,12 +714,21 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
     // slot names the floating window that actually holds focus, so the OSD
     // refers to what the user is looking at.
     if (state->floatingHasFocus()) {
+        // The likeliest reason a user reports that this shortcut "does
+        // nothing": focus is on a FLOATING window, which owns no column, so
+        // the verb declines rather than acting on the strip's stale active
+        // tile. Nothing about the screen says so, and the refusal is
+        // indistinguishable from a dead keybinding.
+        qCInfo(lcScrollEngine) << "toggleWindowedFullscreen: refusing on" << screen << "— the float layer holds focus ("
+                               << state->lastFloatingFocus() << "), which owns no column";
         Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_target"),
                                   state->lastFloatingFocus(), QString(), screen);
         return;
     }
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().toggleActiveWindowedFullscreen();
+    qCInfo(lcScrollEngine) << "toggleWindowedFullscreen:" << sourceWindow << "on" << screen << "changed=" << changed
+                           << "nowFullscreen=" << state->strip().isWindowedFullscreen(sourceWindow);
     if (changed) {
         // The flag never moves a rect; applyLayout's emit-on-change gate has
         // its own windowed-fullscreen leg (m_lastAppliedWindowedFs) so the
