@@ -120,7 +120,21 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     // one deref and missed the next.
     const QString screenId = m_service->screenForWindow(windowId);
 
-    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
+    // exactOnly: this is a PER-WINDOW restore ("put THIS window back where it
+    // was before we tiled it"), which is precisely the contract
+    // IWindowTrackingService documents the flag for. The non-exact default
+    // admits a same-app SIBLING's free geometry, and for a window with no
+    // record of its own — the ordinary case once an app's bucket has filled
+    // with dead instances at MaxPerApp — that borrowed a stranger's rect and
+    // handed it back as this window's pre-tile position. Worse, the rect is
+    // resolved against screenForWindow(), the daemon's TRACKED screen, so a
+    // sibling's rect from another monitor came back either verbatim (when the
+    // tracked screen matches the sibling's) or re-centred onto that tracked
+    // screen — and the effect applies it as absolute coordinates, moving the
+    // window there. The two engines with the same per-window contract
+    // (autotile.cpp, the scroll engine's lifecycle restore) already pass
+    // exactOnly for this reason.
+    auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
     if (!geo) {
         return false;
     }

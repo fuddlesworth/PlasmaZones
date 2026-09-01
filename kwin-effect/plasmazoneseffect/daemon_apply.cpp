@@ -94,9 +94,18 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     };
 
     const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
-    if (desktop > all.size()) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size()
-                          << "— placing" << windowId << "where it is instead";
+    // Lower bound as well as upper: `desktop` arrives over a D-Bus signal, and
+    // the indexing below is `all.at(desktop - 1)`, so a 0 or negative value is
+    // an out-of-bounds read rather than a refusal. 0 is not a hypothetical
+    // value either — it is WindowPlacement::virtualDesktop's own sentinel for
+    // "on all desktops / unknown". Both in-tree emitters gate on `> 0` today,
+    // so this is the boundary check for the slot rather than a fix for a live
+    // caller. Routed to the same recovery as the out-of-range arm: the daemon
+    // has already spent its one-shot and placed nothing, so a bare return
+    // strands the window unplaced for the session.
+    if (desktop < 1 || desktop > all.size()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range (have" << all.size()
+                          << "desktops) — placing" << windowId << "where it is instead";
         placeWhereItIs();
         return;
     }

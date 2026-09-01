@@ -20,6 +20,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <core/output.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
@@ -175,6 +176,26 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     || safeW->isUserMove() || safeW->isUserResize()) {
                     return;
                 }
+                // The rect is ABSOLUTE compositor coordinates, and the daemon
+                // resolved it against its OWN screenForWindow() rather than the
+                // window's live monitor. A stale tracked screen therefore answers
+                // a rect that lands on a different output, and applying it does
+                // not restore a size — it MOVES the window to that output, which
+                // is what a desktop switch looked like to the reporter of
+                // discussion #1028. Refuse it, matching the local-bucket arm's
+                // cross-screen decline in slotScreensChanged: capturedScreenId is
+                // the screen the caller resolved while the window was still on it,
+                // and it is already this lambda's authority for the managed-set
+                // guard above.
+                const QRect restoreRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh);
+                if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(capturedScreenId)) {
+                    if (const QRect g = out->geometry(); g.isValid() && !g.contains(restoreRect.center())) {
+                        qCDebug(lcEffect) << "Desktop switch: declining daemon pre-tile rect for" << windowId
+                                          << "— rect" << restoreRect << "is not on" << capturedScreenId << g;
+                        return;
+                    }
+                }
+
                 // Suppress the VS-crossing detectors across the synchronous
                 // frameGeometryChanged this apply emits — same rationale as the
                 // local-bucket restore path in slotScreensChanged.
@@ -220,8 +241,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
-                m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
-                                              /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                m_effect->applyWindowGeometry(safeW, restoreRect, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
                 // Re-seed the tracked screen from the applied position: the gate
                 // above suppressed the VS-crossing detectors whose early return sits
