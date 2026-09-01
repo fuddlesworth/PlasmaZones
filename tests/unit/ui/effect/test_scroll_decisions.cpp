@@ -465,6 +465,55 @@ private Q_SLOTS:
         QVERIFY(claimRetainsOnFullscreenSkip(Claim::MaximizedToEdges));
         QVERIFY(!claimRetainsOnFullscreenSkip(Claim::WindowedFullscreen));
     }
+
+    void sizeContinuityCarryForwardTable_data()
+    {
+        QTest::addColumn<bool>("declaredRect");
+        QTest::addColumn<bool>("columnAnswered");
+        QTest::addColumn<QSize>("committed");
+        QTest::addColumn<QSize>("column");
+        QTest::addColumn<bool>("carries");
+
+        const QSize column(1610, 879);
+
+        // The ordinary case the mechanism exists for: a client that answered
+        // this column with a slightly different size keeps it, as a pure move.
+        QTest::newRow("client answered smaller") << false << true << QSize(1608, 877) << column << true;
+        // No entry yet, so this batch is the one that offers the real column.
+        QTest::newRow("column not yet answered") << false << false << QSize(1608, 877) << column << false;
+        // Nothing to correct.
+        QTest::newRow("client took the column") << false << true << column << column << false;
+        // A degenerate mid-unmap commit must not centre the window by the
+        // whole column.
+        QTest::newRow("empty committed size") << false << true << QSize() << column << false;
+
+        // THE REGRESSION. A maximize-to-edges column is declared state: its
+        // rect is the raw work area, and carrying a client's own preference
+        // forward commits the window at that preference, centred — which is
+        // "maximize is not full width" exactly as reported.
+        QTest::newRow("declared rect, client answered smaller")
+            << true << true << QSize(833, 790) << QSize(1670, 939) << false;
+        QTest::newRow("declared rect, client took it") << true << true << QSize(1670, 939) << QSize(1670, 939) << false;
+
+        // The paired hazard on the way back out: on the un-maximize batch the
+        // column is restored while the client still holds the raw work area,
+        // and a surviving pre-maximize entry matches the restored size. The
+        // centring maths clamps at zero, so carrying this forward would commit
+        // the maximized size at the restored column's origin.
+        QTest::newRow("stale oversized frame, both axes") << false << true << QSize(1670, 939) << column << false;
+        QTest::newRow("stale oversized frame, width only") << false << true << QSize(1670, 800) << column << false;
+        QTest::newRow("stale oversized frame, height only") << false << true << QSize(1400, 939) << column << false;
+    }
+
+    void sizeContinuityCarryForwardTable()
+    {
+        QFETCH(bool, declaredRect);
+        QFETCH(bool, columnAnswered);
+        QFETCH(QSize, committed);
+        QFETCH(QSize, column);
+        QFETCH(bool, carries);
+        QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestScrollDecisions)

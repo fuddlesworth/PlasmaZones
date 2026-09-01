@@ -1984,12 +1984,33 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // Inert for a window that accepts its column: the sizes match,
                 // so the offer is the column rect unchanged and every branch
                 // below sees exactly what it saw before.
+                //
+                // A MAXIMIZED-TO-EDGES column is exempt, alongside monocle and
+                // windowed fullscreen and for the same reason: in all three the
+                // rect is DECLARED state, and honouring the client's own
+                // smaller answer instead defeats the state outright. The
+                // mechanism above exists to stop a size renegotiation that is
+                // only a few pixels wide; here the gap is the whole difference
+                // between the raw work area and whatever the client prefers, so
+                // "offer the size it actually holds, centred" commits a
+                // maximized window at its pre-maximize size in the middle of
+                // the screen.
+                //
+                // It is also self-sustaining once entered, which is what made
+                // this present as "maximize sometimes does nothing". The first
+                // batch after the toggle finds no entry for the new column
+                // size, offers the full raw area and records it; a client that
+                // answers smaller then makes EVERY later batch for that column
+                // read columnUnchanged and re-issue the shrunken centred rect,
+                // and the entry is deliberately never removed. Since a maximized
+                // column's batches arrive on any focus change or scroll tick,
+                // the full-width frame is typically gone before the user sees it.
                 // Null unless this batch is a plain strip entry that reaches
                 // the record below; see the capture site for why the two are
                 // separated.
                 QRect stripOfferedColumn;
                 if (isScrollingScreen(snap.screenId) && !snap.isMonocle && !snap.isWindowedFullscreen
-                    && snap.window->isWaylandClient()) {
+                    && !snap.isMaximizedToEdges && snap.window->isWaylandClient()) {
                     const QSize columnSize = geo.size();
                     const QSize committedSize = snap.window->frameGeometry().toRect().size();
                     const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
@@ -2014,7 +2035,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // The commanded-rect sibling already guards the same three
                     // cases; this is the missing half of that pairing.
                     stripOfferedColumn = geo;
-                    if (columnUnchanged && !committedSize.isEmpty() && committedSize != columnSize) {
+                    // The whole carry-forward decision, truth-tabled in
+                    // scrolldecisions.h. declaredRect is false here by
+                    // construction — the enclosing guard already excluded all
+                    // three declared-rect states — but it is passed rather than
+                    // hardcoded so the predicate stays complete on its own
+                    // terms and the table documents why they are excluded.
+                    if (ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged, committedSize,
+                                                               columnSize)) {
                         // Centred the same way the paint resolver centres
                         // (scrollVisualTranslationFor), so the drawn and
                         // committed positions agree: same toRect() rounding on
@@ -2035,6 +2063,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                     // AFTER the re-centring, so this is the rect the apply
                     // below actually offers.
+                    scrollDeliveredRect = geo;
+                }
+                // A maximized-to-edges column takes the exemption above, so it
+                // never reaches that assignment — but it is the ONE Wayland
+                // population the counter-assert exists for (KWin's own
+                // maximize-area re-assert is its external mover), and the arm
+                // at the bottom of this lambda refuses to record a commanded
+                // rect while this is null. Without this the counter would be
+                // permanently disarmed for exactly the windows it protects.
+                //
+                // The rect is `geo` unchanged, and that is now the honest
+                // record: the sibling arm's warning about recording "the raw
+                // column instead" was written when the size-continuity pass
+                // did NOT exclude maximized columns, so the delivered rect
+                // could be a centred commit the counter had never offered.
+                // With the exemption in place the column rect IS what gets
+                // delivered, so the two agree by construction.
+                if (isScrollingScreen(snap.screenId) && snap.isMaximizedToEdges && !snap.isMonocle
+                    && !snap.isWindowedFullscreen && snap.window->isWaylandClient()) {
                     scrollDeliveredRect = geo;
                 }
 
