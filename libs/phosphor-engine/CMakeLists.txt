@@ -68,7 +68,11 @@ target_link_libraries(PhosphorEngine
         PhosphorGeometry::PhosphorGeometry
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::Types
-    PRIVATE
+        # PUBLIC, not PRIVATE: WindowPlacement.h is a public header and its
+        # freeGeometryFor() resolves virtual screen ids through
+        # VirtualScreenId::samePhysical. PhosphorIdentity is an INTERFACE
+        # (header-only) target, so this is an include-path dependency with no
+        # link-time cost.
         PhosphorIdentity::PhosphorIdentity
 )
 

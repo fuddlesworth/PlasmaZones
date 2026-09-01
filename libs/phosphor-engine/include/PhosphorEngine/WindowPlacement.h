@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <QHash>
 #include <QJsonArray>
@@ -151,9 +152,46 @@ struct WindowPlacement
 
     /// The shared free/float geometry for @p screenId, or an invalid rect if none
     /// has been captured on that screen yet.
+    ///
+    /// The exact key wins, so a genuinely per-virtual-screen capture keeps its
+    /// own remembered spot. On a miss the search widens to keys on the SAME
+    /// PHYSICAL OUTPUT — and no further. That is not a cross-screen fallback
+    /// (which was removed on purpose, because answering from another monitor
+    /// teleports the window); virtual screens subdivide one output and share
+    /// its coordinate space, so a rect filed under a sibling subdivision is
+    /// already in the right coordinates.
+    ///
+    /// The widening is load-bearing, not defensive. VirtualScreenMigration
+    /// rewrites these keys to the new virtual screen only for windows it can
+    /// resolve zones for, and deliberately keeps the PHYSICAL key otherwise
+    /// ("No zone info — keep physical ID, don't guess VS"). A floating window
+    /// has no zones by definition, so on a virtual-screen setup its key stays
+    /// physical while every reader asks with the virtual id. An exact-only
+    /// lookup therefore missed exactly the records this map exists to serve.
     QRect freeGeometryFor(const QString& screenId) const
     {
-        return freeGeometryByScreen.value(screenId);
+        const auto exact = freeGeometryByScreen.constFind(screenId);
+        if (exact != freeGeometryByScreen.constEnd() && exact.value().isValid()) {
+            return exact.value();
+        }
+        if (screenId.isEmpty()) {
+            return {};
+        }
+        // Deterministic among siblings: QHash iteration order is unspecified,
+        // so without a total order the answer would differ run to run. Same
+        // lexicographic-smallest rule anyFreeGeometryScreenId uses.
+        QString bestKey;
+        QRect best;
+        for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {
+            if (!it.value().isValid() || !PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), screenId)) {
+                continue;
+            }
+            if (bestKey.isEmpty() || it.key() < bestKey) {
+                bestKey = it.key();
+                best = it.value();
+            }
+        }
+        return best;
     }
 
     /// The screenId of the deterministic cross-screen fallback pick: the
