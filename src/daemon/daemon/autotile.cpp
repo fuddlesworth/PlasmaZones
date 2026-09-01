@@ -1103,10 +1103,14 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     for (const QString& screenId : m_autotileEngine->activeScreens()) {
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
-        QStringList order = m_autotileEngine->managedWindowOrder(screenId);
-        if (!order.isEmpty()) {
-            orders[TilingStateKey{screenId, desktop, activity}] = order;
-        }
+        // Stored unconditionally, empty included. updateEngineScreens documents
+        // why: an empty order has to OVERWRITE a stale non-empty entry from an
+        // earlier toggle, or re-entry resurrects windows that have since
+        // closed. The mode-toggle caller pre-clears its own key and was
+        // unaffected, but the feature-disable caller merges with no pre-clear —
+        // so an autotile-active screen with zero tiled windows kept its stale
+        // order across the disable and re-seeded from it on re-enable.
+        orders[TilingStateKey{screenId, desktop, activity}] = m_autotileEngine->managedWindowOrder(screenId);
     }
     return orders;
 }

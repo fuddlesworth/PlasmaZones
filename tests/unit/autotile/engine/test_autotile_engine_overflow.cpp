@@ -76,10 +76,12 @@ private Q_SLOTS:
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
         QVERIFY(state != nullptr);
-        // No algorithm is wired in this harness, so seed the zones the way the
-        // sibling overflow tests do — applyTiling's overflow pass runs off the
-        // calculated zone count.
-        state->setCalculatedZones({QRect(0, 0, 500, 500), QRect(500, 0, 500, 500)});
+        // Zones deliberately NOT seeded. No algorithm is wired in this harness,
+        // so recalculateLayout bails and the zone vector stays empty — which is
+        // exactly the branch this test exists for: applyTiling's overflow pass
+        // now runs off the CAP, above the zones-empty bail, rather than off the
+        // calculated zone count. Seeding zones here would steer the run onto
+        // the pre-existing non-empty path and never touch that branch.
 
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
@@ -87,14 +89,42 @@ private Q_SLOTS:
         QVERIFY(state->containsWindow(QStringLiteral("win-3")));
         QVERIFY(state->isFloating(QStringLiteral("win-3")));
         QCOMPARE(state->tiledWindowCount(), 2);
+        // The SYMPTOM, not just the mechanism. containsWindow asks the state;
+        // isWindowTracked asks the reverse map, and it was the divergence
+        // between those two that #1028 actually was — the daemon reads the
+        // reverse map to route float traffic. A regression that re-diverges
+        // them in either direction has to fail here.
+        QVERIFY(engine.isWindowTracked(QStringLiteral("win-3")));
 
-        // The float bit must round-trip: this is the minimize/unminimize edge
-        // the daemon drives through setWindowFloat.
+        // An unfloat with nowhere to land is REFUSED, not performed and then
+        // silently undone. This is the minimize/unminimize edge the daemon
+        // drives through setWindowFloat: the screen is still at cap, so the
+        // window has no slot to return to and stays floating. Before the
+        // refusal the engine unfloated, retiled synchronously, and the overflow
+        // pass re-floated the window inside the same call — so the caller read
+        // back "still floating", retried, and burned its whole retry budget on
+        // a request that could never converge.
+        //
+        // Asserting the INTERMEDIATE state is what makes this discriminating.
+        // Checking only the end state passes when both calls are silent no-ops,
+        // which is exactly the #1028 defect.
         engine.unfloatWindow(QStringLiteral("win-3"));
         QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("win-3")));
+        QCOMPARE(state->tiledWindowCount(), 2);
+
+        // With room, the same call succeeds — the refusal is about capacity,
+        // not about this window.
+        engine.config()->maxWindows = 3;
+        engine.unfloatWindow(QStringLiteral("win-3"));
+        QCoreApplication::processEvents();
+        QVERIFY(!state->isFloating(QStringLiteral("win-3")));
+        QCOMPARE(state->tiledWindowCount(), 3);
+
         engine.floatWindow(QStringLiteral("win-3"));
         QCoreApplication::processEvents();
         QVERIFY(state->isFloating(QStringLiteral("win-3")));
+        QVERIFY(engine.isWindowTracked(QStringLiteral("win-3")));
     }
 
     void testOverflow_emitsFloatingSignal()

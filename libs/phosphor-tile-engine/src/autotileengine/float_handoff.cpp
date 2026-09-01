@@ -519,6 +519,35 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         return;
     }
 
+    // An unfloat that has nowhere to land is refused HERE rather than performed
+    // and silently undone. retileAfterOperation below runs synchronously, so
+    // applyTiling's overflow pass sees tiledCount above the cap and re-floats
+    // the window before this call even returns. The caller then reads the float
+    // state back, still sees "floating", and retries — the effect's unminimize
+    // path does exactly that, up to kAutotileMaxUnfloatRetries, and every
+    // attempt costs a full unfloat + retile + refloat with the batch signals to
+    // match. Nothing converges, because nothing can: the screen is full.
+    //
+    // Refusing keeps the window floating, which is the honest answer, and makes
+    // the read-back agree with reality so the retry budget is not burned. The
+    // window comes back on its own through OverflowManager::recoverIfRoom as
+    // soon as a slot frees up, which is the same path that recovers every other
+    // overflow-floated window.
+    if (!shouldFloat) {
+        const QString unfloatScreen = m_states.keyForWindow(windowId).screenId;
+        const int cap = std::min(effectiveMaxWindows(unfloatScreen), PhosphorTiles::AutotileDefaults::MaxZones);
+        if (state->tiledWindowCount() >= cap) {
+            qCInfo(PhosphorTileEngine::lcTileEngine)
+                << "unfloatWindow: refusing" << windowId << "on" << unfloatScreen << "— screen is at capacity ("
+                << state->tiledWindowCount() << "of" << cap << "); it stays floating until a slot frees up";
+            // Re-announce the state the window is ACTUALLY in. The caller asked
+            // for false and is getting true, so without this it would keep
+            // believing its request was lost.
+            Q_EMIT windowFloatingStateSynced(windowId, true, unfloatScreen);
+            return;
+        }
+    }
+
     state->setFloating(windowId, shouldFloat);
     m_overflow.clearOverflow(windowId);
 

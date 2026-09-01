@@ -611,6 +611,14 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
             m_lastAppliedTileRect.remove(windowId);
+            // Pending seeds and focus follow the same obligation every other
+            // drop path carries (removeWindow, handoffRelease, the defer gate,
+            // claimCrossScreenReopen). Without the focus purge, the autotile
+            // screen's next applyTiling drains an entry naming a window that
+            // now lives on another monitor and emits activateWindowRequested
+            // for it — a focus steal with no repair path.
+            purgeFromPendingOrders(windowId);
+            purgePendingFocusForWindow(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
@@ -845,9 +853,10 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         return;
     }
 
-    // No cap gate here. Under the default Float overflow behaviour the cap is
-    // enforced by applyTiling's overflow pass, which floats everything past
-    // effectiveMaxWindows back out; under Unlimited there is no cap to enforce.
+    // No cap gate here. The cap is enforced by applyTiling's overflow pass,
+    // which floats everything past effectiveMaxWindows back out; under
+    // Unlimited the only ceiling left is MaxZones, which that pass still
+    // applies.
     // Refusing the window here instead delivered neither: the open was dropped
     // on the floor, so an over-cap window was left unmanaged (not tiled, not
     // floated, just wherever KWin put it) and — because windowOpened keys the
