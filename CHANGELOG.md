@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.4.6] - 2026-09-01
+
 ### Added
 
 - **The support archive records KWin's own window rules**: KWin has its own window rules, separate from PlasmaZones, and they move, resize and re-desktop windows on their own. A window being thrown across monitors can therefore have nothing to do with PlasmaZones, and there was no way to tell from a report. The archive now carries `kwin-rules.txt`. Window titles are removed from it, since a title can carry a document name or a web address and nothing about placement depends on it. The rule's application, its window class and its position, size and desktop settings are all kept ([#1030](https://github.com/fuddlesworth/PlasmaZones/pull/1030)).
@@ -49,6 +51,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Remembered positions are found on subdivided monitors**: a floating window's position is stored under the physical monitor while the rest of PlasmaZones asks by virtual screen, so the lookup missed and the window stayed where it was ([#1031](https://github.com/fuddlesworth/PlasmaZones/pull/1031)).
 - **Leaving windowed fullscreen restores the window properly**: the check that cleared the maximized state read a flag that is still set at that moment on Wayland, so it always skipped, and KWin then put the window straight back to the maximized area over the restore ([#1031](https://github.com/fuddlesworth/PlasmaZones/pull/1031)).
 - **The desktop-switch guard works on subdivided monitors**: the check that rejects an out-of-date screen announcement compared two different kinds of screen name, so it never matched and never rejected anything. It also read the desktop number through a wrapper it was not unwrapping, which made every number come out as zero ([#1031](https://github.com/fuddlesworth/PlasmaZones/pull/1031)).
+- **A closing window in a scrolling strip gets to finish its animation**: the remaining columns moved into the gap the moment a window closed, so the closing window played its animation over a strip that had already settled. PlasmaZones waits out that animation before moving the neighbours, and that wait was being skipped on every close. Closing a window changes how many windows a monitor holds, and that count change had the monitor's scrolling settings re-resolved, which handed the strip back to be rebuilt a moment later whether or not anything about it had changed. The rebuild now waits like the rest of the close path ([#1027](https://github.com/fuddlesworth/PlasmaZones/pull/1027)).
 
 ## [3.4.5] - 2026-08-31
 
@@ -71,7 +74,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Focusing a window on another desktop brings its column into view**: activating a window from the task switcher or the taskbar when it lives on another desktop switched to that desktop but left the strip where it was, so the window you asked for could be off the side of the screen. The strip moved its focus in the background but the desktop you arrived on was never told to redraw, because every position matched what it had stored. A focus that arrives while another desktop is still current is now remembered and applied when that desktop comes up ([#1021](https://github.com/fuddlesworth/PlasmaZones/pull/1021)).
 - **Maximize to Screen Edges fills the screen for a window with a set height**: the feature added last release only widened a window that had been given a fixed or preset height, so it went the full width of the screen at its short height rather than filling it. With Center short columns turned on it then sat marooned in the middle of the screen while the maximize button claimed it was full. A column filling the screen edge to edge now ignores its windows' height settings for as long as it is in that state, and gives them back exactly as they were when you restore it ([#1021](https://github.com/fuddlesworth/PlasmaZones/pull/1021)).
 - **A video going fullscreen on a scrolling monitor covers the screen**: making a video fullscreen in a window on the strip, in Vesktop or any other application, gave the fullscreen surface the size of the monitor but the position of its column, so it hung off the edge and showed as a black band where the column had been, with the rest of the desktop pushed out of view. A window taking its own fullscreen now covers the monitor it is on, whether its column was on screen or parked off the side, and scrolling the strip with the wheel leaves the fullscreen first so the strip and the window never disagree. Keyboard scrolling still leaves the fullscreen in place, which needs a wire change to fix ([#1026](https://github.com/fuddlesworth/PlasmaZones/pull/1026)).
-- **A closing window in a scrolling strip gets to finish its animation**: the remaining columns moved into the gap the moment a window closed, so the closing window played its animation over a strip that had already settled. PlasmaZones waits out that animation before moving the neighbours, and that wait was being skipped on every close. Closing a window changes how many windows a monitor holds, and that count change had the monitor's scrolling settings re-resolved, which handed the strip back to be rebuilt a moment later whether or not anything about it had changed. The rebuild now waits like the rest of the close path ([#1027](https://github.com/fuddlesworth/PlasmaZones/pull/1027)).
 
 ## [3.4.4] - 2026-08-30
 
@@ -2089,7 +2091,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...HEAD
+[3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
 [3.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.4...v3.4.5
 [3.4.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.3...v3.4.4
 [3.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.2...v3.4.3

@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.4.6",
+            "date": "2026-09-01",
+            "highlights": [
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1029, #1030)",
+                "Fixed: maximizing a window on a scrolling monitor fills the screen and stays filled, instead of shrinking back a moment later or hanging a gap's width off the edge (#1031, #1033)",
+                "Fixed: a window snapped into a zone on a second monitor is no longer recomputed onto the primary one (#1032)",
+                "Fixed: floating a window puts it back where that window itself was, on the monitor it is on, rather than borrowing a position from another window or another monitor (#1030, #1031)",
+                "Fixed: windows opened past a tiling layout's window limit now float as the overflow setting says, and no longer break focus follows mouse for the rest of the session (#1030, #1031)",
+                "Fixed: scrolling the strip from the keyboard leaves a fullscreen video first, the same way the wheel already did (#1029)",
+                "Fixed: switching virtual desktops quickly no longer has the KWin effect act on an answer meant for the desktop it just left (#1030)",
+                "Fixed: a closing window in a scrolling strip gets to finish its animation before the other columns move in (#1027)",
+                "Fixed: the support report keeps the compositor log it was discarding, records KWin's own window rules, redacts rule names and paths outside your home directory, and the archive is created readable only by you (#1030, #1031)"
+            ]
+        },
+        {
             "version": "3.4.5",
             "date": "2026-08-31",
             "highlights": [
