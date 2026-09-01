@@ -1,6 +1,23 @@
 {
     "releases": [
         {
+            "version": "3.4.5",
+            "date": "2026-08-31",
+            "highlights": [
+                "New: windows come back on the virtual desktop they were on when you logged out, instead of all landing on whichever desktop is showing. Put windows back on their virtual desktop, under General \u2192 Session restore, turns it off (#1019)",
+                "New: the support report summarizes your session state rather than dumping session.json, and a new Placement Modes section says which mode each screen resolves to (#1022)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1019)",
+                "Fixed: a detached browser tab or a new window no longer opens on the monitor the last window of that application closed on, and moving a tiled window to another monitor now sticks (#1020)",
+                "Fixed: moving windows between desktops or monitors during a session no longer costs other windows their login restore (#1024)",
+                "Fixed: dropping a window into a zone on a second monitor keeps the snap instead of losing it the moment the drag ends (#1023)",
+                "Fixed: dragging a window out of a scrolling strip no longer leaves it following you onto every desktop (#1021)",
+                "Fixed: focusing a window that lives on another desktop brings its column into view instead of leaving the strip where it was (#1021)",
+                "Fixed: Maximize to Screen Edges fills the screen for a window given a fixed or preset height, rather than only widening it (#1021)",
+                "Fixed: a video going fullscreen in a window on a scrolling strip covers the monitor instead of showing as a black band where its column was (#1026)",
+                "Fixed: the Session restore settings text is translated in German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish (#1025)"
+            ]
+        },
+        {
             "version": "3.4.4",
             "date": "2026-08-30",
             "highlights": [

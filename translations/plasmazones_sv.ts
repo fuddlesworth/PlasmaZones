@@ -7660,19 +7660,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="374"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="522"/>
         <source>Session restore</source>
-        <translation type="unfinished"></translation>
+        <translation>Sessionsåterställning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="376"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="536"/>
         <source>Put windows back on their virtual desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Placera tillbaka fönster på deras virtuella skrivbord</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
         <source>logout</source>
-        <translation type="unfinished"></translation>
+        <translation>logga ut</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="524"/>
@@ -13635,7 +13635,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="532"/>
         <source>After you log back in, each window returns to the desktop it was on. Without this, every window reopens on whichever desktop is showing when you log in.</source>
-        <translation type="unfinished"></translation>
+        <translation>När du loggar in igen återgår varje fönster till det skrivbord det låg på. Utan detta öppnas alla fönster på det skrivbord som visas när du loggar in.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="558"/>
@@ -21550,7 +21550,7 @@
         <translation>Fliken för ett fönster som ber om uppmärksamhet.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="696"/>
         <source>Untitled window</source>
         <translation>Namnlöst fönster</translation>
     </message>
