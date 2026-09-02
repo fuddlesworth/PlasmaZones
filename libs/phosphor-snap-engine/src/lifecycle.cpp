@@ -415,15 +415,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             // places by zone geometry and never consults this.)
             const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
             rec->windowId = windowId;
-            // The take above removed the only record for this instance, so the
-            // record() below lands on the APPEND branch and copies this record
-            // wholesale. Without clearing here, that re-arms the cross-desktop
-            // one-shot under the LIVE windowId, and a later mid-session reopen
-            // would teleport the window to a stale recorded desktop. The window
-            // is being restored right now, so the persisted context is spent
-            // whether or not the desktop restore itself fired — it takes an
-            // early "already home" exit without spending the flag.
-            rec->fromPersistedSession = false;
             m_windowTracker->placementStore().record(*rec);
 
             // The record (and its float-back geometry) is now re-bound to the live
