@@ -403,14 +403,6 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
 
-    // Cross-desktop session restore. Registered on the mode-neutral base
-    // registry rather than any of the three per-mode ones for the same reason
-    // the window-appearance block below lives here: all three engines read the
-    // one value, so filing it under snapping/tiling/scrolling would make the
-    // key's home imply a scope it does not have.
-    REGISTER_BOOL_SETTING("restoreWindowsToDesktopOnLogin", restoreWindowsToDesktopOnLogin,
-                          setRestoreWindowsToDesktopOnLogin)
-
     REGISTER_BOOL_SETTING("showWindowBorder", showWindowBorder, setShowWindowBorder)
     REGISTER_VALIDATED_STRING_SETTING("windowBorderScope", windowBorderScope, setWindowBorderScope,
                                       isWindowScopeToken(requested))

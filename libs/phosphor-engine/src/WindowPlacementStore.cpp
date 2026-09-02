@@ -18,10 +18,10 @@ namespace PhosphorEngine {
 namespace {
 Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
 
-// Instance-identity match for STORE keys. The predicate — including its refusal
-// to fuzzy-match a separator-less id — now lives in PhosphorIdentity so the
-// daemon's cross-desktop restore matches records the same way rather than
-// hand-copying the contract into another library.
+// Instance-identity match for STORE keys. The predicate, including its refusal
+// to fuzzy-match a separator-less id, lives in PhosphorIdentity so every library
+// that matches records against a window id shares one contract rather than
+// hand-copying it.
 using PhosphorIdentity::WindowId::sameWindowInstance;
 } // namespace
 
@@ -79,23 +79,6 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
                 if (incoming.kind != WindowKind::Unknown) {
                     merged.kind = incoming.kind;
                 }
-                // A real engine capture is live truth about where the window is
-                // NOW, so the persisted context this record arrived with has
-                // been superseded: disarm the one-shot cross-desktop restore.
-                // Scoped to the engine-capture branch with the other context
-                // fields, deliberately — a geometry-only write (recordFreeGeometry
-                // and the bringup frame-geometry seed both take that path) leaves
-                // the persisted desktop standing, so it must leave the flag
-                // standing too or the seed would disarm every record before the
-                // first window is ever placed.
-                //
-                // Taken from the INCOMING record rather than hard-cleared: a
-                // genuine live capture always arrives with the flag false, so
-                // the disarm still happens, but deserialize() replays persisted
-                // records through record() and two records that collapse onto
-                // one instance would otherwise disarm each other DURING LOAD,
-                // silently costing those windows their restore.
-                merged.fromPersistedSession = incoming.fromPersistedSession;
             }
             for (auto e = incoming.engines.constBegin(); e != incoming.engines.constEnd(); ++e) {
                 merged.engines.insert(e.key(), e.value());
@@ -284,16 +267,30 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                 // collapse instead.
                 continue;
             }
-            if (other.fromPersistedSession && other.virtualDesktop > 0) {
-                // A persisted record for a window that has NOT REOPENED YET.
-                // The live-instance probe above cannot protect it, because a
-                // window that has never opened is by definition not live. The
-                // absorb below carries free geometry and engine slots across
-                // but has no arm for the per-instance virtualDesktop, so
-                // pruning here would silently cost that window the cross-desktop
-                // restore it is still waiting for: log in with two windows of
-                // one app on different desktops, close the first, and the second
-                // loses its desktop memory before it ever opens.
+            if (other.reclaimEligible) {
+                // A sibling that still holds its cross-screen reclaim credit is
+                // not stale duplicate float memory. It is the evidence
+                // peekForReclaim needs to bring a future same-app window home to
+                // the monitor this record remembers, and pruning it strands that
+                // window silently — nothing else reports a bucket that has lost
+                // its last credit.
+                //
+                // The keeper cannot stand in for it. This collapse runs ONLY
+                // from close-capture paths, and keepWindowId is always the
+                // CLOSING window, whose own credit markInstanceClosed revokes
+                // moments later (WindowTrackingAdaptor::windowClosed captures,
+                // then revokes). So absorbing the credit the way engine slots
+                // and geometry are absorbed would hand it to a record that is
+                // about to lose it anyway. Keeping the sibling is the only place
+                // the credit can survive.
+                //
+                // This does not blunt the collapse's own job. The duplicates it
+                // exists to converge are siblings that closed earlier in THIS
+                // session, and markInstanceClosed revokes unconditionally, so
+                // they still prune. What survives is the un-reopened record
+                // deserialized from disk, whose credit serialize re-derived at
+                // the last save from liveness plus the shutdown-close grace.
+                // That is exactly the set peekForReclaim reads.
                 continue;
             }
             bool sharesScreen = false;
@@ -330,6 +327,10 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                     keep.engines.insert(eit.key(), eit.value());
                 }
             }
+            // The sibling's reclaim credit needs no absorbing here: a
+            // credit-bearing sibling is never pruned in the first place (see the
+            // reclaimEligible guard above), so everything reaching this point
+            // has already spent or lost its credit.
             dropClaimsNaming(bucket.at(i).windowId); // same reason as in evictForCapacity
             bucket.removeAt(i);
             removedAny = true;
@@ -397,7 +398,7 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
     const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
 
     // Idempotent: an instance that already claimed keeps the same record, so the
-    // desktop restore and the engine restore that follow it cannot disagree.
+    // open channel and every re-drive that follows it cannot disagree.
     const auto existing = m_openPairing.constFind(instance);
     if (existing != m_openPairing.constEnd()) {
         for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
@@ -622,13 +623,6 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                                   << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
-        // The record has now been consumed by an engine restore and re-bound to
-        // a live instance, so it is no longer "as persisted". Cleared explicitly
-        // because record()'s APPEND branch copies the incoming record wholesale
-        // and would otherwise re-arm the one-shot under the LIVE windowId — and
-        // that branch is the one this call always takes, since the take above
-        // just removed the only record for this instance.
-        rec->fromPersistedSession = false;
         // The consumed record's DEATH metadata belongs to the instance that
         // died, not to the live one adopting its placement — and the append
         // branch would copy both across. Left alone, a dead sibling's revoked
@@ -636,8 +630,7 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
         // window's own close later found the credit already false (harmless)
         // while every save in between read a stale close time for the grace
         // arm. Reset to the defaults a live window is entitled to; its close
-        // re-revokes through markInstanceClosed. Same hazard, same fix as the
-        // fromPersistedSession clear above.
+        // re-revokes through markInstanceClosed.
         rec->reclaimEligible = true;
         rec->closedAtMsecs = 0;
         record(*rec);
@@ -1056,9 +1049,9 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     // loads through WindowTrackingAdaptor's constructor and again through the
     // engines' load delegate at finalizeStartup. Both are bringup, before any
     // window opens, so discarding what is here costs nothing. Calling this
-    // mid-session would not be safe — it would drop every live capture and
-    // re-arm every record's cross-desktop one-shot, teleporting windows that
-    // had already been placed.
+    // mid-session would not be safe. It would drop every live capture and void
+    // every open claim, so windows already placed this session would lose the
+    // record their engines restore from.
     m_byApp.clear();
     m_sequence = 0;
     // Every claim named a record in the store being replaced.

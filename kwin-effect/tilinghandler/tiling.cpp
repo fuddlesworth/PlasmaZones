@@ -2175,17 +2175,39 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // For Wayland windows being retiled to the same zone, skip the
                 // moveResize if the window was previously centered in this zone.
                 // This prevents flicker where the window jumps from its centered
-                // position back to the zone origin, then gets re-centered 200ms later.
-                // It also avoids flooding the Wayland client with configure events
-                // which can freeze terminals like Ghostty.
+                // position back to the zone origin, then gets re-centered by the
+                // reactive pass in slotWindowFrameGeometryChanged. It also avoids
+                // flooding the Wayland client with configure events which can
+                // freeze terminals like Ghostty.
+                //
+                // The re-centring used to run off a 200ms QTimer, which is what
+                // the flicker window described above was; it has been reactive
+                // since the timer was removed, so there is no delay to name here.
+                // The skip is deliberately CONTAINMENT, not fill: an entry only
+                // exists for a window the centring pass placed undersized in
+                // exactly this zone, so "still inside the zone" means "still
+                // sitting where we centred it" for the population the skip was
+                // built for. What makes that reading safe is that the entry can
+                // no longer be stamped from a stale mid-configure frame — the
+                // reactive pass now refuses to run inside the apply bracket and
+                // while a resize configure is in flight — so a live entry
+                // records a genuine refusal, not a lost race. Without those
+                // guards this branch was a self-perpetuating latch: a raced
+                // centring stamped the entry, and the skip then suppressed the
+                // re-assert that would have fixed it, on every later batch.
                 bool skipMoveResize = false;
                 if (snap.window->isWaylandClient()) {
                     auto prevIt = m_centeredWaylandZones.find(snap.windowId);
                     if (prevIt != m_centeredWaylandZones.end() && prevIt.value() == geo) {
                         const QRectF actual = snap.window->frameGeometry();
-                        // Window is still within the zone bounds — already centered
-                        if (actual.x() >= geo.x() - 1 && actual.y() >= geo.y() - 1 && actual.right() <= geo.right() + 2
-                            && actual.bottom() <= geo.bottom() + 2) {
+                        // Window is still within the zone bounds — already
+                        // centered. Exclusive-edge arithmetic (x + width), like
+                        // the centring bounds clamp below, because QRectF::right()
+                        // and QRect::right() disagree by one; a symmetric 1px
+                        // tolerance on every edge covers fractional-scale snap.
+                        if (actual.x() >= geo.x() - 1.0 && actual.y() >= geo.y() - 1.0
+                            && actual.x() + actual.width() <= geo.x() + geo.width() + 1.0
+                            && actual.y() + actual.height() <= geo.y() + geo.height() + 1.0) {
                             skipMoveResize = true;
                             qCDebug(lcEffect) << "Skipping redundant moveResize for centered Wayland window"
                                               << snap.windowId << "zone=" << geo;
@@ -2811,15 +2833,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // ORDER NOTE: this write lands AFTER the apply above, so the
                 // synchronous frameGeometryChanged that apply emits re-enters
                 // slotWindowFrameGeometryChanged while this map still holds the
-                // PREVIOUS batch's zone for this window, and the reactive
-                // centring block there is not behind the apply gate. In
-                // practice the previous entry has already been consumed by the
-                // previous apply's own frame change, and when it survives the
-                // window is normally already at that rect so the near-zero
-                // delta arm consumes it harmlessly. Moving the write above the
-                // apply would close the window entirely; it is left here
-                // because the reactive centring is deliberately re-entrant-
-                // driven and the reordering has not been exercised.
+                // PREVIOUS batch's zone for this window. The reactive centring
+                // block there now sits behind the inGeometryApply gate, so the
+                // mid-apply re-entry returns before reaching the map; a
+                // surviving previous-batch entry is overwritten by the
+                // per-entry write below in the same pass, and is otherwise
+                // consumed only by the next out-of-bracket frame change, where
+                // the window is normally already at that rect and the
+                // near-zero delta arm consumes it harmlessly. Moving the
+                // write above the apply would close the window entirely; it is
+                // left here because the reactive centring is deliberately
+                // re-entrant-driven and the reordering has not been exercised.
                 if (isScrollingScreen(snap.screenId)) {
                     // A COLUMN-MAXIMIZED Wayland window arms the counter-assert,
                     // which is otherwise X11-only. The exclusion below is about
@@ -3156,6 +3180,35 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         return;
     }
 
+    // Never centre from inside the effect's own apply bracket. This is the
+    // same gate the two other consumers in this slot take (the counter-assert
+    // and the virtual-screen crossing check above), and its absence here was
+    // a defect on its own.
+    //
+    // What it costs us without the gate: `applyWindowGeometry` commits at the
+    // top of the batch loop but the target zone is not recorded until the end
+    // of it, so a batch cannot trip its own apply — the map is still empty
+    // when its moveResize lands. A SECOND batch carrying the same zone can,
+    // and the autotile engine emits exactly that on a removal, which it
+    // retiles immediately and uncoalesced (AutotileEngine::onWindowRemoved).
+    // The first batch's entry is live while the second one applies, so the
+    // frame change KWin emits mid-apply — position taken, size still awaiting
+    // the client's ack — reaches the pass with the PRE-resize frame. The pass
+    // reads that stale size as "the client refused to fill its zone" and
+    // issues a competing moveResize at the old size, which supersedes the
+    // enlarge the client was still answering. The window is then pinned a
+    // zone-width short for the rest of its life, because the centring stamps
+    // m_centeredWaylandZones and the redundant-apply skip in
+    // slotWindowsTileRequested honours that entry on every later batch.
+    //
+    // Discussion #1028: a window count dropping 2 -> 1 hands the survivor the
+    // ungapped full-screen zone, and losing that enlarge leaves it centred
+    // with a dead band down each side that belongs to no tiled window — which
+    // is where focus-follows-mouse then finds nothing to focus.
+    if (m_effect->m_daemonGate.inGeometryApply) {
+        return;
+    }
+
     auto it = m_tileTargetZones.find(windowId);
     if (it == m_tileTargetZones.end()) {
         return;
@@ -3163,6 +3216,35 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
 
     const QRect& targetZone = it.value();
     const QRectF actual = w->frameGeometry();
+
+    // Never centre while a resize configure is still in flight. KWin
+    // reconciles moveResizeGeometry to the client's COMMITTED size (a
+    // smaller-than-requested commit included) before it emits
+    // frameGeometryChanged — XdgSurfaceWindow::handleNextWindowGeometry
+    // calls maybeUpdateMoveResizeGeometry, then updateGeometry, which emits
+    // — so at rest the two sizes agree and a genuinely-refusing client
+    // passes this on the very commit that refused. The sizes diverge only
+    // while an unacknowledged resize configure is pending, and a frame event
+    // that arrives THEN (a move applied synchronously, an earlier commit)
+    // still carries the pre-resize size. Centring on it would issue a
+    // competing moveResize at that stale size and supersede the resize the
+    // client is still answering — the enlarge-loss above, minus the second
+    // batch: this closes the same race for a single batch against a slow
+    // client, which the inGeometryApply gate cannot see.
+    //
+    // Skipping does NOT consume the entry: the commit that acknowledges the
+    // configure re-fires this slot, agrees with moveResizeGeometry, and the
+    // pass runs then. Sizes only — positions legitimately diverge mid-move —
+    // and with a tolerance, because moveResizeGeometry holds the requested
+    // fractional rect while the frame is snapped to pixels.
+    if (KWin::Window* kwPending = w->window()) {
+        const QSizeF commanded = QRectF(kwPending->moveResizeGeometry()).size();
+        if (qAbs(commanded.width() - actual.width()) > 1.0 || qAbs(commanded.height() - actual.height()) > 1.0) {
+            qCDebug(lcEffect) << "Autotile centering: configure in flight for" << windowId << "commanded=" << commanded
+                              << "actual=" << actual.size() << "- waiting";
+            return;
+        }
+    }
 
     constexpr qreal MinCenteringDelta = 3.0;
 

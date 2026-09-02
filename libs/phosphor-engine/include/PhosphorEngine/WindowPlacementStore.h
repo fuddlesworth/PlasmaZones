@@ -273,18 +273,18 @@ public:
 
     /// Reserve, once per opening window instance, the record that instance owns.
     ///
-    /// WHY THIS EXISTS. Two independent selectors read a record for the same
-    /// opening window: the daemon's cross-desktop restore through peek() (newest
-    /// first) and the engines' restore through take() / takeForReopen(). At login
-    /// every uuid is fresh, so both always fall to their appId branch, and their
-    /// orders differ — a multi-window app got one record's DESKTOP paired with a
-    /// different record's ZONE. Worse, an already-home window could consume a
-    /// SIBLING's record, so that sibling never returned to its desktop at all.
+    /// WHY THIS EXISTS. The two open channels both select a record for the same
+    /// opening window: the snap channel through SnapAdaptor::resolveWindowRestore
+    /// and the tiling channel through TilingAdaptor::dispatchWindowOpened, which
+    /// reaches take() / takeForReopen(). At login every uuid is fresh, so both
+    /// always fall to their appId branch, and their orders differ. Without a
+    /// reservation an already-home window could consume a SIBLING's record,
+    /// leaving that sibling with nothing to restore from, and a window's later
+    /// re-drives could answer from a different record than its own open used.
     ///
-    /// The fix has to be a RESERVATION, never a predicate. "Skip armed records"
-    /// or "skip non-same-instance records" both look right and both destroy the
-    /// feature: after a logout EVERY record is persisted-armed and NONE is
-    /// same-instance, so such a predicate refuses the whole bucket. Instead the
+    /// The fix has to be a RESERVATION, never a predicate. "Skip non-same-instance
+    /// records" looks right and destroys the behaviour: after a logout NO record
+    /// is same-instance, so such a predicate refuses the whole bucket. Instead the
     /// first daemon-side touch of an opening window claims one record, and every
     /// later reader honours that claim.
     ///
@@ -328,12 +328,19 @@ public:
     /// freshest authority for its app's float-back on that screen, so duplicate
     /// siblings (left by rapid open/close or overlapping short-lived instances)
     /// are stale. Records bound to a still-OPEN window (per the live-instance
-    /// probe) are never pruned, and a pruned sibling's engine slots and
-    /// other-screen geometry are absorbed fill-gaps-only. Without the
-    /// collapse, a consuming reopen — take()'s oldest-first for snap, or a
-    /// probe-excluded tail for the tiling engines — can rotate a reopening
-    /// window between the duplicates: it "opens in a different spot each
-    /// time."
+    /// probe) are never pruned, nor are records that still hold their
+    /// cross-screen reclaim credit: that credit is what homes a future same-app
+    /// window on the monitor the record remembers, and the kept record cannot
+    /// inherit it. PRECONDITION: call this only from a close capture, where
+    /// keepWindowId is the closing window. Every current call site enforces that
+    /// by gating on a non-empty authoritative close screen, and it is what makes
+    /// the credit unabsorbable — markInstanceClosed revokes the keeper's own
+    /// credit immediately after the capture that runs this. A pruned sibling's
+    /// engine slots and other-screen geometry are absorbed fill-gaps-only.
+    /// Without the collapse, a consuming reopen — take()'s oldest-first for
+    /// snap, or a probe-excluded tail for the tiling engines — can rotate a
+    /// reopening window between the duplicates: it "opens in a different spot
+    /// each time."
     ///
     /// Returns true if at least one sibling was removed, so the caller can mark
     /// its persistence dirty: the preceding record() may have been a

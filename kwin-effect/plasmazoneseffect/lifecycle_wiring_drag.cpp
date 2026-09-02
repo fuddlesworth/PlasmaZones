@@ -387,8 +387,11 @@ void PlasmaZonesEffect::connectDragTracker()
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
-                // Release keyboard grab before handling drag end
-                if (m_keyboardGrabbed) {
+                // Release keyboard grab before handling drag end. Effects
+                // guard mirrors the dragStarted lambda: DragTracker signals
+                // are less teardown-exposed than D-Bus replies, but the two
+                // lambdas should not drift.
+                if (m_keyboardGrabbed && KWin::effects) {
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
                 }
@@ -405,6 +408,14 @@ void PlasmaZonesEffect::connectDragTracker()
                 // float→tile toggle overwrites the stored pre-tile rect with
                 // the stale tile zone — permanently corrupting the restore
                 // target (#bug: zed/firefox/plasmazones-settings resize issues).
+                //
+                // Capture the fact BEFORE the erase: the endDrag reply arrives
+                // asynchronously, and the arms that apply no outcome (NoOp,
+                // CancelSnap, error, timeout) must know whether the effect
+                // floated this window at drag start so they can revoke that
+                // optimistic write instead of leaving the float cache latched
+                // on a window the daemon kept tiled.
+                const bool effectFloatedThisDrag = m_dragActivation.floatedWindowIds.contains(windowId);
                 m_dragActivation.floatedWindowIds.remove(windowId);
 
                 // Single entry point for drag-end dispatch. The
@@ -416,7 +427,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 // is gone — cross-VS transitions were applied mid-drag by
                 // slotDragPolicyChanged, and final drop-time actions are
                 // encoded in the PhosphorProtocol::DragOutcome.
-                callEndDrag(w, windowId, cancelled);
+                callEndDrag(w, windowId, cancelled, effectFloatedThisDrag);
 
                 // Bump the per-drag generation so any in-flight beginDrag
                 // reply for the drag we just ended is discarded by the
@@ -447,7 +458,9 @@ void PlasmaZonesEffect::connectDragTracker()
                 // the finish signal (window_connections.cpp), once the
                 // compositor's move genuinely ends — so this call doing nothing
                 // on a multi-button drop is the design, not a dead call.
-                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+                if (KWin::effects) {
+                    m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+                }
             });
 }
 

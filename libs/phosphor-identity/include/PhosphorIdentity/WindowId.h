@@ -90,9 +90,8 @@ inline QString extractInstanceId(const QString& windowId)
  * composites, so a bare id reaching this predicate is foreign input that must
  * not fuzzy-match a composite's uuid component.
  *
- * That asymmetry is the trap this helper exists to hold in one place — it was
- * previously duplicated by hand between the placement store and the daemon's
- * cross-desktop restore, in different libraries, with nothing pinning the two
+ * That asymmetry is the trap this helper exists to hold in one place. It was
+ * previously duplicated by hand between libraries, with nothing pinning the
  * copies together.
  */
 inline bool sameWindowInstance(const QString& lhs, const QString& rhs)
