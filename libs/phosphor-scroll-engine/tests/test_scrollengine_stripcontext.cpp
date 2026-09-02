@@ -1,0 +1,546 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Strip IDENTITY across the daemon/compositor seam
+// (docs/strip-identity-seam-plan.md): which strip a screen is currently
+// showing, how that answer is announced, and the forced batch that rides the
+// same transitions.
+//
+// Its own file rather than more of the smoke suite, per that file's stated
+// rule that a new concern takes a sibling. This is one: it has its own signal
+// (stripContextChanged), its own engine state (the announced-epoch memo and
+// the force-emit arm), and a consumer that is not the geometry pipeline.
+//
+// The two halves are tested together because they fail together. A switch onto
+// a strip nobody touched moves no rect, so the geometry batch is suppressed by
+// the emit-on-change gate and the compositor is never told the strip under it
+// was replaced. The announcement exists to say so, and the force-emit exists so
+// the batch that repopulates the state actually arrives.
+
+#include <PhosphorScrollEngine/ScrollEngine.h>
+
+#include "scrollstriptestutils.h"
+
+#include <QCoreApplication>
+#include <QSignalSpy>
+#include <QtTest>
+
+using namespace PhosphorScrollEngine;
+using ScrollTestUtils::defaultScreenRect;
+using ScrollTestUtils::GeometryFn;
+using ScrollTestUtils::makeProviderEngine;
+
+class TestScrollEngineStripContext : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
+    void desktopSwitchBackEmitsEvenWhenNoRectMoved();
+    void backgroundFocusReportForcesTheReturnBatch();
+    void backgroundFocusThatMovesTheFocusForcesTheReturnBatch();
+    void backgroundFocusArmIsDroppedWhenTheScreenLeavesTheSet();
+    void backgroundFocusArmIsScopedToItsOwnScreen();
+    void identicalSetRePushWithoutASwitchStaysSuppressed();
+    void stripContextIsAnnouncedOnDesktopSwitch();
+    void changedSetSwitchStillAnnouncesTheStayingScreen();
+    void stripContextIsReAnnouncedAfterAScreenLeavesTheSet();
+    void stripContextRePushAnnouncesNothing();
+};
+
+void TestScrollEngineStripContext::desktopSwitchBackEmitsEvenWhenNoRectMoved()
+{
+    // Returning to a desktop whose strip nobody touched emitted NOTHING: every
+    // resolved rect equalled the applied baseline, so applyLayout's
+    // emit-on-change gate suppressed the batch. But that baseline belongs to
+    // the strip that was current BEFORE the switch, so "nothing moved" was
+    // never evidence about what is on screen now — and the compositor, whose
+    // per-window strip state is not keyed by desktop, went on describing the
+    // strip it had been showing. The first scroll verb after the return then
+    // appeared to do nothing.
+    QObject owner;
+    // A provider engine, not makeEngine: applyLayout bails at its work-area
+    // guard long before the emit gate without one, so a bare fixture asserts
+    // nothing about emitting and passes or fails for the wrong reason.
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Away and back with the strip untouched in between. Nothing here moves a
+    // rect on desktop 1, which is the whole point: the pre-fix engine had
+    // nothing to say and said nothing.
+    //
+    // The away desktop is POPULATED for the same reason the sibling tests
+    // populate theirs: an empty destination takes applyLayout's empty-resolve
+    // bail, which clears the view baseline, and the return would then have
+    // something changed to report through the ordinary emit-on-change gate.
+    // The force arm this test exists to pin would not be what carried it.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|d2"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    QVERIFY2(tiledSpy.count() > 0, "switching back to an untouched strip must still emit a batch");
+    // The batch has to carry the strip, not merely be non-empty: an emission
+    // naming no window would satisfy a count check while telling the
+    // compositor nothing about which columns it is now showing.
+    bool sawWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QString id = v.toObject().value(QLatin1String("windowId")).toString();
+            if (id == QStringLiteral("app|a") || id == QStringLiteral("app|b")) {
+                sawWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawWindow, "the switch-back batch must name the strip's windows");
+}
+void TestScrollEngineStripContext::backgroundFocusReportForcesTheReturnBatch()
+{
+    // Activating a window that lives on another desktop (a taskbar click)
+    // can land the focus report while the engine's context for the screen
+    // still resolves the desktop being LEFT. The strip's focus and anchor
+    // move in the background state, but no geometry batch may be emitted for
+    // a context that is not on screen — so the report's centering has to
+    // ride the desktop return. The screen-keyed force flag is not a safe
+    // carrier for that (any interleaved pass can spend it); the pending
+    // focus emit is keyed to the context and is consumed only by a pass that
+    // runs with that context current.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    // Make app|a the ACTIVE window of desktop 1's strip before leaving, so the
+    // background report below genuinely re-activates the active window. Without
+    // this the last window opened is the active one, the report moves the focus
+    // instead, and the test silently drives the mutate arm rather than the
+    // refusal it is written to cover — which is exactly what it used to do.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // Away, with the destination populated so the return leg cannot lean on
+    // the empty-resolve bail resetting the baseline (same reasoning as the
+    // changed-set test below).
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // The activation report for desktop 1's window arrives BEFORE the
+    // engine hears about the switch back — the ordering a taskbar click
+    // produces when KWin activates first and switches second. app|a is the
+    // window the strip already calls active, so the report is refused by
+    // every focus test; the pending emit is what it must still arm.
+    //
+    // Watched from BEFORE the report, not just after the return: the contract
+    // has two halves, and a spy created afterwards can only see one of them. An
+    // engine that answered the report by emitting desktop 1's geometry there
+    // and then — leaking a batch for a strip that is not on screen, which is
+    // the failure the context key exists to prevent — would satisfy every
+    // assertion below while breaking the rule this test names.
+    QSignalSpy duringBackgroundSpy(engine, &ScrollEngine::windowsTiled);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(duringBackgroundSpy.count(), 0);
+
+    // Desktop switch then a plain retile, NOT a set re-push. setActiveScreens
+    // announces the strip context and arms the force flag on its own, so a
+    // return routed through it emits whether or not the report armed anything
+    // — this test would pass with the whole pending mechanism deleted. Moving
+    // the context and retiling leaves the promoted arm as the only carrier.
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    QVERIFY2(tiledSpy.count() > 0, "the return after a background focus report must emit a batch");
+    bool sawWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QString id = v.toObject().value(QLatin1String("windowId")).toString();
+            if (id == QStringLiteral("app|a")) {
+                sawWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawWindow, "the return batch must re-assert the focused window's geometry");
+
+    // The pending arm must be SPENT by that return, not linger. A second
+    // retile with nothing new to say stays suppressed by the emit-on-change
+    // gate; an arm that survived its promotion would force a batch here too.
+    // Another retile rather than a set re-push, because the context has moved
+    // since the last push and setActiveScreens would legitimately announce and
+    // force a batch of its own, which says nothing about the arm.
+    QSignalSpy afterSpy(engine, &ScrollEngine::windowsTiled);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(afterSpy.count(), 0);
+}
+void TestScrollEngineStripContext::backgroundFocusThatMovesTheFocusForcesTheReturnBatch()
+{
+    // The sibling above drives the REFUSED arm: it re-activates the window the
+    // strip already calls active, so windowFocused takes its early return and
+    // the pending emit is armed from there. This drives the other arm — the
+    // report actually MOVES the strip's focus and anchor in the background
+    // state, which is the ordinary taskbar click onto a window that is not the
+    // one that was last active there.
+    //
+    // Both arms have to arm the pending emit, and only this test says so for
+    // the mutate path: without it that insert could be deleted and the whole
+    // suite would stay green.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    // Leave app|a active, so the report for app|b below genuinely moves focus.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy duringBackgroundSpy(engine, &ScrollEngine::windowsTiled);
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(duringBackgroundSpy.count(), 0);
+
+    // The return WITHOUT a set re-push, then a plain retile. That routing is
+    // the whole point of the assertion: setActiveScreens announces the strip
+    // context and arms the force flag by itself, so a return through it proves
+    // nothing about the pending arm — the announce carries the batch either
+    // way. Switching the desktop moves the context without retiling, and the
+    // retile then runs with desktop 1 current and every rect equal to the
+    // baseline (both windows were already visible, so moving the focus between
+    // them shifts nothing). The promoted pending emit is the only thing that
+    // can force a batch out of that pass.
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    QVERIFY2(tiledSpy.count() > 0, "the return after a focus-moving background report must emit a batch");
+    bool sawWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            if (v.toObject().value(QLatin1String("windowId")).toString() == QStringLiteral("app|b")) {
+                sawWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawWindow, "the return batch must re-assert the newly focused window's geometry");
+}
+
+void TestScrollEngineStripContext::backgroundFocusArmIsDroppedWhenTheScreenLeavesTheSet()
+{
+    // A pending arm is context-scoped state, so it must not outlive the screen
+    // leaving the scrolling set. If it did, the screen re-entering later — on a
+    // DIFFERENT desktop — could still find the stale entry and force a batch
+    // for a strip nobody asked about.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Arm the pending emit for desktop 1, then drop the screen entirely.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    engine->setActiveScreens({});
+    QCoreApplication::processEvents();
+
+    // Re-enter on desktop 2, the context the arm does NOT name. The re-entry
+    // announcement legitimately forces its own batch, so the assertion is about
+    // WHICH strip is described: nothing here may re-assert desktop 1's windows.
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QString id = v.toObject().value(QLatin1String("windowId")).toString();
+            QVERIFY2(id != QStringLiteral("app|a") && id != QStringLiteral("app|b"),
+                     "a pending arm for a screen that left the set must not describe its old desktop's strip");
+        }
+    }
+}
+
+void TestScrollEngineStripContext::backgroundFocusArmIsScopedToItsOwnScreen()
+{
+    // The arm is keyed by the whole context, screen included, so a report on S1
+    // must not force a batch out of S2's pass. With a screen-only key — or with
+    // two screens whose keys collided on the desktop number alone — S2's retile
+    // would spend an arm it never earned and re-assert its strip for no reason.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")}, geometry, geometry);
+    // Both screens on the SAME desktop number, so a key that dropped the screen
+    // dimension would compare equal across them.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S2"), 1);
+    engine->windowOpened(QStringLiteral("app|a1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b1"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|a2"), QStringLiteral("S2"), 0, 0);
+    QCoreApplication::processEvents();
+    engine->windowFocused(QStringLiteral("app|a1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // S1 alone goes away and takes a background focus report; S2 never leaves
+    // desktop 1.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|c1"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+    engine->windowFocused(QStringLiteral("app|a1"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    // S2 retiles with nothing of its own changed. The arm belongs to S1's
+    // desktop-1 context, so this pass must stay suppressed.
+    QSignalSpy s2Spy(engine, &ScrollEngine::windowsTiled);
+    engine->retile(QStringLiteral("S2"));
+    QCoreApplication::processEvents();
+    QCOMPARE(s2Spy.count(), 0);
+
+    // And S1's own return still gets it, so the scoping did not simply lose it.
+    QSignalSpy s1Spy(engine, &ScrollEngine::windowsTiled);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->retile(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(s1Spy.count() > 0, "the screen that armed the pending emit must still get its forced batch");
+}
+
+void TestScrollEngineStripContext::identicalSetRePushWithoutASwitchStaysSuppressed()
+{
+    // The negative control for the test above, and the reason the force is
+    // armed from the desktop-switch flag rather than from setActiveScreens
+    // itself. updateEngineScreens re-derives and re-pushes the same set
+    // routinely; if THAT forced an emit, the emit-on-change gate would be
+    // effectively disabled and every redundant re-push would re-feed the
+    // compositor a full batch. A fix for the switch case that also passed this
+    // by emitting unconditionally would be a performance regression wearing a
+    // green test.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->setActiveScreens({QStringLiteral("S1")}); // same set, no context change
+    QCoreApplication::processEvents();
+    QCOMPARE(tiledSpy.count(), 0);
+}
+void TestScrollEngineStripContext::stripContextIsAnnouncedOnDesktopSwitch()
+{
+    // Strip identity has to reach the compositor on a channel of its own.
+    // Carried as a field on the geometry batch it would be silent in exactly
+    // the case that matters, because applyLayout emits on change only and a
+    // switch onto an untouched strip moves no rect.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 1);
+    QCOMPARE(ctxSpy.at(0).at(0).toString(), QStringLiteral("S1"));
+    const QString epochD2 = ctxSpy.at(0).at(1).toString();
+    QVERIFY(!epochD2.isEmpty());
+
+    // Back to desktop 1: a DIFFERENT strip, so a different epoch. Comparing
+    // the two values is the only thing a consumer may do with them, so it is
+    // the only thing asserted here.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 2);
+    QVERIFY2(ctxSpy.at(1).at(1).toString() != epochD2, "each desktop's strip must carry its own epoch");
+}
+void TestScrollEngineStripContext::changedSetSwitchStillAnnouncesTheStayingScreen()
+{
+    // The shape per-context modes actually take. A desktop switch does not
+    // only move contexts, it can change WHICH screens are scrolling: one
+    // monitor's new desktop is tiling, so it leaves the set, and the push that
+    // carries the switch is a set CHANGE rather than an identical-set re-push.
+    //
+    // The screen that stayed scrolling has still had its strip replaced, and
+    // it is the one nothing was watching: the changed-set path announced only
+    // for screens being ADDED, so a stayer got no announcement, and it armed
+    // no force-emit either, so its batch was suppressed by the emit-on-change
+    // gate comparing against the outgoing strip's baseline. Both halves are
+    // asserted here, because either alone leaves the compositor painting the
+    // previous strip's state.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S2"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    // Away to desktop 2, which has a window of its OWN. That matters: an
+    // empty destination strip takes applyLayout's empty-resolve bail, which
+    // clears the view baseline as a side effect and would leave something
+    // changed on the way back, masking whether the force did any work. With
+    // desktop 2 populated the return leg is a genuine no-rect-moved case.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+
+    // The return, as a set CHANGE: S1 goes back to desktop 1 and stays
+    // scrolling while S2 drops out of the set in the same push. That
+    // combination routes through the changed-set branch rather than the
+    // identical-set one, and S1 is a stayer rather than an addition.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    bool announcedS1 = false;
+    for (int i = 0; i < ctxSpy.count(); ++i) {
+        if (ctxSpy.at(i).at(0).toString() == QStringLiteral("S1")) {
+            announcedS1 = true;
+        }
+    }
+    QVERIFY2(announcedS1, "a screen that stays scrolling across a set-changing switch must be announced");
+
+    // And the batch must actually be emitted. app|a is back on the strip it
+    // was last laid out on, so every rect the retile resolves equals the
+    // baseline and the emit-on-change gate suppresses the batch unless the
+    // switch armed the force. Without the arm the compositor is never told the
+    // strip came back, and goes on painting desktop 2's state.
+    // Content-checked, not just counted: S2 dropping out of the set in this
+    // same push can itself produce an emission, so a bare count would pass
+    // without S1's strip ever being re-asserted.
+    bool sawStayingScreenWindow = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            if (v.toObject().value(QLatin1String("windowId")).toString() == QStringLiteral("app|a")) {
+                sawStayingScreenWindow = true;
+            }
+        }
+    }
+    QVERIFY2(sawStayingScreenWindow,
+             "the staying screen's switch must force a batch naming its strip even though no rect moved");
+}
+void TestScrollEngineStripContext::stripContextIsReAnnouncedAfterAScreenLeavesTheSet()
+{
+    // A screen leaving the scrolling set drops its announced epoch, so
+    // re-entering announces again rather than being suppressed by an epoch it
+    // was told about under a previous stint. That drop had no coverage at all:
+    // deleting it broke nothing, while it is what a mode round trip depends on.
+    //
+    // The re-announced epoch is the SAME value, because identity tracks the
+    // context and the context did not move. What changed is that the engine
+    // forgot it had said so.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 1);
+    const QString epoch = ctxSpy.at(0).at(1).toString();
+
+    // Out of the set (the screen's desktop flipped to another mode), then back
+    // on the same context.
+    engine->setActiveScreens({});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+
+    QCOMPARE(ctxSpy.count(), 2);
+    QCOMPARE(ctxSpy.at(1).at(0).toString(), QStringLiteral("S1"));
+    QCOMPARE(ctxSpy.at(1).at(1).toString(), epoch);
+}
+void TestScrollEngineStripContext::stripContextRePushAnnouncesNothing()
+{
+    // The negative control: a re-push with the context unmoved announces
+    // NOTHING, which is what the assertion below pins.
+    //
+    // That is the observable form of epoch stability. An epoch that changed on
+    // every push would announce every time, making the consumer retire its
+    // strip state constantly — throwing away exactly the parked-column
+    // relocations the identity exists to protect, and turning a correctness fix
+    // into a permanent visual regression. Identity must track the CONTEXT, not
+    // the number of times it was asked. The sibling above is where a
+    // re-announcement's epoch VALUE is compared.
+    QObject owner;
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, geometry, geometry);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    QSignalSpy ctxSpy(engine, &ScrollEngine::stripContextChanged);
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCoreApplication::processEvents();
+    QCOMPARE(ctxSpy.count(), 0);
+}
+
+QTEST_GUILESS_MAIN(TestScrollEngineStripContext)
+#include "test_scrollengine_stripcontext.moc"

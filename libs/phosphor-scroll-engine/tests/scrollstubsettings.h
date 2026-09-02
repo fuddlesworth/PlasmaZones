@@ -53,6 +53,7 @@ public:
     /// caches the read at refresh, not per relayout.
     int stripAxis = 0;
     bool respectMinimumSize = false;
+    bool centerShortColumns = false;
     bool smartGaps = false;
     bool alwaysCenterSingleColumn = false;
     bool cropStraddlers = false;
@@ -124,6 +125,10 @@ public:
     bool scrollingRespectMinimumSize() const override
     {
         return respectMinimumSize;
+    }
+    bool scrollingCenterShortColumns() const override
+    {
+        return centerShortColumns;
     }
     bool scrollingSmartGaps() const override
     {
@@ -208,7 +213,7 @@ public:
     bool tabIndicatorEnabled = true;
     bool tabIndicatorHideWhenSingleTab = false;
     bool tabIndicatorPlaceWithinColumn = false;
-    int tabIndicatorGap = 5;
+    int tabIndicatorGap = 2;
     int tabIndicatorWidth = 4;
     qreal tabIndicatorLengthProportion = 0.5;
     int tabIndicatorPosition = static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Left);

@@ -99,6 +99,7 @@ private Q_SLOTS:
     void ruleSlotOverwritesTheSeededAxisInTheMergedMap();
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
+    void heightPresetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
     void templatePresetListReplacesSettingsListWholesale();
     void templatePresetHeightsReplaceSettingsHeights();
@@ -570,6 +571,42 @@ void TestScrollEnginePerScreen::presetIndexIsClampedToTheLivePresetList()
 
     const ColumnWidth clampedLow = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(clampedLow.kind, ColumnWidth::Preset);
+    QCOMPARE(clampedLow.presetFraction, 0.25);
+}
+
+void TestScrollEnginePerScreen::heightPresetIndexIsClampedToTheLivePresetList()
+{
+    // The height twin of the slot above. It exists because
+    // ScrollPerScreenKeys::defaultWindowHeightPresetIndex() was the one
+    // per-screen key with no test reference anywhere in the suite, even though
+    // engine_overrides.cpp reads it exactly as it reads the width index — so a
+    // clamp regression on the height side would have shipped green.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightPresets = QStringList{QStringLiteral("0.25"), QStringLiteral("0.5")};
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap tooHigh;
+    tooHigh.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Preset));
+    tooHigh.insert(ScrollPerScreenKeys::defaultWindowHeightPresetIndex(), 9);
+    engine->applyPerScreenConfig(kS1, tooHigh);
+
+    QVariantMap negative;
+    negative.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Preset));
+    negative.insert(ScrollPerScreenKeys::defaultWindowHeightPresetIndex(), -3);
+    engine->applyPerScreenConfig(kS2, negative);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
+
+    const WindowHeight clampedHigh = openedHeight(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(clampedHigh.kind, WindowHeight::Preset);
+    QCOMPARE(clampedHigh.presetFraction, 0.5);
+
+    const WindowHeight clampedLow = openedHeight(engine, kS2, QStringLiteral("app|b"));
+    QCOMPARE(clampedLow.kind, WindowHeight::Preset);
     QCOMPARE(clampedLow.presetFraction, 0.25);
 }
 

@@ -143,7 +143,7 @@ inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-co
 inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
 inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
 /// Per-context scrolling BEHAVIOUR slots — the knobs that had no rule seam
-/// until now; this block holds nine. Seven ride the same per-screen
+/// until now; this block holds ten. Eight ride the same per-screen
 /// override map as the sizing slots above, each read through an
 /// `effective*` accessor that falls back to the global config value —
 /// including ScrollStickyWindowHandling and ScrollStripAxis (the axis
@@ -155,11 +155,12 @@ inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-win
 /// at all: the daemon resolves each per screen and pushes a resolved set to
 /// the compositor (see their own notes).
 inline constexpr QLatin1StringView ScrollAlwaysCenterSingleColumn{"scroll-always-center-single-column"};
+inline constexpr QLatin1StringView ScrollCenterShortColumns{"scroll-center-short-columns"};
 inline constexpr QLatin1StringView ScrollRespectMinimumSize{"scroll-respect-minimum-size"};
 inline constexpr QLatin1StringView ScrollCropStraddlers{"scroll-crop-straddlers"};
 inline constexpr QLatin1StringView ScrollFocusNewWindows{"scroll-focus-new-windows"};
 inline constexpr QLatin1StringView ScrollSmartGaps{"scroll-smart-gaps"};
-/// Effect-consumed, unlike the five neighbours above it: the daemon resolves
+/// Effect-consumed, unlike the six neighbours above it: the daemon resolves
 /// it per screen and pushes the resolved set to the compositor.
 inline constexpr QLatin1StringView ScrollFocusFollowsMouse{"scroll-focus-follows-mouse"};
 /// Effect-consumed like the toggle it caps, but through a different channel:

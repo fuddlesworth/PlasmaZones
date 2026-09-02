@@ -1106,6 +1106,7 @@ Q_SIGNALS:
     void scrollingFocusFollowsMouseMaxScrollChanged();
     void scrollingStickyWindowHandlingChanged();
     void scrollingRespectMinimumSizeChanged();
+    void scrollingCenterShortColumnsChanged();
     void scrollingRestoreStripsOnLoginChanged();
     void scrollingRestoreFloatedWindowsOnLoginChanged();
     void scrollingKeepFloatingAboveChanged();
@@ -1130,6 +1131,7 @@ Q_SIGNALS:
     void scrollingIncreaseColumnWidthShortcutChanged();
     void scrollingDecreaseColumnWidthShortcutChanged();
     void scrollingMaximizeColumnShortcutChanged();
+    void scrollingMaximizeToEdgesShortcutChanged();
     void scrollingExpandColumnShortcutChanged();
     void scrollingCycleWindowHeightShortcutChanged();
     void scrollingCycleWindowHeightBackShortcutChanged();

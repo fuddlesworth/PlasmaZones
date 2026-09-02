@@ -553,6 +553,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},
              {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
              {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
+             {CD::scrollingBehaviorGroup(), CD::centerShortColumnsKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::keepFloatingAboveKey()},

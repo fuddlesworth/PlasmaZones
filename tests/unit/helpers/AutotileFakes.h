@@ -171,7 +171,24 @@ class FakeStickyWindowTracking : public QObject, public PhosphorEngine::IWindowT
     Q_OBJECT
 
 public:
-    using QObject::QObject;
+    explicit FakeStickyWindowTracking(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+        // Wired in the CONSTRUCTOR, matching production: WindowTrackingService
+        // installs its probe unconditionally, so every store guard that asks
+        // "is this instance live" gets a real answer. Leaving it opt-in meant
+        // three of the four consuming suites never called wireLiveInstanceProbe
+        // and every `m_liveInstanceProbe && ...` guard in WindowPlacementStore
+        // short-circuited false — i.e. NO window counted as live, which is the
+        // maximally permissive branch of the steal / takeForReopen /
+        // reclaim-eligible logic, and the opposite of what production does.
+        // The save path derives from the same probe (WindowPlacementStore.cpp
+        // around the reclaim-credit write), so an unwired fake silently
+        // changed what got PERSISTED too, not just what got read back.
+        // An empty liveInstances set is the same "nothing is live" answer those
+        // suites had before, so opting in now only ADDS live windows.
+        wireLiveInstanceProbe();
+    }
 
     QSet<QString> stickyWindows;
 
@@ -295,7 +312,14 @@ public:
     {
         return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
     }
-    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool = false) const override
+    /// Stub: the fake has no screen manager, so it fails OPEN exactly as the
+    /// real service does in that case. Tests that need the refusal drive it
+    /// through a FakeScreenProvider-backed service instead.
+    bool geometryBelongsToScreen(const QRect&, const QString&) const override
+    {
+        return true;
+    }
+    std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {
         return std::nullopt;
     }
@@ -317,6 +341,34 @@ public:
     using PhosphorEngine::IWindowTrackingService::clearFreeGeometry;
     void clearFreeGeometry(const QString&) override
     {
+    }
+    /// The four below are overridden EXPLICITLY, not left to the interface
+    /// defaults, even though three of them do nothing.
+    ///
+    /// Production overrides all four. Inheriting the defaults here made the
+    /// divergence invisible — there was no line of source to read, so a suite
+    /// asserting through placementStore() after a cross-mode handoff was
+    /// quietly reading a slot the real service would have downgraded, and
+    /// nothing pointed at why. Recording the calls makes the fake's behaviour
+    /// checkable instead of assumed.
+    QSet<QString> releasedEngineSlots;
+    void releaseEngineSlot(const QString& windowId, const QString& engineId) override
+    {
+        releasedEngineSlots.insert(windowId + QLatin1Char('/') + engineId);
+    }
+    QSet<QString> suspensionFloats;
+    bool isSuspensionFloat(const QString& windowId) const override
+    {
+        return suspensionFloats.contains(windowId);
+    }
+    void clearSuspensionFloat(const QString& windowId) override
+    {
+        suspensionFloats.remove(windowId);
+    }
+    QSet<QString> clearedFreeGeometryByScreen;
+    void clearFreeGeometry(const QString& windowId, const QString& screenId) override
+    {
+        clearedFreeGeometryByScreen.insert(windowId + QLatin1Char('/') + screenId);
     }
     QRect resolveZoneGeometry(const QStringList&, const QString&) const override
     {

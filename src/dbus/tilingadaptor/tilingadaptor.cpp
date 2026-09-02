@@ -162,7 +162,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // Scrolling column maximize. Same shape as the flag above: only
         // meaningful on a tiled entry, and validationError() below rejects
         // the floating and monocle pairs.
-        entry.columnMaximized = obj.value(QLatin1String("columnMaximized")).toBool(false);
+        entry.maximizedToEdges = obj.value(QLatin1String("maximizedToEdges")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
@@ -323,7 +323,47 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             if (m_lifecycleEngines.isEmpty()) {
                 return;
             }
-            Q_EMIT managedScreensChanged(combinedManagedScreens(), desktopSwitch);
+            // Stamp the announce with the desktop each screen was resolved
+            // against. The receiver needs it to reject a late announce (see
+            // the signal's doc); read here, at emit time, so it describes the
+            // set actually being sent rather than whatever was current when
+            // the announce was first queued.
+            const QStringList announced = combinedManagedScreens();
+            QVariantMap screenDesktops;
+            if (m_windowTrackingAdaptor) {
+                // Stamp every screen the daemon can resolve a desktop for, NOT
+                // just the announced (still-managed) ones. The receiver's
+                // destructive half — the demote/pre-tile-restore pass — is
+                // driven by the REMOVED set, i.e. precisely the screens absent
+                // from `announced`. Stamping only the survivors left those
+                // screens unstamped, and the receiver compares just the keys it
+                // was given, so the announce whose whole effect is the restore
+                // was the one announce that could never be rejected as stale.
+                // In the limiting case (switching to a desktop where nothing is
+                // managed) `announced` is empty, the map was empty, and the
+                // receiver skipped its staleness gate outright.
+                //
+                // The cost is a wider gate: the receiver rejects on ANY key
+                // that disagrees, so with per-output desktops (#648) a screen
+                // uninvolved in this switch can now veto an announce whose
+                // managed screens were all in agreement. That is deliberate.
+                // Rejection converges (the daemon re-announces for the desktop
+                // the effect has since reported) while a missed rejection does
+                // not, and the announce this stamp exists to make rejectable
+                // is the one that runs the destructive restore pass.
+                QStringList stampable = announced;
+                if (m_screenManager) {
+                    for (const QString& screenId : m_screenManager->effectiveScreenIds()) {
+                        if (!stampable.contains(screenId)) {
+                            stampable.append(screenId);
+                        }
+                    }
+                }
+                for (const QString& screenId : std::as_const(stampable)) {
+                    screenDesktops.insert(screenId, m_windowTrackingAdaptor->currentDesktopForScreen(screenId));
+                }
+            }
+            Q_EMIT managedScreensChanged(announced, desktopSwitch, screenDesktops);
             relayEnabledChanged();
             // Retry opens parked during the flip (see m_unclaimedOpens):
             // engines have their post-flip screen sets by now. Insertion
@@ -388,6 +428,12 @@ void TilingAdaptor::relayScrollTabStrips(const QString& screenId, const QString&
     // here" from the map shape alone (see the header doc). An empty string is
     // treated the same way: it carries no columns either.
     const bool retracts = stripsJson.isEmpty() || stripsJson == QLatin1String("[]");
+    // NOT change-gated, deliberately, unlike the paint-override relay below.
+    // The gate lives upstream in the scroll engine (m_lastTabStripPayload in
+    // engine_apply.cpp), which only emits on a real model change, so a second
+    // gate here could only ever duplicate that one. The cache below is for
+    // REPLAY (a freshly loaded effect asking what it missed), not for
+    // suppression. testRelayEmitsAndCachesPerScreen pins the repeat emission.
     if (retracts) {
         m_lastScrollTabStrips.remove(screenId);
     } else {
@@ -492,9 +538,13 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
         m_lastScrollTabColorsRelay.remove(windowId);
         return;
     }
-    // Change-gated like every other relay here: the effect compares and
-    // drops an unchanged map, so an unchanged one must not cross the bus at
-    // all (a window with no rule retitles as often as a terminal does).
+    // Change-gated HERE because nothing upstream gates this one: the params are
+    // recomputed per relay from the rule set, so an unchanged map would cross
+    // the bus every time (a window with no rule retitles as often as a terminal
+    // does) and the effect would compare and drop it. Note relayScrollTabStrips
+    // deliberately does NOT gate — the scroll engine already emits only on a
+    // real model change there, so a second gate could only duplicate it. The
+    // two differ on purpose.
     const QVariantMap colors = m_windowTrackingAdaptor->tabColorRuleParams(windowId);
     const auto it = m_lastScrollTabColorsRelay.constFind(windowId);
     if (it != m_lastScrollTabColorsRelay.constEnd() && *it == colors) {
@@ -595,6 +645,15 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
+    // Claim this instance's placement record before any selector reads one, the
+    // same reason the snap channel does it at the head of resolveWindowRestore.
+    // The two open channels and every later re-drive must agree on WHICH record
+    // belongs to this window.
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        auto* svc = m_windowTrackingAdaptor->service();
+        svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
+    }
+
     // Window-rule open routing (RouteToScreen / RouteToDesktop). The WTA owns the
     // rule store + evaluator and the desktop/output-move relay signals. It emits a
     // RouteToDesktop move and, for a RouteToScreen pin onto a DIFFERENT engine-managed
@@ -644,6 +703,28 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     // on a redirect having happened, so a rule pinning the window to the
     // screen it already opened on still outranks the remembered placement
     // (dispatchWindowOpened documents the same distinction).
+    //
+    // Move-release suppression: this announce can be the second half of a
+    // live release/re-announce pair (releaseWindowTracking then re-announce —
+    // m_moveReleasedInstances documents the yank-back this caused). Consume
+    // the one-shot and let the ARRIVAL screen's engine adopt the window where
+    // the user put it.
+    //
+    // Consumed UNCONDITIONALLY, ahead of the allowCrossScreenClaim test rather
+    // than behind it. This announce IS the release's re-announce whichever way
+    // the claim gate already stands, so it is what the one-shot was armed for;
+    // short-circuiting the remove() behind the gate left the entry armed on a
+    // rule-routed re-announce (allowCrossScreenClaim already false), and the
+    // window's NEXT announce — the effect re-announces a live window after a
+    // desktop or activity demotion, with no daemon-side close, see
+    // flushPendingWindowOpens — then spent the stale one-shot suppressing a
+    // reclaim that had nothing to do with the move.
+    if (m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId)) > 0
+        && allowCrossScreenClaim) {
+        qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId
+                             << "re-announced after a live move release — cross-screen reclaim suppressed";
+        allowCrossScreenClaim = false;
+    }
     if (allowCrossScreenClaim) {
         for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
             if (engine->claimCrossScreenReopen(entry.windowId, entry.screenId, qMax(0, entry.minWidth),
@@ -949,6 +1030,10 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // A move-release one-shot for a window that closed instead of
+    // re-announcing dies with it — instance ids are unique, so the entry
+    // could never fire again, but the set must not accumulate corpses.
+    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -986,6 +1071,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     m_lastScrollTabColorsRelay.remove(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -1010,10 +1096,11 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
             ++it;
         }
     }
-    // The two OPEN QUEUES go with them. windowClosed drops all four together,
-    // and this prune is the backstop for a window that never produced a
-    // destroy notification — so covering only the two dedup maps left exactly
-    // the windows this function exists for holding a queue slot.
+    // The two OPEN QUEUES and the move-release one-shot set go with them.
+    // windowClosed drops all five together, and this prune is the backstop for
+    // a window that never produced a destroy notification — so covering only
+    // the two dedup maps left exactly the windows this function exists for
+    // holding a queue slot.
     //
     // Milder than a stale dedup entry (both queues are capped, and a flush or
     // an announce retry drains them wholesale), but a dead entry that reaches
@@ -1024,6 +1111,13 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
     });
     m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
         return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
+    });
+    // Already keyed by instance id, so it is compared against `alive` directly.
+    // A leaked entry can never fire (instance ids are unique to a window), but
+    // the set is otherwise unbounded across a session of drag-out floats and
+    // desktop moves whose windows die without a destroy notification.
+    m_moveReleasedInstances.removeIf([&alive](const QString& instanceId) {
+        return !alive.contains(instanceId);
     });
 }
 
@@ -1048,6 +1142,21 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // Arm the move-release one-shots BEFORE the pipeline gate, mirroring the
+    // bookkeeping above: the window is live and being moved, and its next
+    // announce must not be mistaken for a session restore (see
+    // m_moveReleasedInstances).
+    //
+    // TWO of them, armed together because the same announce is misread in two
+    // independent places and each excuse is consumed at a different moment:
+    // this one by the dispatch below (suppressing the cross-screen reclaim),
+    // the store's by the engine's takeForReopen (suppressing the
+    // reclaim-credit burn). A single flag consumed at the first moment would
+    // already be gone by the second — see markInstanceMovedLive.
+    m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        m_windowTrackingAdaptor->service()->placementStore().markInstanceMovedLive(windowId);
+    }
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }
@@ -1110,6 +1219,7 @@ void TilingAdaptor::clearEngine()
     m_pendingIsDesktopSwitch = false;
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
+    m_moveReleasedInstances.clear();
     m_lastFloatBroadcast.clear();
     m_lastScrollTabColorsRelay.clear();
     m_lastEnabledBroadcast.reset();

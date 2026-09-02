@@ -131,6 +131,7 @@ set(plasmazones_effect_SRCS
     tilinghandler/floatcleanup.cpp
     tilinghandler/tiling.cpp
     tilinghandler/wiring.cpp
+    tilinghandler/wheelchord.cpp
     tilinghandler/scrolltabs.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h

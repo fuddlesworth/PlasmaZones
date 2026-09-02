@@ -297,6 +297,7 @@ Q_SIGNALS:
     void scrollCycleColumnWidthRequested(int delta);
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();
+    void scrollMaximizeToEdgesRequested();
     void scrollExpandColumnRequested();
     void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);

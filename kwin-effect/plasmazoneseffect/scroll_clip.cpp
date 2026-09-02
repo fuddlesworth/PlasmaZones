@@ -9,6 +9,10 @@
 
 #include "plasmazoneseffect.h"
 
+// The lcStripDiag category for the stage 0 seam trace below. Included
+// explicitly rather than leaned on from a unity batch, same rule as the
+// windowanimator.h include below it.
+#include "compositor/effectlogging.h"
 #include "compositor/stripviewanimator.h"
 // plasmazoneseffect.h only forward-declares WindowAnimator; currentValue() below
 // needs the complete type, and unity batching must not be what supplies it.
@@ -128,9 +132,15 @@ QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const ScrollVisualPlacement
     // with this uses frameGeometry().toRect(), so reading the same way is what
     // keeps the drawn and committed centring identical on a fractional-scale
     // output, where the two differ by a pixel.
+    //
+    // A tile whose column is DECLARED state has no centring at all, because
+    // the commit path does none for it: see ScrollVisualPlacement. The offsets
+    // are zero for a client that took the full rect anyway, so this only
+    // changes the refusing client, which the commit leaves at the column
+    // origin.
     const QRect r = frameRect.toRect();
-    const int offsetX = qMax(0, placement.columnSize.width() - r.width()) / 2;
-    const int offsetY = qMax(0, placement.columnSize.height() - r.height()) / 2;
+    const int offsetX = placement.centreInColumn ? qMax(0, placement.columnSize.width() - r.width()) / 2 : 0;
+    const int offsetY = placement.centreInColumn ? qMax(0, placement.columnSize.height() - r.height()) / 2 : 0;
     // The translation to APPLY, not the destination: every consumer adds this
     // to a rect it already has, so the shape matches what the stored delta
     // used to hand them.
@@ -142,15 +152,57 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // Ordered cheapest-first: the empty-map probe is the common-case exit on a
     // desktop with nothing parked, and the delta probe answers before the
     // predicate walk for every never-parked column.
-    if (!w || m_scrollVisualDelta.isEmpty()) {
+    //
+    // The empty-map exit is SKIPPED while the diagnostic category is on, and
+    // that is the whole point rather than an oversight. An empty map is
+    // precisely what a screen with no batch, or one whose entries the strip
+    // retire just dropped, looks like — so exiting here made the MISS trace
+    // below unreachable in one of the two states it exists to report, and the
+    // log read identically to "no strip windows here". The isEmpty() test
+    // stays FIRST so the disabled path pays an inlined size check and only
+    // then an atomic load, never a string hash.
+    if (!w) {
+        return false;
+    }
+    if (m_scrollVisualDelta.isEmpty() && !lcStripDiag().isDebugEnabled()) {
         return false;
     }
     const auto vit = m_scrollVisualDelta.constFind(windowId);
     if (vit == m_scrollVisualDelta.constEnd()) {
+        // A MISS on a window that IS strip-managed is the interesting case, and
+        // reporting only hits made it invisible: a missing entry and a
+        // non-strip window both produced silence, which is the difference the
+        // trace exists to show. The strip-membership resolve is done HERE
+        // rather than by reordering the probes above, so the hot path keeps its
+        // cheapest-first order and pays nothing while the category is off.
+        if (lcStripDiag().isDebugEnabled() && scrollManagedOutputFor(w)) {
+            const StripDiagSample sample{false, {}, {}, false, true};
+            const auto lastIt = m_stripDiagLast.constFind(windowId);
+            if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+                m_stripDiagLast.insert(windowId, sample);
+                qCDebug(lcStripDiag) << "park resolve:" << windowId
+                                     << "placement=MISS (strip-managed, no visual delta) verdict= painted-at-commit";
+            }
+        }
         return false;
     }
     KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
     if (!managed) {
+        // Report and advance the gate. A window that HOLDS a relocation but
+        // resolves no managed output is a real transition — a strip retire, or
+        // a screen mid-change — and returning silently left the gate holding
+        // the pre-transition sample, so the eventual return to that same tuple
+        // was suppressed as unchanged and the whole excursion was invisible in
+        // the log.
+        if (lcStripDiag().isDebugEnabled()) {
+            const StripDiagSample sample{true, vit->stripPos, {}, false, false};
+            const auto lastIt = m_stripDiagLast.constFind(windowId);
+            if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+                m_stripDiagLast.insert(windowId, sample);
+                qCDebug(lcStripDiag) << "park resolve:" << windowId
+                                     << "placement=HIT but no managed output verdict= painted-at-commit";
+            }
+        }
         return false;
     }
     // The rect paintWindow actually draws: the window's expanded band moved
@@ -208,13 +260,50 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // it is actually drawn. This one gates the park reap, the setTransformed
     // flag and the strip-capture anchor election, so getting it wrong either
     // culls a visible column or keeps a parked one painting forever.
-    visual.translate(m_stripViewAnimator->offsetFor(managed));
+    const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+    visual.translate(viewOffset);
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);
     }
     const KWin::Rect g = managed->geometry();
-    return !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
+    const bool parked = !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
+
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). This is the
+    // one place both halves of a parked column's drawn position are in hand at
+    // once: the m_scrollVisualDelta entry (candidate C) and the animator's view
+    // offset (candidate B). Reporting them anywhere else would re-derive them
+    // and could disagree with what the draw actually used.
+    //
+    // Runs per strip window per pass, so it is gated twice: the category is off
+    // by default, and even enabled it only reports when the tuple changes. The
+    // isDebugEnabled() check is not redundant with qCDebug — it keeps the
+    // sample construction and the hash write off the hot path entirely.
+    //
+    // What it costs when the category IS on, since this instrument is read on
+    // the timing it perturbs: the empty-map exit above is skipped, so every
+    // strip-managed window resolves its output once per pass. That resolve is
+    // memoised for the pass, except at the park-reap caller, which runs
+    // outside a pass on purpose and therefore pays it uncached — though there
+    // it iterates the relocation map, so the empty case never reaches it.
+    if (lcStripDiag().isDebugEnabled()) {
+        const StripDiagSample sample{true, vit->stripPos, viewOffset.toPoint(), parked, true};
+        const auto lastIt = m_stripDiagLast.constFind(windowId);
+        if (lastIt == m_stripDiagLast.constEnd() || !(*lastIt == sample)) {
+            m_stripDiagLast.insert(windowId, sample);
+            // outerPadding is reported because it is the one input that differs
+            // systematically between the nested harness and a real session: the
+            // harness assigns no decoration packs, so the band is NARROWER there
+            // and columns cull EARLIER. A harness run that shows pad=0 cannot be
+            // used to reason about the cull boundary at all.
+            const auto padIt = m_windowDecorations.constFind(windowId);
+            const qreal pad = padIt != m_windowDecorations.constEnd() ? padIt->outerPadding : 0.0;
+            qCDebug(lcStripDiag) << "park resolve:" << windowId << "placement=HIT stripPos=" << sample.stripPos
+                                 << "viewOffset=" << sample.viewOffset << "pad=" << pad
+                                 << "verdict=" << (parked ? "CULLED" : "painted");
+        }
+    }
+    return parked;
 }
 
 } // namespace PlasmaZones

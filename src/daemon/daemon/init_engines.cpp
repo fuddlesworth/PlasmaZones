@@ -1462,9 +1462,9 @@ void Daemon::initEnginesAndWiring()
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
     // it borrows are destroyed.
-    m_controlAdaptor =
-        new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor, m_layoutManager.get(),
-                           autotileEngine, m_screenManager.get(), m_compositorBridge, this);
+    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
+                                          m_layoutManager.get(), autotileEngine, m_screenManager.get(),
+                                          m_compositorBridge, m_scrollEngine.get(), m_screenModeRouter.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all

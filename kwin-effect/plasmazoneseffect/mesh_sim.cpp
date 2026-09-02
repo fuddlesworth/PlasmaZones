@@ -6,8 +6,9 @@
 // below are a direct transcription of KWin's wobblywindows effect
 // (updateWindowWobblyDatas / heightRingLinearMean), with Qt's QPointF
 // standing in for KWin's Pair and the resize-only edge-lock logic dropped
-// (this path is move-driven). Constants and the 10 ms fixed step match
-// KWin so the feel is the same.
+// (this path is move-driven). Constants and the 10 ms integration step
+// (full chunks plus a partial final step) match KWin so the feel is the
+// same.
 
 #include "mesh_sim.h"
 
@@ -88,9 +89,9 @@ qreal absSum(const QPointF& p)
     return std::fabs(p.x()) + std::fabs(p.y());
 }
 
-// One 10 ms physics tick. Neighbour-spring accelerations per KWin's
+// One <=10 ms physics tick. Neighbour-spring accelerations per KWin's
 // per-node cases, ring-smoothed, then Verlet-style velocity/position
-// update. Returns acc_sum + vel_sum so the caller can detect settle.
+// update. Leaves accel/velocity in the sim for the caller's settle check.
 void integrateOne(MeshSim& sim, const QRectF& rect, qreal time)
 {
     constexpr int W = MeshSim::kW;
@@ -103,11 +104,11 @@ void integrateOne(MeshSim& sim, const QRectF& rect, qreal time)
     QPointF* pos = sim.position;
     QPointF* acc = sim.accel;
 
-    // Constrained (grip) nodes spring to their origin with the STRONGER
-    // gripStiffness so the grabbed point tracks the window tightly; free
-    // nodes use the soft sheet stiffness `k` for their neighbour springs,
-    // so the body drapes. This split is what makes it read as fabric held
-    // at one point rather than a uniformly wobbling solid.
+    // Constrained (grip) nodes spring to their origin with the separate
+    // gripStiffness so the grabbed point tracks the window; free nodes use
+    // the sheet stiffness `k` for their neighbour springs. The knobs are
+    // split so a pack can stiffen the grip above the sheet for a draped,
+    // held-at-one-point read; the KWin-parity defaults keep them equal.
     const qreal gk = sim.params.gripStiffness;
     auto constrainAccel = [&](int idx) {
         const QPointF move = sim.origin[idx] - pos[idx];
@@ -252,8 +253,6 @@ void initMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const
     // NO throb impulse (a symmetric squeeze = the pudding character). The
     // trailing drape falls out of the soft neighbour springs + the tight
     // grip alone.
-    sim.lastFrameTopLeft = frame.topLeft();
-    sim.accumMs = 0.0;
     sim.settled = false;
     sim.initialized = true;
 }
@@ -264,14 +263,20 @@ void stepMeshSim(MeshSim& sim, const QRectF& frame, qreal deltaMs)
         return;
     }
     updateOrigins(sim, frame);
-    sim.accumMs += qBound(0.0, deltaMs, 200.0);
+    // Drain the WHOLE frame delta, KWin-style: full 10 ms chunks then a
+    // partial final step, leaving no remainder. Carrying a remainder in an
+    // accumulator (the previous scheme) makes some frames advance the
+    // lattice zero times at refresh rates whose frame time is not a
+    // multiple of the step (6.9 ms at 144 Hz), while the window itself
+    // moves every frame — visible jitter.
+    qreal remaining = qBound(0.0, deltaMs, 200.0);
     qreal accSum = 0.0;
     qreal velSum = 0.0;
-    bool stepped = false;
-    while (sim.accumMs >= kIntegrationStepMs) {
-        sim.accumMs -= kIntegrationStepMs;
-        integrateOne(sim, frame, kIntegrationStepMs);
-        stepped = true;
+    const bool stepped = remaining > 0.0;
+    while (remaining > 0.0) {
+        const qreal dt = qMin(remaining, kIntegrationStepMs);
+        remaining -= dt;
+        integrateOne(sim, frame, dt);
     }
     if (stepped) {
         for (int i = 0; i < MeshSim::kCount; ++i) {

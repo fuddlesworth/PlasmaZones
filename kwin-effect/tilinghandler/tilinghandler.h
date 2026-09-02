@@ -232,11 +232,15 @@ public:
     {
         m_savedPreTileForDesktopMove.remove(windowId);
     }
-    bool isScreenQueryPending() const
-    {
-        return m_initialScreenQueryPending;
-    }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
+    /// Flags-settle eviction backstop: re-run the structural placement
+    /// filters for an already-announced window whose keep-above /
+    /// skip-switcher flag just changed, and release it from its engine
+    /// (restoring the captured spawn frame) when it is no longer tileable.
+    /// Wired to KWin::Window's flag-change signals in
+    /// setupWindowConnections; free for windows this handler never
+    /// announced.
+    void reevaluateWindowEligibility(KWin::EffectWindow* window);
     void onDaemonReady();
 
     /// Drop everything the DEAD daemon session owned, at the moment its
@@ -283,7 +287,7 @@ public:
     /// Paired invariant, and the reason this is one function rather than an
     /// inline list: anything added to a per-session map must be dropped here.
     ///
-    /// m_columnMaximizedWindows is the deliberate exception. drainDeadSessionState restores it through the ledger
+    /// m_maximizedToEdgesWindows is the deliberate exception. drainDeadSessionState restores it through the ledger
     /// instead, and that restore RETAINS entries it could not pay, so a retained one survives the restart on purpose:
     /// the window is still holding a KWin maximize bit, and clearing the ledger here would lose the only record that
     /// the bit is owed back. The new session heals it, because the first batch resolves an absent wire flag against
@@ -382,8 +386,10 @@ public:
     void restoreAllWindowedFullscreen();
     /// The maximize INTERCEPTION. A scroll-managed window asked to maximize
     /// (titlebar button, Meta+PgUp, a client-side request) gets that request
-    /// routed to the scrolling engine's maximize-column verb instead, so one
-    /// window has ONE maximize authority. Answers whether the request was
+    /// routed to the scrolling engine's toggleMaximizeToEdges verb instead, so
+    /// one window has ONE maximize authority. Not toggleMaximizeColumn, which
+    /// since the split is a pure WIDTH verb that touches neither KWin's
+    /// maximize bit nor the mirrored state. Answers whether the request was
     /// claimed; an unclaimed one is left entirely alone.
     ///
     /// Writes NOTHING to KWin's maximize bit. The user's own flip stands for
@@ -413,6 +419,10 @@ public:
     /// and append to its deferred windowed-fullscreen release list rather than
     /// releasing inline, because that release must land AFTER the managed-set
     /// write.
+    ///
+    /// NOT slots, despite the names around them: both take non-const reference
+    /// out-parameters, which no queued or direct connection can supply, and
+    /// their only callers are plain calls from slotScreensChanged.
     void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
                                        QStringList& windowedFsToRelease,
                                        QHash<QString, QRectF>& windowedFsPreTileRestore);
@@ -433,8 +443,9 @@ public:
     ///
     /// Both Apply arms insert ledger membership before their compositor call
     /// and then skip that call mid-drag, so the ledger records a bit KWin does
-    /// not hold — and the interception reads membership to decide what to
-    /// cancel to, so a click in the interim cancels the wrong way. Nothing else
+    /// not hold — and the interception compares KWin's bit against membership
+    /// to decide whether anything was requested, so a click in the interim
+    /// reads the disagreement as a fresh toggle. Nothing else
     /// closes it: the gesture end replays geometry only, and the engine emits
     /// on change, so a drag that moves no column schedules no batch.
     void reconcileMaximizeAfterGesture(KWin::EffectWindow* w);
@@ -447,7 +458,7 @@ public:
     {
         bool windowedFullscreen = false;
         bool monocle = false;
-        bool column = false;
+        bool maximizedToEdges = false;
     };
 
     /// Release EVERY compositor-state claim this handler holds on @p windowId
@@ -483,19 +494,48 @@ public:
     /// windowMaximizedStateAboutToChange has fired to refresh the captured
     /// departure rect. Most callers discard it, which is why there is no
     /// [[nodiscard]].
-    bool releaseColumnMaximized(const QString& windowId, KWin::EffectWindow* w);
+    bool releaseMaximizedToEdges(const QString& windowId, KWin::EffectWindow* w);
 
     /// Bulk restore for daemon loss, effect unload, engine disable and daemon
     /// bring-up — the restoreAllWindowedFullscreen shape.
-    void restoreAllColumnMaximized();
+    void restoreAllMaximizedToEdges();
 
     /// True while this handler is inside its own bracketed maximize write.
     /// The effect's windowMaximizedStateChanged lambda consults it so the
-    /// interception cannot fire on the echo of its own cancel.
+    /// interception cannot fire on the echo of this handler's own write.
     bool isSuppressingMaximizeChanged() const
     {
         return m_suppressMaximizeChanged > 0;
     }
+
+    /// Drop KWin's maximize state before a SNAP-mode zone placement lands.
+    ///
+    /// A zone placement is authoritative over the window's geometry, but a
+    /// KWin-maximized window carries two pieces of state a bare moveResize
+    /// never touches: the maximize bit itself (which KWin re-enforces against
+    /// the zone rect, and which the client keeps re-asserting through its
+    /// configure acks) and geometryRestore (which can sit on ANOTHER monitor
+    /// entirely — the screen the window was last maximized on). Left standing,
+    /// the next maximize press toggles OFF and KWin restores the window
+    /// cross-screen; the daemon then reads the teleport as the user moving the
+    /// window off its zone and unsnaps it (the #1028-family report's Brave
+    /// trace: commitSnap on one screen, windowScreenChanged-unsnap two seconds
+    /// later).
+    ///
+    /// Seeds geometryRestore with @p zoneRect FIRST, so the restore moveResize
+    /// inside maximize() goes straight to the zone — one configure, on the
+    /// target screen, with no interim hop through a stale rect whose async
+    /// Wayland ack could land on the wrong output and re-trigger the very
+    /// unsnap this exists to prevent.
+    ///
+    /// Lives on this handler rather than the effect because the maximize
+    /// OWNERSHIP LEDGERS live here: a window whose maximize the engine holds
+    /// (monocle, maximize-to-edges) is skipped — those bits are handed back by
+    /// their own release arms, and writing over them would strand the ledger.
+    /// No-op for a window that is not KWin-maximized, so call sites need no
+    /// pre-check. Callers apply the zone rect immediately after, under their
+    /// own inGeometryApply bracket or not — this method brackets its own write.
+    void demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect);
 
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker
@@ -1012,23 +1052,28 @@ public Q_SLOTS:
     void slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
-    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
-    /// The two halves of slotScreensChanged's removed-screens pass, split out
-    /// because they reach opposite conclusions about the same event and were
-    /// the reason the slot ran to 775 lines. A screen leaves the managed set
-    /// either because the DESKTOP changed (the windows stay owned by that
-    /// desktop's live session, so demote and remember) or because autotile was
-    /// genuinely turned off for it (nothing owns them now, so untrack and
-    /// restore). Both take the caller's `windows` snapshot and append to its
-    /// deferred windowed-fullscreen release list rather than releasing inline,
-    /// because that release must land AFTER the managed-set write.
-    ///
-    /// NOT slots, despite living beside them: both take non-const reference
-    /// out-parameters, which no queued or direct connection can supply, and
-    /// their only callers are plain calls from slotScreensChanged. They sit in
-    /// the private section below with the other screenschanged.cpp helpers, so
-    /// the slots block does not advertise as connectable something that is not.
+    /// @param screenDesktops screenId -> desktop the announced set was resolved
+    ///        against. A desktop-switch announce whose stamp disagrees with what
+    ///        this effect last reported has been overtaken by a newer switch and
+    ///        is dropped — see announceMatchesReportedDesktops.
+    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    /// The strip @p screenId is showing has been replaced (desktop or activity
+    /// switch, sticky-pin change). Retires the strip-scoped paint state this
+    /// process holds for that screen, which is not keyed by desktop and would
+    /// otherwise go on describing the strip that was current before.
+    ///
+    /// @p epoch is compared and nothing else — never parsed, never checked
+    /// against KWin's own current desktop. @p debugLabel is logged only.
+    void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
+
+    /// The daemon is about to dispatch a keyboard strip verb on @p screenId and
+    /// needs any natively-fullscreen tile there released first. Thin: defers
+    /// wholly to leaveNativeFullscreenTiles, which the wheel chord calls
+    /// directly. Safe on a screen this process does not manage, and on one
+    /// holding no fullscreen tile — both are a no-op inside.
+    void slotLeaveNativeFullscreenRequested(const QString& screenId);
+
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
     /// The scroll cap's blocked-window list changed. Its own signal rather
@@ -1076,15 +1121,84 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
+    /// NOT a slot, despite the signal that drives it: its only caller is a
+    /// plain call from slotStripContextChanged, and nothing connects to it.
+    /// It sits here with the other state.cpp helpers so the slots block does
+    /// not advertise as connectable something that is not.
+    /// Drop the state this process holds that belonged to the strip @p screenId
+    /// was showing until now. Called when its strip epoch changes.
+    ///
+    /// @par The retire-set rule
+    /// **Retire an entry when what invalidates it is the STRIP changing. Keep
+    /// it when what invalidates it is the CLIENT responding, or the window
+    /// dying.** The operational test for a map you are about to add: if this
+    /// window were on a DIFFERENT strip, would the entry still be true?
+    ///
+    /// | map | entry means | still true elsewhere? | |
+    /// |---|---|---|---|
+    /// | `m_scrollVisualDelta` | where the window sits ON the strip | no | retire |
+    /// | `StripViewAnimator` motion | how far THIS strip's view travelled | no | retire |
+    /// | `m_scrollCommandedRects` | we commanded R and the client is arguing | yes | keep |
+    /// | `m_scrollOfferedColumn` | the client was offered size S and answered | yes | keep |
+    /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
+    /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
+    ///
+    /// The tab-indicator pair is the one place the rule's answer is overridden
+    /// on purpose, so it is in the table rather than absent from it. Both fail
+    /// the test — they describe the outgoing strip's columns — but retiring
+    /// them would be a REGRESSION, not a fix. The daemon's tab emit is
+    /// change-gated per screen id with no context term, so a switch onto a
+    /// strip whose pills happen to serialise identically re-pushes nothing,
+    /// and a consumer that had cleared them would show an empty band instead
+    /// of a stale one. Retiring them only becomes correct once the engine's
+    /// payload gate is keyed by context, or drops the screen's entry when the
+    /// epoch changes; do that first, then move these two rows.
+    ///
+    /// The rule is DIRECTIONAL and both directions fail, which is why it is
+    /// stated rather than left implicit in the loop body:
+    ///  - retire too little and a stale strip position survives the switch, so
+    ///    a parked column paints at its own strip position plus a stranger's
+    ///    view offset — the bug this whole mechanism exists to stop;
+    ///  - retire too much and the rate-limited counter-assert against a client
+    ///    refusing its geometry is disarmed, and a settled window is re-offered
+    ///    a size it already answered. That shows up as resize churn on a
+    ///    desktop switch and nothing points back to here.
+    ///
+    /// So "sweep everything scroll-related, to be safe" is NOT the safe
+    /// choice; it is the second bug.
+    ///
+    /// The subtle case, and why the test is about an entry's MEANING rather
+    /// than a naming convention: a map can be about a client and still be
+    /// strip-scoped. Something recording "the column rect we offered, on strip
+    /// X" would carry the strip in its meaning and would need retiring.
+    /// `m_scrollOfferedColumn` escapes only because what it stores is the
+    /// client's settled answer, not a strip coordinate.
+    ///
+    /// NOT covered by a test: the effect has no unit-test harness in this tree,
+    /// so nothing turns red if this set is later "tidied" into sweeping all
+    /// four. That is precisely why the rule is written here rather than
+    /// inferred from which maps the loop below happens to skip.
+    void retireStripScopedState(const QString& screenId);
+
     /// Bracketed maximize-mode write, the maximize twin of
     /// applyFullScreenSuppressed: a counter rather than a bool because the
     /// batch consumer and the interception arm both nest their own brackets.
-    /// Both helpers serve in-handler and out-of-handler callers alike; the
-    /// only bracket deliberately NOT routed through this one is the monocle
-    /// apply's, which spans the geometry apply as well as the maximize.
+    /// Both helpers serve in-handler and out-of-handler callers alike. TWO
+    /// brackets are deliberately not routed through this one, and both are
+    /// monocle: the batch apply's, which spans the geometry apply as well as
+    /// the maximize, and restoreAllMonocleMaximized's, which holds one bracket
+    /// across a whole loop of writes instead of paying it per window.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
-    /// Scrolling.toggleMaximizeColumn for @p windowId's column on @p screenId.
+    /// Whether @p windowId is still a live tile on a SCROLLING screen, the
+    /// single predicate every maximize-to-edges write gates on. The screen is
+    /// the strip's notified one, falling back to the window's current output,
+    /// so a window mid-way through a cross-screen move answers for the strip
+    /// that placed it. @p w may be null, in which case only the notified
+    /// record can answer.
+    bool isScrollTiledWindow(const QString& windowId, KWin::EffectWindow* w) const;
+
+    /// Scrolling.toggleMaximizeToEdges for @p windowId's column on @p screenId.
     /// The window is named rather than left implicit because the request can
     /// arrive for a window that is not the strip's active one (a client's own
     /// maximize, a click under focus-follows-mouse), and the engine must act on
@@ -1103,7 +1217,7 @@ private:
     /// does, so a pre-toggle batch on the restore direction now resolves to
     /// Apply and re-maximizes the window mid-flight. See the marker's own
     /// declaration for both bugs it closes.
-    void dispatchMaximizeColumnToggle(const QString& screenId, const QString& windowId);
+    void dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId);
 
     /// Announce, once per window per episode, that a window on a tracked
     /// scrolling screen lost its clip because the screen's physical output is
@@ -1249,6 +1363,19 @@ private:
      *        bucket the rect was found under (unchanged when not found).
      */
     QRectF findPreTileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
+
+    /**
+     * @brief The pre-autotile rect to APPLY for a window now sitting on @p screenId.
+     *
+     * findPreTileGeometry answers a rect from any bucket; this decides what may
+     * safely be done with it. A rect from the same OUTPUT (virtual-screen
+     * re-keys included) comes back whole. A rect from another output is
+     * degraded to its SIZE at @p currentFrame's position, because the extents
+     * are coordinate-space-independent while the origin is not — applying one
+     * whole moves the window to that monitor. Invalid when nothing is stored,
+     * or when a degrade was needed and @p currentFrame is unusable.
+     */
+    QRectF preTileRestoreRectFor(const QString& windowId, const QString& screenId, const QRectF& currentFrame) const;
 
     /**
      * @brief Async daemon-side pre-tile geometry restore for a desktop-switch
@@ -1407,6 +1534,20 @@ private:
     /// strip, not the one holding focus.
     QString wheelTargetScreen() const;
 
+    /// Leaves the OWN fullscreen (a client F11, a video going fullscreen — NOT
+    /// the windowed-fullscreen feature) of every scroll-tracked tile on
+    /// @p screenId. A tile in that state refuses every geometry commit through
+    /// applyWindowGeometry's fullscreen bail while the engine goes on scrolling
+    /// and PARKING its column, so the two owners drift apart for the whole hold.
+    ///
+    /// PRIVATE on purpose. It has exactly two callers, both in-class and both
+    /// USER-VERB dispatch sites: handleWheelChord, and
+    /// slotLeaveNativeFullscreenRequested carrying the daemon's keyboard
+    /// shortcut gate over Scrolling.leaveNativeFullscreenRequested. Both call it
+    /// BEFORE their verb goes out. Not callable from the batch apply — see the
+    /// site comment in wheelchord.cpp for the measurement that rules that out.
+    void leaveNativeFullscreenTiles(const QString& screenId);
+
     /// Drop any banked sub-notch remainder. Called from every path that stops
     /// claiming axis events, so a partial notch cannot outlive the gesture
     /// that produced it.
@@ -1448,6 +1589,10 @@ private:
         bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
+    /// One zero-tick dispatch armed at a time for the settle defer
+    /// (deferWindowRouting); windows deferred in the same event-loop burst
+    /// share the tick.
+    bool m_deferredRouteDispatchScheduled = false;
     /// Per-screen rules-visible active layout ids, pushed by the daemon
     /// (see activeLayoutForScreen). A pure ruleQuery input like
     /// m_scrollingScreens — no lifecycle transitions key on it.
@@ -1545,6 +1690,15 @@ private:
     /// stamp — which is why the teardown clear here needs no repaint bookend.
     /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;
+    /// Last strip epoch seen per screen, from Scrolling.stripContextChanged.
+    ///
+    /// The cache KEY this process never had. Every strip-scoped map here is
+    /// keyed by screen name or window id, so nothing distinguished one screen's
+    /// desktop-1 strip from its desktop-2 strip, and state simply carried
+    /// across. Compared for equality only: the value is opaque by contract, and
+    /// re-deriving identity from KWin's current desktop is wrong on any
+    /// sticky-pinned screen.
+    QHash<QString, QString> m_stripEpochByScreen;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a
@@ -1648,16 +1802,16 @@ private:
     /// window against the user's exit, and the first flag-off batch entry
     /// consumes the marker (a lost clear therefore cannot latch it).
     QSet<QString> m_windowedFsClearInFlight;
-    /// A dispatched toggleMaximizeColumn whose reply has not arrived.
+    /// A dispatched toggleMaximizeToEdges whose reply has not arrived.
     ///
     /// Two distinct bugs need this, and neither is guarded by
-    /// resolveColumnMaximizeAction's contract note any more. That note argued
+    /// resolveMaximizeToEdgesAction's contract note any more. That note argued
     /// no marker was needed BECAUSE the interception cancelled KWin's flip
     /// before dispatching, so a stale batch always resolved to None on its own
     /// terms. The cancel is gone, so the guarantee went with it.
     ///
     /// 1. A batch the daemon emitted BEFORE it dequeued the toggle still
-    ///    carries the pre-toggle columnMaximized. On a RESTORE that is
+    ///    carries the pre-toggle maximizedToEdges. On a RESTORE that is
     ///    (flag=1, inSet=1, kwin=0), which resolves to Apply and re-maximizes
     ///    the window mid-flight; the batch's own geometry apply then commits
     ///    the stale maximized rect, so the window visibly flashes back to full
@@ -1743,7 +1897,7 @@ private:
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
     /// on the same terms as m_monocleMaximizedWindows: membership is shed
     /// only by an arm that actually hands the bit back, never merely because
-    /// the window's situation changed. releaseColumnMaximized therefore
+    /// the window's situation changed. releaseMaximizedToEdges therefore
     /// RETAINS membership when it skips a still-fullscreen window, so a later
     /// batch can do the real restore.
     ///
@@ -1764,7 +1918,7 @@ private:
     /// effect has no column identity — every tile of a maximized column is a
     /// member, and they enter and leave together on the batch that carries
     /// the flag.
-    QSet<QString> m_columnMaximizedWindows;
+    QSet<QString> m_maximizedToEdgesWindows;
     int m_suppressMaximizeChanged = 0;
     /// Suppresses slotWindowFullScreenChanged for the effect's OWN
     /// setFullScreen calls (windowed fullscreen), mirroring

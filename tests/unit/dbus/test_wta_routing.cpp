@@ -273,16 +273,96 @@ private Q_SLOTS:
         });
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
+        // The RETURN is asserted as well as the signal. No production caller
+        // reads it today, so these tests are what holds the "reports a match"
+        // half of the contract; asserting only the spy would leave it untested.
+        QVERIFY2(m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1")),
+                 "a matched RouteToDesktop must report the match to its caller");
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 4);
 
-        // A window with no matching rule emits nothing.
+        // A window with no matching rule emits nothing and reports no match.
         m_wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("nomatch"), QString(), QString(), QString(), 0,
                                  0, QString(), 0, QVariantMap());
         QSignalSpy quietSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
+        QVERIFY(!m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1")));
         QCOMPARE(quietSpy.count(), 0);
+    }
+
+    void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
+    {
+        // A matched RouteToDesktop owns this window's desktop whether or not its
+        // target is usable, so both open channels must suppress the remembered
+        // desktop either way. Reporting no-match here would let the rule and the
+        // recorded desktop fight over one window on one open.
+        //
+        // Stored rules cannot produce such a target — the descriptor validator
+        // rejects it on both routes into the store — so the slot is filled
+        // DIRECTLY here. That is the in-process producer the guard exists for,
+        // and it is why this branch is testable even though it is unreachable
+        // from a rules.json.
+        PhosphorRules::RuleAction desk;
+        desk.type = QString(PhosphorRules::ActionType::RouteToDesktop);
+        desk.params.insert(QString(PhosphorRules::ActionParam::TargetDesktop), 0);
+
+        PhosphorRules::ResolvedActions resolved;
+        QVERIFY(resolved.fillSlot(QString(PhosphorRules::ActionSlot::RouteDesktop), desk));
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY2(m_wta->emitOpenRoutingIfMatched(resolved, QStringLiteral("deskapp|inst")),
+                 "a matched rule with an unusable target still owns this window's desktop");
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testEmitRouteToDesktop_noRouteSlotReportsNoMatch()
+    {
+        // The complementary half: an empty verdict must report no match, or
+        // every window would have its remembered desktop suppressed.
+        PhosphorRules::ResolvedActions resolved;
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->emitOpenRoutingIfMatched(resolved, QStringLiteral("deskapp|inst")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    void testApplyOpenDesktopRouting_reportsNoMatchWithoutARuleStore()
+    {
+        // The defensive guard. false is the "no rule named a desktop" answer, so
+        // an inverted sense would have every window look rule-routed.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst10"), QStringLiteral("deskapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        QVERIFY(!m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst10"), QStringLiteral("DP-1")));
+        QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    // The wire clamp, asserted directly. Its consumers are the reason gates in
+    // SnapAdaptor::resolveWindowRestore (the cross-screen reclaim and the
+    // per-open credit burn), so a garbled value reading as anything but Open
+    // would silently skip a genuine restore. Every named reason must survive the
+    // round trip, and everything else must land on Open rather than on whichever
+    // enumerator happens to sit at that ordinal.
+    void testClampRestoreReasonFromWire_unknownValuesReadAsOpen()
+    {
+        using PhosphorEngine::RestoreReason;
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::Open)),
+                 RestoreReason::Open);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::Unminimize)),
+                 RestoreReason::Unminimize);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::PendingSweep)),
+                 RestoreReason::PendingSweep);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DesktopArrival)),
+                 RestoreReason::DesktopArrival);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DaemonRestartSweep)),
+                 RestoreReason::DaemonRestartSweep);
+
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(9999), RestoreReason::Open);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(-1), RestoreReason::Open);
     }
 
     // A BARE RouteToScreen rule (no SnapToZone) must move the opening window to the

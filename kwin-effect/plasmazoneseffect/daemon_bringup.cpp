@@ -3,6 +3,8 @@
 
 #include "plasmazoneseffect.h"
 
+#include <PhosphorEngine/EngineTypes.h>
+
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
@@ -727,13 +729,13 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                             }
                         },
                         /*releaseSuppressionOnMiss=*/true,
-                        // isOpenPath=false: this sweep re-resolves windows that
+                        // DaemonRestartSweep: this sweep re-resolves windows that
                         // are ALREADY open and on screen, exactly like the
                         // pending-restores sweep. It restores zone geometry and
                         // stacking; it must not drive the cross-screen tile
                         // reclaim and re-home the monitors of every window the
                         // user is looking at because the daemon restarted.
-                        /*isOpenPath=*/false);
+                        PhosphorEngine::RestoreReason::DaemonRestartSweep);
                 }
             });
     }

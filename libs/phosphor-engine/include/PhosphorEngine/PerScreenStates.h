@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QtGlobal>
 
@@ -93,6 +94,33 @@ void renumberDesktopKeyedHash(QHash<PlacementStateKey, ValueT>& hash, const QHas
                 key.desktop);
         }
         hash.insert(key, std::move(value));
+    }
+}
+
+/// Set flavour of renumberDesktopKeyedHash, for an engine's auxiliary
+/// per-context SETS (an armed-context marker with no value of its own). Same
+/// gate, same take-then-reinsert, and the same injectivity precondition. There
+/// is no collision warning here because a set has no value to lose: two keys
+/// mapping onto one simply coalesce into the single entry the caller wanted.
+inline void renumberDesktopKeyedSet(QSet<PlacementStateKey>& set, const QHash<int, int>& oldToNew)
+{
+    if (oldToNew.isEmpty() || !desktopRenumberMappingIsValid(oldToNew)) {
+        return;
+    }
+    QList<PlacementStateKey> moved;
+    for (auto it = set.begin(); it != set.end();) {
+        const auto mapped = oldToNew.constFind(it->desktop);
+        if (mapped != oldToNew.constEnd()) {
+            PlacementStateKey newKey = *it;
+            newKey.desktop = mapped.value();
+            moved.append(newKey);
+            it = set.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (const auto& key : moved) {
+        set.insert(key);
     }
 }
 

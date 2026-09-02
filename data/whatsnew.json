@@ -13,6 +13,69 @@
             ]
         },
         {
+            "version": "3.4.8",
+            "date": "2026-09-02",
+            "highlights": [
+                "Removed: Put windows back on their virtual desktop, and the setting for it, since it moved windows around unpredictably while you were still logging in. Rules that route a window to a desktop are unaffected (#1034)",
+                "Fixed: dropping a dragged window into the scrolling strip lands its column where the drop indicator promised, instead of stranding a wide window alone on the screen with the rest of the strip scrolled out of sight (#1037)",
+                "Fixed: snapping a maximized window into a zone clears the compositor's maximize first, so it stops re-inflating over the zone and no longer teleports to the other monitor when maximized again (#1036)",
+                "Fixed: the last window on a tiled monitor grows into the whole screen instead of sitting centered with dead margins where focus follows mouse went numb (#1035)",
+                "Fixed: with drag-to-float and focus follows mouse on, focus no longer sticks to a dropped floating window, and floating windows are focused by clicking (#1035)",
+                "Fixed: a window minimized while the service was restarting frees its tile instead of holding it for the whole session (#1035)",
+                "Fixed: a rule moving a window to another desktop, or closing a floating window, no longer costs another window of the same app its remembered monitor (#1034)",
+                "Fixed: wobbly windows stop jittering during a drag, and the default wobble now feels like KWin's own (#1038)",
+                "Fixed: resizing an X11 window that draws no shadow, Steam among them, no longer smears its edge pixels across the resize animation (#1039)"
+            ]
+        },
+        {
+            "version": "3.4.6",
+            "date": "2026-09-01",
+            "highlights": [
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1029, #1030)",
+                "Fixed: maximizing a window on a scrolling monitor fills the screen and stays filled, instead of shrinking back a moment later or hanging a gap's width off the edge (#1031, #1033)",
+                "Fixed: a window snapped into a zone on a second monitor is no longer recomputed onto the primary one (#1032)",
+                "Fixed: floating a window puts it back where that window itself was, on the monitor it is on, rather than borrowing a position from another window or another monitor (#1030, #1031)",
+                "Fixed: windows opened past a tiling layout's window limit now float as the overflow setting says, and no longer break focus follows mouse for the rest of the session (#1030, #1031)",
+                "Fixed: scrolling the strip from the keyboard leaves a fullscreen video first, the same way the wheel already did (#1029)",
+                "Fixed: switching virtual desktops quickly no longer has the KWin effect act on an answer meant for the desktop it just left (#1030)",
+                "Fixed: a closing window in a scrolling strip gets to finish its animation before the other columns move in (#1027)",
+                "Fixed: the support report keeps the compositor log it was discarding, records KWin's own window rules, redacts rule names and paths outside your home directory, and the archive is created readable only by you (#1030, #1031)"
+            ]
+        },
+        {
+            "version": "3.4.5",
+            "date": "2026-08-31",
+            "highlights": [
+                "New: windows come back on the virtual desktop they were on when you logged out, instead of all landing on whichever desktop is showing. Put windows back on their virtual desktop, under General \u2192 Session restore, turns it off (#1019)",
+                "New: the support report summarizes your session state rather than dumping session.json, and a new Placement Modes section says which mode each screen resolves to (#1022)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1019)",
+                "Fixed: a detached browser tab or a new window no longer opens on the monitor the last window of that application closed on, and moving a tiled window to another monitor now sticks (#1020)",
+                "Fixed: moving windows between desktops or monitors during a session no longer costs other windows their login restore (#1024)",
+                "Fixed: dropping a window into a zone on a second monitor keeps the snap instead of losing it the moment the drag ends (#1023)",
+                "Fixed: dragging a window out of a scrolling strip no longer leaves it following you onto every desktop (#1021)",
+                "Fixed: focusing a window that lives on another desktop brings its column into view instead of leaving the strip where it was (#1021)",
+                "Fixed: Maximize to Screen Edges fills the screen for a window given a fixed or preset height, rather than only widening it (#1021)",
+                "Fixed: a video going fullscreen in a window on a scrolling strip covers the monitor instead of showing as a black band where its column was (#1026)",
+                "Fixed: the Session restore settings text is translated in German, Georgian, Dutch, Polish, Brazilian Portuguese, Russian and Swedish (#1025)"
+            ]
+        },
+        {
+            "version": "3.4.4",
+            "date": "2026-08-30",
+            "highlights": [
+                "New: Maximize to Screen Edges gives a scrolling column the whole work area with no gaps, and the maximize button, Meta+PgUp and an application's own maximize request all do that on a scrolling monitor. The new shortcut is Meta+Alt+M, and Meta+Alt+F is a width verb again (#1007)",
+                "New: Center short columns, under Scrolling → Window → Window handling, centers the windows of a column that does not fill the screen instead of leaving the space at the end. It is off by default and a window rule can set it per monitor, desktop or activity (#1010)",
+                "New: the support archive records which KWin effects your configuration enables and which ones KWin has actually loaded (#1008)",
+                "Changed: this release changes the message the daemon and the KWin effect speak, so both must be rebuilt and installed together (#1007, #1013)",
+                "Fixed: with more than one virtual desktop on a scrolling monitor, the first click on a window on a desktop you had switched away from works instead of being swallowed (#1005)",
+                "Fixed: coming back to a desktop leaves the strip working, so the first scroll after a return moves it (#1013)",
+                "Fixed: a window that says it is a dialog, stays above others or is skipped by the task switcher a moment after it opens is no longer placed into a column first. Yakuake's dropdown terminal is the case that showed it (#1009, #1011)",
+                "Fixed: Steam's game-launch dialog and its other fixed-size windows are kept out of placement by the built-in Steam rule (#1014)",
+                "Fixed: scrolling past a maximized column moves it once rather than running a second animation on top of the strip's own (#1012)",
+                "Fixed: an expanded rule on the Rules page shows the rule you just edited without collapsing the row (#1016)"
+            ]
+        },
+        {
             "version": "3.4.3",
             "date": "2026-08-29",
             "highlights": [

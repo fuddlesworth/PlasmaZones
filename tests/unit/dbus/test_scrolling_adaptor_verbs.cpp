@@ -310,6 +310,14 @@ private Q_SLOTS:
             // user-reachable in a way the four setters' is not.
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
             QCOMPARE(activeColumn().width, widthBeforeGate);
+            // And its maximize-to-edges twin, which the interception now
+            // dispatches: same gate, pinned on the flag it toggles.
+            // The returned bool is the wire answer the KWin effect's
+            // interception reads to decide whether to fall through to a stock
+            // maximize, so a refusal that answered true would be acted on even
+            // though nothing moved. Asserted here, not just the state.
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
+            QVERIFY(!activeColumn().maximizedToEdges);
 
             // The NO-PROVIDER arm, which this block's own "per-method code"
             // reasoning demands and which only focusColumn and scrollView had.
@@ -331,7 +339,9 @@ private Q_SLOTS:
             m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.43);
             m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 301);
             m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QString());
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
             QCOMPARE(activeColumn().width, widthBeforeNoGate);
+            QVERIFY(!activeColumn().maximizedToEdges);
             QCOMPARE(activeHeight(), heightBeforeNoGate);
 
             m_adaptor->setContextGateProvider([](const QString&) {
@@ -368,6 +378,23 @@ private Q_SLOTS:
             QCOMPARE(activeColumn().width, beforeToggle);
         }
 
+        // toggleMaximizeToEdges: the same ownership and boundary gates,
+        // pinned on the FLAG it toggles. The width intent must never move —
+        // that separation (flag verb vs width verb) is the whole design.
+        {
+            const ColumnWidth widthBeforeEdges = activeColumn().width;
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("HDMI-2"), QString()));
+            QVERIFY(!m_adaptor->toggleMaximizeToEdges(QString(), QString()));
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
+            QVERIFY(activeColumn().maximizedToEdges);
+            QCOMPARE(activeColumn().width, widthBeforeEdges);
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QString()));
+            QVERIFY(!activeColumn().maximizedToEdges);
+            QCOMPARE(activeColumn().width, widthBeforeEdges);
+        }
+
         // The windowId is FORWARDED, not swallowed.
         //
         // ScrollEngine::toggleMaximizeColumn defaults that argument, so an
@@ -402,19 +429,36 @@ private Q_SLOTS:
                      "the NAMED window's column must be the one that changed");
             QCOMPARE(widthOfWindow(QStringLiteral("app|a")), aBefore);
 
-            // THE BOUNDARY CONTRACT, and the only assertion in the suite that
-            // discriminates it. ApiVersion 7 tightened this boolean from "the
+            // The maximize-to-edges twin forwards the windowId on the same
+            // terms — it is the verb the interception actually dispatches, so
+            // a swallowed id here is user-reachable through every titlebar
+            // click on an unfocused window.
+            const auto edgesOfWindow = [st](const QString& id) {
+                const int idx = st->strip().columnOfWindow(id);
+                return idx >= 0 && st->strip().columns().at(idx).maximizedToEdges;
+            };
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|b")));
+            QVERIFY2(edgesOfWindow(QStringLiteral("app|b")), "the NAMED window's column must take the flag");
+            QVERIFY2(!edgesOfWindow(QStringLiteral("app|a")), "the ACTIVE column must be left alone");
+            QVERIFY(m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|b")));
+            QVERIFY(!edgesOfWindow(QStringLiteral("app|b")));
+
+            // THE BOUNDARY CONTRACT, and the only assertions in the suite that
+            // discriminate it. ApiVersion 7 tightened this boolean from "the
             // daemon accepted the request" to "the strip changed", and the
-            // KWin effect steers on it: a false answer is its only cue to put
-            // KWin's maximize bit back, because a call that changes nothing
-            // emits no tile batch to correct the window later.
+            // KWin effect steers on the maximize-to-edges verb's answer: a
+            // false answer is its only cue to put KWin's maximize bit back,
+            // because a call that changes nothing emits no tile batch to
+            // correct the window later.
             //
             // The engine-layer suite cannot see this. It calls the engine
-            // directly, so reverting the adaptor's `return m_engine->...` to
-            // the old unconditional `return true` passes every other test in
-            // the tree. This is the one that goes red.
+            // directly, so reverting either adaptor's `return m_engine->...`
+            // to an unconditional `return true` passes every other test in the
+            // tree. These are the ones that go red.
             QVERIFY2(!m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|nosuchwindow")),
                      "an ACCEPTED call the strip does nothing with must answer false, not true");
+            QVERIFY2(!m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|nosuchwindow")),
+                     "the verb the effect steers on must answer false when the strip does nothing");
         }
 
         // Foreign-screen refusal + the same bound pins as the width twin: a

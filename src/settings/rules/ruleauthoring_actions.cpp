@@ -119,10 +119,10 @@ PickerCategory actionCategory(const QString& type, const QString& cat)
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
             || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
             || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate
-            || type == ActionType::SetScrollAlwaysCenterSingleColumn || type == ActionType::SetScrollRespectMinimumSize
-            || type == ActionType::SetScrollCropStraddlers || type == ActionType::SetScrollFocusNewWindows
-            || type == ActionType::SetScrollSmartGaps || type == ActionType::SetScrollFocusFollowsMouse
-            || type == ActionType::SetScrollFocusFollowsMouseMaxScroll
+            || type == ActionType::SetScrollAlwaysCenterSingleColumn || type == ActionType::SetScrollCenterShortColumns
+            || type == ActionType::SetScrollRespectMinimumSize || type == ActionType::SetScrollCropStraddlers
+            || type == ActionType::SetScrollFocusNewWindows || type == ActionType::SetScrollSmartGaps
+            || type == ActionType::SetScrollFocusFollowsMouse || type == ActionType::SetScrollFocusFollowsMouseMaxScroll
             || type == ActionType::SetScrollStickyWindowHandling || type == ActionType::SetScrollStripAxis) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), kOrderScrolling};
         }
@@ -276,6 +276,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
         return PhosphorI18n::tr("Center a lone column");
+    }
+    if (type == ActionType::SetScrollCenterShortColumns) {
+        return PhosphorI18n::tr("Center short columns");
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr("Respect minimum window sizes");
@@ -660,6 +663,10 @@ QString boolActionStateLabel(const QString& type, bool on)
     // absence.
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
         return on ? PhosphorI18n::tr("Center a lone column") : PhosphorI18n::tr("Leave a lone column where it sits");
+    }
+    if (type == ActionType::SetScrollCenterShortColumns) {
+        return on ? PhosphorI18n::tr("Center short columns")
+                  : PhosphorI18n::tr("Leave the space at the end of a short column");
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return on ? PhosphorI18n::tr("Respect minimum window sizes") : PhosphorI18n::tr("Ignore minimum window sizes");

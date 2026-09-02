@@ -62,6 +62,21 @@ QStringList OverflowManager::applyOverflow(const QString& screenId, const QStrin
         return {};
     }
 
+    // VICTIM SELECTION is positional: everything past tileCount in the state's
+    // own window order floats, which is the TAIL of that order.
+    //
+    // This is deliberate, and it is not always the window that caused the
+    // overflow. Under the default End insert position the newcomer IS the tail,
+    // so the two coincide. Under AsMaster or AfterFocused the newcomer is
+    // placed earlier and an EXISTING window falls past the cap instead — which
+    // is the correct reading of those settings: the user asked for new windows
+    // to take the master slot, so honouring the placement and floating the
+    // displaced tail is what they chose. Floating the newcomer would quietly
+    // cancel the insert position it was just given.
+    //
+    // Positional also keeps recoverIfRoom an exact inverse: it unfloats by
+    // ascending windowIndex, so a window evicted here is the first one back
+    // when room frees up.
     QStringList newlyOverflowed;
     for (int i = tileCount; i < windows.size(); ++i) {
         const QString& wid = windows[i];

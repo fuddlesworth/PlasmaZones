@@ -737,18 +737,28 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     // was on the same screen ID as the autotile target (stale state
     // mid-mode-switch) and the previous screen-gated path skipped cleanup.
     // The tracked-check itself only keeps the handoff log meaningful.
-    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
-        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
-                         << screenId << ")";
-        m_snapEngine->handoffRelease(windowId);
-    }
-    // Scroll twin of the release above: autotile taking ownership must also
-    // evict any stale scroll tracking (handoffRelease is a no-op when the
-    // engine doesn't track the window, same screen-agnostic rationale).
-    if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
-        qCInfo(lcDaemon) << "Cross-engine handoff: releasing scroll state for" << windowId << "(autotile screen"
-                         << screenId << ")";
-        m_scrollEngine->handoffRelease(windowId);
+    //
+    // Ownership gate: this signal also fires as a REFUSAL relay (the engine
+    // announcing "this float did not happen" for a window it does not hold,
+    // e.g. the phantom-key refusal sweep in AutotileEngine::setWindowFloat).
+    // A refusal is not an ownership transfer, and releasing the other engines
+    // on it would strip the very tracking guardedHandoff just recovered,
+    // leaving the window owned by no engine. Only infer a handoff when
+    // autotile actually holds the window.
+    if (m_autotileEngine->isWindowTracked(windowId)) {
+        if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+            qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
+                             << screenId << ")";
+            m_snapEngine->handoffRelease(windowId);
+        }
+        // Scroll twin of the release above: autotile taking ownership must also
+        // evict any stale scroll tracking (handoffRelease is a no-op when the
+        // engine doesn't track the window, same screen-agnostic rationale).
+        if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
+            qCInfo(lcDaemon) << "Cross-engine handoff: releasing scroll state for" << windowId << "(autotile screen"
+                             << screenId << ")";
+            m_scrollEngine->handoffRelease(windowId);
+        }
     }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
@@ -784,15 +794,20 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
     // Cross-engine handoff, screen-agnostic for the same reason as the autotile
     // twin: handoffRelease is a no-op when the engine does not track the window,
     // and a stale same-screen-id comparison used to skip the cleanup.
-    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
-        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(scrolling screen"
-                         << screenId << ")";
-        m_snapEngine->handoffRelease(windowId);
-    }
-    if (m_autotileEngine && m_autotileEngine->isWindowTracked(windowId)) {
-        qCInfo(lcDaemon) << "Cross-engine handoff: releasing autotile state for" << windowId << "(scrolling screen"
-                         << screenId << ")";
-        m_autotileEngine->handoffRelease(windowId);
+    // Ownership gate, same rationale as the autotile twin: a refusal-shaped
+    // emission for a window scroll does not hold is not an ownership transfer,
+    // so releasing the other engines on it would orphan the window.
+    if (m_scrollEngine->isWindowTracked(windowId)) {
+        if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+            qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(scrolling screen"
+                             << screenId << ")";
+            m_snapEngine->handoffRelease(windowId);
+        }
+        if (m_autotileEngine && m_autotileEngine->isWindowTracked(windowId)) {
+            qCInfo(lcDaemon) << "Cross-engine handoff: releasing autotile state for" << windowId << "(scrolling screen"
+                             << screenId << ")";
+            m_autotileEngine->handoffRelease(windowId);
+        }
     }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);

@@ -59,8 +59,16 @@ while [[ $# -gt 0 ]]; do
             echo "  ...              Remaining config-dir files (quick layouts, settings profiles, etc.)"
             echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
-            echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
+            echo "  kwin-effect.log  Recent kwin_wayland journal entries (the effect runs inside it)"
             echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
+            echo "  kwin-effects.txt Enabled/loaded KWin desktop effects (kwinrc [Plugins] + live D-Bus state)"
+            echo "  kwin-rules.txt   KWin's own window rules (kwinrulesrc, window titles redacted)"
+            echo ""
+            echo "The archive is meant to be attached to a bug report. Home paths are redacted,"
+            echo "but it still records your machine hostname in the journal lines, the class and"
+            echo "title of tracked windows, the match patterns from your window rules, and the"
+            echo "manufacturer, model and serial number your monitors report over EDID."
+            echo "Look it over before you post it."
             exit 0
             ;;
         *)
@@ -70,13 +78,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Bind HOME once, before anything expands it. Under `set -u` an unset HOME is
+# a fatal error at the first bare $HOME, which is the CONFIG_DIR default below
+# — three lines above the guard written to warn about exactly that case, so the
+# warning could never fire. Binding it to a defined empty string keeps the
+# guard reachable: every HOME-derived path then fails its own -d or -f test and
+# is skipped, and redact_home takes its passthrough arm.
+HOME="${HOME:-}"
+
 # Resolve output directory to an absolute path so the final message
 # remains useful regardless of later CWD changes.
 if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR="${TMPDIR:-/tmp}"
 fi
-mkdir -p "$OUTPUT_DIR"
-OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
+mkdir -p -- "$OUTPUT_DIR"
+OUTPUT_DIR=$(cd -- "$OUTPUT_DIR" && pwd)
 
 # python3 is required for JSON parsing and home-path redaction. Check up
 # front with a clear error: a missing interpreter failing mid-pipeline
@@ -96,13 +112,18 @@ call_dbus() {
     # exposes complex D-Bus types — which /PlasmaZones does. That crash can
     # discard buffered stdout, losing the report entirely. busctl (systemd)
     # is unaffected and present on every systemd distro, so it is the default.
+    # 90s, well above busctl's own 25s default. The daemon collects the journal
+    # inside this call (three journalctl attempts per section, each bounded at
+    # 12s), so a slow journal can legitimately take over a minute, and the
+    # default would abandon a healthy daemon and report it as not running.
+    local bus_timeout=(--timeout=90)
     if command -v busctl &>/dev/null; then
         local raw
-        if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
+        if raw=$(busctl --user "${bus_timeout[@]}" --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
             # Parse busctl JSON output: {"type":"s","data":["..."]}
             python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["data"][0])' <<< "$raw"
         else
-            raw=$(busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
+            raw=$(busctl --user "${bus_timeout[@]}" call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
@@ -142,13 +163,49 @@ fi
 # ─── Build archive staging directory ──────────────────────────────────────────
 
 STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
+# The staging dir holds journal text, so a Ctrl-C partway through collection
+# must not leave it behind. Cleanup lives on EXIT alone, which is the only
+# terminal arm: a bash signal trap runs its handler and then RESUMES at the
+# interrupted point, so putting the rm on INT/TERM deleted the directory and
+# then carried on writing into it. The signal arms instead exit with the
+# conventional 128+signo, which fires the EXIT trap and cleans up on the way
+# out.
 trap 'rm -rf "$STAGING"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # 1. Markdown report from daemon (already redacted)
 # Use printf to avoid heredoc delimiter collision if the report contains the delimiter.
 printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
+# The daemon cannot know what this script packs around its report, so the
+# archive listing is appended here (outside the <details> block so it stays
+# visible when the report is pasted collapsed).
+cat >> "$STAGING/report.md" <<'EOF'
+
+## Archive Contents
+This report ships in an archive with the raw files behind the summaries above:
+- `config.json`, `session.json` (full window session state), `rules.json` and the remaining config-dir files (quick layouts, layout settings, settings profiles)
+- `data/` with user layouts, algorithms, shaders and animation profiles
+- `journal.log` and `kwin-effect.log` with the raw journal lines
+- `kglobalaccel.txt` with the effective shortcut bindings and `kwin-effects.txt` with the enabled/loaded KWin effects
+- `kwin-rules.txt` with KWin's own window rules, which move and re-desktop windows independently of PlasmaZones (window titles, rule descriptions and client machine names redacted)
+
+`journal.log`, `kwin-effect.log`, `kglobalaccel.txt`, `kwin-effects.txt` and `kwin-rules.txt` are each written only when there was something to record and the redaction step succeeded. A missing one means it had nothing in it or could not be cleaned of home paths.
+
+Text files have home and XDG paths replaced with `~`, `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME`. Non-text files such as shader pack previews are left out, because their embedded metadata can carry paths that redaction cannot reach. When anything is omitted that way, its name is listed in `binary-files-omitted.txt`. If that file is not in this archive, nothing was omitted.
+EOF
+
 # 2. Config directory (redact home paths in text files)
+# Strip a trailing slash before anything builds a pattern from HOME. The
+# redaction lookahead below requires a separator AFTER the match, so a HOME of
+# "/home/u/" would demand two and never match "/home/u/.config", silently
+# disabling redaction everywhere. The C++ side is immune because
+# QDir::homePath() cleans the path for it.
+while [[ ${#HOME} -gt 1 && "$HOME" == */ ]]; do
+    HOME="${HOME%/}"
+done
+
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
 # Guard against empty or root HOME (e.g., running from a systemd service without User=,
 # or running as root where HOME=/ would mangle every absolute path).
@@ -159,20 +216,44 @@ elif [[ "$HOME" = "/" ]]; then
 fi
 redact_home() {
     if [[ -n "${HOME:-}" ]] && [[ "$HOME" != "/" ]]; then
-        # Pass HOME via environment to avoid shell quoting issues (e.g., HOME
-        # containing quotes); re.escape quotes it as a literal. Byte-oriented
-        # (environb, "rb", buffer) so a non-UTF-8 HOME or stray bytes in a
-        # journal line pass through unmangled. Processes line by line like
-        # the old perl -pe, so large inputs are never held fully in memory;
-        # $ in the lookahead matches at each (chomped or final) line end.
-        # Handles both file arguments and piped stdin (no files given).
-        HOME="$HOME" python3 -c '
+        # Pass the paths via environment to avoid shell quoting issues (e.g. a
+        # HOME containing quotes); re.escape quotes each as a literal.
+        # Byte-oriented (environb, "rb", buffer) so a non-UTF-8 path or stray
+        # bytes in a journal line pass through unmangled. Processes line by
+        # line like the old perl -pe, so large inputs are never held fully in
+        # memory; $ in the lookahead matches at each (chomped or final) line
+        # end. Handles both file arguments and piped stdin (no files given).
+        #
+        # XDG_CONFIG_HOME and XDG_DATA_HOME are redacted alongside HOME, and
+        # LONGEST FIRST so a path nested under another is replaced by the more
+        # specific variable rather than half-rewritten by the shorter one.
+        # This mirrors SupportReport::buildRedactions in
+        # src/core/platform/supportreport.cpp, which the header of this script
+        # says to keep in sync: with either XDG var pointed outside home, the
+        # daemon's own report.md was redacted while every file staged here
+        # still carried the absolute path, username included.
+        HOME="$HOME" \
+            PZ_XDG_CONFIG="${XDG_CONFIG_HOME:-}" \
+            PZ_XDG_DATA="${XDG_DATA_HOME:-}" \
+            python3 -c '
 import os, re, sys
-pat = re.compile(re.escape(os.environb[b"HOME"]) + rb"(?=[/\s]|$)", re.M)
+subs = []
+for var, repl in ((b"PZ_XDG_CONFIG", b"$XDG_CONFIG_HOME"),
+                  (b"PZ_XDG_DATA", b"$XDG_DATA_HOME"),
+                  (b"HOME", b"~")):
+    val = os.environb.get(var, b"")
+    if val and val != b"/":
+        subs.append((val.rstrip(b"/"), repl))
+# Longest literal first: with XDG_CONFIG_HOME under HOME, replacing HOME first
+# would leave "~/.config/plasmazones" instead of "$XDG_CONFIG_HOME".
+subs.sort(key=lambda s: len(s[0]), reverse=True)
+pats = [(re.compile(re.escape(v) + rb"(?=[/\s]|$)", re.M), r) for v, r in subs]
 out = sys.stdout.buffer
 def redact(stream):
     for line in stream:
-        out.write(pat.sub(b"~", line))
+        for pat, repl in pats:
+            line = pat.sub(repl, line)
+        out.write(line)
 files = sys.argv[1:]
 if files:
     for f in files:
@@ -185,6 +266,74 @@ else:
     else
         cat
     fi
+}
+
+# Stage a whole tree in ONE python process, reading NUL-separated src/dst pairs
+# on stdin. The per-file alternative spawned an interpreter per file, and a data
+# dir with shader packs, curves and animation profiles is easily 100+ files —
+# ~100 interpreter startups on a path the user runs while a bug is live.
+#
+# Failure is isolated PER FILE, which the surrounding `set -e` plus `pipefail`
+# would not give a shell loop: one unreadable file, or a full disk, warns and
+# the rest of the archive still ships. Losing one config file is worth far less
+# than losing the archive, the same trade the journal sections make.
+#
+# Non-text files are listed, never copied — see the config-loop comment for why
+# (embedded absolute paths in asset metadata that redaction cannot reach, and
+# UTF-16 text that grep -I calls binary).
+redact_pairs() {
+    HOME="${HOME:-}" \
+        PZ_XDG_CONFIG="${XDG_CONFIG_HOME:-}" \
+        PZ_XDG_DATA="${XDG_DATA_HOME:-}" \
+        PZ_BINLIST="$1" \
+        PZ_STAGING="$STAGING" \
+        python3 -c '
+import os, re, sys
+subs = []
+for var, repl in ((b"PZ_XDG_CONFIG", b"$XDG_CONFIG_HOME"),
+                  (b"PZ_XDG_DATA", b"$XDG_DATA_HOME"),
+                  (b"HOME", b"~")):
+    val = os.environb.get(var, b"")
+    if val and val != b"/":
+        subs.append((val.rstrip(b"/"), repl))
+subs.sort(key=lambda s: len(s[0]), reverse=True)
+pats = [(re.compile(re.escape(v) + rb"(?=[/\s]|$)", re.M), r) for v, r in subs]
+binlist = os.environb.get(b"PZ_BINLIST", b"")
+staging = os.environb.get(b"PZ_STAGING", b"").rstrip(b"/")
+
+def is_text(path):
+    # Same call grep -I makes: a NUL byte in the first block means binary.
+    with open(path, "rb") as fh:
+        return b"\0" not in fh.read(8192)
+
+raw = sys.stdin.buffer.read().split(b"\0")
+# Trailing empty element from the final separator.
+pairs = [(raw[i], raw[i + 1]) for i in range(0, len(raw) - 1, 2) if raw[i]]
+for src, dst in pairs:
+    try:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if is_text(src):
+            with open(src, "rb") as fh, open(dst, "wb") as out:
+                for line in fh:
+                    for pat, repl in pats:
+                        line = pat.sub(repl, line)
+                    out.write(line)
+        elif binlist:
+            # Record the ARCHIVE-relative path, so the listing reads the way
+            # the tarball does rather than exposing the staging directory.
+            rel = dst
+            if staging and rel.startswith(staging + b"/"):
+                rel = rel[len(staging) + 1:]
+            with open(binlist, "ab") as bl:
+                bl.write(rel + b"\n")
+    except OSError as exc:
+        sys.stderr.write("Warning: skipping %s (%s)\n"
+                         % (src.decode("utf-8", "replace"), exc))
+        try:
+            os.unlink(dst)
+        except OSError:
+            pass
+' "$@"
 }
 
 # Copy the entire config tree, not just config.json/session.json: rules.json,
@@ -205,24 +354,30 @@ if [[ -d "$CONFIG_DIR" ]]; then
     find -P "$CONFIG_DIR" -maxdepth 3 -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$CONFIG_DIR"/}"
         # Reserved names are generated by this script (report.md above, the
-        # journal logs below) or claimed by the DATA_DIR tree; a config-dir
-        # entry with the same name must not fight them for the slot.
+        # journal logs below) or claimed by the DATA_DIR tree. A config-dir
+        # entry with the same name must not fight them for the slot. Each name
+        # is reserved as a DIRECTORY prefix too: a config directory called
+        # `journal.log` would otherwise stage `journal.log/inner.json`, which
+        # no exact-name pattern matches, and the staging mkdir would then leave
+        # a directory where the later redirect expects a file.
         case "$rel" in
-            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|data|data/*)
+            report.md|report.md/*|journal.log|journal.log/*|journal.raw|journal.raw/*|kwin-effect.log|kwin-effect.log/*|kwin-effect.raw|kwin-effect.raw/*|kglobalaccel.txt|kglobalaccel.txt/*|kglobalaccel.raw|kglobalaccel.raw/*|kwin-effects.txt|kwin-effects.txt/*|kwin-effects.raw|kwin-effects.raw/*|kwin-rules.txt|kwin-rules.txt/*|kwin-rules.raw|kwin-rules.raw/*|binary-files-omitted.txt|binary-files-omitted.txt/*|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac
-        mkdir -p "$STAGING/$(dirname "$rel")"
-        # Redact every text file, not just known extensions: config-dir files
-        # are the likeliest to embed home paths, and an extensionless text
-        # config copied verbatim would leak them into a report meant for
-        # public attachment. grep -I detects binary content.
-        if grep -Iq . "$f" 2>/dev/null; then
-            redact_home "$f" > "$STAGING/$rel"
-        else
-            cp "$f" "$STAGING/$rel"
-        fi
-    done
+        # Emit a src/dst pair; redact_pairs below does the staging in one
+        # process, with per-file failure isolation and the binary policy.
+        #
+        # Non-text files are NOT copied. A NUL byte in the first block means
+        # binary, which covers genuine assets (a shader pack's preview.png)
+        # whose container metadata routinely embeds the authoring tool's
+        # absolute source path — bytes no line-oriented redaction can reach.
+        # It also covers UTF-16/BOM'd text, which would otherwise ship with
+        # home paths intact, the exact case this text detection exists to
+        # prevent. Neither belongs in an archive meant for public attachment
+        # and neither diagnoses a placement bug, so they are listed by name.
+        printf '%s\0%s\0' "$f" "$STAGING/$rel"
+    done | redact_pairs "$STAGING/binary-files-omitted.txt"
 fi
 
 # 3. User data directory (layouts, custom algorithms, shaders, etc.)
@@ -239,17 +394,13 @@ if [[ -d "$DATA_DIR" ]]; then
     fi
     find -P "$DATA_DIR" -maxdepth 5 -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$DATA_DIR"/}"
-        mkdir -p "$STAGING/data/$(dirname "$rel")"
         # Text detection instead of an extension allowlist, matching the
         # config-dir loop: an allowlist misses real text formats (a
         # user-authored .luau algorithm, for one) and would ship them with
-        # home paths intact.
-        if grep -Iq . "$f" 2>/dev/null; then
-            redact_home "$f" > "$STAGING/data/$rel"
-        else
-            cp "$f" "$STAGING/data/$rel"
-        fi
-    done
+        # home paths intact. Same batching, same per-file isolation and same
+        # binary policy as that loop — see the comment there.
+        printf '%s\0%s\0' "$f" "$STAGING/data/$rel"
+    done | redact_pairs "$STAGING/binary-files-omitted.txt"
 fi
 
 # 4. Journal logs
@@ -277,8 +428,9 @@ if command -v journalctl &>/dev/null; then
         local out err exit_code=0
         # Capture stdout and stderr separately so journalctl warnings
         # (e.g., "No entries") don't pollute the log output.
-        err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
-        # Ensure temp file is cleaned up even if the script is killed mid-function.
+        # Inside $STAGING so the EXIT trap covers it too: a RETURN trap does not
+        # fire on a signal, and this function is called up to five times.
+        err=$(mktemp "$STAGING/pz-journal-err.XXXXXX")
         trap 'rm -f "$err"; trap - RETURN' RETURN
         out=$(_jctl "$scope" "$@" \
             --since "$JOURNAL_SINCE min ago" \
@@ -302,17 +454,35 @@ if command -v journalctl &>/dev/null; then
     # Truncate to the most recent MaxLogLines (the entries around a failure),
     # then redact via temp file to avoid SIGPIPE. tail keeps the newest lines,
     # matching capLogLines() in src/core/platform/supportreport.cpp.
+    #
+    # Guarded as a unit: under `set -e` a write failure here (a full disk, a
+    # redactor that will not start) would abort the whole run after the report
+    # and the config tree are already staged, and the EXIT trap would then
+    # delete all of it. One missing diagnostics file is worth far less than the
+    # archive, so the section warns and the run continues. The redacted file is
+    # dropped on failure rather than shipped half-written.
     if [[ -n "${JOURNAL:-}" ]]; then
-        printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
-        tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
+        if ! { printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw" \
+            && tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"; }; then
+            echo "Warning: could not collect the plasmazonesd journal" >&2
+            rm -f "$STAGING/journal.log"
+        fi
         rm -f "$STAGING/journal.raw"
     fi
 
-    # KWin effect logs: the effect runs inside the kwin_wayland process, so its
-    # journal is tagged "kwin_wayland", not "plasmazonesd". Filter to PlasmaZones
-    # lines (every effect log category contains "plasmazones"). Without this a
+    # Compositor logs: the effect runs inside the kwin_wayland process, so its
+    # journal is tagged "kwin_wayland", not "plasmazonesd". Without this a
     # non-loading effect — the most common "drags/shortcuts do nothing" cause —
     # leaves no trace in the archive.
+    #
+    # The whole window is kept. This used to grep for "plasmazones" on the
+    # premise that every effect log category contains it, but KWin installs its
+    # own message handler and does not print the category, so effect lines
+    # arrive bare and only the ones quoting a PlasmaZones window id matched.
+    # Measured on a live session, that dropped 77% of them, and an archive with
+    # no kwin-effect.log at all was read as "the effect logged nothing". The
+    # tail below already bounds the file. See the matching note in
+    # src/core/platform/supportreport.cpp.
     KWIN_JOURNAL=$(collect_journal --user -t kwin_wayland)
     if [[ -z "${KWIN_JOURNAL:-}" ]]; then
         KWIN_JOURNAL=$(collect_journal --user --identifier=kwin_wayland)
@@ -323,11 +493,20 @@ if command -v journalctl &>/dev/null; then
         KWIN_JOURNAL=$(collect_journal --system -t kwin_wayland)
     fi
     if [[ -n "${KWIN_JOURNAL:-}" ]]; then
-        printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw"
-        grep -i plasmazones "$STAGING/kwin-effect.raw" 2>/dev/null \
-            | tail -n "$MAX_LOG_LINES" | redact_home > "$STAGING/kwin-effect.log" || true
+        # Staged through a file for the plasmazonesd path's stated reason: with
+        # printf as the pipeline's producer, tail closing early kills it with
+        # SIGPIPE and pipefail turns that into a failure the old `|| true` had
+        # to swallow — which also swallowed a genuine redact_home failure and
+        # shipped a partially redacted file. Guarded as a unit for the same
+        # reason as the sibling above: a failure warns rather than taking the
+        # whole archive down with it.
+        if ! { printf '%s\n' "$KWIN_JOURNAL" > "$STAGING/kwin-effect.raw" \
+            && tail -n "$MAX_LOG_LINES" "$STAGING/kwin-effect.raw" | redact_home > "$STAGING/kwin-effect.log"; }; then
+            echo "Warning: could not collect the kwin_wayland journal" >&2
+            rm -f "$STAGING/kwin-effect.log"
+        fi
         rm -f "$STAGING/kwin-effect.raw"
-        # grep matched nothing → drop the empty file rather than ship a blank.
+        # Nothing in the window → drop the empty file rather than ship a blank.
         [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"
     fi
 fi
@@ -355,9 +534,96 @@ fi
         busctl --user call org.kde.kglobalaccel /component/plasmazonesd \
             org.kde.kglobalaccel.Component allShortcutInfos 2>&1 || true
     fi
-} | redact_home > "$STAGING/kglobalaccel.txt" || true
+} > "$STAGING/kglobalaccel.raw" || true
+# Redact as its own guarded step, never with `|| true` on the pipeline: that
+# swallowed a genuine redact_home failure, and the -s check below only drops an
+# EMPTY file, so a python3 that died mid-stream shipped a PARTIALLY REDACTED
+# file in an archive whose whole purpose is public attachment. Same
+# warn-and-delete shape the journal sections use.
+if ! redact_home "$STAGING/kglobalaccel.raw" > "$STAGING/kglobalaccel.txt"; then
+    echo "Warning: could not redact the kglobalaccel capture — dropping it" >&2
+    rm -f "$STAGING/kglobalaccel.txt"
+fi
+rm -f "$STAGING/kglobalaccel.raw"
 # Nothing captured (no rc section, no busctl) → drop the blank file.
 [[ -s "$STAGING/kglobalaccel.txt" ]] || rm -f "$STAGING/kglobalaccel.txt"
+
+# 6. KWin desktop effects
+# Other effects interact with PlasmaZones (blur/contrast behind overlays,
+# wobbly windows and translate-style effects fighting placement animations,
+# a second tiling effect grabbing the same windows), so triagers need to know
+# what is enabled. Two views, same rationale as the kglobalaccel capture:
+# kwinrc [Plugins] is the persisted enable/disable state, while the D-Bus
+# properties show what the running compositor actually loaded and what is
+# animating right now — the two can diverge (unsupported effects, crashes,
+# scripted toggles).
+{
+    KWIN_RC="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrc"
+    if [[ -f "$KWIN_RC" ]]; then
+        echo "── kwinrc [Plugins] ──"
+        awk '/^\[/{keep=($0=="[Plugins]")} keep' "$KWIN_RC"
+        echo ""
+    fi
+    if command -v busctl &>/dev/null; then
+        echo "── org.kde.KWin /Effects loadedEffects ──"
+        busctl --user get-property org.kde.KWin /Effects \
+            org.kde.kwin.Effects loadedEffects 2>&1 || true
+        echo ""
+        echo "── org.kde.KWin /Effects activeEffects ──"
+        busctl --user get-property org.kde.KWin /Effects \
+            org.kde.kwin.Effects activeEffects 2>&1 || true
+    fi
+} > "$STAGING/kwin-effects.raw" || true
+# Guarded redaction step (see the kglobalaccel section for why `|| true` on the
+# pipeline is unsafe here).
+if ! redact_home "$STAGING/kwin-effects.raw" > "$STAGING/kwin-effects.txt"; then
+    echo "Warning: could not redact the KWin effects capture — dropping it" >&2
+    rm -f "$STAGING/kwin-effects.txt"
+fi
+rm -f "$STAGING/kwin-effects.raw"
+# Nothing captured (no kwinrc, no busctl) → drop the blank file.
+[[ -s "$STAGING/kwin-effects.txt" ]] || rm -f "$STAGING/kwin-effects.txt"
+
+# 7. KWin window rules
+# KWin's own rules move, resize and re-desktop windows underneath PlasmaZones,
+# so a placement complaint can have nothing to do with PlasmaZones at all. The
+# desktop fields are the ones that repay the capture: Rules::applyDesktops
+# clears the membership list and repopulates it only from desktop IDs that still
+# resolve, so a rule holding stale desktop UUIDs silently makes its windows
+# on-all-desktops — and an empty list is exactly what isOnAllDesktops() means.
+# A rule carrying position/size alongside that relocates the window in the same
+# stroke, which reads as PlasmaZones throwing windows around.
+#
+# The free-text VALUES are dropped. This archive is meant to be attachable to a
+# public issue (the whole reason home paths are redacted), and a window title
+# carries document names, URLs and contact names, while the fields that diagnose
+# a placement rule — wmclass, the desktop/position/size values and their *rule
+# policy numbers — carry none. titlematch/titlerule are kept so a triager can
+# still see that a title match exists and how it is applied.
+#
+# description= is dropped for the same reason as title=: it is the user's own
+# name for the rule, and in practice it quotes the document, site or contact the
+# rule was made for. clientmachine= is a bare hostname. Both carry exactly the
+# class of data the title rule exists to keep out, and neither diagnoses
+# anything. The pattern stays anchored at ^ so titlematch=/titlerule= and the
+# other *rule policy numbers survive untouched.
+{
+    KWIN_RULES_RC="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrulesrc"
+    if [[ -f "$KWIN_RULES_RC" ]]; then
+        sed -E 's/^(title|Title|description|Description|clientmachine|ClientMachine)=.*/\1=<redacted>/' \
+            "$KWIN_RULES_RC"
+    fi
+} > "$STAGING/kwin-rules.raw" || true
+# Guarded redaction step (see the kglobalaccel section for why `|| true` on the
+# pipeline is unsafe here).
+if ! redact_home "$STAGING/kwin-rules.raw" > "$STAGING/kwin-rules.txt"; then
+    echo "Warning: could not redact the KWin rules capture — dropping it" >&2
+    rm -f "$STAGING/kwin-rules.txt"
+fi
+rm -f "$STAGING/kwin-rules.raw"
+# No kwinrulesrc (the common case — the user has never made a KWin rule) → drop
+# the blank file rather than shipping a puzzling empty one.
+[[ -s "$STAGING/kwin-rules.txt" ]] || rm -f "$STAGING/kwin-rules.txt"
 
 # ─── Create archive ──────────────────────────────────────────────────────────
 
@@ -365,7 +631,25 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ARCHIVE_NAME="plasmazones-report-${TIMESTAMP}.tar.gz"
 ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_NAME"
 
-tar -czf "$ARCHIVE_PATH" -C "$STAGING" .
+# The archive carries window titles, rule patterns and the whole config, so it
+# is created owner-only rather than at whatever the ambient umask allows.
+#
+# Built inside the 0700 staging dir and MOVED into place, rather than tarred
+# straight to the destination. The default output dir is $TMPDIR, where this
+# timestamped name is guessable, and `rm -f` followed by `tar` is two syscalls:
+# another local user can recreate a symlink at the path in between, and tar has
+# no O_NOFOLLOW/O_EXCL, so it would write through it. The umask does not help —
+# it governs the mode of a file tar CREATES, not one it follows into. `mv`
+# replaces a symlink rather than writing through it, and the file is never
+# world-reachable before it lands.
+# The build directory is its own mktemp -d (0700), NOT $STAGING — an archive
+# written inside the tree being tarred would try to include itself — and not
+# $STAGING/.. either, which is the world-writable $TMPDIR this guards against.
+ARCHIVE_BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-archive.XXXXXXXXXX")
+trap 'rm -rf "$STAGING" "$ARCHIVE_BUILD_DIR"' EXIT
+ARCHIVE_TMP="$ARCHIVE_BUILD_DIR/$ARCHIVE_NAME"
+(umask 077; tar -czf "$ARCHIVE_TMP" -C "$STAGING" .)
+mv -f "$ARCHIVE_TMP" "$ARCHIVE_PATH"
 
 echo "Support report archive created:"
 echo "  $ARCHIVE_PATH"

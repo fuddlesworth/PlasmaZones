@@ -17,6 +17,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorIdentity/WindowId.h>
 #include "placementlogging.h"
+#include <QGuiApplication>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -250,6 +251,44 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     return result;
 }
 
+namespace {
+// Does this request name an output a zone FRAME may be measured against?
+//
+// With a screen manager present an empty screenId answers false, never the
+// primary output. ScreenManager::physicalScreenFor() deliberately maps an empty
+// id onto the primary screen (the historical findByIdOrName contract its other
+// callers depend on), which is exactly the wrong answer here: every caller of
+// zoneGeometry/multiZoneGeometry computes a window frame and only checks
+// isValid(), so a primary-screen stand-in does not degrade gracefully. It
+// recomputes the zone against the wrong monitor and the window is moved onto
+// that monitor, and on same-sized outputs the two rects differ only by the
+// output origin so nothing downstream can tell them apart. SnapEngine's
+// calculateSnapToLastZone states this contract outright for the disk-restore
+// case, which lands an empty lastUsedScreenId and is supposed to end in noSnap.
+// Callers that genuinely mean the primary screen resolve it and pass its id
+// (WindowTrackingAdaptor::getZoneGeometry does exactly that).
+//
+// With no screen manager at all there is nothing to resolve against, so the
+// primary screen stands in as before.
+bool frameScreenIdResolves(const PhosphorScreens::ScreenManager* screenManager, const QString& screenId)
+{
+    if (!screenManager) {
+        return true;
+    }
+    return !screenId.isEmpty() && screenManager->physicalScreenFor(screenId).isValid();
+}
+
+// The QScreen behind a resolved id, when there is one. A tracked output can
+// legitimately have none (a synthetic provider, which is what a headless test
+// stages), and the geometry helpers below take the manager's own rects for that
+// screen id in preference to the QScreen anyway, so a null here is not by itself
+// a refusal — frameScreenIdResolves is.
+QScreen* frameQScreenFor(const PhosphorScreens::ScreenManager* screenManager, const QString& screenId)
+{
+    return screenManager ? screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
+}
+} // namespace
+
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenId) const
 {
     auto uuidOpt = parseUuid(zoneId);
@@ -262,10 +301,14 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Resolve physical screen (virtual IDs resolve to their backing physical output)
-    QScreen* screen =
-        m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
-    if (!screen) {
+    // Resolve physical screen (virtual IDs resolve to their backing physical
+    // output). See frameScreenIdResolves above for why an empty screenId is
+    // refused rather than measured against the primary output.
+    if (!frameScreenIdResolves(m_screenManager, screenId)) {
+        return QRect();
+    }
+    QScreen* screen = frameQScreenFor(m_screenManager, screenId);
+    if (!screen && !m_screenManager) {
         return QRect();
     }
 
@@ -290,9 +333,14 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
-    QScreen* screen =
-        m_screenManager ? m_screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
-    if (!screen) {
+    // Same resolution rule as zoneGeometry() above: with a screen manager present,
+    // an empty or unresolvable screenId answers invalid rather than falling back
+    // to the primary output.
+    if (!frameScreenIdResolves(m_screenManager, screenId)) {
+        return combined.toAlignedRect();
+    }
+    QScreen* screen = frameQScreenFor(m_screenManager, screenId);
+    if (!screen && !m_screenManager) {
         return combined.toAlignedRect();
     }
     for (const QString& zoneId : zoneIds) {

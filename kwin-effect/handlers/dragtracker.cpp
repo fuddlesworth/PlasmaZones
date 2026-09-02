@@ -19,6 +19,13 @@ DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
 
 void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
 {
+    // Stamp the compositor's own move/resize state BEFORE any tracking
+    // filter: resizes and shouldHandleWindow-rejected windows are never
+    // tracked below, but they still hold KWin's move filter, and
+    // compositorMoveResizeActive() must answer for exactly that span.
+    if (w) {
+        m_interactiveWindow = w;
+    }
     // Only track moves, not resizes
     if (!w || !w->isUserMove() || w->isUserResize()) {
         return;
@@ -42,10 +49,36 @@ void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
     Q_EMIT dragStarted(w, m_draggedWindowId, w->frameGeometry());
 }
 
+void DragTracker::noteWiredWindowMoveState(KWin::EffectWindow* w)
+{
+    // Deliberately does NOT start tracking a drag: this window's move began
+    // before we were listening, so there was no dragStarted for it and
+    // synthesising one here would emit a drag-start every consumer would have
+    // to unwind at a drop it never saw begin. Only the compositor-state stamp
+    // is recovered, which is what the input-interception guards read.
+    if (!w || m_interactiveWindow) {
+        return;
+    }
+    if (w->isUserMove() || w->isUserResize()) {
+        m_interactiveWindow = w;
+        qCInfo(lcEffect) << "Adopting in-flight interactive move at wiring time -" << w->windowClass();
+    }
+}
+
 void DragTracker::handleWindowFinishMoveResize(KWin::EffectWindow* w)
 {
-    // Not our window — either already ended by forceEnd(), or was a resize we didn't track
-    if (w != m_draggedWindow) {
+    // The compositor's move is over — this signal is KWin's truth, unlike
+    // forceEnd(), which fires on LMB release while KWin can still be
+    // holding the move for other buttons.
+    if (w && w == m_interactiveWindow) {
+        m_interactiveWindow = nullptr;
+    }
+    // Not our window — either already ended by forceEnd(), or was a resize we
+    // didn't track. The explicit null test matters: with no drag tracked,
+    // m_draggedWindow is null too, so a null w would compare equal and fall
+    // through to finishDrag, emitting dragStopped(nullptr, empty id) at every
+    // consumer for a drag that never existed.
+    if (!w || w != m_draggedWindow) {
         return;
     }
 
@@ -100,6 +133,11 @@ void DragTracker::finishDrag(bool cancelled)
 
 void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
 {
+    // A closed window cannot hold KWin's move filter, but its EffectWindow
+    // outlives the close (Deleted), so the QPointer would not auto-null.
+    if (window && window == m_interactiveWindow) {
+        m_interactiveWindow = nullptr;
+    }
     if (m_draggedWindow == window) {
         qCInfo(lcEffect) << "Drag: window closed, cancelled";
         // Don't call finishDrag() — it would pass the mid-destruction window pointer
@@ -118,8 +156,15 @@ void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
 /// receive the signal — but a caller that reaches for it during a NORMAL drag
 /// would strand every downstream consumer waiting on dragStopped. Use
 /// forceEnd() for that.
+///
+/// Note for any future caller: clearing m_interactiveWindow here does not end
+/// the compositor's move. If KWin is still holding one, compositorMoveResizeActive()
+/// starts answering false while the move filter is live, which re-opens the
+/// interception-steal window the guard exists to close. A compositor-loss path
+/// (no compositor, no move) is fine; a mid-gesture caller is not.
 void DragTracker::reset()
 {
+    m_interactiveWindow = nullptr;
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
     m_lastCursorPos = QPointF();

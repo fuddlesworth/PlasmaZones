@@ -440,6 +440,11 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMaximizeColumnRequested();
      }},
+    {kIdScrollMaximizeToEdges, &ConfigDefaults::scrollingMaximizeToEdgesShortcut,
+     &Settings::scrollingMaximizeToEdgesShortcut, QT_TRANSLATE_NOOP("plasmazones", "Maximize to Screen Edges"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMaximizeToEdgesRequested();
+     }},
     // "Grow into empty space", not "expand to available width": the old
     // wording was indistinguishable from Maximize Column in the System
     // Settings list. This one names what the op actually does — claim the

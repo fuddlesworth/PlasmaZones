@@ -53,7 +53,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Trigger width")
             searchAnchor: "scrollingDragScrollTriggerWidth"
-            description: i18n("How close to the edge of the working area the pointer has to be before the strip can start scrolling.")
+            description: i18n("How close to the edge of the work area the pointer has to be before the strip can start scrolling.")
 
             SettingsSpinBox {
                 id: triggerWidthSpin

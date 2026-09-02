@@ -352,11 +352,11 @@ bool ShaderSetStore::applySet(const QString& name)
     // that the user clicks Apply and simply watches nothing happen.
     QJsonObject root;
     if (!readSetFile(filePath, &root)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set “%1”.").arg(name));
         return false;
     }
     if (!versionAccepted(root, QStringLiteral("applySet(%1)").arg(name))) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" was written by a newer version of PlasmaZones.").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("“%1” was written by a newer version of PlasmaZones.").arg(name));
         return false;
     }
     // A null validate closure refuses, like apply below: the ctor documents that
@@ -364,11 +364,11 @@ bool ShaderSetStore::applySet(const QString& name)
     // Skipping validation would apply an unvetted payload instead.
     if (!m_config.validate || !m_config.validate(root)) {
         qCWarning(lcConfig) << "ShaderSetStore::applySet: validation refused" << filePath;
-        Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" does not match this page.").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("“%1” does not match this page.").arg(name));
         return false;
     }
     if (!m_config.apply || !m_config.apply(root)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not apply \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not apply “%1”.").arg(name));
         return false;
     }
     // Live state moved, so every row's `active` flag is stale.
@@ -446,7 +446,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     // fileSnapshot hook nothing could restore it. Allowed, but only with
     // explicit consent — QML confirms first and then passes overwrite=true.
     if (!overwrite && QFile::exists(filePath)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(existingSetName(name)));
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set named “%1” already exists.").arg(existingSetName(name)));
         return false;
     }
 
@@ -497,7 +497,7 @@ bool ShaderSetStore::removeSet(const QString& name)
     QFile file(filePath);
     if (!file.exists()) {
         qCWarning(lcConfig) << "ShaderSetStore::removeSet: no such set:" << filePath;
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete “%1”.").arg(name));
         return false;
     }
     if (!snapshotFile(filePath)) {
@@ -505,7 +505,7 @@ bool ShaderSetStore::removeSet(const QString& name)
     }
     if (!file.remove()) {
         qCWarning(lcConfig) << "ShaderSetStore::removeSet: could not remove" << filePath;
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete “%1”.").arg(name));
         // The delete never landed, so the file is untouched and the snapshot it
         // staged has to go back. rollbackSnapshot owns the dirty-state signal.
         rollbackSnapshot(filePath);
@@ -537,18 +537,18 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName
         return false;
     }
     if (!QFile::exists(oldPath)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(oldName));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set “%1”.").arg(oldName));
         return false;
     }
     // Renaming onto another set would destroy it. Refuse, with the reason.
     if (newPath != oldPath && QFile::exists(newPath)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(newName));
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set named “%1” already exists.").arg(newName));
         return false;
     }
 
     QJsonObject root;
     if (!readSetFile(oldPath, &root)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(oldName));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set “%1”.").arg(oldName));
         return false;
     }
     root.insert(kNameKey, newName);
@@ -614,12 +614,12 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
     const QFileInfo sourceInfo(sourcePath);
     if (!sourceInfo.isFile() || sourceInfo.size() > kMaxSetFileBytes) {
         qCWarning(lcConfig) << "ShaderSetStore::exportSet: refusing to read" << sourcePath;
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set “%1”.").arg(name));
         return false;
     }
     QFile source(sourcePath);
     if (!source.open(QIODevice::ReadOnly)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set “%1”.").arg(name));
         return false;
     }
     const QByteArray payload = source.readAll();

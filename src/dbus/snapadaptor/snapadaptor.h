@@ -153,9 +153,13 @@ public Q_SLOTS:
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
      *                   Forwarded to SnapEngine for protocol compatibility; the unified
      *                   placement record now carries the kind, so it no longer gates restore.
+     * @param restoreReason Why this resolve is running — see
+     *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
+     *                   unrecognised value reads as Open. Gates the cross-screen
+     *                   tile reclaim and the per-open reclaim-credit burn.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                              bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
+                              int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
                               int& snapHeight, bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════

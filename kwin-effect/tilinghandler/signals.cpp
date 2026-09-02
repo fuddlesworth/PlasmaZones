@@ -54,19 +54,22 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // setActiveScreens(QSet()) call in the engine) handles them via a
         // delayed defer so the resnap dispatch can land first. Doing it here
         // would race with that defer and block applyGeometriesBatch.
-        restoreAllMonocleMaximized();
-        // The exact analogue for windowed fullscreen, and deliberately the
-        // context-agnostic full-set drain: the slotScreensChanged sweep skips
-        // sticky and off-current-desktop windows (its per-context discipline
-        // protects setNoBorder), but setFullScreen and the keep flags are
-        // global per-window properties, and with the engine disabled no later
-        // batch or per-context pass exists to release a skipped window — it
-        // would stay KWin-fullscreen with keep-below held for the session.
+        // Windowed fullscreen FIRST, per claimReleaseOrder: both maximize
+        // restores skip a window that still holds fullscreen, so releasing it
+        // ahead of them is what lets a window holding both get a real restore
+        // rather than a skip. Deliberately the context-agnostic full-set
+        // drain: the slotScreensChanged sweep skips sticky and
+        // off-current-desktop windows (its per-context discipline protects
+        // setNoBorder), but setFullScreen and the keep flags are global
+        // per-window properties, and with the engine disabled no later batch
+        // or per-context pass exists to release a skipped window — it would
+        // stay KWin-fullscreen with keep-below held for the session.
         restoreAllWindowedFullscreen();
+        restoreAllMonocleMaximized();
         // Same reasoning for the column-maximize mirror: with the engine
         // disabled no later batch exists to release a window the mirror
         // still holds maximized.
-        restoreAllColumnMaximized();
+        restoreAllMaximizedToEdges();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not
@@ -385,7 +388,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // relies on the next batch, and the engine emits on change, so a
         // strip at rest schedules none. Both are no-ops for a non-member.
         unmaximizeMonocleWindow(windowId);
-        releaseColumnMaximized(windowId, w);
+        releaseMaximizedToEdges(windowId, w);
         return;
     }
     if (!w->isFullScreen()) {
@@ -419,13 +422,13 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // window with its bit still set. Both calls are no-ops for a
             // non-member, and the branch is already under !isFullScreen().
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
         if (screenId.isEmpty()) {
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
@@ -436,7 +439,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // retile coming — demote the stale tracking and release instead.
         if (!m_managedScreens.contains(screenId)) {
             unmaximizeMonocleWindow(windowId);
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
             m_effect->updateAllDecorations();
@@ -458,14 +461,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // a no-op for any window that is not a member.
             unmaximizeMonocleWindow(windowId);
             // The column mirror needs the identical repair, and now shares the
-            // shape that makes it work: releaseColumnMaximized also retains
+            // shape that makes it work: releaseMaximizedToEdges also retains
             // membership on its fullscreen skip, so a float taken during the
             // hold leaves the window KWin-maximized with the ledger held and
             // no reader — no batch reaches a window that stays floating. Same
             // two guarantees as the call above make this safe: the branch is
             // under !isFullScreen() and the window is confirmed floating, and
             // it is a no-op for a non-member.
-            releaseColumnMaximized(windowId, w);
+            releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
             return;
         }
@@ -492,6 +495,10 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         m_effect->updateAllDecorations();
         return;
     }
+    // Captured BEFORE the clear below drops it: the fullscreen-area assert at
+    // the tail of this branch needs to know this window was a strip tile, and
+    // clearWindowTiledAllScreens is exactly what stops it being one.
+    const QString stripScreenBeforeClear = scrollTrackedScreenFor(windowId);
     // Clear border tracking so borders are not drawn over fullscreen content
     // (title-bar restores flow through the rule path).
     clearWindowTiledAllScreens(windowId);
@@ -535,6 +542,48 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     m_effect->m_scrollOfferedColumn.remove(windowId);
     if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
+    }
+    // A strip tile entering its OWN fullscreen (a client F11, a video going
+    // fullscreen — NOT the windowed-fullscreen feature, whose members returned
+    // above) must actually COVER its output.
+    //
+    // Measured, in the nested harness and live: such a window commits at the
+    // output SIZE with the COLUMN's origin — (8,286 1920x1080) for a
+    // (8,286 948x508) tile, and (1924,54 3840x2160) live on a 3840-wide output.
+    // The presentation then runs off the screen with only the part inside the
+    // output visible, which for letterboxed video is a black band where the
+    // column was. Unloading this effect and repeating the identical cycle on the
+    // identical window gives the correct origin, so the strip placement is what
+    // KWin's fullscreen geometry ends up anchored on.
+    //
+    // Nothing downstream repairs it: every later batch takes
+    // applyWindowGeometry's fullscreen bail ("window is fullscreen, skipping"),
+    // so the wrong rect stands for the whole hold while the engine goes on
+    // scrolling and PARKING that column — the model/reality split that produces
+    // the off-screen desktop and the empty slots.
+    //
+    // FullScreenArea is the rect KWin itself uses for a fullscreen window, so
+    // asserting it can only agree with what KWin was trying to do. Change-gated,
+    // so a window already covering its output takes no commit. Bracketed with
+    // inGeometryApply like every sibling direct moveResize in this file: the call
+    // emits frameGeometryChanged synchronously on X11 and must not re-enter the
+    // VS-crossing detector for a move the effect itself just made, and the
+    // tracker re-seed pairs with the outputChanged the bracket swallows.
+    if (KWin::effects && !stripScreenBeforeClear.isEmpty() && isScrollingScreen(stripScreenBeforeClear)) {
+        if (KWin::Window* kwFull = w->window()) {
+            const QRect fsArea = KWin::effects->clientArea(KWin::FullScreenArea, w).toRect();
+            if (fsArea.isValid() && w->frameGeometry().toRect() != fsArea) {
+                qCInfo(lcEffect) << "Asserting fullscreen area for strip tile" << windowId << "from"
+                                 << w->frameGeometry() << "to" << fsArea;
+                const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+                m_effect->m_daemonGate.inGeometryApply = true;
+                const auto fsGuard = qScopeGuard([this, prevInApply] {
+                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
+                });
+                kwFull->moveResize(QRectF(fsArea));
+                m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
+            }
+        }
     }
     m_effect->removeWindowDecoration(windowId);
 }

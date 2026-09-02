@@ -80,6 +80,7 @@ private Q_SLOTS:
 
     void focusNewWindowsOverrideIsPerScreen();
     void alwaysCenterSingleColumnOverrideIsPerScreen();
+    void centerShortColumnsOverrideIsPerScreen();
     void centerFocusedColumnOverrideIsPerScreen();
     void respectMinimumSizeOverrideIsPerScreen();
     void smartGapsOverrideIsPerScreen();
@@ -176,6 +177,34 @@ void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
     const QVector<QRect> anchored = engine->visibleTileRects(kS2);
     QCOMPARE(anchored.size(), 1);
     QCOMPARE(Ax::mainPos(anchored.first()), 0);
+}
+
+void TestScrollEngineBehaviour::centerShortColumnsOverrideIsPerScreen()
+{
+    // The CROSS-axis twin of the lone-column slot above, and the rule seam's
+    // only engine-visible effect. Both screens open a window at a fixed
+    // height shorter than the work area; only the overridden one centres it
+    // across the strip, and neither column changes extent.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->centerShortColumns = false;
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 250.0;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::centerShortColumns(), true));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    const QVector<QRect> centered = engine->visibleTileRects(kS1);
+    QCOMPARE(centered.size(), 1);
+    QCOMPARE(Ax::crossLen(centered.first()), 250);
+    QCOMPARE(Ax::crossPos(centered.first()), (ScrollTestUtils::kCrossExtent - 250) / 2);
+
+    const QVector<QRect> anchored = engine->visibleTileRects(kS2);
+    QCOMPARE(anchored.size(), 1);
+    QCOMPARE(Ax::crossLen(anchored.first()), 250);
+    QCOMPARE(Ax::crossPos(anchored.first()), 0);
 }
 
 void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
@@ -509,6 +538,11 @@ void TestScrollEngineBehaviour::retileKeepsClientDecidedHeightsUnlessARulePinsOn
     // path would pass every geometry assertion here.
     engine->resetStripToDefaults(kS1);
     QCOMPARE(Ax::crossLen(engine->visibleTileRects(kS1).first()), 300);
+    // Emptiness first: QSignalSpy is a QList, so last() on an empty one is
+    // undefined behaviour. A regression that emits NO feedback would crash the
+    // test binary here instead of failing an assertion, and a crashed ctest
+    // case is far harder to read than a failed QCOMPARE.
+    QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("retile"));
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
@@ -587,10 +621,16 @@ void TestScrollEngineBehaviour::clientDecidedHeightBoundsAndDeclinesUnusableClie
 {
     // The commit's bounds. An absurd client extent is clamped to the work
     // area's cross extent rather than persisted as an intent no column can
-    // hold, and a degenerate one is DECLINED so the tile keeps the context
-    // default instead of becoming a standing 1px sliver. Also pins the
-    // per-window contract: a sizing intent must be read exactOnly, or it can
-    // be minted from a same-app sibling's remembered rect.
+    // hold. Also pins the per-window contract: a sizing intent reads the
+    // window's OWN record. The resolver has no appId fallback at all, so that
+    // is structural, but the sizing arm must still consult it.
+    //
+    // NOT covered here, despite what this test used to claim: the degenerate
+    // arm (clientCross < 1) is unreachable through a conforming tracker,
+    // because QRect::isValid already rejects a zero or negative extent and the
+    // stub answers nullopt for an invalid rect — so the run below takes
+    // commitClientDecidedHeight's no-record early return instead. Reaching that
+    // guard needs a stub knob that returns a deliberately non-isValid rect.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
@@ -607,7 +647,14 @@ void TestScrollEngineBehaviour::clientDecidedHeightBoundsAndDeclinesUnusableClie
     // The whole point of the bound is that the STORED intent is sane.
     QCOMPARE(s1->strip().windowHeightIntent(QStringLiteral("app|huge")),
              WindowHeight::makeFixed(ScrollTestUtils::kCrossExtent));
-    QVERIFY2(tracker->lastExactOnly, "a sizing intent must be read exactOnly");
+    // The QCOMPARE above already proves the record was consulted — the intent
+    // could not carry the tracker's own extent otherwise — so a `> 0` call
+    // count adds nothing it can fail on. Pin the EXACT count instead, which
+    // does discriminate: it catches the sizing arm resolving the record twice
+    // per open (a real cost on a path that runs per window) and it catches an
+    // arm that stops consulting it while some other caller keeps the counter
+    // moving.
+    QCOMPARE(tracker->unmanagedGeometryCalls, 1);
 
     // No record at all: the tile falls back to the context default, which
     // under ClientDecides is the even split, and nothing is pinned.
@@ -719,6 +766,8 @@ void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne
     engine->resetStripToDefaults(kS2);
     QCOMPARE(engine->visibleTileRects(kS2).size(), 1);
     QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS2).first()), qRound(0.75 * kMainExtent));
+    // See the height twin: last() on an empty spy is undefined behaviour.
+    QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
 }
 

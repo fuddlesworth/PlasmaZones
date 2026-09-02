@@ -642,7 +642,10 @@ public Q_SLOTS:
     /**
      * @brief Get geometry for a specific zone ID on a specific screen
      * @param zoneId PhosphorZones::Zone UUID string
-     * @param screenId Screen ID (empty = primary screen)
+     * @param screenId Screen ID. It must name a resolvable output: an empty or
+     *        unknown id yields an all-zero rect rather than the zone measured
+     *        against the primary monitor. Callers that mean the primary screen
+     *        want the getZoneGeometry() overload, which resolves it by name.
      * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
     PhosphorProtocol::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
@@ -806,16 +809,21 @@ public:
     /// the layout assigned to that screen's (desktop, activity) context, the
     /// same id the windowless context cascade stamps.
     ///
-    /// EVERY per-window resolver must go through this rather than the bare
-    /// buildRuleQueryForWindow free function. Seven of them share one
+    /// This is the hint-bearing helper the snap engine's exclusion-query
+    /// provider uses (enginewiring.cpp, its only caller). It is NOT the
+    /// enforcement point for uniform stamping — the per-window resolvers call
+    /// the bare buildRuleQueryForWindow and stamp their context through
+    /// stampScreenContext, which is the mechanism that actually keeps them
+    /// consistent.
+    ///
+    /// The stamping matters because SIX resolvers share one
     /// RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
     /// revision), and resolveCached returns the cached actions WITHOUT
-    /// consulting the query on a hit — so whichever of those seven touches a
+    /// consulting the query on a hit — so whichever of those six touches a
     /// window first fixes the context every later one reuses for that window's
-    /// lifetime. (The other two consumers do not share it:
-    /// shouldRestoreSizeOnUnsnap calls the uncached resolve(), and the snap
-    /// engine's exclusion-query provider feeds SnapEngine's separate
-    /// exclusion evaluator.)
+    /// lifetime. (The remaining resolvers do not share it: shouldRestoreSizeOnUnsnap
+    /// calls the uncached resolve(), and shouldFloatByRule, scrollOpenRuleParams,
+    /// tabColorRuleParams and dropIndicatorRuleParams opt out.)
     ///
     /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
     /// and unhinted paths resolve different screens, so the ORDER matters too.
@@ -1070,7 +1078,13 @@ public:
     /// window's placement. Called from the snap open-path facade. Pins @p screenId
     /// so a ScreenId-scoped rule resolves; reuses the per-window evaluator cache
     /// placementZonesByRule seeds.
-    void applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
+    ///
+    /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
+    /// failed the 1-based guard and no move was emitted, so a caller can tell a
+    /// rule that owns the window's desktop from one that never matched, whether
+    /// or not its payload was usable. No production caller reads this today; the
+    /// routing tests assert it, which is why it is not void.
+    bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as
     /// applyOpenDesktopRouting) AND resolves a RouteToScreen pin: when the
@@ -1148,7 +1162,13 @@ public:
     /// the target desktop but stays on its spawn monitor, and under per-output
     /// virtual desktops that desktop belongs to the owner monitor's slice, so
     /// the spawn monitor never shows it.
-    void emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
+    ///
+    /// Returns whether a route action MATCHED (see applyOpenDesktopRouting).
+    /// The answer does not depend on the move being carried out: a declared
+    /// workspace that is momentarily unresolvable, and a RouteToDesktop whose
+    /// target fails the guard, both matched.
+    bool emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
+
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -1668,6 +1688,15 @@ public:
      */
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
 
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    ///
+    /// Public so TilingAdaptor can stamp managedScreensChanged with the
+    /// per-screen desktop the announced set was resolved against. A pure
+    /// query — the router state it reads lives on WTA, which is why the
+    /// caller cannot answer it itself.
+    int currentDesktopForScreen(const QString& screenId) const;
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
@@ -1719,9 +1748,6 @@ private:
      *        disabled-context gates and last-used-zone tracking.
      */
     int currentDesktop() const;
-    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
-    /// desktops, #648), falling back to the global currentDesktop().
-    int currentDesktopForScreen(const QString& screenId) const;
 
     // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits

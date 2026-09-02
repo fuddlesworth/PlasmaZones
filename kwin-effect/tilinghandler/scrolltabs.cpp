@@ -73,9 +73,11 @@ namespace {
 namespace ScrollTabKey = PhosphorProtocol::Service::ScrollTabKey;
 
 /// The payload the engine emits for "this screen has no indicators". Matched
-/// literally rather than parsed: every clear path emits exactly this string
-/// (ScrollEngine::clearTabStripsForScreen), and parsing it would cost a
-/// QJsonDocument for the commonest message on the channel.
+/// literally as a FAST PATH rather than parsed: every clear path emits exactly
+/// this string (ScrollEngine::clearTabStripsForScreen), and parsing it would
+/// cost a QJsonDocument for the commonest message on the channel. Any other
+/// spelling of an empty array still reaches the same teardown, from the parsed
+/// array's own isEmpty() — see slotScrollTabStripsChanged.
 constexpr QLatin1String kEmptyPayload("[]");
 
 /// Wire keys of one strip object, as the scroll engine emits them
@@ -295,6 +297,17 @@ void TilingHandler::slotScrollTabStripsChanged(const QString& screenId, const QS
         return;
     }
     const QJsonArray strips = doc.array();
+    // An array that PARSED empty is the clear path too, not just the exact
+    // bytes matched above. The fast path is a byte compare against the one
+    // spelling the engine emits, which is a producer coupling: any other
+    // spelling of an empty array (whitespace, a future producer) would
+    // otherwise take the intake path below and leave a payload entry and a
+    // stale hover behind instead of the full teardown. Same outcome either
+    // way, reached from the parsed shape rather than from the wire text.
+    if (strips.isEmpty()) {
+        dropScrollTabScreen(screenId);
+        return;
+    }
     // Reverse index: drop this screen from every window it used to name, so
     // a window that left a tabbed column stops triggering rebuilds here.
     const QList<QString> indexedBefore = m_scrollTabScreensByWindow.keys();
@@ -359,8 +372,12 @@ void TilingHandler::dropScrollTabScreen(const QString& screenId)
     // Compare by OUTPUT, not by raw id: the hover screen is recorded in the
     // effect's own physical spelling while the daemon may name the screen in
     // its effective spelling; both resolve to one output.
-    if (!m_scrollTabHoverScreen.isEmpty()
-        && m_effect->outputForScreenId(m_scrollTabHoverScreen) == m_effect->outputForScreenId(screenId)) {
+    // Require a resolved output on both sides: outputForScreenId answers null
+    // for a screen already gone from effects->screens(), and two nulls compare
+    // equal, which would clear a hover belonging to an unrelated dead screen.
+    const auto* hoverOutput =
+        m_scrollTabHoverScreen.isEmpty() ? nullptr : m_effect->outputForScreenId(m_scrollTabHoverScreen);
+    if (hoverOutput && hoverOutput == m_effect->outputForScreenId(screenId)) {
         m_scrollTabHoverScreen.clear();
         // The pill under the parked pointer just vanished; the override must
         // not outlive it (unless a press is still being held — see
@@ -669,6 +686,13 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
                 // the painter deliberately carries no i18n, so the caller
                 // resolves it. Translated through the catalog the effect
                 // loads at construction (see lifecycle.cpp).
+                //
+                // QCoreApplication::translate rather than PhosphorI18n::tr:
+                // this plugin is its own target and does not carry src/ on its
+                // include path, so that header is unreachable here. The context
+                // string is the one PhosphorI18n itself declares, and lupdate
+                // extracts translate() calls natively, so the catalog entry is
+                // identical either way.
                 pill.title = QCoreApplication::translate("plasmazones", "Untitled window");
             }
             const auto colorIt = m_scrollTabColorCache.constFind(pill.windowId);
@@ -842,10 +866,18 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     // sequence can begin with one held) yet must NOT keep re-evaluating
     // hover, which could light new pills and re-take the interception
     // against the drag.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging() && m_scrollTabPressHeld) {
+    // Gated on the COMPOSITOR's move state as well as the tracker's: the
+    // tracker's shadow opens early on purpose (forceEnd on LMB release while
+    // KWin holds the move for other buttons) and never opens at all for a
+    // window shouldHandleWindow rejected — in both spans KWin's move filter
+    // is live and taking the interception here would strand it (the window
+    // then follows every desktop switch, reading as stuck on all desktops).
+    const bool dragLive = m_effect->m_dragTracker
+        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive());
+    if (dragLive && m_scrollTabPressHeld) {
         return;
     }
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+    if (dragLive) {
         // Clear the PAINTER's hover too, not just the model's: a pill lit
         // when a non-pointer drag begins (a keyboard Move, a touch-initiated
         // move — a pointer drag cannot start under a lit pill, the
@@ -1074,7 +1106,22 @@ void TilingHandler::setScrollTabHoverCursor(bool overPill)
 {
     // While a pill press is held the interception stays regardless of hover
     // (see noteScrollTabPress); the release path re-evaluates.
-    const bool hold = overPill || m_scrollTabPressHeld;
+    //
+    // Defence in depth for every caller (rebuildScrollTabIndicators re-enters
+    // hover asynchronously off the daemon's tab-strip relay): never TAKE the
+    // interception while KWin's interactive move/resize is live — the
+    // interception outranks KWin's move filter, so the ending button release
+    // would land here instead and strand the move. A held pill press keeps
+    // its latch (the press/release pairing invariant; a pointer drag cannot
+    // start under one anyway).
+    // Both halves of the drag predicate, matching updateScrollTabHover and
+    // activateScrollTabAt. compositorMoveResizeActive() covers everything
+    // isDragging() does today, but the two are independent members and pairing
+    // them here keeps this defence from quietly weakening if that ever stops
+    // being true.
+    const bool dragLive = m_effect->m_dragTracker
+        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive());
+    const bool hold = (overPill && !dragLive) || m_scrollTabPressHeld;
     if (!KWin::effects) {
         // No compositor to talk to (teardown): record the intent so the latch
         // does not claim an interception that was never taken.
@@ -1134,7 +1181,13 @@ bool TilingHandler::activateScrollTabAt(const QPointF& pos)
     // consumes a mid-move press first; on the filter path that does reach
     // here, the false return continues to the overhang/focus handlers, not
     // to the drop machinery.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+    // compositorMoveResizeActive as well as isDragging, matching the hover and
+    // cursor guards: the tracker's shadow is already clear on a drop where a
+    // non-left button still holds KWin's move, and it never opens at all for a
+    // window shouldHandleWindow rejected. Restructuring the strip in either
+    // span is the same defect this declines in the tracked one.
+    if (m_effect->m_dragTracker
+        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive())) {
         return false;
     }
     // The same activation the daemon performed for a pill click: focus the

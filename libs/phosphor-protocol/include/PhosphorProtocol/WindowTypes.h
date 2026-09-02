@@ -10,8 +10,25 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <cstdlib>
 
 namespace PhosphorProtocol {
+
+/// Magnitude ceilings shared by every geometry-bearing wire struct.
+///
+/// A consumer builds a QRect from these, and QRect's x/y/w/h constructor
+/// computes `x + w - 1` — signed overflow, and undefined, BEFORE any
+/// `isValid()` or `width <= 0` guard the consumer writes can run. Those guards
+/// are therefore not a defence, and the bound has to be applied here.
+///
+/// Deliberately generous, and deliberately NOT a screen-bounds check: the
+/// scrolling engine parks off-screen columns entirely outside their screen
+/// rect, so a legitimate park origin sits far outside every output. An
+/// over-strict validator here has already broken that once, dropping every
+/// vertical park at its own validationError. These limits are orders of
+/// magnitude past any real display and only catch garbling.
+inline constexpr int MaxWireExtent = 100000;
+inline constexpr int MaxWireOrigin = 1000000;
 
 /// D-Bus struct for batch geometry entries: (siiiis)
 ///
@@ -38,6 +55,40 @@ struct WindowGeometryEntry
     {
         return QRect(x, y, width, height);
     }
+
+    /// Empty when the entry is safe to consume; a diagnostic otherwise.
+    ///
+    /// Call this BEFORE toRect() or any other arithmetic on the fields. Same
+    /// contract as TileRequestEntry::validationError(), and it exists for the
+    /// same reason: the consumer's QRect construction overflows before its own
+    /// guards can run. Size is NOT checked for positivity here — callers
+    /// legitimately differ on whether a zero extent means "size-only" or
+    /// "invalid" — only magnitude, which is the half that is undefined
+    /// behaviour rather than a policy question.
+    QString validationError() const
+    {
+        if (windowId.isEmpty()) {
+            return QStringLiteral("WindowGeometryEntry: empty windowId");
+        }
+        // Widened before the absolute value: qAbs(INT_MIN) is itself undefined
+        // behaviour in int, and INT_MIN is exactly the sort of value a corrupt
+        // wire payload carries.
+        if (std::abs(static_cast<qint64>(width)) > MaxWireExtent
+            || std::abs(static_cast<qint64>(height)) > MaxWireExtent) {
+            return QStringLiteral("WindowGeometryEntry: implausible size (windowId=%1 w=%2 h=%3)")
+                .arg(windowId)
+                .arg(width)
+                .arg(height);
+        }
+        if (std::abs(static_cast<qint64>(x)) > MaxWireOrigin || std::abs(static_cast<qint64>(y)) > MaxWireOrigin) {
+            return QStringLiteral("WindowGeometryEntry: implausible origin (windowId=%1 x=%2 y=%3)")
+                .arg(windowId)
+                .arg(x)
+                .arg(y);
+        }
+        return {};
+    }
+
     static WindowGeometryEntry fromRect(const QString& id, const QRect& r)
     {
         return {id, r.x(), r.y(), r.width(), r.height(), QString()};

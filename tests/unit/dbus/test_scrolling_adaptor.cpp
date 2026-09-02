@@ -63,6 +63,11 @@
  *     disconnect — see the note in testClearedEngine_stopsRelayingSignals.
  * 18. (moved to test_scrolling_adaptor_verbs.cpp: scrollView's gates,
  *     step arithmetic and repeat behaviour.)
+ * 19. stripContextChanged relays a context switch to the bus, stays silent on
+ *     a re-push of the same context, and carries a different epoch for a
+ *     different one. clearEngine severs it: that relay is a bare forward with
+ *     no engine test, so the disconnect is load-bearing rather than defence
+ *     in depth.
  */
 
 #include <QTest>
@@ -540,6 +545,7 @@ private Q_SLOTS:
         // the shutdown path: the KWin effect dispatches it from a user's
         // maximize click, which can land while the daemon is going down.
         m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
+        m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -555,12 +561,61 @@ private Q_SLOTS:
         // above is the discriminating one — that lambda has no such guard, and
         // clearEngine also clears the last-broadcast set it compares against.
         QSignalSpy stripSpy(m_adaptor, &ScrollingAdaptor::stripChanged);
+        // The strip-IDENTITY relay is discriminating in the same way the
+        // screen-set one is: its lambda is a bare forward of three strings
+        // with no engine test, so a missing disconnect really does keep
+        // putting epochs on the bus and this assertion catches it. It shipped
+        // without one.
+        QSignalSpy ctxSpy(m_adaptor, &ScrollingAdaptor::stripContextChanged);
         m_adaptor->clearEngine();
 
+        // Arm a real context switch as well as a set push: the epoch is
+        // emit-on-change, so without the desktop move the engine would stay
+        // silent here for its own reasons and the assertion below would hold
+        // with the disconnect deleted.
+        m_engine->setCurrentDesktop(2);
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         QCOMPARE(spy.count(), 0);
         QCOMPARE(stripSpy.count(), 0);
+        QCOMPARE(ctxSpy.count(), 0);
+    }
+
+    // The strip-identity relay itself, which shipped with no coverage at all:
+    // deleting the connect() left the whole suite green.
+    //
+    // What this pins is that a context change reaches the BUS interface, with
+    // the screen named and an epoch attached. The epoch's VALUE is never
+    // asserted — it is an opaque hash and the contract on it is equality and
+    // nothing else — so the assertions are its presence, its screen, and that
+    // a second switch changes it.
+    void testStripContextChanged_relaysContextSwitches()
+    {
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripContextChanged);
+
+        // The FIRST setCurrentDesktop on a fresh engine only primes the
+        // tracker (armSwitch is gated on the context having been set before),
+        // and the fixture's own setUpFixture has already latched the starting
+        // epoch, so this pair is a genuine move rather than a first record.
+        m_engine->setCurrentDesktop(2);
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), QStringLiteral("DP-1"));
+        const QString firstEpoch = spy.first().at(1).toString();
+        QVERIFY(!firstEpoch.isEmpty());
+
+        // A re-push of the SAME context is silent: the engine's gate is
+        // emit-on-change and the adaptor deliberately adds no second one, so
+        // this is the engine's contract showing through the relay.
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 1);
+
+        // A different context is a different strip, so a different epoch.
+        m_engine->setCurrentDesktop(3);
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(spy.at(1).at(1).toString() != firstEpoch);
     }
 
     // The strip wake-up the Monitors page's thumbnail subscribes to. What it

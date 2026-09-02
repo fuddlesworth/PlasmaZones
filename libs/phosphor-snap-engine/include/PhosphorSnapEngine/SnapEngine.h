@@ -104,6 +104,15 @@ public:
     int currentVirtualDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
 
+    /// Whether @p screenId resolves to SNAPPING mode in its current
+    /// (desktop, activity) context — the same verdict resolveWindowRestore's
+    /// screen-mode ownership gate reads, permissive when no layout manager is
+    /// wired (tests). Public for the SnapAdaptor's open-path reclaim-credit
+    /// burn, which must partition opens the way the open channels do: a
+    /// tiling-screen open burns via that engine's takeForReopen, a snap-screen
+    /// open has only the adaptor's resolve to do it.
+    bool isSnapModeScreen(const QString& screenId) const;
+
     /// Resolve the zone on @p screenId's @p targetDesktop layout that is
     /// positionally equivalent to @p currentZoneId (1-based index of zones sorted
     /// by number), plus its pixel geometry. Returns an empty pair when the target

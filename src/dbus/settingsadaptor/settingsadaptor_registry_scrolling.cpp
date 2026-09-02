@@ -733,6 +733,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
         m_schemas[QStringLiteral("scrollingStickyWindowHandling")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingRespectMinimumSize", scrollingRespectMinimumSize,
                                setScrollingRespectMinimumSize)
+        REGISTER_CONCRETE_BOOL("scrollingCenterShortColumns", scrollingCenterShortColumns,
+                               setScrollingCenterShortColumns)
         REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
                                setScrollingRestoreStripsOnLogin)
         // scrollingRestoreFloatedWindowsOnLogin and scrollingKeepFloatingAbove are
@@ -777,6 +779,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingDecreaseColumnWidthShortcut)
         REGISTER_CONCRETE_STRING("scrollingMaximizeColumnShortcut", scrollingMaximizeColumnShortcut,
                                  setScrollingMaximizeColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMaximizeToEdgesShortcut", scrollingMaximizeToEdgesShortcut,
+                                 setScrollingMaximizeToEdgesShortcut)
         REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
                                  setScrollingExpandColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,

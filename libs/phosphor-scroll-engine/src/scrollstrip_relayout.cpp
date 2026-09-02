@@ -24,6 +24,37 @@ int crossExtent(const ScrollLayoutParams& params)
     return params.axis.crossSize(params.workArea);
 }
 
+/// The rect a maximized-to-edges column resolves against: the pre-gap work
+/// area when the caller supplied one, else the gapped work area. The fallback
+/// keeps every params construction that never sets rawWorkArea (tests, pure
+/// verb math) meaning "fill the work area, gap-free" instead of collapsing to
+/// the degenerate-area arms on a null rect.
+QRect rawAreaFor(const ScrollLayoutParams& params)
+{
+    return params.rawWorkArea.isValid() ? params.rawWorkArea : params.workArea;
+}
+
+/// Where a column's content starts on the CROSS axis given the extent it
+/// actually resolved to. With the centre policy off, or with a column that
+/// fills (or overflows) the cross extent, this is the area's start edge and
+/// the layout is unchanged. With it on and slack left over, the content is
+/// centred in that slack, which is what puts a half-height solo window in the
+/// middle of the screen instead of against the top.
+///
+/// Takes the whole RECT rather than a start edge, so the low edge and the
+/// extent it is centred within always come from the same place and cannot
+/// disagree. That matters here beyond tidiness: a maximized-to-edges column
+/// resolves against the RAW work area, which is wider than the gapped one, so
+/// deriving the extent from params would centre it in the wrong slack.
+int crossStartFor(int contentCross, const ScrollLayoutParams& params, const QRect& areaRect)
+{
+    const int crossLow = params.axis.crossLow(areaRect);
+    if (!params.centerShortColumns) {
+        return crossLow;
+    }
+    return crossLow + qMax(0, params.axis.crossSize(areaRect) - contentCross) / 2;
+}
+
 } // namespace
 
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
@@ -64,13 +95,7 @@ int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutPar
     if (isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal()) {
         return 0;
     }
-    int visibleTiles = 0;
-    for (const Tile& tile : c.tiles) {
-        if (!tile.minimized) {
-            ++visibleTiles;
-        }
-    }
-    return params.tabIndicator.reservedThickness(visibleTiles);
+    return params.tabIndicator.reservedThickness(c.visibleTileCount());
 }
 
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
@@ -196,6 +221,18 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
     if (c.isEmpty() || c.isFullyMinimized()) {
         return 0;
     }
+    // Maximize-to-edges: the extent is DECLARED, not resolved from the width
+    // intent (which stays stored, untouched, for the un-maximize restore).
+    // No minimum floor and no work-area cap — the raw main extent already
+    // exceeds the capped answer, and a client minimum wider than the output
+    // overhangs under the compositor's own enforcement, the same outcome the
+    // respectMinimumSize=false arm accepts everywhere else.
+    if (c.maximizedToEdges) {
+        const int rawMain = params.axis.mainSize(rawAreaFor(params));
+        if (rawMain > 0) {
+            return rawMain;
+        }
+    }
     const int px = qMax(resolveColumnWidthPx(c.width, params), columnMinExtentPx(c, params));
     return qMin(px, mainExtent(params));
 }
@@ -237,13 +274,7 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         const bool indicatorEatsMainAxis =
             isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal();
         if (c.display == ColumnDisplay::Tabbed && indicatorEatsMainAxis) {
-            int visibleTiles = 0;
-            for (const Tile& tile : c.tiles) {
-                if (!tile.minimized) {
-                    ++visibleTiles;
-                }
-            }
-            reservationFloor = params.tabIndicator.reservedThickness(visibleTiles);
+            reservationFloor = params.tabIndicator.reservedThickness(c.visibleTileCount());
         }
         for (const Tile& tile : c.tiles) {
             // minMain, not minWidth: this is the column's floor ALONG the
@@ -300,8 +331,18 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int colMain = columnExtentPx(m_columns.at(columnIndex), params);
-    return (mainExtent(params) - colMain) / 2;
+    const Column& col = m_columns.at(columnIndex);
+    const int colMain = columnExtentPx(col, params);
+    // A maximized-to-edges column is centred in the extent it RESOLVES
+    // against, which is the raw work area, not the gapped one. relayout
+    // already shifts such a column low by the outer gap so that an anchor of
+    // "column sits at the strip cursor" lands it on the raw area exactly, so
+    // centring it in the gapped extent here would subtract that same gap a
+    // second time and hang the column off the low edge of the output. With
+    // the flag off nothing changes: the column resolves against the gapped
+    // work area and takes no shift.
+    const int centringExtent = col.maximizedToEdges ? params.axis.mainSize(rawAreaFor(params)) : mainExtent(params);
+    return (centringExtent - colMain) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params)
@@ -404,6 +445,26 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
+    // A maximized-to-edges column has exactly ONE correct position under every
+    // focus policy: the raw work area it resolves against. Its extent IS the
+    // raw main extent, which is strictly larger than the gapped viewport
+    // whenever an outer gap is set, so without this the Never arm below takes
+    // its over-wide branch and pins the column to a viewport edge measured in
+    // GAPPED coordinates — spending the outer gap a second time on top of
+    // relayout's unconditional shift, exactly the way the centering policy did
+    // before centeredAnchorFor was taught the difference. Only the
+    // TRAILING-side arrival (targetIdx < prevIdx) missed: the leading-side one
+    // asks for a zero offset, and the clamp below cannot narrow that, since a
+    // maximized column's own extent puts maxViewOffset above its strip
+    // position by construction. That is what the regression slot drives.
+    //
+    // centeredAnchorFor IS that one answer, not a stand-in for it: with colMain
+    // equal to the centring extent it reduces to a zero anchor, and a zero
+    // anchor is what relayout's outer-gap shift lands on the raw rect.
+    if (m_columns.at(targetIdx).maximizedToEdges) {
+        return centeredAnchorFor(targetIdx, params);
+    }
+
     const int viewMain = mainExtent(params);
     const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
     const int activeMainPos = columnStripPos(targetIdx, params);
@@ -470,11 +531,14 @@ int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, c
     int pos = activeMainPos - oldViewOffset;
     if (colMain >= viewMain) {
         // Exactly the viewport's length along the strip, never longer:
-        // columnWidthPx caps every column at the work area, so this is the
-        // equality case and both arms resolve to the same zero offset. Kept
-        // as a branch because the cap lives in another function and a future
-        // width kind that opted out of it would land here needing the
-        // entering-edge pin.
+        // columnExtentPx caps every column that reaches here at the work area,
+        // so this is the equality case and both arms resolve to the same zero
+        // offset. The one kind that is NOT capped, a maximized-to-edges
+        // column, returned above rather than reaching this arm, because for it
+        // the two arms differ and the trailing-side one is wrong. Kept as a
+        // branch because the cap lives in another function and a future width
+        // kind that opted out of it would land here needing the entering-edge
+        // pin.
         pos = (prevIdx >= 0 && targetIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
@@ -515,6 +579,77 @@ void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params
     // structural inserts re-clamp when the strip genuinely cannot honour
     // the view (insertWindowAt's anchor re-clamp).
     m_viewAnchor = anchor;
+}
+
+void ScrollStrip::reanchorForDropCommit(int oldViewOffset, const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0) {
+        m_viewAnchor = 0;
+        m_viewDetached = false;
+        return;
+    }
+    // The drop OWNS the view the way a pan does, so the latch is SET, not
+    // cleared — and above the degenerate-area guard, for
+    // reanchorAfterFocusChange's reason (the latch answers "who owns the
+    // view", which needs no layout maths). Without it the applyLayout the
+    // commit runs immediately afterwards re-applies the centering policy
+    // through updateViewForFocus and undoes this anchor on the same pass —
+    // under Always unconditionally, and under OnOverflow for exactly the
+    // over-wide column this function exists to keep beside its neighbour.
+    // The next focus change re-attaches through reanchorAfterFocusChange,
+    // same as any pan.
+    m_viewDetached = true;
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there): every arm below would write garbage over the persisted anchor.
+    if (mainExtent(params) <= 0) {
+        return;
+    }
+    // A maximized-to-edges column has exactly ONE correct position
+    // (focusAnchorFor documents why); the fit maths below would pin it to a
+    // viewport edge measured in gapped coordinates.
+    if (m_columns.at(m_activeColumnIdx).maximizedToEdges) {
+        m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
+        return;
+    }
+    const int viewMain = mainExtent(params);
+    const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
+    // Where the indicator promised the column: the hit-test that produced the
+    // drop target resolved against the pre-insert view, so the column's strip
+    // position minus that view offset IS the promised on-screen position. The
+    // Never fit then moves the view only as far as full visibility requires —
+    // an in-view drop stays put, an off-view one lands flush at the entering
+    // edge with the neighbour on the other side still visible.
+    int pos = columnStripPos(m_activeColumnIdx, params) - oldViewOffset;
+    if (colMain >= viewMain || pos < 0) {
+        pos = 0;
+    } else if (pos + colMain > viewMain) {
+        pos = viewMain - colMain;
+    }
+    m_viewAnchor = clampedAnchorFor(m_activeColumnIdx, pos, params);
+}
+
+void ScrollStrip::clampViewIntoStrip(const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0) {
+        return;
+    }
+    // Degenerate-area guard, same as clampedAnchor's: the clamp would
+    // collapse ANY anchor to 0 against a zero-width work area.
+    if (mainExtent(params) <= 0) {
+        return;
+    }
+    // TRAILING edge only, unlike clampedAnchor's both-edge bound: a leading
+    // overhang (negative derived viewOffset) is how the centering mutators
+    // deliberately express a centered short strip, and flattening it here
+    // would pin a lone centered column flush to the edge for the whole hold.
+    // The dead space the drag settle exists to reclaim is only ever past the
+    // trailing end — the detach take shortened the strip under a view that
+    // pointed at the vanished columns.
+    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    const int maxViewOffset = qMax(0, stripExtentPx(params) - mainExtent(params));
+    if (activeMainPos - m_viewAnchor > maxViewOffset) {
+        m_viewAnchor = activeMainPos - maxViewOffset;
+    }
 }
 
 void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
@@ -728,17 +863,60 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
+        // Maximize-to-edges: the column resolves against the RAW work area on
+        // both axes with the inner gap suppressed inside it. Its strip-space
+        // position stays cursor-derived like every other column (the strip
+        // still scrolls it), shifted low by the outer gap so that a column
+        // sitting at the anchor lands on the raw area exactly — cursor math is
+        // workArea-based, and any anchor policy (pin, center, overflow) then
+        // differs from the raw rect only by outer-gap slivers that would
+        // otherwise peek through at the screen edges.
+        //
+        // The shift is UNCONDITIONAL, not gated on the column covering the
+        // viewport. A gate makes the emitted position jump by the outer gap at
+        // the moment the column stops covering, and that jump is invisible to
+        // the view coordinate the batch's viewDelta is differenced from. The
+        // effect then sees a window whose committed move is a gap MORE than
+        // the view slide it was told about, and runs a second per-window
+        // spring for the remainder — a full-screen-sized window scrolling with
+        // two overlapping animations on it, which is what the gate actually
+        // looked like in practice. Shifting every frame by the same constant
+        // keeps the column's motion equal to the view's, so the residual leg
+        // stays degenerate and one spring carries the strip.
+        const bool toEdges = col.maximizedToEdges;
+        const QRect colArea = toEdges ? rawAreaFor(params) : area;
+        const int colGap = toEdges ? 0 : gap;
+        const int mainStart = mainCursor - (axis.mainLow(area) - axis.mainLow(colArea));
         // Published so a consumer can tell "the user asked for this extent"
         // from "this column cannot be any narrower" — columnExtentPx takes the
-        // max of the two and the answer is indistinguishable afterwards.
-        rc.extentPinnedByMinimum = columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
+        // max of the two and the answer is indistinguishable afterwards. A
+        // maximized-to-edges extent is declared, never minimum-pinned.
+        //
+        // This re-resolves the pair columnExtentPx just took a max of, which
+        // reads like the kind of duplicate per-tick walk the note at the end of
+        // this function says to remove. It stays because the only way to share
+        // the work is to fold the flag out of columnExtentPx and into its four
+        // callers, and that resolver owns the toEdges arm and the work-area cap
+        // the other three depend on. The toEdges short-circuit below keeps the
+        // extra pair off the maximized path, which is the one whose column
+        // spans the whole output.
+        rc.extentPinnedByMinimum =
+            !toEdges && columnMinExtentPx(col, params) >= resolveColumnWidthPx(col.width, params);
+        rc.maximizedToEdges = toEdges;
         // The default: a column spans the FULL cross extent and only its main
         // extent varies. The tabbed branch below is the one exception and
         // rewrites this rect from the height intent of the tab that OWNS the
         // column (see tabbedColumnCrossPx), which is not necessarily the tab
         // on show and is not the only tab that may carry an intent.
-        rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
+        rc.rect = axis.makeRect(mainStart, axis.crossLow(colArea), colW, axis.crossSize(colArea));
 
+        // Same predicate as Column::visibleTileCount, which the two reservation
+        // sites use — visible.size() == col.visibleTileCount() by construction,
+        // and the indicator is sized from one while the tiles are laid out from
+        // the other, so the two must not drift. Spelled out here rather than
+        // routed through the accessor because this walk needs the INDICES; the
+        // accessor would allocate a vector for callers that only want the
+        // count.
         QVector<int> visible;
         visible.reserve(col.tiles.size());
         for (int ti = 0; ti < col.tiles.size(); ++ti) {
@@ -759,7 +937,21 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // is replaced before anything derives from it. Everything below —
             // the indicator rect, the content rect the tabs are committed at —
             // then follows the shortened column on its own.
-            rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, tabbedColumnCrossPx(col, params));
+            //
+            // Maximize-to-edges wins over the owner's height intent: the flag
+            // declares the full raw cross extent, so the default rect above
+            // stands and the intent survives untouched for the restore. A
+            // column that IS short then takes the centre policy, which is why
+            // the start edge comes from crossStartFor rather than the area.
+            if (!toEdges) {
+                const int tabbedCross = tabbedColumnCrossPx(col, params);
+                // mainStart, matching the default rect above and the stack
+                // tiles below. It equals mainCursor on this branch today (the
+                // outer-gap shift is zero whenever !toEdges), but spelling the
+                // main-axis origin two ways in one function is how that stops
+                // being true silently.
+                rc.rect = axis.makeRect(mainStart, crossStartFor(tabbedCross, params, area), colW, tabbedCross);
+            }
             // Only the active tile is laid out, at the column's content rect;
             // the others share its rect but are reported hidden.
             int activeTi = qBound(0, col.activeTileIdx, col.tiles.size() - 1);
@@ -789,14 +981,30 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // cross-axis extent, which is why "height" keeps its name — it is
             // the role, not the screen dimension.
             const int n = visible.size();
-            const int gapsTotal = gap * (n - 1);
-            const int availH = qMax(n, crossExtent(params) - gapsTotal);
+            // colGap is 0 for a maximized-to-edges column: its stack divides
+            // the raw cross extent with no separation, matching the gap-free
+            // look the flag promises on every side.
+            const int gapsTotal = colGap * (n - 1);
+            const int availH = qMax(n, axis.crossSize(colArea) - gapsTotal);
 
             QVector<int> heights(n, 0);
             qreal autoWeightTotal = 0;
             int fixedTotal = 0;
             for (int vi = 0; vi < n; ++vi) {
                 const Tile& t = col.tiles.at(visible.at(vi));
+                // Maximize-to-edges wins over the tiles' height intents, the
+                // same override the tabbed branch applies to its owner's
+                // intent: the flag declares the full raw cross extent, so a
+                // Fixed/Preset tile is resolved as Auto (sharing by weight)
+                // and its stored intent survives untouched for the restore.
+                // Without this a lone Fixed/Preset tile kept its short height
+                // and the centre policy floated it mid-screen while the
+                // column's main extent — and the compositor's maximize state —
+                // said full, which is the "maximize only widens" report.
+                if (toEdges) {
+                    autoWeightTotal += qMax<qreal>(0.01, t.height.weight);
+                    continue;
+                }
                 switch (t.height.kind) {
                 case WindowHeight::Fixed:
                     heights[vi] = qBound(1, t.height.fixedPx, availH);
@@ -806,7 +1014,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     heights[vi] =
                         qMin(availH,
                              proportionalPx(nearestPresetValue(params.presetWindowHeights, t.height.presetFraction),
-                                            crossExtent(params), gap));
+                                            axis.crossSize(colArea), colGap));
                     fixedTotal += heights[vi];
                     break;
                 case WindowHeight::Auto:
@@ -814,14 +1022,17 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     break;
                 }
             }
-            // A lone tile fills the column height on Auto intent only; an
-            // explicit Fixed/Preset height is honored (niri parity — a solo
-            // window can be shorter than the column, leaving empty space
-            // below it). The explicit heights were already resolved and
-            // clamped to the work area in the switch above, and the
-            // min-height clamp below still applies.
+            // A lone tile fills the column height on Auto intent, or whenever
+            // the column is maximized to edges — that flag overrides the stored
+            // intent for as long as it is set, exactly as it does for the stack
+            // below and for the tabbed branch. Otherwise an explicit
+            // Fixed/Preset height is honored (niri parity — a solo window can
+            // be shorter than the column, leaving empty space below it). The
+            // explicit heights were already resolved and clamped to the work
+            // area in the switch above, and the min-height clamp below still
+            // applies.
             if (n == 1) {
-                if (col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
+                if (toEdges || col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
                     heights[0] = availH;
                 }
             } else {
@@ -854,7 +1065,9 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 qreal weightLeft = autoWeightTotal;
                 for (int vi = 0; vi < n; ++vi) {
                     const Tile& t = col.tiles.at(visible.at(vi));
-                    if (t.height.kind != WindowHeight::Auto) {
+                    // toEdges: every tile was accumulated as Auto above, so
+                    // every tile takes its weight share here too.
+                    if (!toEdges && t.height.kind != WindowHeight::Auto) {
                         continue;
                     }
                     const qreal w = qMax<qreal>(0.01, t.height.weight);
@@ -917,14 +1130,28 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 }
             } // respectMinimumSize
 
-            int crossCursor = axis.crossLow(area);
+            // The stack is laid out from the column's start edge unless the
+            // centre policy is on and it came out short — see crossStartFor.
+            // Measured from the RESOLVED heights, so every arm above (the
+            // Fixed/Preset renormalize, the Auto share, the min-size clamp
+            // and its rebalance) is already folded in, and an overflowing
+            // stack yields no offset rather than a negative one.
+            //
+            // Against colArea, not area: a maximized-to-edges column is laid
+            // out in the RAW work area, and centring it in the gapped one
+            // would offset it by half the outer gap.
+            int stackCross = gapsTotal;
+            for (int vi = 0; vi < n; ++vi) {
+                stackCross += heights[vi];
+            }
+            int crossCursor = crossStartFor(stackCross, params, colArea);
             for (int vi = 0; vi < n; ++vi) {
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(visible.at(vi)).windowId;
-                rt.rect = axis.makeRect(mainCursor, crossCursor, colW, heights[vi]);
+                rt.rect = axis.makeRect(mainStart, crossCursor, colW, heights[vi]);
                 rt.windowedFullscreen = col.tiles.at(visible.at(vi)).windowedFullscreen;
                 rc.tiles.append(rt);
-                crossCursor += heights[vi] + gap;
+                crossCursor += heights[vi] + colGap;
             }
         }
 

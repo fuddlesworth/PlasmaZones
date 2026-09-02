@@ -42,10 +42,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // texScale note below); alignment is a property of the rects, not of
     // the densities.
     const qreal pad = wb.outerPadding;
-    QRectF windowRect = w->expandedGeometry();
-    if (windowRect.isEmpty()) {
-        windowRect = w->frameGeometry();
-    }
+    // The same rect the fold builds from, through the same accessor — a second
+    // reading of expandedGeometry() here would reintroduce the stale-rect case
+    // on the backdrop alone and silently misalign it against the composite,
+    // which is exactly the drift the shared surfaceCanvasFor exists to prevent.
+    const QRectF windowRect = surfaceWindowRect(w);
     // The SAME canvas the fold builds, from the same helper — not a second derivation that
     // happens to agree. Texel alignment between the backdrop and the composite is what lets
     // a pack sample both with one uv, and a drift between two copies of this arithmetic

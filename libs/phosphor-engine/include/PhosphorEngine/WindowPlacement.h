@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <QHash>
 #include <QJsonArray>
@@ -16,6 +17,13 @@
 #include <utility>
 
 namespace PhosphorEngine {
+
+/// Upper sanity bound for a virtual desktop number read back from disk. Not a
+/// compositor limit — KWin's real desktop count is only knowable at runtime, and
+/// the effect re-checks the target against the live list before moving anything.
+/// This exists so a corrupt or foreign session.json cannot put an arbitrary
+/// integer into a placement record.
+inline constexpr int MAX_PLAUSIBLE_VIRTUAL_DESKTOP = 1024;
 
 /// One engine's view of a window: which managed slot it occupies (or that it is
 /// floating / unmanaged) in THAT engine's mode. State is PER ENGINE — a window
@@ -94,6 +102,29 @@ struct WindowPlacement
     // ── Recency (most-recent-wins ordering; stamped by the store) ──
     quint64 sequence = 0;
 
+    // ── Cross-screen reclaim credit ──
+    /// Whether this record may power the cross-screen reclaim's appId-sibling
+    /// fallback (WindowPlacementStore::peekForReclaim). The reclaim exists for
+    /// SESSION RESTORE — KWin reopening a logout-surviving window on a
+    /// nondeterministic output — so only a record whose window was live at the
+    /// last save is evidence of a misplaced restore. A record whose window
+    /// closed mid-session is reopen memory, not restore evidence: left
+    /// eligible, it teleports every later same-app window (a detached browser
+    /// tab, a Ctrl+N) to wherever the last sibling died. Defaults true (a
+    /// runtime capture describes a live window); cleared by
+    /// markInstanceClosed on close and by takeForReopen's per-open credit
+    /// burn; persisted as "liveAtSave" with serialize() re-deriving the value
+    /// from the live-instance probe (plus a shutdown-close grace) so the
+    /// graveyard dies across sessions while logout closes keep their credit.
+    /// Deliberately OUTSIDE sameContentAs (like sequence): credit flips must
+    /// not defeat the merge's content-identical short-circuit.
+    bool reclaimEligible = true;
+    /// When markInstanceClosed saw this window close (msecs since epoch), 0 if
+    /// never. In-memory only — serialize() reads it for the shutdown-close
+    /// grace (a close moments before the final logout save must still persist
+    /// as restore evidence); never written to JSON.
+    qint64 closedAtMsecs = 0;
+
     bool isValid() const
     {
         return !windowId.isEmpty() && !appId.isEmpty();
@@ -108,9 +139,46 @@ struct WindowPlacement
 
     /// The shared free/float geometry for @p screenId, or an invalid rect if none
     /// has been captured on that screen yet.
+    ///
+    /// The exact key wins, so a genuinely per-virtual-screen capture keeps its
+    /// own remembered spot. On a miss the search widens to keys on the SAME
+    /// PHYSICAL OUTPUT — and no further. That is not a cross-screen fallback
+    /// (which was removed on purpose, because answering from another monitor
+    /// teleports the window); virtual screens subdivide one output and share
+    /// its coordinate space, so a rect filed under a sibling subdivision is
+    /// already in the right coordinates.
+    ///
+    /// The widening is load-bearing, not defensive. VirtualScreenMigration
+    /// rewrites these keys to the new virtual screen only for windows it can
+    /// resolve zones for, and deliberately keeps the PHYSICAL key otherwise
+    /// ("No zone info — keep physical ID, don't guess VS"). A floating window
+    /// has no zones by definition, so on a virtual-screen setup its key stays
+    /// physical while every reader asks with the virtual id. An exact-only
+    /// lookup therefore missed exactly the records this map exists to serve.
     QRect freeGeometryFor(const QString& screenId) const
     {
-        return freeGeometryByScreen.value(screenId);
+        const auto exact = freeGeometryByScreen.constFind(screenId);
+        if (exact != freeGeometryByScreen.constEnd() && exact.value().isValid()) {
+            return exact.value();
+        }
+        if (screenId.isEmpty()) {
+            return {};
+        }
+        // Deterministic among siblings: QHash iteration order is unspecified,
+        // so without a total order the answer would differ run to run. Same
+        // lexicographic-smallest rule anyFreeGeometryScreenId uses.
+        QString bestKey;
+        QRect best;
+        for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {
+            if (!it.value().isValid() || !PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), screenId)) {
+                continue;
+            }
+            if (bestKey.isEmpty() || it.key() < bestKey) {
+                bestKey = it.key();
+                best = it.value();
+            }
+        }
+        return best;
     }
 
     /// The screenId of the deterministic cross-screen fallback pick: the
@@ -292,6 +360,7 @@ struct WindowPlacement
         }
 
         obj[QLatin1String("seq")] = static_cast<double>(sequence);
+        obj[QLatin1String("liveAtSave")] = reclaimEligible;
         return obj;
     }
 
@@ -301,7 +370,14 @@ struct WindowPlacement
         p.appId = appId;
         p.windowId = obj.value(QLatin1String("windowId")).toString();
         p.screenId = obj.value(QLatin1String("screen")).toString();
-        p.virtualDesktop = obj.value(QLatin1String("desktop")).toInt();
+        // session.json is on-disk input this process does not control, so the
+        // desktop number is range-checked here rather than trusted all the way
+        // to the compositor. Anything outside a plausible desktop count is
+        // treated as unknown (0), which reads as "no remembered desktop" and
+        // leaves the window wherever it opens — the same outcome as a record
+        // that never carried one.
+        const int rawDesktop = obj.value(QLatin1String("desktop")).toInt();
+        p.virtualDesktop = (rawDesktop > 0 && rawDesktop <= MAX_PLAUSIBLE_VIRTUAL_DESKTOP) ? rawDesktop : 0;
         p.activity = obj.value(QLatin1String("activity")).toString();
         p.kind = clampWindowKindFromWire(obj.value(QLatin1String("kind")).toInt());
 
@@ -333,6 +409,10 @@ struct WindowPlacement
         }
 
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
+        // Missing key (a record persisted by a pre-credit build) reads TRUE:
+        // one legacy session behaves exactly as before, and the next save
+        // stamps the derived value. Not migration code — a default.
+        p.reclaimEligible = obj.value(QLatin1String("liveAtSave")).toBool(true);
         return p;
     }
 };
@@ -390,7 +470,10 @@ struct WindowPlacement
 /// and must answer whether that context resolves to @p engineId's mode;
 /// callers wrap their layout-manager mode lookup (and any null-manager
 /// permissiveness) in it, keeping this library free of the zones-layer mode
-/// type.
+/// type. (The function this whole block documents is
+/// pendingCrossScreenManagedRestore, declared below the two helpers that
+/// follow — it needs their definitions first.)
+
 /// Whether @p windowId carries a stable, FIFO-matchable appId — the guard
 /// every cross-engine gate and claim runs before consulting the placement
 /// store. A bare id (no `appId|uuid` composite, so extractAppId returns the

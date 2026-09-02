@@ -823,7 +823,7 @@ SettingsFlickable {
         readonly property bool isTemplate: layoutToDelete && layoutToDelete.isScrollingTemplate === true
 
         title: isTemplate ? i18n("Delete Template") : (isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout"))
-        subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.displayName || "") : ""
+        subtitle: layoutToDelete ? i18n("Are you sure you want to delete “%1”?", layoutToDelete.displayName || "") : ""
         standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
         onClosed: layoutToDelete = null

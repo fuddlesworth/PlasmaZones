@@ -152,6 +152,11 @@ private Q_SLOTS:
         QCOMPARE(dbusSignature(outcome), QStringLiteral("(issiiiisbba(siiiiiibsssdd))"));
     }
 
+    // bypassReason's token tables are the drag family's one TRANSFORMING
+    // marshaller; they are pinned in the library's own suite
+    // (test_phosphorprotocol.cpp testBypassReasonWireStringRoundTrip) rather
+    // than here, because the converters need no bus.
+
     void testPreTileGeometryEntryRoundtrip()
     {
         // Registered and marshalled like its neighbours but, until this case,
@@ -266,7 +271,7 @@ private Q_SLOTS:
         //
         // Verify D-Bus signature: (siiiissbbbbssiiibsb) = string + 4 ints + 2
         // strings + 4 bools (monocle, floating, windowedFullscreen,
-        // columnMaximized) + stacking + scrollEdge + viewDelta + the visual
+        // maximizedToEdges) + stacking + scrollEdge + viewDelta + the visual
         // position pair and its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiiissbbbbssiiibsb)"));
@@ -288,7 +293,7 @@ private Q_SLOTS:
         QCOMPARE(entry.windowedFullscreen, true);
         // Differs from windowedFullscreen beside it, so a transposition of the
         // two adjacent bools fails here rather than passing by coincidence.
-        QCOMPARE(entry.columnMaximized, false);
+        QCOMPARE(entry.maximizedToEdges, false);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDelta, -240);
@@ -304,7 +309,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
         QCOMPARE(defaultEntry.windowedFullscreen, false);
-        QCOMPARE(defaultEntry.columnMaximized, false);
+        QCOMPARE(defaultEntry.maximizedToEdges, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDelta, 0);
@@ -362,7 +367,7 @@ private Q_SLOTS:
             QCOMPARE(got.monocle, sent.monocle);
             QCOMPARE(got.floating, sent.floating);
             QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
-            QCOMPARE(got.columnMaximized, sent.columnMaximized);
+            QCOMPARE(got.maximizedToEdges, sent.maximizedToEdges);
             QCOMPARE(got.stacking, sent.stacking);
             QCOMPARE(got.scrollEdge, sent.scrollEdge);
             QCOMPARE(got.viewDelta, sent.viewDelta);
@@ -375,13 +380,13 @@ private Q_SLOTS:
 
         // TWO legal payloads, because no single legal payload can cover the
         // four bool slots: validationError rejects windowedFullscreen and
-        // columnMaximized beside either monocle or floating, so wf=true
+        // maximizedToEdges beside either monocle or floating, so wf=true
         // forces monocle and floating false. Payload A (wf=true,
-        // columnMaximized=true — a pair that IS legal, since the two drive
+        // maximizedToEdges=true — a pair that IS legal, since the two drive
         // different compositor state) catches a floating-for-wf or
         // monocle-for-wf transposition in either operator; payload B
         // (monocle=true) catches the monocle-for-floating swap A cannot
-        // see, and clears columnMaximized both because monocle+cm is
+        // see, and clears maximizedToEdges both because monocle+cm is
         // rejected and so that `false` crosses the bus for that bool too. Between them, a transposition introduced in
         // EITHER operator alone fails loudly. (A matching swap in both operators is an identity round-trip no bus test
         // can see — the realistic regression is the single-operator edit, and that is what these two payloads pin.)
@@ -401,7 +406,7 @@ private Q_SLOTS:
         roundTrip(sent);
         sent.monocle = true;
         sent.windowedFullscreen = false;
-        sent.columnMaximized = false;
+        sent.maximizedToEdges = false;
         sent.viewImmediate = false;
         roundTrip(sent);
     }

@@ -243,6 +243,20 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         if (!m_effect->isTileableWindow(w) || !m_effect->shouldHandleWindow(w)) {
             return;
         }
+        // A floating window under the cursor neither receives hover focus nor
+        // is looked through — a plain return, symmetric with the active-window
+        // float pause above. Both halves are needed to avoid a one-way focus
+        // trap: activating a float on hover hands it focus, the active-float
+        // pause then freezes FFM, and with keep-floating-above the float
+        // overlaps the tiled stack so any cursor sweep across its frame
+        // re-captures focus that only a manual click can move away — the
+        // #1028 "sticky window". A `continue` would be the #461 steal in a
+        // new coat: focusing a tiled window underneath a visible overlay the
+        // cursor is actually on. Floats are click-to-focus, in both
+        // directions.
+        if (m_effect->isWindowFloating(m_effect->getWindowId(w))) {
+            return;
+        }
         // Also block focus for windows below the minimum size threshold.
         // These are normal windows (pass isTileableWindow) but too small
         // for autotile — e.g., emoji picker, small utilities. Without this,
@@ -868,12 +882,12 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // cleanupClosedWindowState scrubs the monocle set but has no column
     // equivalent, and the funnel's own release retains an entry it could not
     // pay — deliberately, so a later arm can pay it. On a dying window there
-    // is no later arm, and restoreAllColumnMaximized re-inserts on a resolve
+    // is no later arm, and restoreAllMaximizedToEdges re-inserts on a resolve
     // miss, so a window closing around a daemon-loss drain leaves an entry
     // with no window and no reaper. Window ids are appId-derived and reusable,
     // and three live readers consume that entry: interceptMaximizeRequest's
-    // already-agrees test, dispatchMaximizeColumnToggle's refusal write-back,
-    // and the batch's resolveColumnMaximizeAction inSet term. A reused id
+    // already-agrees test, dispatchMaximizeToEdgesToggle's refusal write-back,
+    // and the batch's resolveMaximizeToEdgesAction inSet term. A reused id
     // therefore feeds all three a membership the new window never earned, and
     // the refusal write-back is the one that can act on it outright by
     // driving KWin to MaximizeFull for a column the engine never maximized.
@@ -881,7 +895,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is
     // a bit the effect genuinely still owes.
-    m_columnMaximizedWindows.remove(windowId);
+    m_maximizedToEdgesWindows.remove(windowId);
 
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
@@ -902,122 +916,6 @@ void TilingHandler::releaseWindowTracking(const QString& windowId, const QString
                                                        QStringLiteral("releaseWindowTracking"));
         qCDebug(lcEffect) << "Notified tiling: releaseWindowTracking" << windowId << "on screen" << screenId;
     }
-}
-
-void TilingHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore)
-{
-    if (!window || window->isDeleted()) {
-        return;
-    }
-    const QString windowId = m_effect->getWindowId(window);
-    m_pendingFreshWindows.insert(windowId);
-    m_deferredWindowRoutes.insert(windowId, DeferredWindowRoute{QPointer<KWin::EffectWindow>(window), canSnapRestore});
-}
-
-QSet<QString> TilingHandler::completeDeferredWindowRoutes()
-{
-    const auto routes = m_deferredWindowRoutes;
-    m_deferredWindowRoutes.clear();
-    QSet<QString> routedWindowIds;
-    routedWindowIds.reserve(routes.size());
-    for (auto it = routes.constBegin(); it != routes.constEnd(); ++it) {
-        routedWindowIds.insert(it.key());
-        KWin::EffectWindow* window = it->window.data();
-        if (!window || window->isDeleted()) {
-            m_pendingFreshWindows.remove(it.key());
-            continue;
-        }
-        const QString windowId = m_effect->getWindowId(window);
-        routedWindowIds.insert(windowId);
-        // The pending-fresh entry was keyed by the id at defer time; if the
-        // live id diverged, the old key would leak forever (the tail prune
-        // below only drops dead/off-screen windows, and this window is
-        // neither).
-        if (windowId != it.key()) {
-            m_pendingFreshWindows.remove(it.key());
-        }
-        // The defer-time first-frame suppression was armed with the standard
-        // deadline, but the screen query this dispatch waited on can outlast
-        // it — re-arm (deadline only, no-op for unsuppressed windows) so the
-        // window doesn't return to compositing at its centred spawn placement
-        // between deadline expiry and the reposition below.
-        m_effect->refreshRestoreSuppressionDeadline(window);
-        // Consume (and maybe apply) the instant snap-restore cache entry,
-        // exactly as the non-deferred open path does — a deferred window must
-        // not leave its entry alive for a later same-app sibling to claim.
-        // A teleport can move the window to another screen; re-resolve after.
-        QString screenId = m_effect->getWindowScreenId(window);
-        if (it->canSnapRestore && !window->isMinimized()
-            && m_effect->tryInstantSnapRestore(window, windowId, /*canSnapRestore=*/true)) {
-            screenId = m_effect->getWindowScreenId(window);
-        }
-        if (m_managedScreens.contains(screenId)) {
-            if (window->isMinimized()) {
-                // A window that minimized while the screen query was pending
-                // is excluded from the follow-up batch (it is in
-                // routedWindowIds), so nothing else will claim it — claim it
-                // here, release the first-frame suppression (a minimized
-                // window paints nothing, and leaving the suppression armed
-                // stalls its eventual restore for the 250 ms deadline), and
-                // drop the spawn-provenance marker so a later re-add cannot
-                // inherit knownFreeFloating=true from a stale entry.
-                // Empty filter: passing m_managedScreens duplicated the
-                // claim's own internal autotile-screen gate verbatim.
-                claimAlreadyMinimizedAsFloated(window, windowId, {}, /*enteringAutotile=*/true);
-                m_pendingFreshWindows.remove(windowId);
-                m_effect->endRestoreSuppression(window);
-                continue;
-            }
-            if (it->canSnapRestore && m_effect->snapHandler()) {
-                QPointer<KWin::EffectWindow> safeWindow = window;
-                m_effect->snapHandler()->callResolveWindowRestore(
-                    window,
-                    [this, safeWindow, windowId](bool snapApplied) {
-                        if (!safeWindow || safeWindow->isDeleted()) {
-                            return;
-                        }
-                        if (!m_managedScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
-                            m_pendingFreshWindows.remove(windowId);
-                            m_effect->endRestoreSuppression(safeWindow.data());
-                            return;
-                        }
-                        // knownFreeFloating only when the restore did NOT
-                        // apply — a zone-placed window's live frame is the
-                        // zone rect, not a genuine free frame.
-                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied)
-                            && !m_notifiedWindows.contains(windowId)) {
-                            m_effect->endRestoreSuppression(safeWindow.data());
-                        }
-                    },
-                    /*releaseSuppressionOnMiss=*/false);
-            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true)
-                       && !m_notifiedWindows.contains(windowId)) {
-                m_effect->endRestoreSuppression(window);
-            }
-            continue;
-        }
-
-        m_pendingFreshWindows.remove(it.key());
-        m_pendingFreshWindows.remove(windowId);
-        if (it->canSnapRestore && !window->isMinimized() && m_effect->snapHandler()) {
-            m_effect->snapHandler()->callResolveWindowRestore(window);
-        } else {
-            m_effect->endRestoreSuppression(window);
-        }
-    }
-
-    const auto pendingIds = m_pendingFreshWindows.values();
-    for (const QString& windowId : pendingIds) {
-        // EXACT resolve: the entry is keyed to a specific instance's id, so a
-        // fuzzy hit on a same-app sibling must not keep a dead entry alive —
-        // a retained stale entry later flips knownFreeFloating to true and
-        // poisons the free-geometry capture.
-        KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
-        if (!window || window->isDeleted() || !m_managedScreens.contains(m_effect->getWindowScreenId(window))) {
-            m_pendingFreshWindows.remove(windowId);
-        }
-    }
-    return routedWindowIds;
 }
 
 void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
@@ -1148,7 +1046,7 @@ void TilingHandler::drainDeadSessionState()
     restoreAllMonocleMaximized();
     // The column-maximize mirror belongs to the dead session too, and the
     // batch Apply arm re-establishes it from the new daemon's truth.
-    restoreAllColumnMaximized();
+    restoreAllMaximizedToEdges();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The resolved per-screen scroll behaviour belongs to the dead session
     // too, and bring-up clears it rather than trusting the teardown to have:
@@ -1300,6 +1198,16 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
+    // The announced-epoch memo is per-session for the same reason as its
+    // neighbours: it records what a PARTICULAR daemon said. Note this is
+    // symmetry and bookkeeping, not a repair — the epoch is derived from a
+    // seeded-at-zero hash of the context key, so a restarted daemon announces
+    // the SAME value for the same strip and a retained entry would compare
+    // equal rather than firing a spurious retire. Cleared because every other
+    // daemon-published map here is, and because a screen whose context moved
+    // while the daemon was down should be treated as a first epoch rather than
+    // compared against a memo from a session that is gone.
+    m_stripEpochByScreen.clear();
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep
     // blitting pills for columns the new daemon never laid out: the replay

@@ -64,15 +64,23 @@ p_add_test(test_localized_context_substitution core/test_localized_context_subst
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp)
-target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Needs the FakeScreenProvider: the mis-keyed free-geometry guard only engages
+# with real output geometry behind the ScreenManager (it fails open otherwise).
+add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_lifecycle COMMAND test_wts_lifecycle)
 
 add_executable(test_wts_session core/windowtracking/test_wts_session.cpp)
 target_link_libraries(test_wts_session PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_session COMMAND test_wts_session)
 
-add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp)
+# FakeScreenProvider compile-in: the zone-geometry screen-resolution cases need
+# a tracked multi-output topology that resolves an empty screen id to a primary.
+add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_queries PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
@@ -87,7 +95,11 @@ add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Qt6::Gui named explicitly, matching test_wts_lifecycle: both targets compile
+# FakeScreenProvider.cpp, which uses QScreen. It resolved transitively through
+# plasmazones_core before, so the two targets disagreed about a dependency they
+# share.
+target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
 add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp)
@@ -1080,13 +1092,26 @@ add_test(NAME test_shader_timing COMMAND test_shader_timing)
 
 # Pure-logic test for the scroll-managed window decision helpers
 # (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
-# decision with its clear-in-flight marker contract (full 16-row truth
-# table) and the counter-assert burst budget (rate limit, rollover,
-# fresh-batch re-arm). Same header-only reach as the anchor test.
+# decision and the maximize-to-edges 3-way decision (a 16-row truth table
+# each, plus their in-flight marker walks), the counter-assert burst budget
+# (rate limit, rollover, fresh-batch re-arm), the compositor-claim release
+# table with its teardown order and fullscreen-skip retention, and the
+# size-continuity carry-forward table. Same header-only reach as the anchor
+# test.
 add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
 target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
+
+# Pure-logic test for the desktop-switch pre-autotile restore decision
+# (tilinghandler/pretiledecisions.h) — the truth table over
+# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
+# pinning the cross-screen decline that keeps a bucket rect from another
+# monitor moving the window there. Same header-only reach as the scroll test.
+add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
+target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
@@ -1181,6 +1206,20 @@ add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
+
+# WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
+# comparison that keeps or drops a snap when the compositor reports a window
+# on a new output. Split out rather than folded into test_wta_convenience,
+# which is already at the file-size ceiling. Same shared fixture, so the same
+# FakeScreenProvider compile-in and engine link set.
+add_executable(test_wta_screen_changed dbus/test_wta_screen_changed.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_screen_changed PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)

@@ -36,6 +36,8 @@
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 
+#include <cstdlib>
+
 namespace PlasmaZones {
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
@@ -93,6 +95,20 @@ KWin::VirtualDesktop* desktopByNumber(int desktop)
 }
 } // namespace
 
+void PlasmaZonesEffect::placeWindowWhereItIs(KWin::EffectWindow* w)
+{
+    // Recovery for a desktop move that cannot happen. The daemon emitted the
+    // move INSTEAD of placing the window and is waiting for the re-announce the
+    // arrival would have produced, so a bare refusal strands it unplaced for
+    // the rest of the session. Placing it on the desktop it is already on is
+    // the honest answer: the rule named somewhere that does not exist.
+    if (!w || !m_snapHandler) {
+        return;
+    }
+    m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+    m_snapHandler->slotDesktopChangedRestoreArrivals();
+}
+
 void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
 {
     if (desktop < 1) {
@@ -105,7 +121,16 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     }
     KWin::VirtualDesktop* target = desktopByNumber(desktop);
     if (!target) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: no desktop numbered" << desktop;
+        // Refusing the move is not the end of it. On the open path a
+        // RouteToDesktop rule emits this and places nothing, expecting the
+        // window to be re-announced when it lands. If the move never happens,
+        // nothing re-announces it and the window stays unplaced for the rest of
+        // the session. So hand it straight to the arrival restore instead,
+        // which places it on the desktop it is already on. The concrete case is
+        // a user who removed a virtual desktop that a rule still names.
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: no desktop numbered" << desktop << "— placing" << windowId
+                          << "where it is instead";
+        placeWindowWhereItIs(w);
         return;
     }
     applyDesktopMove(w, target, windowId);
@@ -135,7 +160,11 @@ void PlasmaZonesEffect::slotWindowDesktopMoveByIdRequested(const QString& window
         }
     }
     if (!target) {
-        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: no desktop with id" << desktopId;
+        // Same recovery as the numbered variant: the daemon placed nothing and
+        // is waiting for the re-announce this move was supposed to cause.
+        qCDebug(lcEffect) << "slotWindowDesktopMoveByIdRequested: no desktop with id" << desktopId << "— placing"
+                          << windowId << "where it is instead";
+        placeWindowWhereItIs(w);
         return;
     }
     applyDesktopMove(w, target, windowId);
@@ -150,12 +179,52 @@ void PlasmaZonesEffect::applyDesktopMove(KWin::EffectWindow* w, KWin::VirtualDes
     // it to a single desktop here would silently un-sticky it. Directional
     // cross-desktop move is meaningless for an everywhere window — leave it.
     if (w->isOnAllDesktops()) {
+        // No recovery call here, unlike the no-such-desktop branches above. A
+        // sticky window is present on every desktop, so it was never displaced
+        // and is not waiting to be placed — driving a restore at it would
+        // re-place a window that went nowhere, which is the same unsolicited
+        // re-placement the arrival arm in window_desktop_connections.cpp goes
+        // to some length to avoid for the grew / un-stuck cases.
         qCDebug(lcEffect) << "desktop move: window is on all desktops, ignoring" << windowId;
         return;
     }
     // Single-desktop membership (not on-all-desktops) so the window genuinely
     // moves to the target.
     KWin::effects->windowToDesktops(w, {target});
+
+    // The window has just left the desktop on screen, so nothing will place it
+    // until the user goes to where it went. On a tiling or scrolling screen that
+    // handler's desktop-return catch-scan re-announces it; snapping has no such
+    // sweep, so park it for SnapHandler to re-drive on arrival.
+    //
+    // Keyed on the target not being in view rather than on WHY the move
+    // happened: a RouteToDesktop rule on the open path and a cross-mode handoff
+    // both land here, and the rule case leaves the window unplaced. Parking is a
+    // no-op for a window that turns out to need nothing (the resolve answers
+    // no-snap), so covering both is cheaper than distinguishing them.
+    //
+    // That breadth is safe for the move-to-next/prev-desktop shortcut too, which
+    // is the other producer of this signal. Its re-snap branch emits
+    // applyGeometryRequested with a zone immediately after this move, and that
+    // slot calls markWindowSnapped, which cancels the park — signals on one
+    // D-Bus connection keep their order, so the cancel always follows this arm.
+    // Its no-equivalent-zone fallback branch emits no geometry and leaves the
+    // window genuinely unplaced, which is precisely the case the park is for.
+    //
+    // Measured against the window's OWN output, not the global current desktop.
+    // Under per-output virtual desktops (Plasma 6.7) those differ, and the
+    // global reading both over-parks (the target is current somewhere else, so
+    // the window really is out of view on its own output) and under-parks (the
+    // target is globally current while this output shows something else).
+    // Falls back to the global reading when the window has no output.
+    if (m_snapHandler) {
+        KWin::LogicalOutput* const out = w->screen();
+        KWin::VirtualDesktop* const shownHere =
+            out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
+        if (shownHere != target) {
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+        }
+    }
 }
 
 void PlasmaZonesEffect::slotWindowOutputMoveRequested(const QString& windowId, const QString& targetScreenId)
@@ -259,6 +328,26 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                                    const QString& zoneId, const QString& screenId, bool sizeOnly)
 {
+    // Magnitude bound BEFORE either QRect construction below. QRect's
+    // x/y/w/h constructor computes `x + w - 1`, which is signed overflow and
+    // undefined for a garbled payload — and it happens inside the constructor,
+    // so the `isValid()` and `width > 0` guards further down run too late to be
+    // a defence. Same ceilings the tile wire applies, shared from WindowTypes.h.
+    // Deliberately magnitude only, not a screen-bounds test: legitimate parked
+    // columns sit far outside every output.
+    // Widened before the absolute value: qAbs(INT_MIN) is itself undefined in
+    // int and in practice yields INT_MIN back, which is negative, so every
+    // comparison here would be false and the guard would fail OPEN on exactly
+    // the payload it exists to stop. Mirrors WindowGeometryEntry's validator.
+    if (std::abs(static_cast<qint64>(width)) > PhosphorProtocol::MaxWireExtent
+        || std::abs(static_cast<qint64>(height)) > PhosphorProtocol::MaxWireExtent
+        || std::abs(static_cast<qint64>(x)) > PhosphorProtocol::MaxWireOrigin
+        || std::abs(static_cast<qint64>(y)) > PhosphorProtocol::MaxWireOrigin) {
+        qCWarning(lcEffect) << "slotApplyGeometryRequested: implausible geometry for" << windowId << x << y << width
+                            << height << "— dropping";
+        return;
+    }
+
     KWin::EffectWindow* w = findWindowById(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
@@ -366,9 +455,37 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
     if (!skipGeometry) {
+        // Same defensive pair as the batch path below and drag_end's
+        // ApplySnap: pre-seed the tracked screen from the daemon's
+        // authoritative answer (async follow-up frame changes), bracket the
+        // apply (the synchronous one) — an ungated fire here let the
+        // VS-crossing handler resolve a cross-screen apply against stale
+        // state and report a phantom crossing.
+        if (!screenId.isEmpty()) {
+            m_trackedScreenPerWindow[w] = screenId;
+            m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
+        }
+        // Genuine snap commit only (same trio the tracking discriminator
+        // below tests): a float-restore places FREE geometry, where KWin's
+        // maximize is the user's business, and an autotile-managed screen's
+        // maximize belongs to TilingHandler's own ledgers. After the
+        // pre-seed above, whose coverage the demote's committed configure
+        // rides; before the bracketed apply.
+        const bool demoteForSnap =
+            !zoneId.isEmpty() && !screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId);
+        if (demoteForSnap) {
+            m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
+        }
+        // Save/restore, not set/clear (nesting-safe).
+        const bool prevInApply = m_daemonGate.inGeometryApply;
+        m_daemonGate.inGeometryApply = true;
+        const auto applyGuard = qScopeGuard([this, prevInApply] {
+            m_daemonGate.inGeometryApply = prevInApply;
+        });
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                            QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
     }
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
@@ -434,7 +551,18 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         pending.append(p);
     };
     for (const auto& entry : geometries) {
-        if (entry.windowId.isEmpty() || entry.width <= 0 || entry.height <= 0) {
+        // validationError() BEFORE the size test and before any toRect(): it
+        // bounds the magnitudes, and the QRect construction inside toRect()
+        // overflows before a `<= 0` check can see anything. The size test stays
+        // as this consumer's own policy (a zero extent is meaningless here),
+        // which the shared validator deliberately leaves to the caller.
+        if (const QString invalid = entry.validationError(); !invalid.isEmpty()) {
+            qCWarning(lcEffect) << "slotApplyGeometriesBatch: dropping entry —" << invalid;
+            continue;
+        }
+        if (entry.width <= 0 || entry.height <= 0) {
+            qCWarning(lcEffect) << "slotApplyGeometriesBatch: dropping" << entry.windowId << "with non-positive size"
+                                << entry.width << "x" << entry.height;
             continue;
         }
         if (KWin::EffectWindow* window = windowMap.value(entry.windowId)) {
@@ -559,8 +687,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // genuinely un-snaps the window regardless of visibility.
             const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
             if (!skipMinimizedRestore) {
+                // Snap placements only (the discriminator below): a non-empty
+                // authoritative screenId that is not autotile-managed marks a
+                // real zone commit, and a surviving KWin maximize would fight
+                // its rect and arm a cross-screen restore.
+                const bool demoteForSnap = !p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId);
+                if (demoteForSnap) {
+                    m_tilingHandler->demoteMaximizeForSnapPlacement(p.window, p.geometry);
+                }
                 applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                                    /*skipAnimation=*/false, batchProfilePath);
+                                    /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(),
+                                    /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
             }
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real

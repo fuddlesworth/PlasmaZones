@@ -139,7 +139,7 @@ Item {
         var c = root._resolved && root._resolved.chain ? root._resolved.chain : [];
         // Bare value: the sole caller wraps this in a "Current: %1" label, so a
         // "Packs: " prefix here would render the doubled "Current: Packs: ...".
-        return c.length > 0 ? root._packNames(c).join(", ") : i18n("None");
+        return c.length > 0 ? root._packNames(c).join(", ") : i18nc("@item no decoration packs in the chain", "None");
     }
 
     function _packNames(ids) {

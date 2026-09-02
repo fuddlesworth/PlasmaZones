@@ -148,6 +148,11 @@ public:
     {
         return QStringLiteral("Meta+Alt+F");
     }
+    static QString scrollingMaximizeToEdgesShortcut()
+    {
+        // M for maximize, niri's Mod+M with this scheme's Meta+Alt prefix.
+        return QStringLiteral("Meta+Alt+M");
+    }
     static QString scrollingExpandColumnShortcut()
     {
         return QStringLiteral("Meta+Alt+E");

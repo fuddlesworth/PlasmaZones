@@ -79,6 +79,14 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
                 m_lastBroadcastScreens = screenIds;
                 Q_EMIT scrollingScreensChanged(screenIds);
             });
+    // Strip identity. Relayed with NO extra change gate, unlike the screen-set
+    // relay above: the engine already announces this on change only, and a
+    // second gate here could only ever swallow a real switch. The whole value
+    // of the signal is that it fires when no geometry batch does.
+    connect(m_engine, &PhosphorScrollEngine::ScrollEngine::stripContextChanged, this,
+            [this](const QString& screenId, const QString& epoch, const QString& debugLabel) {
+                Q_EMIT stripContextChanged(screenId, epoch, debugLabel);
+            });
     // Strip wake-ups for anyone rendering the strip (the settings app's
     // Monitors thumbnail today). Relayed straight through: placementChanged
     // IS the engine's change gate, and the reasons this adaptor does not add
@@ -320,18 +328,28 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     // Same gate chain as the width setters above: ownership, engine activity
     // on the screen, and the per-context gate. There is no value to range
     // check — the verb is a toggle. windowId is deliberately NOT rejected when
-    // empty: that spelling means "the focused column" and is what the keyboard
-    // shortcut sends. An unknown windowId is refused by the strip itself,
-    // which is the only place that knows which columns it holds.
+    // empty: that spelling means "the focused column", the same thing the
+    // keyboard shortcut asks for in-process. An unknown windowId is refused by
+    // the strip itself, which is the only place that knows which columns it
+    // holds.
     //
-    // WHETHER THE STRIP CHANGED IS REPORTED, unlike every other verb on this
-    // interface, because this one is the only one whose caller is holding
-    // compositor state that only the answer can settle. The KWin effect leaves
-    // KWin's maximize bit exactly where the user's click put it and dispatches,
-    // so a request nothing acts on leaves the window in the state the USER
-    // asked for with no batch coming to impose the strip's own. A void method
-    // still replies success on a silent no-op, so only a real return value can
-    // carry that back.
+    // WHETHER THE STRIP CHANGED IS REPORTED here only to keep the wire shape
+    // identical to toggleMaximizeToEdges below, which is the verb whose caller
+    // actually steers on the answer; that method carries the reason. True on
+    // both means the strip changed. False covers a refusal at this boundary
+    // and an accepted call the engine acted on with nothing, and deliberately
+    // does not distinguish them.
+    //
+    // GATED ON THE CALLER'S SCREEN, ACTED ON THE WINDOW'S. For a named window
+    // the engine re-resolves to that window's own tracked screen and acts
+    // there (ScrollEngine::toggleMaximizeColumn), while every term of the gate
+    // below reads the screenId the caller passed. So a request can clear
+    // screen A's gate and change a column on screen B, or be refused by A
+    // while B would have allowed it. This is NOT a guarantee this layer makes,
+    // and it is recorded rather than closed: resolving the window's screen
+    // needs ScrollEngine::stateForWindow, which is private, and the adaptor
+    // deliberately holds no view of engine state beyond isActiveOnScreen.
+    // Same on toggleMaximizeToEdges below.
     //
     // False therefore covers BOTH refusals, and deliberately does not
     // distinguish them: refused here at the boundary (no engine, empty screen
@@ -345,6 +363,25 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
         return false;
     }
     return m_engine->toggleMaximizeColumn(screenId, windowId);
+}
+
+bool ScrollingAdaptor::toggleMaximizeToEdges(const QString& screenId, const QString& windowId)
+{
+    // toggleMaximizeColumn's contract, verbatim: same gate chain, same
+    // caller-screen gate against an engine that resolves the named window's
+    // own screen, same two-refusals meaning of false.
+    //
+    // This is the verb the report exists FOR. The KWin effect leaves KWin's
+    // maximize bit exactly where the user's click put it and dispatches, so a
+    // request nothing acts on leaves the window in the state the user asked
+    // for, and no tile batch is coming to impose the strip's own. False is the
+    // effect's only cue to put the bit back where the engine has it. A void
+    // method still replies success on a silent no-op, so only a real return
+    // value can carry that back.
+    if (refusesScreenVerb(screenId)) {
+        return false;
+    }
+    return m_engine->toggleMaximizeToEdges(screenId, windowId);
 }
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
@@ -481,13 +518,16 @@ void ScrollingAdaptor::clearEngine()
 {
     if (m_engine) {
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
-        // The strip wake-up relay dies with it, for the same reason: a
-        // detached adaptor must not keep putting a dead engine's screen ids
-        // on the bus. Defence in depth rather than the load-bearing half —
-        // the relay's own `!m_engine` conjunct already makes a surviving
-        // connection inert rather than fatal, so no test can tell this
-        // disconnect from its absence. The sibling above is the one a spy
-        // discriminates, because its lambda has no such guard.
+        // Three relays are wired in the constructor and all three die here: a
+        // detached adaptor must not keep putting a dead engine's state on the
+        // bus. Two of them are load-bearing, because their lambdas are bare
+        // forwards with no engine test, so a surviving connection really does
+        // keep emitting and a spy discriminates the disconnect from its
+        // absence: the screen-set relay above, and the strip-identity relay
+        // below. The third, placementChanged, is defence in depth — its
+        // lambda's own `!m_engine` conjunct already makes a surviving
+        // connection inert rather than fatal.
+        disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::stripContextChanged, this, nullptr);
         disconnect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, nullptr);
         m_engine = nullptr;
     }

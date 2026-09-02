@@ -62,6 +62,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
     m_wiredWindows.insert(w);
 
+    // Recover the compositor's move state for a window already being dragged
+    // when we wired it. The start signal we connect below has come and gone for
+    // such a window (effect reload or compositor restart mid-gesture), so
+    // without this the tracker would report no compositor move for the rest of
+    // that drag.
+    if (m_dragTracker) {
+        m_dragTracker->noteWiredWindowMoveState(w);
+    }
+
     // Virtual-desktop set changes (departure / arrival arms and the stamp they
     // diff against) live in window_desktop_connections.cpp.
     wireDesktopChangeHandler(w);
@@ -76,6 +85,50 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
         // (not tracked by the autotile handler's m_notifiedWindowScreens).
         m_trackedScreenPerWindow[w] = getWindowScreenId(w);
+        // Flags-settle eviction backstop: a client can set keep-above,
+        // skip-switcher or its transient parent AFTER mapping (Yakuake
+        // queues the first two in its map-time request burst; another client
+        // may flip one seconds later). Each of those flips a structural
+        // placement filter, and without these the map-time tileability
+        // verdict was permanent — the pre-settle window got inserted,
+        // focused and column-sized. The one-tick routing defer in
+        // slotWindowAdded harvests the same-burst case before any insert;
+        // these catch the late case and release the window
+        // (reevaluateWindowEligibility gates itself on announced windows, so
+        // the connection is free for everything else).
+        //
+        // transientChanged / modalChanged are the arms the keep-above pair
+        // could not reach: on Wayland an xdg_toplevel's set_parent and
+        // set_modal arrive as their own requests after the initial commit,
+        // so a dialog can map as a parentless normal toplevel and only
+        // become transient a beat later. Both are structural rejects in
+        // shouldHandleWindow and isTileableWindow, and window TYPE has no
+        // signal of its own, so transientChanged is also the only handle on
+        // the isDialog() reject for clients whose dialog type KWin derives
+        // from the transient relationship.
+        //
+        // What this does NOT cover, so nobody re-derives it from the
+        // Yakuake bug report: a dialog whose parent toplevel is destroyed
+        // BEFORE the dialog maps. Measured live 2026-08-30 — Yakuake's
+        // dropdown closed 32 ms before its First Run dialog arrived, so
+        // transientFor() was null permanently rather than late, and the
+        // dialog presented as a plain normal toplevel (resizable,
+        // unbounded maxSize, not special, not modal) that KWin never
+        // revises. No signal fires because no state changes, so neither
+        // these arms nor a longer settle defer can catch it; an Exclude
+        // rule is the only lever.
+        connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::transientChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
+        connect(kw, &KWin::Window::modalChanged, this, [this, safeW]() {
+            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;
@@ -691,6 +744,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             notifyWindowResized(window, m_resizeStartGeometry);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
+        // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
+        // is when compositorMoveResizeActive() clears), re-drive the pill
+        // hover: the dragStopped re-drive fires on LMB release and is
+        // suppressed while KWin still holds the move for other buttons, so a
+        // multi-button drop onto the pill band would otherwise stay unlit
+        // until the next pointer twitch.
+        // KWin::effects, not m_tilingHandler: cursorPos() needs the former, while
+        // the latter is constructed with the effect and outlives every window
+        // connection — the tail call below dereferences it unguarded, as does
+        // the rest of this file.
+        if (KWin::effects) {
+            m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+        }
         // A maximize claim taken during the gesture was never paid: the batch
         // arms insert membership and then skip the compositor call while the
         // user is dragging, and nothing re-drives them — this lambda replays
@@ -741,7 +807,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // the effect (re)loads has no entry, so its first RESTORE compared
     // false==false, read as a no-edge, and played no morph.
     //
-    // No equivalent seed for m_columnMaximizedWindows, and that asymmetry is
+    // No equivalent seed for m_maximizedToEdgesWindows, and that asymmetry is
     // intended. This map is an EDGE FILTER whose whole job is answering
     // "did the state change", so a missing entry is a wrong answer with no
     // way back — nothing else ever writes it. The claim ledger is an
@@ -758,6 +824,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     if (KWin::Window* kwSeed = w->window()) {
         m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
     }
+
+    // Shadow-margin cache for surfaceWindowRect(). Seed from the window's
+    // current rects (nothing is resizing at connect time, so the pair agrees),
+    // then refresh on every windowExpandedGeometryChanged. The body — and the
+    // write-side invariants: never refresh from a paint-time sample, refuse
+    // implausible margins — lives beside surfaceWindowRect in surfacelayers.cpp.
+    refreshSurfaceShadowMargins(w);
+    connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
+            &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
                 if (!window) {
@@ -793,7 +868,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // even when the shader is skipped).
                 invalidateRuleCacheForStateChange(getWindowId(window));
                 // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
-                // belongs to the scrolling engine's maximize-column verb, not
+                // belongs to the scrolling engine's maximize-to-edges verb, not
                 // to KWin: the strip owns the column's width, so letting both
                 // answer would give one window two maximize authorities.
                 // Placed AFTER the edge filter and the tracking write so it

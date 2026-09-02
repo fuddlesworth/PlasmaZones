@@ -30,15 +30,17 @@ namespace PlasmaZones {
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
  * (with the preset vocabulary beside it), the wheel-driven focusColumn and
  * scrollView verbs, the four absolute width/height setters for external
- * scripting, the toggleMaximizeColumn verb that answers a window's own
- * maximize request with the strip's full-work-area column (and reports back
- * whether the strip changed, so the effect can put KWin's maximize bit back
- * to the engine's state when it did not), the
+ * scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges
+ * verb that answers a window's own maximize request (and reports back whether
+ * the strip changed, so the effect can put KWin's maximize bit back to the
+ * engine's state when it did not), the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
- * moved), the blueprintProgressJson template-seed report, and the
- * stripChanged wake-up that tells a preview its strip is worth re-reading.
+ * moved), the blueprintProgressJson template-seed report, the
+ * stripChanged wake-up that tells a preview its strip is worth re-reading,
+ * and the stripContextChanged announcement of which strip a screen is
+ * currently showing.
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -270,39 +272,78 @@ public Q_SLOTS:
     void setWindowHeightPixels(const QString& screenId, int px);
 
     /**
-     * @brief Toggle a column's maximize (compositor-driven)
+     * @brief Toggle a column's maximized width
      *
-     * The KWin effect calls this when a scroll-managed window is asked to
-     * maximize (titlebar button, Meta+PgUp, a client-side request), so that
-     * request reaches the engine's own maximize-column verb instead of KWin's
-     * maximize. Identical in effect to the Scrolling maximize column
-     * shortcut, and deliberately routed to the SAME ScrollEngine entry point
-     * rather than a parallel one.
+     * A pure WIDTH verb (niri maximize-column): it swaps the column between
+     * the work area's full extent along the strip and its previous width, and
+     * touches neither KWin's maximize bit nor the maximizedToEdges state. The
+     * maximize interception is toggleMaximizeToEdges below.
      *
-     * Unlike the four setters above this one HAS an in-tree caller. Same
-     * ownership and per-context gates as focusColumn.
+     * Like the four setters above, this one has no in-tree wire caller: the
+     * Scrolling maximize column shortcut reaches the engine IN-PROCESS and
+     * never crosses this boundary, so both spellings here exist for external
+     * scripting. It is deliberately routed to the SAME ScrollEngine entry
+     * point the shortcut drives rather than a parallel one.
+     *
+     * It still answers the same boolean toggleMaximizeToEdges does: the two are
+     * wire twins and keep one shape. Same ownership and per-context gates as
+     * focusColumn.
      *
      * @param screenId Screen whose column to toggle; empty is ignored
      * @param windowId Window naming the column; empty targets the FOCUSED
      *        column. A named window targets the column holding it and is
      *        ignored when the strip does not hold it, so a maximize request
      *        from a window that never took focus cannot resize another column.
-     *
-     *        The empty spelling is accepted for completeness, not because
-     *        anything sends it here: the keyboard shortcut reaches the engine
-     *        IN-PROCESS and never crosses this boundary, and the only in-tree
-     *        wire caller is the KWin effect's maximize interception, which
-     *        always names the requesting window.
+     *        The engine raises the navigation OSD only for the empty spelling.
      *
      * @return true only when the strip actually CHANGED. False covers both
      *         kinds of refusal and does not distinguish them: refused at this
-     *         boundary, or accepted and acted on by nothing. The effect steers
-     *         on it, because a call that changes nothing emits no tile batch,
-     *         so false is its only cue to put KWin's maximize bit back. No
-     *         [[nodiscard]]: the in-process keyboard-shortcut path legitimately
+     *         boundary, or accepted and acted on by nothing. Nothing in the
+     *         tree steers on this verb's answer, which is toggleMaximizeToEdges'
+     *         job; it is reported so the twins keep one wire shape. No
+     *         [[nodiscard]]: a caller that only wants the toggle legitimately
      *         discards it.
      */
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
+
+    /**
+     * @brief Toggle a column's maximize-to-edges state (the compositor's maximize)
+     *
+     * The maximize-to-edges twin of toggleMaximizeColumn above, with the same
+     * addressing and the same gates. This is the verb the KWin effect's
+     * maximize interception dispatches when a scroll-managed window is asked
+     * to maximize (titlebar button, Meta+PgUp, a client-side request), and the
+     * state it toggles is the one the effect mirrors onto KWin's maximize bit.
+     * The width verb above no longer has any wire mirror.
+     *
+     * WHETHER THE STRIP CHANGED IS REPORTED because this caller is holding
+     * compositor state that only the answer can settle: the effect leaves
+     * KWin's maximize bit exactly where the user's click put it and dispatches,
+     * so a request nothing acts on leaves the window in the state the USER
+     * asked for with no batch coming to impose the strip's own. A void method
+     * still replies success on a silent no-op, so only a real return value can
+     * carry that back.
+     *
+     * NOTE the gate below reads the screenId the caller passed, while the
+     * engine re-resolves a named window to that window's own tracked screen and
+     * acts there. So a request can clear screen A's gate and change a column on
+     * screen B, or be refused by A while B would have allowed it. Recorded
+     * rather than closed: resolving the window's screen needs
+     * ScrollEngine::stateForWindow, which is private, and this adaptor holds no
+     * view of engine state beyond isActiveOnScreen. Same on the width twin.
+     *
+     * @param screenId Screen whose column to toggle; empty is ignored
+     * @param windowId Window naming the column; empty targets the FOCUSED
+     *        column, and the interception always names the requesting window.
+     *        The engine raises the navigation OSD only for the empty spelling.
+     *
+     * @return true only when the strip actually CHANGED. False covers both a
+     *         refusal at this boundary and an accepted call acted on by
+     *         nothing, and deliberately does not distinguish them: the effect's
+     *         response is the same either way, put KWin's maximize bit back
+     *         where the engine has it.
+     */
+    bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId);
 
     /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
@@ -428,6 +469,22 @@ Q_SIGNALS:
      */
     void scrollingScreensChanged(const QStringList& screenIds);
 
+    /// The identity of the strip @p screenId shows changed (desktop switch,
+    /// activity switch, sticky-pin release). A pin ACQUIRE does not announce:
+    /// it pins the screen to the desktop its key already resolves to, so the
+    /// strip does not change under it until a later switch.
+    ///
+    /// NOT seeded at bring-up. There is no property to read the current
+    /// epochs from, so a consumer attaching after a screen was announced holds
+    /// nothing for it and its first announcement records rather than compares.
+    ///
+    /// Relayed straight through with no second change gate: the engine's own
+    /// announcement is already emit-on-change, and damping it here would risk
+    /// swallowing a real switch. @p epoch is opaque and only ever compared;
+    /// @p debugLabel is for logs. Both contracts are on the engine signal and
+    /// in the interface XML.
+    void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
+
     /// The resolved per-screen effect-owned behaviour changed. Payload is the
     /// whole map (see @ref scrollEffectBehaviour), so a receiver never has to
     /// merge a delta against a copy it might have missed an update to.
@@ -466,6 +523,29 @@ Q_SIGNALS:
     /// changing a single visible tile. Receivers should also coalesce — a
     /// drag or a burst of opens emits per step.
     void stripChanged(const QString& screenId);
+
+    /// A user strip verb is about to run on @p screenId, so the compositor must
+    /// leave the OWN fullscreen of every scroll-tracked tile there first.
+    ///
+    /// A tile in its own fullscreen (a client F11, a video going fullscreen —
+    /// NOT the windowed-fullscreen feature, whose members are committed at their
+    /// column rect on purpose) refuses every geometry commit through the
+    /// effect's fullscreen bail. The engine cannot see that, so it goes on
+    /// scrolling and PARKING that column while the screen still shows the
+    /// fullscreen window, and the two owners stay split for the whole hold.
+    ///
+    /// Emitted from the keyboard shortcut gate immediately BEFORE the verb is
+    /// dispatched, which is the whole point of a separate signal rather than a
+    /// flag on the geometry batch: the exit has to land first, so the relayout
+    /// the verb produces is built against a window the compositor will accept.
+    /// A flag would arrive with the geometry it was meant to precede.
+    ///
+    /// Emitted unconditionally for any scrolling screen whose verb passed the
+    /// gate, whether or not a tile is actually fullscreen — only the compositor
+    /// knows that, and the receiver no-ops in the common case. The wheel chord
+    /// has no need of it: it originates inside the effect and calls the same
+    /// code path directly.
+    void leaveNativeFullscreenRequested(const QString& screenId);
 
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;

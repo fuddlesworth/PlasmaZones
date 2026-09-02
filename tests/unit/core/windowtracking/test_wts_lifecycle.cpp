@@ -24,12 +24,15 @@
 #include <QString>
 #include <QStringList>
 #include <QRect>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <memory>
 
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
+#include "FakeScreenProvider.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -189,6 +192,14 @@ private Q_SLOTS:
         int predicateCallCount = 0;
         QString lastScreenId;
         int lastDesktop = -1;
+        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
+        // from the slot on failure, so a clear written at the end is skipped
+        // exactly when it matters — leaving the fixture-owned service holding a
+        // callback that captures this slot's locals by reference, to be invoked
+        // or destroyed after they are gone.
+        const auto clearPredicate = qScopeGuard([this] {
+            m_service->setShouldTrackPredicate({});
+        });
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
             lastScreenId = screenId;
@@ -227,10 +238,6 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
         QVERIFY(stateSpy.count() >= 1);
-
-        // The predicate captures this slot's locals by reference — clear it
-        // before they go out of scope so nothing can call it afterwards.
-        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_predicateAcceptsEnabledContext()
@@ -243,6 +250,14 @@ private Q_SLOTS:
         int predicateCallCount = 0;
         QString lastScreenId;
         int lastDesktop = -1;
+        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
+        // from the slot on failure, so a clear written at the end is skipped
+        // exactly when it matters — leaving the fixture-owned service holding a
+        // callback that captures this slot's locals by reference, to be invoked
+        // or destroyed after they are gone.
+        const auto clearPredicate = qScopeGuard([this] {
+            m_service->setShouldTrackPredicate({});
+        });
         m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
             ++predicateCallCount;
             lastScreenId = screenId;
@@ -260,10 +275,6 @@ private Q_SLOTS:
         QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
         QCOMPARE(lastDesktop, 1);
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-
-        // The predicate captures this slot's locals by reference — clear it
-        // before they go out of scope so nothing can call it afterwards.
-        m_service->setShouldTrackPredicate({});
     }
 
     void testWindowClosed_persistsWhenPredicateUnset()
@@ -276,6 +287,11 @@ private Q_SLOTS:
         // confirm the unset-equivalent persist-everything behaviour is
         // restored. Catches a future bug where the setter only stores
         // non-empty functions, or where clearing leaks the prior predicate.
+        // The clear here is the SUBJECT of this test, not teardown: it is the
+        // second half of the round-trip described above, so it must stay an
+        // explicit call. (The other predicate slots use a scope guard, because
+        // there the clear is genuinely cleanup that a failing assertion would
+        // otherwise skip.)
         m_service->setShouldTrackPredicate([](const QString&, int) {
             return false;
         });
@@ -544,6 +560,118 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screen), QRect(100, 100, 800, 600));
     }
 
+    void testValidatedUnmanagedGeometry_rejectsMisKeyedRecord()
+    {
+        // A record can be MIS-KEYED: a rect filed under one screen whose
+        // coordinates describe another. Real sessions carry them (three in the
+        // bundle from discussion #1028), written before recordFreeGeometry
+        // refused the mismatch, so the read has to defend itself.
+        //
+        // The generic sanity check cannot catch this. isGeometryOnScreen asks
+        // whether a rect is on ANY screen, and a mis-keyed rect is — the wrong
+        // one — so it came back verbatim and moved the window there. That is
+        // the cross-screen restore this resolver no longer performs, arriving
+        // through the key instead of through a fallback.
+        //
+        // Needs REAL output geometry, so this builds its own service over a
+        // FakeScreenProvider rather than using m_service (constructed with a
+        // null ScreenManager, under which the guard fails open by design).
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        auto svc = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, &manager, nullptr);
+        // Same wiring the fixture gives m_service: setWindowFloating asserts on
+        // hasSnapState().
+        auto engine = std::make_unique<SnapEngine>(m_layoutManager, svc.get(), m_zoneDetector, nullptr, nullptr);
+        engine->setEngineSettings(m_settings);
+        svc->setSnapState(engine->snapState());
+        svc->setSnapEngine(engine.get());
+
+        const QString windowId = QStringLiteral("firefox|mis-keyed");
+
+        svc->setWindowFloating(windowId, true);
+        // Honest capture on DP-2 first, to prove the guard is not simply
+        // refusing everything.
+        svc->recordFreeGeometry(windowId, QStringLiteral("DP-2"), QRect(2000, 100, 800, 600), /*overwrite=*/true);
+        QVERIFY2(svc->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2")).has_value(),
+                 "a rect that does lie on its key screen must answer");
+
+        // Now the mis-key: DP-1 coordinates filed under DP-2. The write point
+        // refuses it, so the honest DP-2 rect survives untouched.
+        svc->recordFreeGeometry(windowId, QStringLiteral("DP-2"), QRect(100, 100, 800, 600), /*overwrite=*/true);
+        const auto still = svc->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2"));
+        QVERIFY(still.has_value());
+        QVERIFY2(still->x() >= 1920, "a rect that does not lie on DP-2 must not be filed under it");
+
+        // The READ guard, which the block above does NOT reach: the writer
+        // refuses the mis-key before the reader ever sees one, so driving this
+        // through recordFreeGeometry can only ever test the write point. The
+        // comment at the top of this test is about records that ALREADY EXIST
+        // on disk from before that guard shipped, and the only way to stand one
+        // up is to seed the store directly.
+        const QString legacyId = QStringLiteral("firefox|legacy-mis-keyed");
+        PhosphorEngine::WindowPlacement legacy;
+        legacy.windowId = legacyId;
+        legacy.appId = QStringLiteral("firefox");
+        legacy.screenId = QStringLiteral("DP-2");
+        // DP-1 coordinates under a DP-2 key — exactly what the old writer let
+        // through.
+        legacy.freeGeometryByScreen.insert(QStringLiteral("DP-2"), QRect(100, 100, 800, 600));
+        QVERIFY(svc->placementStore().record(legacy));
+        // Prove the seed actually landed. Without this the refusal below would
+        // also pass against a store that quietly dropped the record, which
+        // would test nothing at all.
+        const auto seeded = svc->placementStore().peekExact(legacyId);
+        QVERIFY(seeded.has_value());
+        QCOMPARE(seeded->freeGeometryFor(QStringLiteral("DP-2")), QRect(100, 100, 800, 600));
+        QVERIFY2(!svc->validatedUnmanagedGeometry(legacyId, QStringLiteral("DP-2")).has_value(),
+                 "a record already on disk with a rect that does not lie on its key screen must be refused by the "
+                 "READ, not merely by the write that no longer happens");
+    }
+
+    void testValidatedUnmanagedGeometry_isScreenLocal()
+    {
+        // "Float restore is screen-local by doctrine" — the phrase is
+        // test_window_placement_store's, and the resolver used to contradict it
+        // with a cross-screen fallback that re-centred another monitor's rect
+        // onto the asking screen. That relocated a window the user had put
+        // here, off a rect that only ever guessed: a window which has never
+        // floated on this screen has no remembered spot here to return to.
+        // Nothing is the honest answer, and it leaves the window alone.
+        const QString windowId = QStringLiteral("firefox|screen-local");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->setWindowFloating(windowId, true);
+        m_service->recordFreeGeometry(windowId, screen, QRect(100, 100, 800, 600), /*overwrite=*/true);
+
+        QVERIFY2(m_service->validatedUnmanagedGeometry(windowId, screen).has_value(),
+                 "the screen the rect was captured on must answer");
+        QVERIFY2(!m_service->validatedUnmanagedGeometry(windowId, QStringLiteral("DP-2")).has_value(),
+                 "a rect remembered on DP-1 is not a float-back for DP-2");
+    }
+
+    void testValidatedUnmanagedGeometry_isPerWindow()
+    {
+        // No cross-instance share either. An app's bucket fills with dead
+        // instances (MaxPerApp), so a live window with no record of its own
+        // would otherwise be handed a ghost's remembered spot — discussion
+        // #1028. Every caller of this resolver asks a per-window question.
+        const QString recorded = QStringLiteral("konsole|has-a-record");
+        const QString sibling = QStringLiteral("konsole|no-record");
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->setWindowFloating(recorded, true);
+        m_service->recordFreeGeometry(recorded, screen, QRect(120, 140, 640, 480), /*overwrite=*/true);
+
+        QVERIFY(m_service->validatedUnmanagedGeometry(recorded, screen).has_value());
+        QVERIFY2(!m_service->validatedUnmanagedGeometry(sibling, screen).has_value(),
+                 "a same-app sibling's float-back is not this window's");
+    }
+
     void testRecordFreeGeometry_firstCaptureWins_whenNotOverwrite()
     {
         // overwrite=false is the production capture path: the FIRST captured free
@@ -650,6 +778,11 @@ private Q_SLOTS:
         // holds — the exact no-steal exclusion the store's own unit tests
         // exercise with a hand-rolled probe.
         PhosphorEngine::WindowRegistry registry;
+        // RAII: a failing assertion below would otherwise leave the
+        // fixture-owned service pointing at this slot's stack registry.
+        const auto clearRegistry = qScopeGuard([this] {
+            m_service->setWindowRegistry(nullptr);
+        });
         m_service->setWindowRegistry(&registry);
         registry.upsert(QStringLiteral("live-uuid"), PhosphorEngine::WindowMetadata{});
 
@@ -677,7 +810,6 @@ private Q_SLOTS:
         QCOMPARE(consumed->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
         // The live window's record is untouched.
         QVERIFY(m_service->placementStore().peekExact(QStringLiteral("term|live-uuid")).has_value());
-        m_service->setWindowRegistry(nullptr);
     }
 
     void testRecordFloatingClose_synthSlotKeyedOnOwningModeEngine()
@@ -688,6 +820,10 @@ private Q_SLOTS:
         // reopen accepts read strictly their own slot, so a snap-keyed (or
         // absent) verdict re-tiles a window that closed floating. Deleting
         // either half of the fix fails this test.
+        // RAII, same reason as the predicate guards above.
+        const auto clearResolver = qScopeGuard([this] {
+            m_service->setModeEngineIdResolver({});
+        });
         m_service->setModeEngineIdResolver([](const QString&, const QString& screenId) -> QString {
             return screenId == QStringLiteral("DP-1") ? QString(PhosphorEngine::WindowPlacement::scrollingEngineId())
                                                       : QString(PhosphorEngine::WindowPlacement::snapEngineId());
@@ -723,8 +859,6 @@ private Q_SLOTS:
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
         QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::autotileEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
-
-        m_service->setModeEngineIdResolver({});
     }
 
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()

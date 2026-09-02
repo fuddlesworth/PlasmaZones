@@ -310,12 +310,16 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       of animating it, because a leg retargeted every 16 ms never progresses
 //       on a stateless curve.
 //
-//       Snap.resolveWindowRestore gained three in-args: isOpenPath, minWidth,
-//       minHeight. The cross-screen tile reclaim hangs off this slot and two of
-//       its drivers are NOT opens (the unminimize of a daemon-restart orphan
-//       and the pending-restores sweep); without the flag the daemon could not
+//       Snap.resolveWindowRestore gained three in-args: restoreReason, minWidth,
+//       minHeight. The cross-screen tile reclaim hangs off this slot and four of
+//       its drivers are NOT opens (the unminimize of a daemon-restart orphan,
+//       the pending-restores sweep, the bring-up stacking sweep and the
+//       desktop-arrival re-drive); without the argument the daemon could not
 //       tell them apart, and unminimizing a window teleported it across
-//       monitors. The min sizes exist because a reclaim ADOPTS the window into
+//       monitors. It began as an isOpenPath BOOL and became an enum: the
+//       desktop-arrival re-drive is a login-restore continuation that must skip
+//       the desktop restore but still qualify for the reclaim, which two states
+//       cannot express. The min sizes exist because a reclaim ADOPTS the window into
 //       a strip or layout and the adopting engine evaluates its oversized /
 //       float verdict exactly once from them, so passing 0,0 left an oversized
 //       window tiled for the session.
@@ -375,10 +379,11 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //   v7: Scrolling.toggleMaximizeColumn gains a BOOLEAN RETURN, (ss) -> (ss)b.
 //       A signature change, so it takes a bump like any other.
 //
-//       It is the only verb on that interface that reports what it did, and it
-//       needs to because it is the only one whose caller is holding compositor
-//       state that only the answer can settle: the effect leaves KWin's
-//       maximize bit where the user's click put it and dispatches, so a request
+//       It and its later twin toggleMaximizeToEdges are the only verbs on that
+//       interface that report what they did, and the twin needs to because its
+//       caller is holding compositor state that only the answer can settle: the
+//       effect leaves KWin's maximize bit where the user's click put it and
+//       dispatches, so a request
 //       nothing acts on leaves the window in the state the user asked for with
 //       no batch coming to impose the strip's own. A void method still replies
 //       success on a silent no-op, so nothing short of a return value can carry
@@ -398,8 +403,97 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       reason v5 states above: no released peer ever spoke an intermediate
 //       version, so the steps within this cycle are unobservable outside the
 //       branch. A change to it AFTER v7 ships needs v8.
-inline constexpr int ApiVersion = 7;
-inline constexpr int MinPeerApiVersion = 7;
+//
+//       Folded into this same unreleased cycle (v5's rule again — neither form
+//       ever shipped): the TileRequestEntry field is RETARGETED from
+//       columnMaximized to maximizedToEdges, same position after
+//       windowedFullscreen, signature unchanged at a(siiiissbbbbssiiibsb).
+//       The old flag was MEASURED (rendered extent vs work area) and mirrored
+//       maximize-column; the new one is DECLARED per-column state (niri
+//       maximize-window-to-edges: raw work area on both axes, gap-free),
+//       driven by the new Scrolling.toggleMaximizeToEdges verb, (ss) -> b on
+//       toggleMaximizeColumn's exact shape. The KWin maximize bit now mirrors
+//       ONLY this state; toggleMaximizeColumn reverts to a pure width verb
+//       with no wire representation (niri Mod+F), though it keeps its boolean
+//       return, and the effect's maximize interception dispatches the new
+//       verb instead. A peer mismatched on the retarget demarshals perfectly
+//       and then mirrors the wrong state — the handshake, not the signature,
+//       is what refuses that pairing. Both verbs answer the same boolean under
+//       the same name on the wire, `changed`.
+//
+//   v8: Scrolling gains stripContextChanged (sss), the strip-identity
+//       announcement for the daemon/compositor seam
+//       (docs/strip-identity-seam-plan.md).
+//
+//       A NEW REQUIRED SIGNAL, which is the case the bump rule at the head of
+//       this ledger names, and it takes a step of its own rather than folding
+//       into v7 because v7 SHIPPED in 3.4.3 — the fold-in rule above applies
+//       only within an unreleased cycle, and v7's own text says a change to it
+//       after it ships needs v8.
+//
+//       Required in the sense that matters here: the effect retires the
+//       per-window strip state it holds for a screen when that screen's strip
+//       identity changes, and a daemon that does not announce it leaves that
+//       state describing a strip nobody is looking at. Nothing about the
+//       pairing fails loudly — the signature still matches, no call errors,
+//       no marshalling breaks — so a parked column simply paints at the
+//       previous strip's position and keeps doing it. A silent wrong answer is
+//       exactly what the handshake exists to refuse, and it is the reason a
+//       signal-only addition is not treated as harmlessly additive here.
+//
+//   v9: Scrolling gains leaveNativeFullscreenRequested (s), a screen-scoped
+//       signal the daemon emits from the keyboard shortcut gate immediately
+//       BEFORE dispatching a strip verb, telling the compositor to release the
+//       OWN fullscreen of every scroll-tracked tile on that screen. Such a tile
+//       refuses every geometry commit through the effect's fullscreen bail
+//       while the engine goes on scrolling and PARKING its column, so the two
+//       owners drift apart for the whole hold. The wheel chord already did this
+//       for itself inside the effect, but the keyboard half originates in the
+//       daemon and could not.
+//
+//       ANOTHER new REQUIRED signal, so it takes a step of its own for exactly
+//       the reason v8 did: v8 shipped in 3.4.4, and the
+//       fold-into-the-unreleased-cycle rule does not reach across a release.
+//       Its failure mode is the silent kind as well. A daemon that emits it to
+//       an effect with no such slot, or an effect waiting on a daemon that
+//       never emits it, matches every other signature on the interface and
+//       errors nowhere. The strip simply goes on scrolling and parking a column
+//       whose window the compositor is refusing to move, which is the bug this
+//       signal exists to close.
+//
+//       A SIGNAL rather than a field on the geometry batch, which is what the
+//       gap note in the wheel path originally anticipated. The exit has to land
+//       BEFORE the relayout, so the verb's batch is built against a window the
+//       compositor will accept, and a batch field arrives carrying the very
+//       geometry it was supposed to precede. Gating on the batch's own
+//       strip-motion fields was measured wrong for a second reason: a batch
+//       cannot tell a user verb from an insert-driven reflow, and it dropped
+//       the fullscreen whenever an unrelated window merely opened and slid the
+//       strip.
+
+//       Tiling managedScreensChanged ALSO gains a third argument in this same
+//       step, screenDesktops (a{sv}) — the screenId to virtual-desktop map the
+//       announced set was RESOLVED AGAINST. One bump, not two: both changes
+//       land in the SAME unreleased cycle, which is the case the fold-in rule
+//       at v5 spells out ("Do NOT split it back into one bump per change"), and
+//       no released peer ever speaks an intermediate version.
+//
+//       A CHANGED REQUIRED SIGNAL this time rather than a new one, and its two
+//       pairings fail as silently as the rest: an old effect cannot marshal the
+//       third argument and simply stops receiving the signal, which is the
+//       managed-set announcement the whole tiling seam is built on, while an
+//       old daemon marshals nothing extra and silently keeps the race the
+//       argument exists to close.
+//
+//       The race: the announce is asynchronous while the compositor's own
+//       desktopChanged is not, so it can arrive after the user has switched
+//       again. The effect cannot detect that on its own — by then its
+//       last-reported desktop already equals the live one, so a stale announce
+//       is indistinguishable from a fresh one, and it would install a managed
+//       set computed for one desktop while filtering windows by another. The
+//       stamp makes the announce self-describing.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

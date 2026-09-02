@@ -64,6 +64,7 @@
 #include <QVarLengthArray>
 #include <QTimer>
 #include <QHash>
+#include <QMargins> // QMarginsF, m_surfaceShadowMargins' value type
 #include <QFont> // scrollTabIndicatorFont's return type
 #include <QPointer>
 #include <QRect>
@@ -706,8 +707,15 @@ private:
      * @param window Dragged window (QPointer-protected in the async reply)
      * @param windowId Window identifier
      * @param cancelled True if the drag was cancelled (Escape / external)
+     * @param effectFloatedThisDrag True when the effect floated the window
+     *        optimistically at drag start (captured from
+     *        m_dragActivation.floatedWindowIds BEFORE the dragStopped erase).
+     *        Every no-outcome reply arm reverts that float; deliberately NOT
+     *        defaulted, so a future drag-end call site must decide it
+     *        explicitly rather than silently skipping the revert and
+     *        reintroducing the #1028 focus-follows-mouse latch.
      */
-    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled, bool effectFloatedThisDrag);
     void connectNavigationSignals();
 
     /**
@@ -899,6 +907,26 @@ private:
     /// Push the compositor's live per-output-virtual-desktops mode. Sent at
     /// bringup and on every runtime change; the daemon change-gates it.
     void reportPerOutputDesktopsMode();
+    /// Recovery for a desktop move the compositor cannot carry out: place the
+    /// window on the desktop it is already on, so a daemon waiting for the
+    /// arrival re-announce is not left holding an unplaced window.
+    void placeWindowWhereItIs(KWin::EffectWindow* w);
+
+    /// What this effect last told the daemon each screen's desktop is.
+    ///
+    /// The authority for rejecting a managedScreensChanged announce that the
+    /// compositor has already outrun: the announce carries the desktops it was
+    /// resolved against, and a disagreement with this map means a newer switch
+    /// happened while it was in flight.
+    ///
+    /// Built on demand rather than returned by reference: the dedup map is
+    /// keyed by OUTPUT (see reportScreenDesktop for why), while the announce
+    /// this gates carries screen ids. Resolving each output through
+    /// outputScreenId() here is what makes the two comparable, and it yields
+    /// the same id the report itself was sent under. Outputs that have gone
+    /// since their last report resolve to an empty id and are dropped, which is
+    /// correct — a dead output cannot contradict a live announce.
+    QHash<QString, int> lastReportedScreenDesktops() const;
     QString getWindowScreenId(KWin::EffectWindow* w) const;
     /// getWindowScreenId for a caller that has already resolved the window id.
     /// The engine-authoritative scroll override is keyed on the window id, so
@@ -1124,10 +1152,20 @@ private:
     // off-screen, so the jump between them at the end of the animation is
     // never visible. Do NOT use this to end an animation somewhere on screen —
     // the window would visibly snap at the end.
+    //
+    // demoteMaximizeOnDeferredReplay: the snap-commit callers demote KWin's
+    // maximize (TilingHandler::demoteMaximizeForSnapPlacement) before calling
+    // here, but that demote bails while a user gesture is live — the same
+    // condition that makes this function DEFER the apply. Passing true makes
+    // the deferred replay re-run the demote before its moveResize, paying the
+    // claim the mid-gesture bail skipped; a superseded or dropped replay
+    // drops the demote with it. Read only on the deferral path — the
+    // immediate path assumes the caller already demoted.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
-                             const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
+                             const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
+                             bool demoteMaximizeOnDeferredReplay = false);
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
     /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
     /// centred in the zone; everything else passes through unchanged. The
@@ -1448,6 +1486,42 @@ private:
     /// Raw-pointer-keyed; erased in the windowDeleted cleanup with its
     /// siblings.
     QHash<KWin::EffectWindow*, QString> m_lastPushedCaption;
+    /// Last CONSISTENT shadow margins (expandedGeometry - frameGeometry) per
+    /// window, the input surfaceWindowRect() reconstructs the canvas base from.
+    /// Seeded when the window's connections are made and refreshed on every
+    /// windowExpandedGeometryChanged, which is the one moment KWin guarantees
+    /// the two rects agree. Raw-pointer-keyed; erased in the windowDeleted
+    /// cleanup with its siblings.
+    QHash<KWin::EffectWindow*, QMarginsF> m_surfaceShadowMargins;
+    /// The rect every surface canvas is built from: the frame grown by the last
+    /// consistent shadow margins, NEVER expandedGeometry() read raw.
+    ///
+    /// expandedGeometry() can transiently answer for the window's PREVIOUS frame
+    /// rect. Measured on KWin 6.7.4 with an X11 client (Steam): a shrink from
+    /// 1908x2052 to 1908x678 left expandedGeometry() reporting the old 2052
+    /// height for 25 ms while frameGeometry(), bufferGeometry() and
+    /// clientGeometry() had all already moved. Steam carries no shadow at all,
+    /// so that value was not a stale shadow — it was a stale copy of the old
+    /// frame rect. The canvas built from it ran 1374 px past the window, and the
+    /// chain painted its border and backdrop pane across the overhang: a band of
+    /// blurred wallpaper below the window, framed as if the window were still
+    /// there. A Wayland client (ghastty) driven through the SAME four-step
+    /// resize never diverged, KWin applying frame, shadow and item tree together
+    /// at the client's commit.
+    ///
+    /// Reconstructing rather than reading raw is what makes this ordering-proof:
+    /// the margins are a property of the window's decoration, not of its size,
+    /// so carrying them across a resize is correct by construction and needs no
+    /// assumption about whether the frame or the expanded signal lands first.
+    QRectF surfaceWindowRect(KWin::EffectWindow* w) const;
+    /// The margin cache's ONE refresh path: recompute @p window's shadow
+    /// margins from the live frame/expanded pair and store them when
+    /// plausible. Called at connect time (setupWindowConnections seeds it)
+    /// and on every windowExpandedGeometryChanged; defined in
+    /// surfacelayers.cpp beside surfaceWindowRect, which consumes it. The
+    /// write-side invariants (why it must never run from a paint-time
+    /// sample, and the implausible-margin refusal) live on the definition.
+    void refreshSurfaceShadowMargins(KWin::EffectWindow* window);
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
@@ -2342,8 +2416,11 @@ private:
     /// window's SCREEN is on. The mode comes from the per-screen engine
     /// discriminator the tiling handler holds (scrolling, else autotile-managed
     /// is tiling, else snapping), because a floated window carries no mode of
-    /// its own. Consulted by reconcileRuleWindowLayer only when no
-    /// SetWindowLayer rule owns the window.
+    /// its own. Answers false for a window whose desktop is not in view on
+    /// its own output (per-output current-desktop resolve), so an off-desktop
+    /// floater never holds the grant; the reconcile sweep drains a previously
+    /// granted bit on the same pass. Consulted by reconcileRuleWindowLayer
+    /// only when no SetWindowLayer rule owns the window.
     bool keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:
@@ -2562,6 +2639,40 @@ private:
     /// question — and give any NEW commit-half mover its own repaint pairing
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
+
+    /// Change-gate for the lcStripDiag per-window trace in
+    /// scrollParkedOffscreen. Diagnostic only: nothing reads it but the log
+    /// site, and it is never written while the category is disabled.
+    ///
+    /// Mutable because the predicate is const and is the only place the inputs
+    /// it reports are assembled — same shape, and the same justification, as
+    /// the mutable m_scrollClipLossReported once-reporting set in the tiling
+    /// handler. Keyed by window id and swept only on windowDeleted, so within a
+    /// session it is bounded by the number of distinct windows traced while the
+    /// category was enabled rather than by the live strip population: the
+    /// relocation map it shadows is torn down on unfloat, screen change, engine
+    /// flip and daemon loss, and none of those reach this gate. Entries are two
+    /// points and three bools, and a stale key is only ever compared, never
+    /// dereferenced, so the cost of the looser bound is bytes in a debugging
+    /// session.
+    struct StripDiagSample
+    {
+        bool hadPlacement = false;
+        QPoint stripPos;
+        QPoint viewOffset;
+        bool parked = false;
+        /// Whether the window resolved a managed output. Its own field rather
+        /// than an implied zero offset, because without it the no-output
+        /// sample is byte-identical to an ordinary hit on a window sitting at
+        /// offset (0,0) and unparked — so the two report sites would mask each
+        /// other through the shared change gate, and an excursion into and out
+        /// of the no-output state would be invisible for exactly those
+        /// windows.
+        bool hadOutput = true;
+
+        bool operator==(const StripDiagSample& o) const = default;
+    };
+    mutable QHash<QString, StripDiagSample> m_stripDiagLast;
 
     /// Frozen strip displacement for a CLOSE-GRABBED corpse. A deleted window
     /// cannot re-derive its relocation or view offset in the paint path —

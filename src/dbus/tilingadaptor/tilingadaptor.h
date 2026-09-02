@@ -127,8 +127,10 @@ public:
     void relayScrollTabStrips(const QString& screenId, const QString& stripsJson);
     /// Per-screen tab-indicator PAINT overrides resolved from context rules
     /// (a Set tab style / colour rule scoped to a screen, desktop or
-    /// activity): tabStyle, gapsBetweenTabs, cornerRadius and the three colours,
-    /// keyed by WindowPaintKeys / WindowColorKeys spellings. Only the keys a
+    /// activity): the ScrollTab paint keys, keyed by WindowPaintKeys /
+    /// WindowColorKeys spellings. That is tabStyle, gapsBetweenTabs,
+    /// cornerRadius, the three colours and the five font keys — eleven in all,
+    /// as ServiceConstants.h describes the same map. Only the keys a
     /// rule actually set are present. An EMPTY map clears the screen (the
     /// cache entry is dropped, the signal carries the empty map so the effect
     /// falls back to the global settings). Change-gated: the daemon resolves
@@ -362,8 +364,15 @@ Q_SIGNALS:
      *
      * @param screenIds List of screen IDs currently engine-managed
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
+     * @param screenDesktops screenId -> virtual desktop (int) the announced set
+     *        was RESOLVED AGAINST. See the interface XML for why the stamp is
+     *        required rather than informational: without it a receiver cannot
+     *        distinguish a late announce for the desktop it just left from a
+     *        fresh one for the desktop it is on. Every screen the daemon can
+     *        resolve a desktop for is stamped, not only the announced ones —
+     *        the receiver's destructive pass is driven by the REMOVED set.
      */
-    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
 
     /**
      * @brief Emitted when any screen's rules-visible active layout changes
@@ -390,7 +399,7 @@ Q_SIGNALS:
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
      *        a(siiiissbbbbssiiibsb): (windowId, x, y, width, height, zoneId,
-     *        screenId, monocle, floating, windowedFullscreen, columnMaximized,
+     *        screenId, monocle, floating, windowedFullscreen, maximizedToEdges,
      *        stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos,
      *        tabFrom, viewImmediate)
      */
@@ -590,6 +599,30 @@ private:
         bool allowCrossScreenClaim = true;
     };
     QList<ParkedOpen> m_unclaimedOpens;
+    /// Instance ids of LIVE windows released via releaseWindowTracking. The
+    /// case that motivated it is the effect's cross-screen MOVE transfer
+    /// (release on the old screen, then re-announce on the new one), but the
+    /// effect calls releaseWindowTracking from every live tracking drop —
+    /// the drag-bypass revert, the float cleanup, and the desktop/activity
+    /// demotion handlers as well as the output transfer — so the one-shot
+    /// arms on all of them. That is the intended reading rather than an
+    /// over-reach: every one of those is the user (or a rule) deliberately
+    /// moving a LIVE window, and none is a session restore, so none of them
+    /// wants the next announce reclaimed back to a remembered home.
+    /// The re-announce looks like a first
+    /// observation to claimCrossScreenReopen, whose same-instance branch then
+    /// matches the window's own stale record (still tiled on the OLD screen —
+    /// releaseWindowTracking deliberately captures nothing) and reclaims the
+    /// window straight back, silently undoing the user's move-to-screen
+    /// shortcut / script / rule. One-shot: consumed by the window's next
+    /// dispatch, which skips the claim round so the ARRIVAL screen's engine
+    /// adopts it — exactly what a move means. A genuine session restore never
+    /// passes through releaseWindowTracking, and a daemon restart clears the
+    /// set, so the reclaim's real audiences are untouched. Entries die with
+    /// the window (windowClosed / onTrackedWindowDestroyed), are swept by
+    /// pruneStaleFloatBroadcasts for a window that produced neither, and go
+    /// wholesale at clearEngine.
+    QSet<QString> m_moveReleasedInstances;
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);

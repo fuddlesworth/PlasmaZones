@@ -87,6 +87,39 @@ bool ScrollEngine::isEnabled() const noexcept
     return !m_scrollingScreens.isEmpty();
 }
 
+bool ScrollEngine::announceStripContextIfChanged(const QString& screenId)
+{
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    // An equality token, not a digest and not secret: a hex qHash of the key
+    // rather than the key's own text, so the only affordance the value offers
+    // a consumer is comparison. Nothing here hides the context — the label
+    // built just below carries the screen, desktop and activity in plain text
+    // on this same signal, deliberately, for the logs. What the hashing buys
+    // is that a consumer cannot casually PARSE a desktop number out of the
+    // epoch and start branching on it, which is the mistake stripContextChanged
+    // exists to prevent: see its declaration for why deriving strip identity
+    // compositor-side is wrong on pinned screens.
+    //
+    // Deterministic across processes, which the bring-up story depends on: the
+    // one-argument qHash defaults its seed to 0 and qHashMulti therefore never
+    // consults Qt's per-process QHashSeed (that randomisation is injected by
+    // QHash itself, not by a direct call). The same context yields the same
+    // epoch in a restarted daemon.
+    const QString epoch = QString::number(qHash(key), 16);
+    const auto it = m_announcedStripEpoch.constFind(screenId);
+    if (it != m_announcedStripEpoch.constEnd() && *it == epoch) {
+        return false;
+    }
+    m_announcedStripEpoch.insert(screenId, epoch);
+    // The label is diagnostic payload, never a branch input. Logs in this
+    // subsystem are read constantly and an opaque digest alone would make
+    // every future investigation harder for no correctness gain.
+    const QString label = QStringLiteral("%1|%2|%3").arg(screenId, QString::number(key.desktop), key.activity);
+    qCDebug(lcScrollEngine) << "strip context:" << label << "epoch" << epoch;
+    Q_EMIT stripContextChanged(screenId, epoch, label);
+    return true;
+}
+
 void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
 {
     // Consume the context-switch flag on EVERY entry (both branches), the
@@ -106,13 +139,55 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // masquerade as one. The retile loop is unconditional — the
         // daemon's per-pass override push depends on it (scrolling.cpp's
         // LOAD-BEARING gate).
+        //
+        // The loops below iterate a SNAPSHOT rather than the caller's set,
+        // because both the announcement and the screen-set emit are
+        // synchronous: a slot that re-entered the engine could outlive the
+        // caller's container while this function still holds an iterator into
+        // it. In-tree the daemon passes a freshly built set, so this is a
+        // latent hazard rather than an observed one, and cheap to close.
+        const QStringList snapshot(screens.cbegin(), screens.cend());
         if (!screens.isEmpty()) {
+            // Identity FIRST, before the set announcement, matching the
+            // changed-set branch below. Both signals ride one connection, so a
+            // consumer sees them in emission order, and this order is the one
+            // that reads correctly: a consumer retires the state belonging to
+            // the strip that just went away before it is asked to do anything
+            // about the mode or the set.
+            //
+            // Announced for EVERY screen in the set, not only on the switch
+            // branch: this is emit-on-change itself, so a push that moved no
+            // screen's context is silent anyway, and routing it through one
+            // place keeps identity from depending on which branch a caller
+            // happened to take.
+            // The retile below resolves the strip that is current AFTER the
+            // switch, and its emit-on-change gate would compare that answer
+            // against a baseline belonging to the strip from BEFORE it. On a
+            // switch to a desktop whose strip has not been touched, every rect
+            // matches and the batch is suppressed — so the compositor is never
+            // told the strip it is showing has been replaced, and keeps the
+            // previous one's per-window state.
+            //
+            // Armed per screen off whether the announcement actually FIRED,
+            // rather than off the switch flag. That pairs the two halves
+            // exactly: a screen is forced when, and only when, its consumer
+            // was just told to retire. Keying it off the flag instead was
+            // wrong in both directions — it armed every screen in the set when
+            // one output's desktop moved, forcing no-op batches on monitors
+            // whose context never changed, and it armed NOTHING on a context
+            // change that arrived without the flag, which is a retire with no
+            // batch to repopulate what it dropped.
+            for (const QString& screenId : snapshot) {
+                if (announceStripContextIfChanged(screenId)) {
+                    m_forceEmitScreens.insert(screenId);
+                }
+            }
             if (wasDesktopSwitch) {
-                QStringList sortedSame(screens.cbegin(), screens.cend());
+                QStringList sortedSame = snapshot;
                 sortedSame.sort();
                 Q_EMIT scrollingScreensChanged(sortedSame, true);
             }
-            for (const QString& screenId : screens) {
+            for (const QString& screenId : snapshot) {
                 scheduleRetileForScreen(screenId);
             }
         }
@@ -122,6 +197,14 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     const bool wasEnabled = isEnabled();
     const QSet<QString> removed = m_scrollingScreens - screens;
     const QSet<QString> added = screens - m_scrollingScreens;
+    // Snapshot the caller's set HERE, before anything in this branch emits.
+    // Several emits below are synchronous (windowsReleased, and the
+    // announcements in the loops after it), so a slot that re-entered the
+    // engine could outlive the container `screens` refers to. Taking the copy
+    // after those emits would be too late to be the protection it looks like,
+    // which is why it is built at the top and every later walk of the final
+    // set reads it rather than `screens`.
+    const QStringList finalScreens(screens.cbegin(), screens.cend());
     // A live drag-insert preview whose target or restore-source screen is
     // leaving the set must be unwound BEFORE the state teardown below, while
     // both states still exist (autotile's setAutotileScreens cancels for the
@@ -196,6 +279,12 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // lifecycle edges like its order twin, or the seed sits armed and
         // re-anchors a view the user has since moved, several transitions later.
         m_pendingInitialFocus.remove(screenId);
+        // The close-settle hold goes with the strip it was holding, on the
+        // same terms pruneStatesForRemovedScreen drops it for a departed
+        // output (engine_closehold.cpp documents why it is hygiene here
+        // rather than a live defect).
+        m_closeReflowHoldUntil.remove(screenId);
+        m_closeReflowFlushScheduled.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -227,12 +316,75 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 it->fuzzyClaimWindow.start();
             }
         }
+        // Armed off the announce verdict like the other two sites. An added
+        // screen is NOT the clean slate it looks like: releaseScreenState
+        // deliberately keeps m_lastAppliedRect, and the removal loop prunes
+        // only the leaving screen's CURRENT context, so a screen re-entering
+        // on a context whose state survived resolves against a live baseline
+        // and every rect can match. Without the arm that batch is suppressed
+        // and the announcement above is a retire with nothing behind it.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+        }
         scheduleRetileForScreen(screenId);
+    }
+    // The screens that STAYED get the same treatment the identical-set branch
+    // gives its whole set. This is not a symmetry nicety: with per-context
+    // modes, a desktop switch that flips ANY one screen to another mode takes
+    // this branch rather than the identical-set one, and every screen that
+    // remained scrolling across that switch has had its context replaced just
+    // as surely. Announcing only for `added` left exactly those screens
+    // unannounced and unarmed — the strip swapped under them, their emit-on-
+    // change gate compared against the outgoing strip's baseline, the batch
+    // was suppressed, and the compositor went on painting the previous strip's
+    // per-window state. That is the hole this whole mechanism exists to close,
+    // reached through the door nobody was watching.
+    //
+    // The announce is emit-on-change, so a stayer whose context did not
+    // actually move is silent.
+    //
+    // Walks the snapshot taken at the top of this branch, not `screens`:
+    // the announcement below emits synchronously. `added` is a local and
+    // needs no such care.
+    for (const QString& screenId : finalScreens) {
+        if (added.contains(screenId)) {
+            continue;
+        }
+        // Same rule as the identical-set branch: the announcement's own
+        // verdict decides the arm. Arm AND retile together, because the arm
+        // alone buys nothing — the flag is consumed at applyLayout's emit
+        // gate, and this branch was scheduling only `added` screens, so a
+        // stayer's forced batch had nothing to run it and the flag was spent
+        // later on an unrelated pass.
+        if (announceStripContextIfChanged(screenId)) {
+            m_forceEmitScreens.insert(screenId);
+            scheduleRetileForScreen(screenId);
+        }
+    }
+    // A screen LEAVING the set forgets its announced epoch, so re-entering
+    // announces again rather than being suppressed by an epoch it was told
+    // about under a previous stint.
+    //
+    // The force-emit arm goes with it, and for a sharper reason: that flag is
+    // consumed at the emit gate, PAST several of applyLayout's early returns,
+    // so a screen armed by a switch and then dropped from the set before its
+    // retile drained would carry the arm indefinitely and spend it on some
+    // unrelated later batch. The epoch drop below has always been here; this
+    // one was the asymmetry.
+    for (const QString& screenId : removed) {
+        m_announcedStripEpoch.remove(screenId);
+        m_forceEmitScreens.remove(screenId);
+        // Same asymmetry fix as the force flag above: a pending focus emit
+        // for a screen leaving the set would otherwise survive to a later
+        // stint and force a batch for a report from another era.
+        for (auto pit = m_pendingFocusEmitContexts.begin(); pit != m_pendingFocusEmitContexts.end();) {
+            pit = pit->screenId == screenId ? m_pendingFocusEmitContexts.erase(pit) : std::next(pit);
+        }
     }
 
     // Sorted: QSet iteration order is unspecified across runs, and a wire
     // consumer comparing successive payloads must not see phantom changes.
-    QStringList sorted(screens.cbegin(), screens.cend());
+    QStringList sorted = finalScreens;
     sorted.sort();
     // Propagate the consumed context-switch flag (autotile parity): a
     // desktop switch whose per-desktop assignments ALSO change the set must
@@ -287,7 +439,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_declinedOpenFocus.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
     }
     releasedWindows.append(windows);
     if (!clearScreenBookkeeping) {
@@ -362,6 +514,7 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
+        sc.maximizedToEdges = col.maximizedToEdges;
         // Rides with the display it belongs to; see StashedColumn.
         sc.heightOwnerId = col.heightOwnerId;
         // Clamped, not value(): an out-of-range activeTileIdx would record an
@@ -641,10 +794,19 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
             break;
         }
     }
+    // The column's presentation as it stands right now, for the latched arms
+    // below. Only a JOIN can have one, and it is read before the insert, which
+    // makes the arriving tile active and can take the extent with it.
+    QString shownTabBeforeInsert;
+    QString heightOwnerBeforeInsert;
     if (liveCol >= 0) {
         // Tile position among the ALREADY-ARRIVED stashed siblings.
         int at = 0;
         const Column& live = state->strip().columns().at(liveCol);
+        if (!live.tiles.isEmpty()) {
+            shownTabBeforeInsert = live.tiles.at(qBound(0, live.activeTileIdx, live.tiles.size() - 1)).windowId;
+        }
+        heightOwnerBeforeInsert = live.heightOwnerId;
         for (int j = 0; j < tileIdx; ++j) {
             if (live.indexOfWindow(sc.tiles.at(j).windowId) >= 0) {
                 ++at;
@@ -666,6 +828,18 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         inserted = state->strip().insertWindowAt(colAt, windowId, sc.width, sc.display, params);
         if (inserted) {
             state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
+            // The stashed maximize-to-edges state, applied on the arrival that
+            // CREATES the column and nowhere else — width and display above
+            // are creation-only for the same reason, and the setter stamps the
+            // whole column through any member, so whichever tile arrives first
+            // brings the flag with it. Re-asserting per arrival would replay it
+            // over a user who un-maximized (or resized, which clears it)
+            // between two sibling arrivals. Fuzzy claims included, on width's
+            // terms rather than windowed-fullscreen's: this is how the COLUMN
+            // presents, not a state pushed onto the arriving client.
+            if (sc.maximizedToEdges) {
+                state->strip().setMaximizedToEdgesForWindow(windowId, true);
+            }
         }
     }
     if (!inserted) {
@@ -688,18 +862,48 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         state->strip().setWindowedFullscreen(windowId, true);
     }
     // Re-assert the column's stashed ACTIVE tile: every insert makes the
-    // arriving tile active, so a tabbed column's shown tab would otherwise
-    // be whichever sibling announced last.
-    if (const QString tab = stash.at(colIdx).activeWindowId;
-        !tab.isEmpty() && tab != windowId && state->strip().columnOfWindow(tab) >= 0) {
-        state->strip().focusWindow(tab, params);
+    // arriving tile active, so a tabbed column's shown tab would otherwise be
+    // whichever sibling announced last.
+    //
+    // Only until it has actually been put in force once, latched per column.
+    // Past that a sibling claiming its slot hours later would rewind a tab the
+    // user has since switched; what it owes the column is the tab shown before
+    // this insert stole it, which inside the burst is the stashed tab anyway.
+    // An EMPTY stashed tab does not latch: engine_serialize.cpp clears the
+    // recorded tab when it did not survive, so arrival order decides, and
+    // latching would arm the hand-back arm for a column with nothing to hand.
+    if (const QString tab = stash.at(colIdx).activeWindowId; !stash.at(colIdx).shownTabRestored) {
+        if (!tab.isEmpty() && tab == windowId) {
+            // The arriving tile IS the shown tab and the insert just made it
+            // active, so the stashed value is in force.
+            stash[colIdx].shownTabRestored = true;
+        } else if (!tab.isEmpty() && state->strip().columnOfWindow(tab) >= 0) {
+            state->strip().focusWindow(tab, params);
+            stash[colIdx].shownTabRestored = true;
+        }
+        // Otherwise the tab has not announced yet (or was never recorded) —
+        // the latch stays clear so a later arrival tries again.
+    } else if (!shownTabBeforeInsert.isEmpty() && shownTabBeforeInsert != windowId
+               && state->strip().columnOfWindow(shownTabBeforeInsert) >= 0) {
+        state->strip().focusWindow(shownTabBeforeInsert, params);
     }
     // The stashed EXTENT owner, a different question from the shown tab and
-    // allowed to name a different window. Skipped until it is on the strip:
-    // the restore arrives one window at a time.
-    if (const QString owner = stash.at(colIdx).heightOwnerId;
-        !owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
-        state->strip().setTabbedHeightOwner(owner);
+    // allowed to name a different window, so it carries its own latch on the
+    // same terms: an empty stashed owner never latches, exactly as an empty
+    // shown tab never does, which is why the hand-back arm below cannot run
+    // until some non-empty owner has latched. The insert can take the ownership on its way
+    // in (the height intent above claims it when it is not Auto), so the
+    // latched arm hands the pre-insert owner back rather than doing nothing.
+    if (const QString owner = stash.at(colIdx).heightOwnerId; !stash.at(colIdx).heightOwnerRestored) {
+        if (!owner.isEmpty() && state->strip().columnOfWindow(owner) >= 0) {
+            // Latched on the attempt, not on setTabbedHeightOwner's answer: it
+            // reports false both for an ownership that already stands and for a
+            // Normal column, and the stashed value has had its say either way.
+            state->strip().setTabbedHeightOwner(owner);
+            stash[colIdx].heightOwnerRestored = true;
+        }
+    } else if (!heightOwnerBeforeInsert.isEmpty() && state->strip().columnOfWindow(heightOwnerBeforeInsert) >= 0) {
+        state->strip().setTabbedHeightOwner(heightOwnerBeforeInsert);
     }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and
@@ -829,13 +1033,7 @@ QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
     }
     // QSet iteration order is unspecified; pick the lexicographic minimum so
     // repeated shortcut presses with no active screen land deterministically.
-    QString fallback = *m_scrollingScreens.cbegin();
-    for (const QString& candidate : m_scrollingScreens) {
-        if (candidate < fallback) {
-            fallback = candidate;
-        }
-    }
-    return fallback;
+    return *std::min_element(m_scrollingScreens.cbegin(), m_scrollingScreens.cend());
 }
 
 QString ScrollEngine::scrollingScreenForPhysical(const QString& screenId) const
@@ -1139,6 +1337,7 @@ void ScrollEngine::refreshConfigFromSettings()
         ? static_cast<PhosphorEngine::StickyWindowHandling>(sticky)
         : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
+    m_centerShortColumns = settings->scrollingCenterShortColumns();
     m_smartGaps = settings->scrollingSmartGaps();
     // Bounded like every other cast/derived read here: the value is derived
     // daemon-side from the animation duration, but nothing stops a future
@@ -1146,18 +1345,31 @@ void ScrollEngine::refreshConfigFromSettings()
     // as the strip hanging after every close.
     m_closeReflowDelayMs = qBound(0, settings->scrollingCloseReflowDelayMs(), kMaxCloseReflowDelayMs);
 
-    // Tab-indicator geometry. The numeric fields are taken as-is: the config
-    // schema already clamps every one of them, and re-clamping here with a
-    // second set of literals is exactly the drift the ConfigDefaults asserts
-    // exist to prevent. The POSITION is the exception — it is cast to an enum,
-    // so it gets the same validate-then-fall-back guard the other cast enums
-    // above carry, and an unknown value leaves the configured default alone.
+    // Tab-indicator geometry. The numeric fields get the same reject-and-keep
+    // guard as the POSITION cast below (NOT the Fixed-width read above, which
+    // clamps instead), against the shared bounds in enginelimits.h rather than
+    // a second set of literals — sharing the constants is what avoids the
+    // drift the ConfigDefaults asserts exist to prevent, without having to
+    // trust the value. The daemon's Settings is already clamped by the config
+    // schema and so always passes; the guard is for a third-party
+    // IScrollSettings, an injected interface as untrusted as the override map.
+    // Out of range leaves the last accepted value (the struct default on a
+    // first refresh) alone.
     m_tabIndicator.enabled = settings->scrollingTabIndicatorEnabled();
     m_tabIndicator.hideWhenSingleTab = settings->scrollingTabIndicatorHideWhenSingleTab();
     m_tabIndicator.placeWithinColumn = settings->scrollingTabIndicatorPlaceWithinColumn();
-    m_tabIndicator.gap = settings->scrollingTabIndicatorGap();
-    m_tabIndicator.width = settings->scrollingTabIndicatorWidth();
-    m_tabIndicator.lengthProportion = settings->scrollingTabIndicatorLengthProportion();
+    const int indicatorGap = settings->scrollingTabIndicatorGap();
+    if (indicatorGap >= kMinTabIndicatorGap && indicatorGap <= kMaxTabIndicatorGap) {
+        m_tabIndicator.gap = indicatorGap;
+    }
+    const int indicatorWidth = settings->scrollingTabIndicatorWidth();
+    if (indicatorWidth >= kMinTabIndicatorWidth && indicatorWidth <= kMaxTabIndicatorWidth) {
+        m_tabIndicator.width = indicatorWidth;
+    }
+    const qreal indicatorLength = settings->scrollingTabIndicatorLengthProportion();
+    if (indicatorLength >= kMinTabIndicatorLengthProportion && indicatorLength <= kMaxTabIndicatorLengthProportion) {
+        m_tabIndicator.lengthProportion = indicatorLength;
+    }
     const int indicatorPos = settings->scrollingTabIndicatorPosition();
     if (indicatorPos >= static_cast<int>(TabIndicatorPosition::Left)
         && indicatorPos <= static_cast<int>(TabIndicatorPosition::Bottom)) {
@@ -1231,6 +1443,10 @@ void ScrollEngine::retile(const QString& screenId)
 {
     if (screenId.isEmpty()) {
         for (const QString& sid : std::as_const(m_scrollingScreens)) {
+            // Drop any queued retile for this screen: we are performing that
+            // apply right now, and the queued callback would otherwise run a
+            // second full pass for it when it drains.
+            m_pendingRetiles.remove(sid);
             applyLayout(sid);
         }
         return;
@@ -1259,6 +1475,16 @@ void ScrollEngine::scheduleRetileForScreen(const QString& screenId)
         this,
         [this, screenId]() {
             if (m_pendingRetiles.remove(screenId) && m_scrollingScreens.contains(screenId)) {
+                // Close-settle hold, THIRD arm — and the one that made the
+                // other two look broken: the daemon's tiled-count gate turns
+                // every close's own placementChanged into an identical-set
+                // re-push, which lands here one turn later to reflow the strip
+                // the hold had just deferred. Swallowing it loses nothing; the
+                // flush is this same apply, one hold later. engine_closehold.cpp
+                // carries the full account.
+                if (deferForCloseReflowHold(screenId)) {
+                    return;
+                }
                 applyLayout(screenId);
             }
         },

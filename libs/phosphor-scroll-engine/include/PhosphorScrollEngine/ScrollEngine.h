@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QString>
@@ -247,15 +248,25 @@ public:
     /// interception needs — that request names one window and the active
     /// column is frequently a different one.
     ///
-    /// Answers whether the strip actually CHANGED. The compositor's maximize
-    /// interception needs that distinction and not merely "the call arrived":
-    /// it no longer writes KWin's maximize bit before dispatching, so a request
-    /// this engine quietly does nothing with (no state for the context, an
-    /// empty strip, a window no column holds, a column the verb refuses) leaves
-    /// the window holding the state the USER asked for with no batch coming to
-    /// impose the strip's answer. False is the effect's cue to put the bit back
-    /// where the engine last had it.
+    /// Answers whether the strip actually CHANGED, which is the contract the
+    /// compositor's maximize interception is built on. That interception
+    /// dispatches toggleMaximizeToEdges below rather than this verb, and both
+    /// twins answer the same way so the wire shape and the effect's reply
+    /// handling do not have to fork: a request the engine quietly does nothing
+    /// with (no state for the context, an empty strip, a window no column
+    /// holds, a column the verb refuses) leaves the window holding the state
+    /// the USER asked for with no batch coming to impose the strip's answer.
+    /// False is the effect's cue to put the bit back where the engine last had
+    /// it.
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
+    /// Toggle a column's maximize-to-edges state (full raw work area on both
+    /// axes, gap-free; niri maximize-window-to-edges generalized to the
+    /// column). Same window/screen addressing and the same changed-reporting
+    /// return as toggleMaximizeColumn, and this is the verb the compositor's
+    /// maximize interception dispatches: the KWin maximize bit mirrors THIS
+    /// state alone, toggleMaximizeColumn being a pure width verb with no
+    /// mirror.
+    bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
     /// (Karousel equalize). Refuses with fewer than two.
@@ -905,6 +916,42 @@ Q_SIGNALS:
     /// Scrolling twin of autotileScreensChanged, with the same
     /// identical-set re-emit contract on desktop/activity switches.
     void scrollingScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// The identity of the strip @p screenId is now showing has changed.
+    ///
+    /// @p epoch is OPAQUE. It is derived from the same context key that keys
+    /// strip storage, and a consumer may only compare it for equality with the
+    /// last one it saw. It must never be parsed, ordered, or reconciled against
+    /// the compositor's own notion of the current desktop or activity: a screen
+    /// under a sticky pin resolves to the PINNED desktop, deliberately not the
+    /// live one, so anything derived from KWin's current desktop disagrees with
+    /// this engine forever on exactly those screens.
+    ///
+    /// @p debugLabel is for logging and nothing else. Branching on it is the
+    /// same mistake as parsing the epoch, wearing a different hat.
+    ///
+    /// Announced INDEPENDENTLY of any geometry batch, which is the whole point:
+    /// applyLayout emits on change only, so a switch onto a strip nobody
+    /// touched produces no batch, and identity carried as a batch field would
+    /// be silent in precisely the case a consumer most needs it.
+    ///
+    /// Announced from setActiveScreens, for every screen in the resulting set,
+    /// and from the sticky-pin RELEASE path, which moves a screen's key without
+    /// going through that push. A pin ACQUIRE announces nothing because it
+    /// pins to the desktop the key already resolves to. Desktop and activity
+    /// switches therefore reach a consumer by way of the daemon's screen push
+    /// rather than by the setters themselves: a key change with no such push
+    /// behind it is not announced.
+    ///
+    /// There is no bring-up seed. The epoch is announce-only, with nothing to
+    /// read it from, so a consumer that attaches after a screen was announced
+    /// holds no epoch for it and must treat its first announcement as a record
+    /// rather than a comparison.
+    ///
+    /// The value is deterministic across processes — the one-argument qHash
+    /// seeds at 0 and never consults Qt's per-process hash seed — so a
+    /// restarted daemon announces the same epoch for the same context. A
+    /// consumer must not read a change out of a restart, nor assume one.
+    void stripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
     void enabledChanged(bool enabled);
     /// Tab-indicator model for @p screenId, emitted when the resolved model
     /// changes (a relayout that produces an identical payload stays silent): a
@@ -944,6 +991,20 @@ private:
     {
         return m_perScreenOverrides.value(currentKeyForScreen(screenId));
     }
+    /// Emit stripContextChanged for @p screenId when its context key resolves
+    /// to a different strip than the one last announced.
+    ///
+    /// Derived from currentKeyForScreen — the SAME call that keys strip
+    /// storage — so identity can never drift from the storage it names. That
+    /// is what lets the epoch stay opaque: pins, activities and any future
+    /// context dimension come along without a consumer learning about them.
+    ///
+    /// Returns whether it actually announced. Callers use that to decide
+    /// whether to arm the force-emit, which pairs the two correctly: the batch
+    /// is forced exactly when a consumer was told to retire, so a retire is
+    /// never left without the batch that repopulates it, and a push that moved
+    /// no screen's context forces nothing.
+    bool announceStripContextIfChanged(const QString& screenId);
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
@@ -1033,6 +1094,18 @@ private:
     /// in @p screenIds that no longer has ANY context state. Overrides
     /// survive by design; see the definition.
     void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
+    /// Drop the one-shot arms that are keyed by SCREEN but carry a CONTEXT as
+    /// their value, for every entry whose context @p contextDied accepts:
+    /// m_pendingFocusEmitContexts and m_burstPendingApplies.
+    ///
+    /// Both are consumed by comparing the stored context against the current
+    /// one, so an entry outliving its context is not inert — KWin hands a
+    /// removed desktop's index back out, and the reborn context compares equal
+    /// to the dead one. The state prunes take the same predicate; this exists
+    /// because those two maps cannot be swept by the screen-keyed sweep that
+    /// serves a REMOVED screen (here the screen survives, only its context
+    /// died).
+    void pruneContextKeyedScreenArms(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& contextDied);
     // engine_core.cpp
     /// Capture @p state's strip STRUCTURE (column groupings, widths,
     /// display, per-tile height intents) before a mode reassignment tears
@@ -1133,6 +1206,12 @@ private:
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
     void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
+    /// Emit geometryRestoreRequested for @p record's remembered free rect, if
+    /// the restore gate allows it and the rect belongs to the screen the window
+    /// is opening on. Shared by the two float-restore entry points; see the
+    /// definition for the gate and the screen-local rule.
+    void emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                       const QString& screenId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -1184,7 +1263,11 @@ private:
     std::function<QRect(const QString&)> m_availableGeometryProvider;
     std::function<QRect(const QString&)> m_screenGeometryProvider;
     std::function<QList<QRect>()> m_allScreenGeometriesProvider;
-    PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
+    /// QPointer, not a raw pointer: this is set post-construction by
+    /// setWindowRegistry and never cleared, so a teardown order that takes the
+    /// registry first would leave it dangling. Matches the shape
+    /// WindowTrackingService holds the same object with.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
 
     PhosphorEngine::PerScreenStates<ScrollState> m_states;
@@ -1212,9 +1295,18 @@ private:
     /// (echo round trips are milliseconds), so the drain treats a match on
     /// one as genuine focus. Entries are unstamped/removed at every sweep
     /// that removes them from the list.
+    ///
+    /// The expiry sits at echo scale, NOT human scale. Multi-desktop use
+    /// strands entries systematically — an activation fired just as the user
+    /// switches desktops never echoes (the compositor refuses or redirects
+    /// the focus) — and every stranded entry eats the FIRST real click on
+    /// its window for the whole expiry window (the 3.4.2→3.4.3 regression:
+    /// clicking a parked window in the taskbar appeared to do nothing, and
+    /// only the second click worked). One second still dwarfs a D-Bus round
+    /// trip under load while sitting below any deliberate re-click.
     QHash<QString, qint64> m_pendingSelfActivationQueuedAt;
     QElapsedTimer m_selfActivationClock;
-    static constexpr qint64 kSelfActivationEchoExpiryMs = 10000;
+    static constexpr qint64 kSelfActivationEchoExpiryMs = 1000;
     /// The one arrival whose focus an `openFocused = false` rule declined, held
     /// until its compositor focus report arrives and is consumed exactly once.
     ///
@@ -1254,6 +1346,81 @@ private:
     /// isDesktopSwitch=true for a REAL switch — same contract as
     /// AutotileEngine::m_isDesktopContextSwitch.
     bool m_isDesktopContextSwitch = false;
+    /// Screens whose next applyLayout must emit even when every resolved rect
+    /// equals the one already applied.
+    ///
+    /// applyLayout's emit-on-change gate rests on an assumption that a context
+    /// switch breaks: that an unchanged rect means the compositor is already
+    /// showing this batch's answer. The baseline it compares against
+    /// (m_lastAppliedRect, and the state's lastAppliedViewOffset) describes
+    /// what the compositor was told about a DIFFERENT strip — the one that was
+    /// current before the switch — so "nothing moved" says nothing about what
+    /// is on screen now. Returning to a desktop whose strip is untouched
+    /// therefore emitted no batch at all, and the compositor's per-window strip
+    /// state (its visual-delta entries and the per-output view spring) kept
+    /// describing the strip it had been showing.
+    ///
+    /// Armed wherever announceStripContextIfChanged actually fires, which is
+    /// what pairs the two: on those paths a screen is forced when, and only
+    /// when, its consumer was just told to retire. Four sites do it — the
+    /// identical-set branch of setActiveScreens, its added and stayer loops,
+    /// and the sticky-pin release in updateStickyScreenPins.
+    ///
+    /// There is a FIFTH producer that is deliberately NOT announce-paired:
+    /// applyLayout promotes an m_pendingFocusEmitContexts entry into this set
+    /// once the context that armed it is the one on screen. Nothing retired
+    /// there — the arm exists because a background focus report moved the
+    /// strip's focus and anchor with only placementChanged emitted, so the
+    /// return owes a geometry batch the change gate would otherwise suppress.
+    /// See that member for the full contract.
+    ///
+    /// A screen ADDED to the set is armed too, and the reason is worth stating
+    /// because the obvious argument for leaving it unarmed is wrong. That
+    /// argument runs: an added screen gets fresh state and no baseline, so it
+    /// emits on its own. But releaseScreenState deliberately does NOT drop
+    /// m_lastAppliedRect (see its own contract above), and the removal loop
+    /// prunes only the leaving screen's CURRENT context, so a screen
+    /// re-entering on a context whose state survived resolves against a full
+    /// live baseline. Every rect can then match and the batch is suppressed —
+    /// the same hole this flag exists to close, reached by a different door.
+    ///
+    /// Deliberately a forced EMIT rather than dropping m_lastAppliedRect for
+    /// the screen's windows, which is the tempting spelling because the header
+    /// above notes that dropping the rect memory forces an emit. That memory
+    /// is also the park/unpark discriminator (applyLayout's wasParked and
+    /// wasOnScreen read it), so
+    /// clearing it would make every parked column read as ARRIVING and hand
+    /// each one an edge-anchored origin it never departed from. The rect
+    /// memory is still true; it is the inference drawn from it that does not
+    /// survive the switch.
+    QSet<QString> m_forceEmitScreens;
+    /// A focus report absorbed while its context was in the BACKGROUND
+    /// (windowFocused's off-current-key arm): the strip's focus and anchor
+    /// moved, but only placementChanged was emitted, so the compositor never
+    /// heard the centering. Keyed by screen, valued with the CONTEXT the
+    /// report belonged to, and promoted into m_forceEmitScreens by the first
+    /// applyLayout pass that runs with that context current — unlike the bare
+    /// force flag it cannot be spent by a pass for a different context, which
+    /// is exactly how the desktop-return centering was getting lost (the
+    /// return retile consumed the switch's arm on the old focus, or ran
+    /// before the focus report existed, and nothing forced a later emit when
+    /// every rect matched the stored baseline).
+    /// Keyed by the whole CONTEXT rather than by screen. One slot per screen
+    /// would be enough for the single-switch case, but two background reports
+    /// for two different off-current contexts of the same screen do happen
+    /// (activating windows on two parked desktops before returning to either),
+    /// and the second would overwrite the first — leaving the first context's
+    /// return with no forced repair, which is the exact failure this member
+    /// exists to prevent. A set of contexts arms each independently, and each
+    /// is consumed by the pass that runs with that context current.
+    QSet<PhosphorEngine::PlacementStateKey> m_pendingFocusEmitContexts;
+    /// Last strip epoch announced per screen, so stripContextChanged is
+    /// emit-on-change rather than a re-announcement on every set push.
+    ///
+    /// A screen leaving the scrolling set drops its entry, so re-entering
+    /// re-announces: the consumer retired the screen's strip state when it
+    /// left, and would otherwise never be told to rebuild it.
+    QHash<QString, QString> m_announcedStripEpoch;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
@@ -1295,6 +1462,7 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
+    bool m_centerShortColumns = false;
     /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
     /// the animation duration): a close-triggered reflow — and the
     /// focus-adoption reflow the compositor's successor pick fires
@@ -1309,10 +1477,13 @@ private:
     /// its apply cannot wait), which means a close-then-immediate-open chain
     /// (a file dialog handing back to its parent) reflows over the corpse as
     /// it always did — best-effort degradation to the pre-hold behaviour,
-    /// not a correctness bug. Only windowClosed and windowFocused defer.
-    /// scheduleRetileForScreen's queued apply is outside the hold for the
-    /// same reason and on the same terms: a config/per-screen change or a
-    /// min-size report landing mid-hold reflows on its own turn.
+    /// not a correctness bug. Three paths defer: windowClosed, windowFocused
+    /// and scheduleRetileForScreen's queued apply — that third one being what
+    /// makes the other two work, since the daemon turns every close's own
+    /// placementChanged into an identical-set re-push that retiles anyway.
+    /// engine_closehold.cpp carries the full account, including why the
+    /// config, per-screen and min-size retiles that reach the same guard lose
+    /// nothing by being replayed from the flush.
     int m_closeReflowDelayMs = 0;
     /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
     /// guard that keeps one timer per screen however many closes land inside
@@ -1359,17 +1530,15 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
-    /// Windows whose last EMITTED batch entry carried columnMaximized. The
+    /// Windows whose last EMITTED batch entry carried maximizedToEdges. The
     /// column twin of m_lastAppliedWindowedFs and its own leg of the same
-    /// emit-on-change gate, for the same reason and one more: this flag can
-    /// flip with every committed rect byte-identical. It is derived partly
-    /// from extentPinnedByMinimum, which moves when a client reports a
-    /// minimum anywhere in [resolveColumnWidthPx(width), workAreaMain] on an
-    /// already-full-width column, or when respectMinimumSize is toggled over
-    /// one. Without this leg the batch is suppressed and the compositor keeps
-    /// asserting a maximize the engine has dropped. Maintained wherever
-    /// m_lastAppliedWindowedFs is.
-    QSet<QString> m_lastAppliedColumnMaximized;
+    /// emit-on-change gate, for the same reason and one more: the flag can
+    /// flip with every committed rect byte-identical (a toggle on a column
+    /// whose client minimum already outruns the raw area, or an un-maximize
+    /// whose stored width still renders full). Without this leg the batch is
+    /// suppressed and the compositor keeps asserting a maximize the engine
+    /// has dropped. Maintained wherever m_lastAppliedWindowedFs is.
+    QSet<QString> m_lastAppliedMaximizedToEdges;
     /// Which screen edge each currently-parked window went out by — one of
     /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
     /// the screen's strip axis: a horizontal strip goes out left/right, a
@@ -1499,6 +1668,7 @@ private:
     /// keeps a map-taking form, because the open path resolves several values
     /// for one screen off a single fetch.
     bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
+    bool effectiveCenterShortColumns(const QVariantMap& overrides) const;
     bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
     bool effectiveSmartGaps(const QVariantMap& overrides) const;
     /// Hoisted out of the emit loop by its one caller: it is a per-SCREEN

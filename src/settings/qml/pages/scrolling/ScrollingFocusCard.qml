@@ -75,7 +75,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Crop columns at the screen edge")
             searchAnchor: "cropStraddlers"
-            description: i18n("When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.")
+            description: i18n("When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping stops fullscreen video and games from being sent straight to the screen, so they use more power while any screen uses scrolling.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingCropStraddlers
@@ -167,7 +167,7 @@ SettingsCard {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
-            text: i18n("Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.")
+            text: i18n("Both scroll keys use the same chord, so the view scroll key never runs. Give them different chords to use both.")
             visible: root.settingsBridge.wheelTriggersCollide && wheelEnabledSwitch.checked
         }
 

@@ -298,6 +298,8 @@ public:
     P_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
+    // Shared by Snapping.Behavior.WindowHandling and Scrolling.Behavior, so the
+    // group disambiguates and the key stays generic.
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
     // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
     // Scrolling.Behavior — restore a FLOATED (unsnapped / untiled) window to its
@@ -308,6 +310,7 @@ public:
     // Scrolling.Behavior: stack the mode's floated windows above the windows it
     // places (keep-above, applied by the KWin effect beneath any SetWindowLayer rule).
     P_CONFIG_KEY(keepFloatingAboveKey, "KeepFloatingAbove")
+
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
@@ -498,6 +501,7 @@ public:
     // shared leaf names, disambiguated by group)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    P_CONFIG_KEY(centerShortColumnsKey, "CenterShortColumns")
     P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")

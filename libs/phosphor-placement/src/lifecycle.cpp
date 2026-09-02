@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "placementlogging.h"
@@ -146,7 +147,22 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
             }
             entry.zoneNumbers = zoneNumbers;
 
-            m_pendingRestoreQueues[appId].append(entry);
+            // Capped per app, oldest dropped first. consumePendingAssignment
+            // pops exactly ONE entry per reopen and pruneStaleAssignments
+            // cannot reach this map (it is appId-keyed, not windowId-keyed), so
+            // an app that is snapped and closed more often than it is reopened
+            // grew this list for the whole session. The placement store already
+            // caps per app for the same reason; this matches that posture.
+            // A bounded FIFO drops at the head. consumePendingAssignment
+            // serves the OLDEST entry first, so the dropped one is the entry
+            // the next reopen would have taken; the cap is a bound on
+            // unbounded growth, not a preference for recency.
+            auto& queue = m_pendingRestoreQueues[appId];
+            constexpr int MaxPendingRestoresPerApp = 16;
+            while (queue.size() >= MaxPendingRestoresPerApp) {
+                queue.removeFirst();
+            }
+            queue.append(entry);
 
             qCInfo(lcPlacement) << "Persisted zone" << zoneId << "for closed window" << appId << "screen:" << screenId
                                 << "desktop:" << desktop << "layout:"
@@ -608,6 +624,52 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
         }
     }
     return false;
+}
+
+bool WindowTrackingService::geometryOverlapsScreen(const QRect& geometry, const QString& screenId) const
+{
+    if (!geometry.isValid() || screenId.isEmpty()) {
+        return true; // Nothing to check against — fail open.
+    }
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
+    if (!mgr) {
+        return true;
+    }
+    // Resolve containment against the PHYSICAL output, even when the key names
+    // a virtual screen. Virtual screens subdivide ONE output and share its
+    // coordinate space, so the question here — do these coordinates belong to
+    // the space this key names — is answered by the output. screenGeometry()
+    // returns the VS SUB-RECT for a virtual id, and a floating window is by
+    // definition not engine-managed, so nothing constrains it to stay inside
+    // one subdivision: validating against the sub-rect turns a routine, legal
+    // position into a refusal. The guard's actual purpose is catching a rect
+    // filed under the wrong MONITOR, and two virtual screens on one output are
+    // not two monitors, so widening to the output loses none of its value.
+    const QString containmentId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
+        : screenId;
+    const QRect screenGeo = mgr->screenGeometry(containmentId);
+    if (!screenGeo.isValid()) {
+        return true;
+    }
+    const QRect intersection = geometry.intersected(screenGeo);
+    // Thresholds CLAMPED to the window's own size. MinVisibleWidth/Height were
+    // written for isGeometryOnScreen's rescue question ("is any part of this
+    // visible anywhere"), where a flat 100px floor is the right answer. The
+    // question here is different, and an unclamped floor refuses every window
+    // smaller than 100x100 that is sitting entirely and correctly on its own
+    // screen — which silently drops the float-back capture for every small
+    // utility, palette and dialog window, and then refuses to read any such
+    // record already on disk.
+    // Half the window's own extent, capped at the flat floor. A bare
+    // min(floor, extent) would demand FULL containment for anything under the
+    // floor — a 60px palette pulled half over a monitor edge would be refused
+    // where a 200px window needs only 100px of overlap — so a small window
+    // would be held to a stricter rule than a large one, which is the opposite
+    // of the point. Halving keeps the requirement proportional at both sizes.
+    const int requiredWidth = std::min(MinVisibleWidth, std::max(1, geometry.width() / 2));
+    const int requiredHeight = std::min(MinVisibleHeight, std::max(1, geometry.height() / 2));
+    return intersection.width() >= requiredWidth && intersection.height() >= requiredHeight;
 }
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const

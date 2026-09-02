@@ -137,6 +137,25 @@ void PlasmaZonesEffect::reportScreenDesktop(const KWin::LogicalOutput* output, i
     }
 }
 
+QHash<QString, int> PlasmaZonesEffect::lastReportedScreenDesktops() const
+{
+    // Re-resolve each output's id rather than caching one alongside the value.
+    // outputScreenId() appends "/connector" only while a duplicate model name
+    // is connected, so a cached id goes stale the moment an identical monitor
+    // is plugged or unplugged, and the gate this feeds would then compare an
+    // announce against ids no live output answers to. See reportScreenDesktop
+    // for why the dedup map is keyed by output in the first place.
+    QHash<QString, int> byScreenId;
+    byScreenId.reserve(m_lastScreenDesktop.size());
+    for (auto it = m_lastScreenDesktop.cbegin(); it != m_lastScreenDesktop.cend(); ++it) {
+        const QString screenId = outputScreenId(it.key());
+        if (!screenId.isEmpty()) {
+            byScreenId.insert(screenId, it.value());
+        }
+    }
+    return byScreenId;
+}
+
 void PlasmaZonesEffect::resyncAllScreenDesktops(bool force)
 {
     if (!KWin::effects) {

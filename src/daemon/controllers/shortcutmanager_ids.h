@@ -126,6 +126,7 @@ inline constexpr auto kIdScrollCycleColumnWidthBack = "scroll_cycle_column_width
 inline constexpr auto kIdScrollIncreaseColumnWidth = "scroll_increase_column_width";
 inline constexpr auto kIdScrollDecreaseColumnWidth = "scroll_decrease_column_width";
 inline constexpr auto kIdScrollMaximizeColumn = "scroll_maximize_column";
+inline constexpr auto kIdScrollMaximizeToEdges = "scroll_maximize_to_edges";
 inline constexpr auto kIdScrollExpandColumn = "scroll_expand_column";
 inline constexpr auto kIdScrollCycleWindowHeight = "scroll_cycle_window_height";
 inline constexpr auto kIdScrollCycleWindowHeightBack = "scroll_cycle_window_height_back";

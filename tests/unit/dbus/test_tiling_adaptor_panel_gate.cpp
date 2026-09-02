@@ -73,12 +73,23 @@ public:
     {
         return true;
     }
+    /// Windows the adaptor OFFERED to the cross-screen session reclaim, in
+    /// order. Recorded rather than acted on: the property under test is
+    /// whether the adaptor runs the claim round at all, and answering the
+    /// claim would additionally change which dispatch branch is taken.
+    QStringList reclaimOffers;
+
     void windowOpened(const QString& windowId, const QString&, int, int) override
     {
         dispatched.append(windowId);
         if (burstDepth == 0) {
             dispatchedOutsideBurst.append(windowId);
         }
+    }
+    bool claimCrossScreenReopen(const QString& windowId, const QString&, int, int) override
+    {
+        reclaimOffers.append(windowId);
+        return false; // decline, so the arrival-screen dispatch still runs
     }
     void beginArrivalBurst() override
     {
@@ -159,22 +170,6 @@ class TestTilingAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // The deferral queue's DROP path. A window that opens behind the panel gate
-    // and closes before the gate lifts must never reach an engine.
-    //
-    // Untested until now, and the sibling close-sweep case covers the OTHER
-    // queue (the mid-flip park), so deleting removePendingOpen's call site left
-    // the whole suite green. What it guards is a phantom tile for the session:
-    // the flush would dispatch a dead window into the engine, and there is no
-    // later windowClosed to shed it, because the close already happened before
-    // the dispatch. A splash screen or a session-restore dialog that opens and
-    // closes inside the startup window is exactly this shape.
-    //
-    // The assertion is on ENGINE TRACKING, not on the queue count: every other
-    // deferral case here pins only that the queue drained, which cannot tell a
-    // dispatch from a drop.
-    // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
     // Replay ORDER out of the deferral queue, and the burst brackets around it.
     //
     // deferUntilPanelReady's comment calls replay order load-bearing: it
@@ -223,6 +218,53 @@ private Q_SLOTS:
     }
 
     // -------------------------------------------------------------------------
+    // The move-release one-shot (m_moveReleasedInstances).
+    //
+    // releaseWindowTracking drops a LIVE window from engine tracking WITHOUT
+    // capturing a placement, and the effect then re-announces it on the screen
+    // the user moved it to. That announce looks like a first observation to
+    // claimCrossScreenReopen, whose same-instance branch matches the window's
+    // own stale record — still tiled on the OLD screen — and yanks it back,
+    // silently undoing the move. The one-shot suppresses exactly that claim
+    // round and nothing else.
+    //
+    // The whole feature shipped untested, and its consumption sat behind a
+    // short-circuited `allowCrossScreenClaim &&`, so a rule-routed re-announce
+    // left the entry armed to spend itself on an unrelated later announce.
+    // Asserting only "the re-announce was not reclaimed" would pass against
+    // that; the third announce below is what pins the ONE in one-shot.
+    // -------------------------------------------------------------------------
+    void testMoveReleaseSuppressesExactlyOneCrossScreenReclaim()
+    {
+        RecordingEngine engine;
+        QObject adaptorParent;
+        // Null screen manager: the panel gate never engages, so every open
+        // dispatches synchronously and the assertions read dispatch order
+        // directly rather than through a flush.
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        // Baseline: an ordinary open IS offered to the session reclaim.
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(engine.reclaimOffers, QStringList{QStringLiteral("kate|a")});
+        QCOMPARE(engine.dispatched.size(), 1);
+
+        // A live move release arms the one-shot; the re-announce skips the
+        // claim round and is adopted by the arrival screen's engine instead.
+        adaptor.releaseWindowTracking(QStringLiteral("kate|a"));
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
+        QCOMPARE(engine.reclaimOffers.size(), 1); // unchanged — suppressed
+        QCOMPARE(engine.dispatched.size(), 2); // but still dispatched
+
+        // ONE shot. The next announce for the same live window is offered
+        // again, or a single move would disarm the session reclaim for that
+        // window permanently.
+        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
+        QCOMPARE(engine.reclaimOffers.size(), 2);
+        QCOMPARE(engine.reclaimOffers.last(), QStringLiteral("kate|a"));
+    }
+
+    // -------------------------------------------------------------------------
     // The queue's OVERFLOW valve. The panel query is a D-Bus round trip that
     // may never answer, so the queue is capped; past the cap an open is
     // processed against the unreserved screen rect rather than dropped.
@@ -266,6 +308,22 @@ private Q_SLOTS:
         QCOMPARE(engine.dispatched.last(), QStringLiteral("overflow|new"));
     }
 
+    // -------------------------------------------------------------------------
+    // The deferral queue's DROP path. A window that opens behind the panel gate
+    // and closes before the gate lifts must never reach an engine.
+    //
+    // Untested until now, and the sibling close-sweep case covers the OTHER
+    // queue (the mid-flip park), so deleting removePendingOpen's call site left
+    // the whole suite green. What it guards is a phantom tile for the session:
+    // the flush would dispatch a dead window into the engine, and there is no
+    // later windowClosed to shed it, because the close already happened before
+    // the dispatch. A splash screen or a session-restore dialog that opens and
+    // closes inside the startup window is exactly this shape.
+    //
+    // The assertion is on ENGINE TRACKING, not on the queue count: every other
+    // deferral case here pins only that the queue drained, which cannot tell a
+    // dispatch from a drop.
+    // -------------------------------------------------------------------------
     void testDeferredOpenClosedBeforeReady_neverReachesTheEngine()
     {
         PhosphorScreens::ScreenManager mgr;
@@ -638,7 +696,7 @@ private Q_SLOTS:
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
             "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
-            "\"windowedFullscreen\":true,\"columnMaximized\":true,\"tabFrom\":\"a|1\"},"
+            "\"windowedFullscreen\":true,\"maximizedToEdges\":true,\"tabFrom\":\"a|1\"},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
@@ -675,7 +733,7 @@ private Q_SLOTS:
         // absence on a|1 reads false.
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
-        // columnMaximized rides the same JSON hop, and needs pinning for the
+        // maximizedToEdges rides the same JSON hop, and needs pinning for the
         // same reason the two above do: a typo or a dropped parse line yields
         // false with no error.
         //
@@ -690,8 +748,8 @@ private Q_SLOTS:
         // is explicitly legal (they drive different compositor state, and a
         // maximized column can hold a windowed-fullscreen tile), so this also
         // pins that validationError does not reject the pair.
-        QCOMPARE(requests.at(1).columnMaximized, true);
-        QCOMPARE(requests.at(0).columnMaximized, false);
+        QCOMPARE(requests.at(1).maximizedToEdges, true);
+        QCOMPARE(requests.at(0).maximizedToEdges, false);
         // tabFrom parses through the same JSON hop on a tiled entry (key
         // spelling pinned against the engine producer), and its absence on
         // a|1 reads empty.

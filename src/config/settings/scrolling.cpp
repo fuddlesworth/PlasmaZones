@@ -607,6 +607,10 @@ P_STORE_GET(bool, scrollingRespectMinimumSize, scrollingBehaviorGroup, respectMi
 P_STORE_SET_BOOL(setScrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey,
                  scrollingRespectMinimumSizeChanged)
 
+P_STORE_GET(bool, scrollingCenterShortColumns, scrollingBehaviorGroup, centerShortColumnsKey, bool)
+P_STORE_SET_BOOL(setScrollingCenterShortColumns, scrollingBehaviorGroup, centerShortColumnsKey,
+                 scrollingCenterShortColumnsChanged)
+
 P_STORE_GET(bool, scrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey, bool)
 P_STORE_SET_BOOL(setScrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey,
                  scrollingRestoreStripsOnLoginChanged)
@@ -772,6 +776,9 @@ P_STORE_SET_STRING(setScrollingDecreaseColumnWidthShortcut, shortcutsScrollingGr
 P_STORE_GET(QString, scrollingMaximizeColumnShortcut, shortcutsScrollingGroup, maximizeColumnKey, QString)
 P_STORE_SET_STRING(setScrollingMaximizeColumnShortcut, shortcutsScrollingGroup, maximizeColumnKey,
                    scrollingMaximizeColumnShortcutChanged)
+P_STORE_GET(QString, scrollingMaximizeToEdgesShortcut, shortcutsScrollingGroup, maximizeToEdgesKey, QString)
+P_STORE_SET_STRING(setScrollingMaximizeToEdgesShortcut, shortcutsScrollingGroup, maximizeToEdgesKey,
+                   scrollingMaximizeToEdgesShortcutChanged)
 P_STORE_GET(QString, scrollingExpandColumnShortcut, shortcutsScrollingGroup, expandColumnKey, QString)
 P_STORE_SET_STRING(setScrollingExpandColumnShortcut, shortcutsScrollingGroup, expandColumnKey,
                    scrollingExpandColumnShortcutChanged)

@@ -1,0 +1,429 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+# Strip identity across the daemon/compositor seam
+
+The scrolling strip breaks on virtual desktops other than the one the daemon
+started on. It has broken there three or four times, in different clothes, and
+each fix has landed in the daemon. This document argues the recurrence is one
+structural defect at the D-Bus seam, and proposes a staged repair.
+
+**Status, 2026-08-30.**
+
+The originally REPORTED symptom ("the whole strip doesn't scroll, only the
+active window moves" on desktop 2) turned out not to be this seam at all. It
+was a maximized-to-edges column running a second per-window spring beside the
+view slide, fixed by PR #1012. The tell was a full-screen-width rect inside a
+strip (`maximizeMode= full`, `QRect(0,46 3840x2068)`); when a strip window's
+rect is screen-sized, suspect that path before the parked-column paint state.
+
+Of the three candidates below, **A is confirmed and now FIXED** — see
+[Candidate A](#candidate-a-fixed). B and C were never reproduced: the harness
+was pushed through three configurations (fresh, decorations seeded, strips
+restored from disk) and the end columns animated correctly in all of them.
+They are not disproven, only unobserved.
+
+**Stage 1 is BUILT, with three of its own prescriptions descoped.**
+`Scrolling.stripContextChanged` carries an opaque per-screen strip epoch,
+announced independently of any geometry batch, and the effect retires its
+strip-scoped paint state when the epoch moves. Candidate A was separately
+repaired at the emit gate. Stage 2 (directory, generation, subscription) and
+stage 3 (coordinate split) remain unbuilt, and stage 3 still has no answer to
+its clip problem.
+
+What stage 1 specified and did not ship, recorded here so the section below is
+read as a design note rather than a description of the tree:
+
+- **No bring-up seed.** The epoch is announce-only, with no readable property
+  to fetch at connect time, so a consumer that attaches after the daemon has
+  already announced a screen holds no epoch for it. Its first announcement is
+  therefore its first epoch, which records and returns without retiring. The
+  first context switch of such a session does not retire.
+- **No multi-epoch batch grouping.** Entries are not grouped by
+  `(screenId, epoch)` and no group is retired-then-applied as a unit. What the
+  code has instead is a first-epoch guard against a batch that raced ahead of
+  the announcement, which covers the same race for the FIRST epoch only.
+  Ordering is otherwise whatever D-Bus delivery gives: the daemon announces
+  before it schedules the forced retile, and the retile is queued, so the
+  announcement leads on that path — but a retile already queued before the
+  switch is not covered.
+- **No kill switch.** The retirement is unconditional; there is no config gate.
+
+The retire-set itself is complete for the maps it names, and the rule that
+decides membership lives on `retireStripScopedState`'s declaration, including
+the two tab-indicator maps that fail the rule's test and are kept anyway
+because the daemon's tab emit is change-gated per screen with no context term.
+
+Note what stage 1 does NOT do: it does not stop the effect from holding state
+across a switch, it makes the effect *told* so it can retire it. Retirement is
+a discipline every future strip-scoped map has to opt into. Making a
+cross-strip read unrepresentable needs the re-keying stage 2 brings.
+
+## Premise
+
+The engine keys a strip by `(screen, desktop, activity)`.
+`PhosphorEngine::PlacementStateKey` (`EngineTypes.h:21`) is that triple, and
+`ScrollEngine::currentKeyForScreen()` resolves it per screen. Persisted state
+agrees; a healthy two-desktop session holds two strips:
+
+```
+WindowTracking/ScrollStrips
+  'LG Electronics:LG Ultra HD:115107|1|'  columns=5
+  'LG Electronics:LG Ultra HD:115107|2|'  columns=5
+```
+
+`PhosphorProtocol::TileRequestEntry` (`AutotileTypes.h`) has **no desktop and
+no activity field**. The D-Bus signature is `a(siiiissbbbbssiiibsb)` and every
+member is per window or per screen. So the daemon resolves N strips per output
+and emits them all on one screen-keyed channel that cannot say which strip a
+batch belongs to.
+
+The compositor side matches the wire, not the model. The state demonstrably
+implicated in the current failure:
+
+| State | Where | Key | Role |
+| --- | --- | --- | --- |
+| `m_scrollVisualDelta` | `plasmazoneseffect.h:2515` | window id | paint position of a parked column |
+| `StripViewAnimator::m_motions` | `stripviewanimator.h:220` | `LogicalOutput*` | the view offset added to every carried window |
+
+`scroll_clip.cpp:221` states the shape of the problem outright:
+
+> `scrollManagedOutputFor` applies neither a desktop nor an activity term, so an
+> off-activity column stays scroll-managed exactly like an off-desktop one does
+> (#808).
+
+**Therefore: strip-scoped compositor state can outlive the strip it describes,
+with nothing on the wire able to say so.**
+
+Deliberately *not* claimed here: that the screen-keyed sets
+(`m_scrollingScreens`, `m_scrollCropStraddlerScreens`,
+`m_scrollVerticalAxisScreens`) are part of this. They are re-pushed by the
+daemon on context change and may be correctly maintained. They are listed in an
+earlier draft of this document without evidence; that was overreach.
+
+Also not claimed: that the engine side is uniformly correct. `m_lastAppliedRect`
+(`engine_apply.cpp`, read at :330) is keyed by window id alone on the engine
+object, with no context term, and is the baseline the `viewDelta` evidence loop
+compares against. Disjoint per-desktop window sets hide it today; a sticky or
+all-desktops window collides. That is the same defect class living inside the
+engine and should be fixed alongside, but it is not the reported bug.
+
+## Why the end columns are the ones that break
+
+The symptom is precise: on a non-startup desktop the columns at the head and
+tail of the strip do not travel, while every column between them animates.
+
+A middle column rides `viewDelta` in the geometry batch and is re-derived on
+every scroll, so it self-corrects the instant the next batch lands. A parked end
+column is different by construction. It is committed off the union of all
+outputs (`engine_apply.cpp:401`, `parkTop = unionBottom + 1 + kParkMargin`)
+because, as the wire documents, a rect is the only clip every present path
+honours. It is then denied the view delta outright:
+
+```cpp
+// engine_apply.cpp:641
+if (!parkedNow && viewDelta != 0) {
+    obj[QLatin1String("viewDelta")] = viewDelta;
+```
+
+so its entire on-screen existence during a slide comes from two pieces of
+**retained** state combined in `scrollParkedOffscreen()` (`scroll_clip.cpp:140`):
+its `m_scrollVisualDelta` entry, and `StripViewAnimator::offsetFor(output)`.
+Both are strip-scoped in meaning and neither is strip-keyed in fact.
+
+Parked columns are the load-bearing case for the one thing the seam cannot
+express. That is why they fail first and fail alone.
+
+## What actually breaks: three live candidates
+
+Source reading cannot separate these. All three produce "ends teleport, middles
+animate, only off the startup desktop".
+
+<a name="candidate-a-fixed"></a>
+**A. No batch is emitted, so nothing repairs the stale view. — FIXED.**
+`engine_apply.cpp:746` is emit-on-change:
+
+```cpp
+// Emit-on-change: a relayout that resolved every window to the exact
+// rect already applied ... must not re-feed the compositor's apply path.
+if (anyEntryChanged) {
+    Q_EMIT windowsTiled(...);
+}
+```
+
+The batch is built full-strip (`arr.append(obj)` for every tile) but emitted
+only if some rect changed. Returning to a desktop whose strip is unchanged
+emits nothing at all. Any repair carried *on a batch* is therefore inert in
+exactly the failing case. This is the finding that killed the previous draft of
+this plan, which put strip identity in `TileRequestEntry`.
+
+**Fix as shipped:** `ScrollEngine::m_forceEmitScreens`, armed in
+`setActiveScreens`' identical-set branch where a REAL switch is already
+distinguished from a no-op re-push, and consumed at the emit gate. The gate's
+premise is that an unchanged rect means the compositor already shows this
+answer; across a context switch the baseline describes a DIFFERENT strip, so
+that inference does not hold. Deliberately a forced emit rather than dropping
+`m_lastAppliedRect`, which is also the park/unpark discriminator — clearing it
+would make every parked column read as arriving and hand it an edge origin it
+never departed from.
+
+Covered by `desktopSwitchBackEmitsEvenWhenNoRectMoved` plus the negative
+control `identicalSetRePushWithoutASwitchStaysSuppressed`, which exists because
+a fix that emitted unconditionally would pass the first test while disabling
+emit-on-change for every redundant re-push. Both mutation-checked: the positive
+test fails with the force neutered, and the fixture uses `makeProviderEngine`
+because a bare `makeEngine` has no work area and `applyLayout` bails before the
+emit gate — a fixture that asserts nothing.
+
+Note this does NOT give strips an identity. The compositor is now TOLD on
+every switch, which is enough for A, but it still cannot tell which strip a
+batch belongs to. Stage 1 remains the structural answer.
+
+**B. The animator's view offset belongs to the other strip.**
+`m_motions` is keyed by `LogicalOutput*`. Its header explains the choice:
+
+> The coordinate's ORIGIN is arbitrary... It deliberately does not try to mirror
+> the engine's own `viewOffset`: the two would have to be kept in step across
+> every context switch, screen change and restore, and nothing needs them to
+> agree.
+
+The paint offset is `committed - animated`, and that difference is only
+meaningful if both terms accumulated from the same strip. The reasoning is sound
+within one strip and does not survive a context switch. Note the offset rings
+out to zero when settled, so this candidate predicts corruption *during* a
+slide, not at rest.
+
+**C. `m_scrollVisualDelta` is absent for the incoming strip's parked columns.**
+Inserted only at `tiling.cpp:1638`, under `snap.hasVisualPos`, and removed at
+ten sites. If a removal fires on the switch, or an entry was simply never
+established for the incoming strip, `scrollParkedOffscreen` returns false and
+the column paints at its committed rect, off screen.
+
+They are not mutually exclusive and A can mask the others.
+
+## Gate before any code
+
+One `qCDebug` in `scrollParkedOffscreen` (`scroll_clip.cpp:140`) reporting, per
+parked window: whether the `m_scrollVisualDelta` lookup hit, the placement it
+returned, and what `offsetFor(managed)` gave. Plus one line at
+`slotWindowsTileRequested` (`tiling.cpp:66`) recording that a batch arrived at
+all.
+
+Predictions, on the live desktop-2 repro:
+
+- **A** — no batch line on the desktop switch, and none until the first scroll.
+- **B** — lookup hits with a correct placement, offset is non-zero and belongs
+  to the previous strip's travel.
+- **C** — lookup misses for the parked columns.
+
+This is a gate, not a footnote. The previous draft of this document prescribed
+a fix for a mechanism nobody had confirmed, and both mechanisms it assumed have
+since been ruled out.
+
+## Why the compositor must not derive identity itself
+
+Whatever the mechanism, the repair involves naming strips. The obvious spelling
+is a `desktop` field the effect compares to `KWin::effects->currentDesktop()`.
+That is wrong, and the engine already says why. From `ScrollEngine.h:1622`:
+
+> ONE EXCEPTION to "the context the producer resolved for": a screen under a
+> sticky-desktop pin. `currentKeyForScreen` answers with the **PINNED** desktop
+> (the pin outranks the per-output desktop), while the daemon resolves its
+> template against the **LIVE** one and knows nothing about the pin. It is
+> engine-internal state with no accessor.
+
+The engine's strip identity is deliberately not always the live compositor
+desktop. An effect comparing against KWin's current desktop is permanently wrong
+for every pinned screen, needs a second arm for activities, and a third for
+all-desktops windows. `#808` is that shape already.
+
+**The engine is the sole authority on strip identity. The compositor compares
+it and never computes it.** An opaque token makes the mistake unrepresentable.
+
+One concession: opacity costs log readability, and this subsystem is diagnosed
+from `journalctl`. The token travels with a **debug-only human label**
+(`"LG…|2|"`) that is logged and never branched on. If that label is ever read by
+logic, the design has failed.
+
+## Stage 1: strip identity as an announcement
+
+**Identity is a fact about a screen, not a rider on placement.** Given
+candidate A, it cannot live in `TileRequestEntry`.
+
+**Wire.** A new signal on the Scrolling interface:
+
+```xml
+<signal name="stripContextChanged">
+  <arg name="screenId" type="s"/>
+  <arg name="epoch" type="s"/>   <!-- opaque; hash of the engine's context key -->
+  <arg name="debugLabel" type="s"/> <!-- logging only, never branched on -->
+</signal>
+```
+
+Emitted whenever a screen's resolved context key changes, independent of
+whether any geometry changed. Desktop and activity switches announce by way of
+the daemon's `setActiveScreens` push, which is where the announcement is made
+for every screen in the set; a key change with no such push behind it is not
+announced, so this is a property of how the daemon drives the engine rather
+than a guarantee the engine makes on its own. A sticky-pin RELEASE announces
+directly, because it moves the key without going through that push. A pin
+ACQUIRE does not, and does not need to: it pins the screen to the desktop the
+key already resolves to, so nothing moves until a later switch, where the
+ordinary announcement correctly stays silent for a pinned screen.
+
+Adding a signal does not break the existing
+`windowsTileRequested` signature, so no lockstep wire break and no stale-`.so`
+hazard, which matters given the effect cannot be hot-reloaded (unload/loadEffect
+does not reload; it needs a logout).
+
+**Consumer.** The effect holds `QHash<QString /*screenId*/, QString /*epoch*/>`.
+On a changed epoch it retires the strip-scoped state for that screen, before any
+subsequent batch applies.
+
+**What is retired, and why each.** The previous draft listed this set by guess.
+Corrected against each member's own documentation:
+
+| State | Retire? | Reason |
+| --- | --- | --- |
+| `m_scrollVisualDelta` (windows on that screen) | **yes** | describes a position on *this* strip; meaningless on another |
+| `StripViewAnimator` motion for the output | **yes** | see below; a cross-strip offset is the candidate-B corruption |
+| `m_scrollCommandedRects` | **no** | client-negotiation state, not paint state. A rate-limited counter-assert against a client refusing geometry. Retiring it mid-flight disarms a defence for no benefit |
+| `m_scrollOfferedColumn` | **no** | size-continuity discriminator. Its doc: "an entry means the client HAS been offered this column". Dropping it makes the next batch re-offer and can resize a settled window |
+| screen-keyed sets (`m_scrollingScreens`, crop, vertical axis) | **no** | daemon re-pushes these on context change; no evidence they are implicated |
+
+The distinction that got the first draft wrong: **strip-scoped paint state** is
+about a strip and dies with it; **client-negotiation state** is about a window
+and its lifetime is the window's. Only the former is retired.
+
+**Animator handling — decided against re-keying, for now.** This section
+originally specified moving `m_motions` from `LogicalOutput*` to
+`(LogicalOutput*, epoch)`. As built, stage 1 instead calls the existing
+`StripViewAnimator::forgetOutput` when an epoch changes.
+
+The behaviour is identical while only one strip renders per output, which is
+the case today: a second key dimension whose value is always the current epoch
+buys nothing except stale entries that then need reaping. Re-keying earns its
+complexity only once several strips are live at once, which is stage 2, so it
+belongs there. The property the doc wanted — that a cross-strip offset is
+unrepresentable rather than merely cleaned up — is genuinely weaker this way,
+and that is the trade: retirement is a discipline the code must keep applying,
+where re-keying would have been structural.
+
+**Multi-epoch batches.** A batch already spans screens, and a window migrating
+desktops may put two epochs for one screen in one batch. Entries are grouped by
+`(screenId, epoch)` and each group is retired-then-applied as a unit. Applying a
+batch whole and retiring once is order-dependent and would discard state
+established by an earlier entry in the same batch.
+
+**Kill switch.** Behind a config gate for at least one release. A behaviour
+change in the compositor with no runtime disable costs every user a logout to
+back out.
+
+**Test.** A context change retires strip-scoped paint state and leaves
+client-negotiation state intact. Neither assertion exists today, and the first
+is what every previous fix slipped past.
+
+## Stage 2: directory, generation, subscription
+
+Needed the moment the effect renders more than one strip, and **not before**.
+An earlier draft of this section claimed generation numbers were independently
+useful for a single strip. They are not, and neither is the rest of it:
+
+- **Directory** exists so the effect can CHOOSE among strips and order them.
+  With one strip it never chooses.
+- **Subscription** was meant to stop batches for strips nobody is watching, but
+  `applyLayout` resolves `currentKeyForScreen` and bails when there is no state,
+  so the daemon already emits for the current context only. There is no traffic
+  to save, and the handshake would add the switch race noted below for nothing.
+- **Generation** catches a strip drifting while its epoch is unchanged. With one
+  strip, every return to a strip crosses an epoch change (you were on another
+  context's epoch), so stage 1's retirement already fires. The only gap left is
+  a mutation that moves no rect WHILE the strip is current.
+
+That last gap is real but it is not a strip-identity problem, and it should not
+be built as part of this. It is emit-gate completeness: `m_lastAppliedRect` only
+notices geometry, so every piece of non-geometric strip state needs its own leg
+on the gate or it silently never reaches the compositor.
+`m_lastAppliedWindowedFs` and `m_lastAppliedMaximizedToEdges` are two such legs,
+each added because "a toggle never moves a rect". A generation counter is the
+general form of that pattern and deserves to be argued on its own terms, not
+smuggled in under a stage that is otherwise gated on multi-strip rendering.
+
+**Directory.** With one strip the effect only compares tokens. With several it
+must choose among them, and an overview must order them. An opaque token cannot
+be enumerated or sorted by the compositor, and ordering by desktop index
+reintroduces the pinned-desktop divergence. So the engine publishes, per output,
+an ordered list of `(epoch, displayOrder, label)`. The effect selects from the
+published list and still never computes identity.
+
+**Generation.** A token detects replacement, not drift. The daemon can reflow a
+strip while it is not current. Each epoch carries a monotonic generation; a bump
+means the cache for that epoch is stale though its identity is unchanged. This
+also subsumes candidate A properly: a generation bump is emitted on a resolve
+that changed nothing geometrically but changed which strip is current.
+
+**Subscription.** The effect declares which epochs it needs, normally one and
+several during an overview. The daemon emits batches for exactly that set.
+Push-always is the wrong default: N times the batch traffic at scroll rates for
+strips nobody is looking at, and the drag auto-scroll heartbeat already runs
+these at roughly 60 Hz.
+
+**Known race.** The effect learns of a context switch from KWin, the daemon from
+its own path, and they will disagree for at least a frame. That is the same
+class as `#728` (desktop-switch focus race). The subscription must be
+declarative and idempotent — the effect states what it wants and the daemon
+converges — rather than a request/response that can interleave.
+
+## Stage 3: separating commitment from depiction — SKETCH ONLY
+
+Not a design. Recorded so stages 1 and 2 do not foreclose it, and so its
+unsolved problem is on the record.
+
+Only one strip per output can own real window geometry. The others are depicted,
+scaled and offset, so they cannot commit rects.
+
+The seam has already cracked here. The park rect exists because "a rect is the
+only clip every present path honours"; `visualPos` exists because "the park is
+not where the column IS on the strip". That pair is a strip-space coordinate
+bolted onto a wire that speaks only screen-absolute rects. Finishing the split
+would make strip-space position primary and commitment a per-output exception.
+
+**The unsolved problem.** The park hack exists *because* rects are the only
+universal clip. If entries stop committing rects, nothing in the present
+pipeline stops a depicted strip painting onto a neighbouring monitor. Stage 3
+requires a clip mechanism that does not rely on committed geometry, and this
+document does not have one. Do not treat stage 3 as costed.
+
+## Sequencing
+
+| Stage | Buys | Wire change | Do it |
+| --- | --- | --- | --- |
+| 0 Instrumentation | Identifies which candidate is real | none | DONE |
+| 1 Identity announcement | Strip identity crosses the seam | one added signal | DONE |
+| 2 Directory + generation + subscription | N-strip capable | more signals | Only with multi-strip rendering |
+| 3 Coordinate split | Removes the park special case | reshapes the batch | Only with overview, and only once the clip problem is solved |
+
+Stage 1 stood on its own. Stage 2 does not: every part of it is gated on the
+effect rendering more than one strip at a time, as its own section now spells
+out. Stage 3 is gated on that AND on an answer to the clip problem, which this
+document does not have. The v3.5 dynamic-workspaces work currently has overview
+descoped, so both remaining stages are parked rather than pending.
+
+## Non-goals
+
+- Teaching the compositor what a virtual desktop is. It compares tokens.
+- Retiring the ten ad-hoc `m_scrollVisualDelta` removal sites in stage 1. Once
+  the invariant holds they become provably redundant and can go in a separate
+  pass, with the epoch retirement as the argument. Mixing "establish the rule"
+  with "collect the winnings" makes a regression impossible to bisect.
+- Re-keying `m_lastAppliedRect`. Real, same class, not this bug; separate change.
+
+## Verification
+
+The defect reproduces on a second virtual desktop with enough columns that head
+and tail park: scroll to either end and the terminal column teleports instead of
+travelling, while middles animate.
+
+Build and `ctest` are not evidence here. The claim is about compositor paint
+behaviour across a context switch, so it is verified live, on the repro, with
+the stage 0 instrumentation still in place, before and after.

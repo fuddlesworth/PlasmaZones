@@ -53,7 +53,7 @@ ColumnLayout {
                 // for a state where "Default" IS no layout. Name it honestly.
                 if (previews.page._layoutBridge.defaultLayoutId === previews.page._noLayoutToken) {
                     return {
-                        "displayName": i18n("None"),
+                        "displayName": i18nc("the explicit no-layout choice", "None"),
                         "zones": []
                     };
                 }
@@ -67,7 +67,7 @@ ColumnLayout {
             // "Default", which is the state the user just opted out of.
             if (previews.view.localLayoutId === previews.page._noLayoutToken) {
                 return {
-                    "displayName": i18n("None"),
+                    "displayName": i18nc("the explicit no-layout choice", "None"),
                     "zones": []
                 };
             }
@@ -130,7 +130,7 @@ ColumnLayout {
                 // resolved default instead of the local pick.
                 if (previews.page._layoutBridge.defaultAutotileAlgorithm === previews.page._noLayoutToken) {
                     return {
-                        "displayName": i18n("None"),
+                        "displayName": i18nc("no tiling algorithm is set", "None"),
                         "category": 1,
                         "zones": []
                     };
@@ -145,7 +145,7 @@ ColumnLayout {
             // would fall through to the raw id and caption the card "none".
             if (previews.view.localAlgorithmId === previews.page._noLayoutToken) {
                 return {
-                    "displayName": i18n("None"),
+                    "displayName": i18nc("no tiling algorithm is set", "None"),
                     "category": 1,
                     "zones": []
                 };

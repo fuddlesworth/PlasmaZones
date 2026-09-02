@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <cmath>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -91,9 +92,13 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // All three opened windows must now tile: raising the cap from 2 to 4
-        // backfills the previously-overflowed win3. >= 2 would also pass if the
-        // backfill did nothing, so assert the exact count the regression targets.
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // recovers the previously-overflowed win3. >= 2 would also pass if the
+        // recovery did nothing, so assert the exact count the regression targets.
+        // QTRY_, because an over-cap window is a real overflow-floated member of
+        // the state now (not an unmanaged phantom backfillWindows re-adopts), so
+        // its recovery rides OverflowManager::recoverIfRoom on the settings
+        // retile timer rather than landing synchronously in refreshConfigFromSettings.
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -118,7 +123,11 @@ private Q_SLOTS:
         cmSaved.splitRatio = 0.35;
         cmSaved.masterCount = 3;
         engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = cmSaved;
-        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, masterStackRatio));
+        // Epsilon compare, not qFuzzyCompare: masterStackRatio is read straight
+        // out of the engine config, and qFuzzyCompare returns FALSE when either
+        // side is exactly 0.0 — so a future default of 0 would turn this into a
+        // confusing failure that has nothing to do with what it tests.
+        QVERIFY(std::abs(engine.config()->splitRatio - masterStackRatio) < 1e-9);
 
         engine.setAlgorithm(QLatin1String("centered-master"));
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
@@ -179,16 +188,23 @@ private Q_SLOTS:
         QVERIFY(gridAlgo);
         QVERIFY(gridAlgo->defaultMaxWindows() != settings.autotileMaxWindows());
 
+        // Armed before the switch, since the switch is what starts the guard.
+        QSignalSpy persistSpy(&engine, &AutotileEngine::settingsPersistRequested);
+
         // Make grid the default algorithm and land on it.
         settings.setDefaultAutotileAlgorithm(QLatin1String("grid"));
         engine.setAlgorithm(QLatin1String("grid"));
         QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
 
-        // The switch arms the write-back guard timer (single-shot, 500ms), which
-        // suppresses the maxWindows re-read. The clobber only bites on a LATER
-        // refresh once that guard has lapsed, so wait it out — otherwise the test
-        // passes for the wrong reason and never exercises the fallback.
-        QTest::qWait(600);
+        // The switch arms the write-back guard timer, which suppresses the
+        // maxWindows re-read. The clobber only bites on a LATER refresh once
+        // that guard has lapsed, so wait for the guard's OWN completion signal
+        // rather than sleeping past a hard-coded interval. A fixed qWait is
+        // coupled to the production constant in the FALSE-PASS direction: raise
+        // the interval, or load the machine, and the guard has not lapsed, the
+        // clobber path is never exercised, and the test passes for exactly the
+        // reason this comment warns about — silently.
+        QVERIFY(persistSpy.wait(5000));
 
         // A refresh with the algorithm unchanged (grid stays the default) must not
         // pull maxWindows down to the global key. The global still holds its schema
@@ -273,6 +289,25 @@ private Q_SLOTS:
 
         QVERIFY(!engine.algorithm().isEmpty());
         QCOMPARE(state->windowCount(), 1);
+
+        // Surviving the round trip is necessary but not sufficient: the
+        // assertions above hold equally if saveState and loadState are empty
+        // stubs, so on their own they cannot tell "no delegate means no-op"
+        // from "these functions never do anything". Installing a delegate and
+        // showing the SAME calls now reach it is what separates the two.
+        int saves = 0;
+        int loads = 0;
+        engine.setPersistenceDelegate(
+            [&saves] {
+                ++saves;
+            },
+            [&loads] {
+                ++loads;
+            });
+        engine.saveState();
+        engine.loadState();
+        QCOMPARE(saves, 1);
+        QCOMPARE(loads, 1);
     }
 
     void testPersistenceDelegate_invokesCallbacks()
@@ -409,7 +444,8 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // QTRY_: recovery rides the settings retile timer (see testMaxWindowsIncrease_triggersBackfill).
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
     }
 
     void testOverflowBehavior_floatToUnlimited_combinedWithMaxIncrease_singleBackfill()
@@ -436,7 +472,8 @@ private Q_SLOTS:
         engine.refreshConfigFromSettings();
         QCoreApplication::processEvents();
 
-        QCOMPARE(state->tiledWindowCount(), 3);
+        // QTRY_: recovery rides the settings retile timer (see testMaxWindowsIncrease_triggersBackfill).
+        QTRY_COMPARE(state->tiledWindowCount(), 3);
         QCOMPARE(engine.config()->overflowBehavior, PhosphorTiles::AutotileOverflowBehavior::Unlimited);
         QCOMPARE(engine.config()->maxWindows, 4);
     }

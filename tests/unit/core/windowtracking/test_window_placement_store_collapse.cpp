@@ -38,6 +38,12 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("dolphin|new"), QStringLiteral("dolphin"),
                                    WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                    QStringLiteral("S1")));
+        // The superseded sibling closed earlier this session, which revokes its
+        // reclaim credit. That is what marks it as stale duplicate memory rather
+        // than as evidence the cross-screen reclaim still reads; a record that
+        // KEPT its credit is never pruned. Production always reaches the collapse
+        // through a close, so this is the real shape.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|old")));
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new")));
 
@@ -65,6 +71,8 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"),
                                    WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                    QStringLiteral("S1")));
+        // Superseded by its own earlier close — see the credit note above.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|dup")));
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
@@ -146,6 +154,8 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"),
                                    WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                    QStringLiteral("S1"), keepS1));
+        // Superseded by its own earlier close — see the credit note above.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|sib")));
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
@@ -184,6 +194,10 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"),
                                    WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                    QStringLiteral("S1"), keepS1)); // newest
+        // Both superseded siblings closed earlier this session — see the credit
+        // note in the first test. A credit-bearing record is never pruned.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|bridge")));
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|leaf")));
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
@@ -214,6 +228,8 @@ private Q_SLOTS:
         reversed.record(makePlacement(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"),
                                       WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                       QStringLiteral("S1"), keepS1));
+        QVERIFY(reversed.markInstanceClosed(QStringLiteral("dolphin|bridge")));
+        QVERIFY(reversed.markInstanceClosed(QStringLiteral("dolphin|leaf")));
 
         QVERIFY(reversed.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
         QVERIFY(reversed.contains(QStringLiteral("dolphin|keep")));
@@ -239,6 +255,8 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("dolphin|kept-uuid"), QStringLiteral("dolphin"),
                                    WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(),
                                    QStringLiteral("S1")));
+        // Superseded by its own earlier close — see the credit note above.
+        QVERIFY(store.markInstanceClosed(QStringLiteral("dolphin|old-uuid")));
 
         QVERIFY(
             store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("org.kde.dolphin|kept-uuid")));

@@ -42,6 +42,35 @@ void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth
     m_floatRestore.insert(windowId, restore);
 }
 
+void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                                 const QString& screenId)
+{
+    // SCREEN-LOCAL recorded position only, for autotile's documented reason: a
+    // rect captured on a different screen would teleport the window while the
+    // float tracking points elsewhere. The move itself is gated (daemon-wired
+    // scrollingRestoreFloatedWindowsOnLogin setting + per-window
+    // RestorePosition rule) while the floating MARK is not — the callers mark
+    // unconditionally and only the geometry comes through here.
+    //
+    // Shared by the two restore paths (insertOpenedWindow's record-float branch
+    // and restoreFloatRecordForOpen) because they are one rule with two entry
+    // points, and a change to the gate that reached only one of them would
+    // restore the position on one open path and not the other.
+    const QString restoreScreen = record.screenId.isEmpty() ? screenId : record.screenId;
+    const QRect freeGeo = record.freeGeometryFor(restoreScreen);
+    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+    // Do not trust the KEY. This reads the shared free-geometry map directly
+    // rather than through validatedUnmanagedGeometry, so it gets none of that
+    // resolver's validation — and the rect goes straight out as an absolute
+    // geometry to apply. A record filed under one screen whose coordinates
+    // describe another would teleport the window to that monitor, which is
+    // exactly what the comment above says this restore must never do.
+    if (freeGeo.isValid() && restorePosition
+        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
+        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+    }
+}
+
 void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
 {
     // Registry answer, not a parse: a canonical id frozen before KWin resolved
@@ -59,14 +88,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     if (!record) {
         return;
     }
-    // Same gate and screen-local rule as the record-float branch of
-    // insertOpenedWindow (which documents both).
-    const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
-    const QRect freeGeo = record->freeGeometryFor(restoreScreen);
-    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-    if (freeGeo.isValid() && restorePosition) {
-        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-    }
+    emitGatedFloatGeometryRestore(windowId, *record, screenId);
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -158,19 +180,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 m_scrollFloatedWindows.insert(windowId);
                 consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
                 // The window is marked floating unconditionally above; only
-                // the geometry MOVE onto the recorded free spot is gated
-                // (daemon-wired scrollingRestoreFloatedWindowsOnLogin
-                // setting + per-window RestorePosition rule) — the autotile
-                // shape, insert.cpp. SCREEN-LOCAL recorded position only,
-                // for autotile's documented reason: a rect captured on a
-                // different screen would teleport the window while the
-                // float tracking points elsewhere.
-                const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
-                const QRect freeGeo = record->freeGeometryFor(restoreScreen);
-                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-                if (freeGeo.isValid() && restorePosition) {
-                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-                }
+                // the geometry MOVE onto the recorded free spot is gated. That
+                // gate and its screen-local rule live in the shared helper.
+                emitGatedFloatGeometryRestore(windowId, *record, screenId);
                 Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
                 return true;
             }
@@ -207,12 +219,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
-        // exactOnly: a column width is a PER-WINDOW contract, and the
-        // non-exact default admits a same-app SIBLING's record (the interface
-        // documents that sharing as being for free POSITIONS). Minting one
-        // window's sizing intent out of another instance's remembered rect
-        // opens the column at a size this window never asked for.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true)) {
+        // A column width is a PER-WINDOW contract, and the resolver is
+        // per-window by construction — there is no sharing mode to opt out of.
+        // That matters here specifically: minting one window's sizing intent
+        // out of another instance's remembered rect would open the column at a
+        // size this window never asked for.
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
             // The tracked geometry is a PHYSICAL rect from the compositor, so
             // it has to be decoded by role. Reading .width() unconditionally
             // would, on a vertical strip, feed the client's cross extent into
@@ -654,6 +666,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
     }
     bool migratedWindowedFs = false;
+    bool migratedMaximizedToEdges = false;
     std::optional<WindowHeight> migratedHeight;
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
@@ -667,6 +680,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // silently default false; read it off the old tile before takeWindow
         // destroys it (the boundary-crossing verb carries it the same way).
         migratedWindowedFs = oldState->strip().isWindowedFullscreen(windowId);
+        // Maximize-to-edges is declared COLUMN state nothing re-derives, carried
+        // the same way but only off a LONE tile (floatWindowInternal's rule): a
+        // shared column survives the migration and keeps its own flag.
+        const int oldColIdx = oldState->strip().columnOfWindow(windowId);
+        migratedMaximizedToEdges = oldColIdx >= 0 && oldState->strip().columns().at(oldColIdx).tiles.size() == 1
+            && oldState->strip().columns().at(oldColIdx).maximizedToEdges;
         // The tile's HEIGHT intent is carried the same way and for a sharper
         // reason: the insert below re-runs the whole open path, so a
         // ClientDecides screen would re-stamp the window with its recorded
@@ -697,7 +716,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // redundant emit, but the exit sets should stay identical).
         m_scrollFloatedWindows.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedColumnMaximized.remove(windowId);
+        m_lastAppliedMaximizedToEdges.remove(windowId);
         if (wasFloating) {
             // Announce the dropped float bit: signal-driven subscribers
             // (the effect's FloatingCache) would otherwise keep believing
@@ -792,6 +811,17 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             qCWarning(lcScrollEngine) << "windowOpened:" << windowId
                                       << "arrived floated — migrated windowed-fullscreen state dropped";
         }
+    }
+    // The same hand-over for the maximize-to-edges flag, onto a column the
+    // arrival has to ITSELF: a consume-open lands it in an existing column
+    // whose flag is that column's own, and a float exit leaves no tile at all.
+    // Both of those drop the carried flag, and quietly, unlike the
+    // windowed-fullscreen arm above: that state is the client's and losing it
+    // is worth a warning, while this one describes how a column the arrival
+    // no longer owns alone was presenting, which the new host answers for.
+    const int newColIdx = migratedMaximizedToEdges ? state->strip().columnOfWindow(windowId) : -1;
+    if (newColIdx >= 0 && state->strip().columns().at(newColIdx).tiles.size() == 1) {
+        state->strip().setMaximizedToEdgesForWindow(windowId, true);
     }
 
     // Three tiers, narrowest first: the per-window openFocused rule outranks
@@ -1012,7 +1042,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // is different — it is retained on purpose for the close capture.)
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
-    m_lastAppliedColumnMaximized.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
 
     if (inStrip && key == currentKeyForScreen(key.screenId)) {
         // Background-context guard: applyLayout resolves the screen's
@@ -1041,159 +1071,9 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
 // startCloseReflowHold / deferForCloseReflowHold / scheduleCloseReflowFlush
 // live in engine_closehold.cpp (this TU is over the file-size ceiling).
 
-void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
-{
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
-        m_activeScreen = screenId;
-    }
-    // Self-activation echo filter, m_pendingSelfActivations' consume side
-    // and the home of its contract: the effect reports EVERY activation
-    // back through notifyWindowFocused, including ones this engine
-    // initiated, and the round trip is asynchronous — on a rapid focus
-    // scroll the strip has already advanced past the echoed window by the
-    // time the report lands, and treating the stale echo as user focus
-    // would rewind the active column below (the next scroll step then
-    // advances from the rewound column and skips one). Entries ahead of the
-    // match go with it: the effect's calls share one ordered D-Bus
-    // connection, so their echoes were dropped (show desktop, window gone)
-    // and can never arrive after this one. The tab-click path never queues
-    // here — its activation goes out via the adaptor's focusWindowRequested,
-    // never this engine's emit, so its echo still drives the strip
-    // (signals.cpp documents that contract).
-    if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
-        // Expiry check BEFORE swallowing: an entry whose echo the compositor
-        // dropped (show desktop, focus-stealing prevention) has no reclaim
-        // path any more (see below), and without this it ate the FIRST real
-        // click on its window. Echo round trips are milliseconds; a stamp
-        // this old means the echo is dead and this report is the user.
-        const qint64 queuedAt = m_pendingSelfActivationQueuedAt.value(windowId, -1);
-        const bool expired = queuedAt < 0 || !m_selfActivationClock.isValid()
-            || m_selfActivationClock.elapsed() - queuedAt > kSelfActivationEchoExpiryMs;
-        m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
-                                       m_pendingSelfActivations.begin() + selfIdx + 1);
-        for (auto stampIt = m_pendingSelfActivationQueuedAt.begin();
-             stampIt != m_pendingSelfActivationQueuedAt.end();) {
-            stampIt = m_pendingSelfActivations.contains(stampIt.key()) ? std::next(stampIt)
-                                                                       : m_pendingSelfActivationQueuedAt.erase(stampIt);
-        }
-        if (!expired) {
-            return;
-        }
-        // Fall through: adopt as genuine focus.
-    }
-    // Declined-open consume, m_declinedOpenFocus' read side. An
-    // `openFocused = false` arrival was focused by the compositor anyway, and
-    // the rewind that declined it has already asked for the prior window back;
-    // adopting this report would undo that. Consumed exactly once, so the next
-    // report naming the same window is a real user click and adopts below.
-    //
-    // Placed ahead of the reclaim on the next line ON PURPOSE: this report is
-    // not the "genuine focus" the reclaim reasons about, and clearing the queue
-    // here would drop the prior window's activation echo that the rewind just
-    // queued, letting that echo rewind the strip a second time when it lands.
-    if (m_declinedOpenFocus.remove(windowId)) {
-        return;
-    }
-    // Deliberately NO reclaim of m_pendingSelfActivations here. An earlier
-    // form cleared the queue on every genuine report, reasoning that a
-    // genuine focus implies every previously-sent echo already landed. That
-    // inference is false ACROSS DIRECTIONS: on a window close the compositor
-    // activates its own successor pick and that genuine report is in flight
-    // BEFORE this engine queues its competing self-activation (the close
-    // handler's focusWindowAfter), so the queued entry's echo is still
-    // legitimately in flight when the genuine report lands. The clear wiped
-    // it, the echo then arrived against an empty queue, was mis-read as user
-    // focus, and the two picks re-anchored the strip against each other —
-    // the post-close anchor ping-pong (0↔1916 several times in two seconds,
-    // re-parking live windows on every bounce). The queue stays bounded
-    // without the reclaim: the prefix-drop at match above, the close-time
-    // removeAll, and the kMaxPendingSelfActivations cap all still run — and
-    // the dropped-echo case the reclaim used to (over-)serve is now handled
-    // precisely by the per-entry expiry at the match above.
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
-    if (!state) {
-        return;
-    }
-    if (state->isFloating(windowId)) {
-        // Focus-side memory for switchFocusBetweenFloatingAndTiling: a
-        // genuine report naming a float is the only place the engine learns
-        // the float layer holds focus, and which member holds it.
-        state->setLastFloatingFocus(windowId);
-        state->setFloatingHasFocus(true);
-        return;
-    }
-    // A genuine report naming a tile means the float layer lost focus,
-    // whether or not the strip's own focus slot moves below.
-    state->setFloatingHasFocus(false);
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-    // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
-    // screen owns the view for the rest of the hold, and picking the dragged
-    // window up activates it. Handing the view back here would slide the
-    // layout under a stationary cursor, the hazard applyLayout's own
-    // dragPreviewSteersView guard exists for. screensMatch, not ==, for that
-    // guard's reason. Read before the focus move so both outcomes below share
-    // one answer.
-    const bool dragPreviewSteersView = m_dragInsertPreview
-        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId);
-    const bool focusMoved = state->strip().focusWindow(windowId, params);
-    // A view still detached AFTER the focus move is one no re-anchor took
-    // back, and there are two ways to arrive here holding one. focusWindow
-    // REFUSED the report, because it names the window the strip already calls
-    // active (scrollstrip_navigation.cpp's same-column, same-tile bail); or it
-    // accepted a same-COLUMN tile move, which re-anchors nothing because no
-    // strip geometry moved. Both are right about the focus SLOT and wrong
-    // about the VIEW. A pan detaches the view from the centering policy, and
-    // the re-anchor that re-attaches it (reanchorAfterFocusChange) is reached
-    // from focusWindow on a COLUMN change and on nothing else, so neither of
-    // these two outcomes gets there. No later pass revisits the question
-    // either: updateViewForFocus returns early while detached, so even the
-    // applyLayout a desktop return runs cannot re-derive the anchor. The
-    // result was that clicking the focused window, or switching away from its
-    // desktop and back, did nothing at all — the whole report was dropped,
-    // latch and all.
-    //
-    // Re-attach and let the POLICY answer, rather than re-anchoring outright.
-    // Under Never/OnOverflow updateViewForFocus leaves a fully-visible column
-    // alone, so a pan that kept the focused column on screen survives an
-    // incidental activation — KWin re-fires windowActivated on restacking,
-    // fullscreen exit and desktop switches, not only on real focus moves.
-    // Under Always it re-centres, which is what that setting asks for.
-    //
-    // The report must NAME the active window: a minimized tile in the active
-    // column is refused by focusWindow without becoming the column's active
-    // tile, and that report has no claim on the view.
-    const bool handBackView =
-        state->strip().viewDetached() && state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
-    if (!focusMoved && !handBackView) {
-        return;
-    }
-    if (handBackView) {
-        state->strip().setViewDetached(false);
-    }
-    // The focus change may scroll the viewport; never re-activate here (the
-    // compositor initiated this focus). Background-context guard: see
-    // windowClosed. The latch is cleared for a background context too (it is
-    // persisted state), but only the on-screen context re-derives the anchor
-    // now — a background one re-derives on the applyLayout its own desktop
-    // return runs, which is the pass that used to return early.
-    if (key == currentKeyForScreen(key.screenId)) {
-        // Close-settle hold, second arm: the compositor's successor pick
-        // lands here milliseconds after a close, and its reanchor reflow
-        // moving the neighbours would defeat the hold windowClosed just
-        // started. The anchor/focus state above is already updated — only
-        // the geometry emission waits; the scheduled flush replays it.
-        if (!deferForCloseReflowHold(key.screenId)) {
-            applyLayout(key.screenId, false);
-        }
-    }
-    // Focus and view anchor are persisted (serializeStripState), and
-    // placementChanged is the only thing that marks DirtyScrollStrips.
-    // Emitted for a background context too: the strip that changed is
-    // serialized whether or not it is the one on screen right now.
-    Q_EMIT placementChanged(key.screenId);
-}
+// The compositor focus-report handler (windowFocused) lives in
+// engine_focus.cpp — split out when this file crossed the size ceiling a
+// FIFTH time.
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the
 // client resize echo (onWindowResized) live in engine_minsize.cpp — split out

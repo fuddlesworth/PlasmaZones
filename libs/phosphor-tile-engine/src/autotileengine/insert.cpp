@@ -297,7 +297,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     // the two candidates cannot diverge here anyway.)
                     const bool restorePosition =
                         !m_restorePositionPredicate || m_restorePositionPredicate(windowId, screenId);
-                    if (freeGeo.isValid() && restorePosition) {
+                    // Key not trusted: freeGeometryFor was read off the record
+                    // directly, so validatedUnmanagedGeometry's mis-key guard
+                    // never ran. The comment above notes a rect for another
+                    // screen would teleport the window to a third monitor with
+                    // the state saying otherwise; this is the check that makes
+                    // that true rather than merely intended.
+                    if (freeGeo.isValid() && restorePosition
+                        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                     }
                     qCInfo(PhosphorTileEngine::lcTileEngine)
@@ -336,6 +343,34 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // for the tier-1-inserted case costs nothing.
     if (preSeeded) {
         cleanupPendingOrderIfResolved(screenId);
+    }
+    // Membership-verified, because every addWindow above can refuse (the split
+    // tree's MaxRuntimeTreeDepth ceiling). Keying and returning true on a
+    // refusal left a phantom key: isWindowTracked answered true for a window no
+    // TilingState held, so the daemon routed the window's float traffic here
+    // instead of through the adoption handoff, and setWindowFloat then wrote
+    // into a state that silently ignored it (TilingState::setFloating no-ops for
+    // an unheld window) while still announcing the float. Leave no trace
+    // instead, exactly as handoffReceive's own refusal arm does.
+    if (!state->containsWindow(windowId)) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "insertWindow: state refused" << windowId << "on" << screenId << "- window left unmanaged";
+        // windowOpened keys the reverse map before calling in here, so the
+        // sweep has to drop that key too — the same cleanup the defer gate and
+        // claimCrossScreenReopen run for their own refusals.
+        m_states.removeWindow(windowId);
+        m_windowMinSizes.remove(windowId);
+        m_autotileFloatedWindows.remove(windowId);
+        purgeFromPendingOrders(windowId);
+        // The last two match removeWindow and handoffRelease, which are the
+        // canonical unmanage paths: a stale OverflowManager entry would lie to
+        // the capture discriminator and the drag preview until the screen's
+        // next recoverIfRoom, and a surviving pending focus would make
+        // applyTiling emit activateWindowRequested for a window this engine
+        // just refused.
+        m_overflow.clearOverflow(windowId);
+        purgePendingFocusForWindow(windowId);
+        return false;
     }
     m_states.setKeyForWindow(windowId, currentKey);
     return true;
@@ -385,6 +420,17 @@ void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
     }
 }
 
+void AutotileEngine::purgePendingFocusForWindow(const QString& windowId)
+{
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == windowId) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
+        }
+    }
+}
+
 void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
@@ -395,13 +441,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
     purgeFromPendingOrders(windowId);
     // A pending post-retile focus for a window that just closed must not
     // survive to activate a dead id on its screen's next retile.
-    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
-        if (fit.value() == windowId) {
-            fit = m_pendingFocusByScreen.erase(fit);
-        } else {
-            ++fit;
-        }
-    }
+    purgePendingFocusForWindow(windowId);
 
     const TilingStateKey key = m_states.takeWindow(windowId);
     if (key.screenId.isEmpty()) {

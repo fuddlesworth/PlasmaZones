@@ -13,13 +13,16 @@
 // permanently.
 
 #include "tilinghandler.h"
+#include "pretiledecisions.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <core/output.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
@@ -61,8 +64,32 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // A const scan, so a guard-bail below never inserts an empty per-screen
     // bucket (operator[] would); the bucket is created only at the genuine
     // insertion point (below).
-    if (findPreTileGeometry(windowId).isValid()) {
-        return;
+    //
+    // First-capture-wins applies WITHIN an output. Across outputs it does not:
+    // an entry measured on a monitor the window has since left describes a
+    // position that no longer means anything for it, and because this early
+    // return never expired it, that entry was pinned for the window's whole
+    // life — the reader could only ever be handed a foreign rect, however far
+    // the window travelled. Re-home instead: drop the stale entry and let the
+    // capture below file a fresh one under the current output. Still exactly
+    // one entry per window, which is what the all-bucket reader needs.
+    //
+    // The stale entry is only IDENTIFIED here, never dropped here. Three
+    // unconditional guards sit between this point and the single insertion
+    // below (snap-owned, own-minimize-float, not-floating), so dropping on the
+    // spot and then bailing out of one of them would leave the window with NO
+    // free-geometry memory at all rather than a stale-but-real one — and
+    // nothing re-files it, so findPreTileGeometry answers invalid for the rest
+    // of the window's life. Removal is deferred to the commit, keeping the
+    // "exactly one entry per window" invariant without ever passing through
+    // zero.
+    QString staleBucket;
+    if (findPreTileGeometry(windowId, &staleBucket).isValid()) {
+        if (PhosphorIdentity::VirtualScreenId::samePhysical(staleBucket, screenId)) {
+            return;
+        }
+    } else {
+        staleBucket.clear();
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -106,6 +133,23 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return;
+    }
+    // Drop-then-insert as one unit: every guard that could bail has now been
+    // passed, so the window is never left without an entry. See the deferral
+    // note at the scan above.
+    if (!staleBucket.isEmpty()) {
+        qCDebug(lcEffect) << "Pre-autotile geometry for" << windowId << "re-homed from" << staleBucket << "to"
+                          << screenId;
+        auto bucketIt = m_preTileGeometries.find(staleBucket);
+        if (bucketIt != m_preTileGeometries.end()) {
+            bucketIt->remove(windowId);
+            // Drop the bucket when it empties, matching the const-scan
+            // reasoning above: a stray empty per-screen hash is a slow leak
+            // across a long session of monitor changes.
+            if (bucketIt->isEmpty()) {
+                m_preTileGeometries.erase(bucketIt);
+            }
+        }
     }
     m_preTileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
@@ -175,6 +219,38 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     || safeW->isUserMove() || safeW->isUserResize()) {
                     return;
                 }
+                // The rect is ABSOLUTE compositor coordinates, and the daemon
+                // resolved it against its OWN screenForWindow() rather than the
+                // window's live monitor. A stale tracked screen therefore answers
+                // a rect that lands on a different output, and applying it does
+                // not restore a size — it MOVES the window to that output, which
+                // is what a desktop switch looked like to the reporter of
+                // discussion #1028. Refuse it, matching the local-bucket arm's
+                // cross-screen decline in slotScreensChanged: capturedScreenId is
+                // the screen the caller resolved while the window was still on it,
+                // and it is already this lambda's authority for the managed-set
+                // guard above.
+                const QRect restoreRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh);
+                if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(capturedScreenId)) {
+                    if (const QRect g = out->geometry(); g.isValid() && !g.contains(restoreRect.center())) {
+                        qCDebug(lcEffect) << "Desktop switch: declining daemon pre-tile rect for" << windowId
+                                          << "— rect" << restoreRect << "is not on" << capturedScreenId << g;
+                        return;
+                    }
+                } else if (KWin::effects && !KWin::effects->screenAt(restoreRect.center())) {
+                    // outputForScreenId answers null when the captured screen
+                    // was unplugged during this D-Bus round trip — which is
+                    // exactly when a stale absolute rect is most likely, and the
+                    // guard above then does not run at all. Fall back to the
+                    // origin validation the INGEST side of this same data
+                    // already performs: a rect whose centre is on no connected
+                    // output would park the window where nothing can show it.
+                    qCDebug(lcEffect) << "Desktop switch: declining daemon pre-tile rect for" << windowId << "— rect"
+                                      << restoreRect << "is on no connected output (captured screen" << capturedScreenId
+                                      << "is gone)";
+                    return;
+                }
+
                 // Suppress the VS-crossing detectors across the synchronous
                 // frameGeometryChanged this apply emits — same rationale as the
                 // local-bucket restore path in slotScreensChanged.
@@ -193,19 +269,27 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // pre-tile restores in screenschanged.cpp use, and for the reason
                 // stated there: a bare clear strips a column-maximize member's bit
                 // while leaving the effect recorded as still holding it, which is
-                // the exact split m_columnMaximizedWindows' contract forbids.
-                if (m_columnMaximizedWindows.contains(windowId)) {
-                    releaseColumnMaximized(windowId, safeW);
-                } else if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                           && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !safeW->isUserMove()
-                           && !safeW->isUserResize()) {
+                // the exact split m_maximizedToEdgesWindows' contract forbids.
+                if (m_maximizedToEdgesWindows.contains(windowId)) {
+                    releaseMaximizedToEdges(windowId, safeW);
+                    // REQUESTED maximize, matching releaseMaximizedToEdges and
+                    // the twin in screenschanged.cpp. The committed bit lags a
+                    // client round-trip on Wayland in both directions, so a
+                    // maximize requested but not yet committed would read as
+                    // "not maximized" and skip the clear, letting KWin
+                    // re-assert the maximize-area rect over the restore below.
+                    // The fullscreen union is correct HERE (no setFullScreen
+                    // precedes this arm) and is deliberately kept.
+                } else if (KWin::Window* kw = safeW->window(); kw
+                           && kw->requestedMaximizeMode() != KWin::MaximizeRestore && !kw->isRequestedFullScreen()
+                           && !kw->isFullScreen() && !safeW->isUserMove() && !safeW->isUserResize()) {
                     // The fullscreen and gesture pair every sibling maximize
                     // write in this tree carries: maximize() has no fullscreen
                     // conditional and would moveResize a presenting surface
                     // down to its restore rect, and mid-gesture it snaps the
                     // window under the user's pointer.
                     //
-                    // Unlike releaseColumnMaximized, which skips on the same
+                    // Unlike releaseMaximizedToEdges, which skips on the same
                     // conditions and RETAINS membership so a later arm pays
                     // the bit, this is the non-member arm and holds no ledger,
                     // so a skip here is permanent rather than deferred. That
@@ -220,8 +304,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 // Snap-out: leaving zone-managed sizing.
-                m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
-                                              /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                m_effect->applyWindowGeometry(safeW, restoreRect, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
                 // Re-seed the tracked screen from the applied position: the gate
                 // above suppressed the VS-crossing detectors whose early return sits
@@ -239,6 +322,38 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
                                  << windowId;
             });
+}
+
+QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QString& screenId,
+                                            const QRectF& currentFrame) const
+{
+    QString bucketScreenId;
+    const QRectF saved = findPreTileGeometry(windowId, &bucketScreenId);
+    if (!saved.isValid()) {
+        return {};
+    }
+    // PHYSICAL ids: virtual screens subdivide ONE output and share its
+    // coordinate space, so a VS re-key leaves the rect perfectly applicable —
+    // that is the case the all-bucket reader policy exists for. What decides
+    // the question is the coordinate space, which is the OUTPUT.
+    const bool sameOutput = PhosphorIdentity::VirtualScreenId::samePhysical(bucketScreenId, screenId);
+    if (!sameOutput) {
+        qCDebug(lcEffect) << "Pre-autotile restore for" << windowId << "has a rect from" << bucketScreenId
+                          << "but sits on" << screenId << "— restoring size only";
+    }
+    // A rect measured on ANOTHER output. Its extents still describe this
+    // window's free-floating size, but its ORIGIN belongs to a different
+    // monitor's coordinate space, so applying it whole does not restore a
+    // size — it moves the window to that monitor. Users read that as windows
+    // being thrown across monitors (discussion #1028).
+    //
+    // Degrade rather than decline: the caller's whole purpose is to un-tile
+    // the window, and refusing outright leaves it sitting at its tile rect
+    // looking tiled. Size at the CURRENT position is what handleDragToFloat
+    // already does for the same reason ("size is coordinate-space-independent,
+    // so any bucket's rect is safe"), and it is the strictly better half of
+    // the rect to keep.
+    return PlasmaZones::PreTileDecisions::applicablePreTileRect(saved, sameOutput, currentFrame);
 }
 
 QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* bucketScreenId) const
@@ -288,7 +403,10 @@ void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const 
     // move. Consumed either way: a rect that cannot be applied here has no
     // later consumer, and leaving it behind would let a much later re-add on
     // the original screen restore a rect from a session-old position.
-    if (savedIt.value().first == screenId) {
+    // PHYSICAL ids: a virtual-screen re-key names the same output and the same
+    // coordinate space, so its rect is still applicable. Only a genuine
+    // monitor boundary invalidates the origin.
+    if (PhosphorIdentity::VirtualScreenId::samePhysical(savedIt.value().first, screenId)) {
         m_preTileGeometries[screenId][windowId] = savedIt.value().second;
     } else {
         qCDebug(lcEffect) << "Desktop move: dropping cross-screen pre-autotile rect for" << windowId

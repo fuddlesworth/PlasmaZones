@@ -88,6 +88,19 @@ public:
         return m_shaderProfileTree;
     }
 
+    /// Pre-write the maximize edge tracking for a maximize demote the
+    /// effect itself authored (TilingHandler::demoteMaximizeForSnapPlacement):
+    /// stamps the window not-fully-maximized so the demote's committed
+    /// Wayland echo reads as no-edge in the maximize lambda instead of
+    /// replaying a WindowMaximize morph over the snap-in leg, and drops any
+    /// pending morph a just-prior genuine edge armed so the zone-rect commit
+    /// cannot complete it through the geometry hook.
+    void noteMaximizeDemotedForSnap(KWin::EffectWindow* w)
+    {
+        m_lastFullyMaximized.insert(w, false);
+        m_pendingMaximizeMorph.remove(w);
+    }
+
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
     /// — the rules from `rules.json` that carry any effect-consumed
     /// action (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;

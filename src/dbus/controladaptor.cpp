@@ -31,6 +31,7 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
                                PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IPlacementEngine* autotileEngine,
                                PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
+                               PhosphorEngine::IPlacementEngine* scrollEngine, const ScreenModeRouter* modeRouter,
                                QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
@@ -40,6 +41,8 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
     , m_autotileEngine(autotileEngine)
     , m_screenManager(screenManager)
     , m_compositorBridge(compositorBridge)
+    , m_scrollEngine(scrollEngine)
+    , m_modeRouter(modeRouter)
 {
 }
 
@@ -187,6 +190,8 @@ void ControlAdaptor::detach()
     m_autotileEngine = nullptr;
     m_screenManager = nullptr;
     m_compositorBridge = nullptr;
+    m_scrollEngine = nullptr;
+    m_modeRouter = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
@@ -217,7 +222,8 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     message.setDelayedReply(true);
 
     // Snapshot QObject state on the main thread (these pointers are not thread-safe).
-    auto snapshot = SupportReport::collectSnapshot(m_screenManager, m_layoutManager, m_autotileEngine);
+    auto snapshot = SupportReport::collectSnapshot(m_screenManager, m_layoutManager, m_autotileEngine, m_scrollEngine,
+                                                   m_modeRouter);
 
     // Compositor bridge state lives in the dbus layer, so SupportReport (core/)
     // cannot read it directly — fold it into the snapshot here. Whether the

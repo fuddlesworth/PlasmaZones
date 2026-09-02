@@ -7,10 +7,12 @@
 // removed-screens pass) and it accounted for most of that file.
 
 #include "tilinghandler.h"
+#include "pretiledecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -21,6 +23,7 @@
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QLoggingCategory>
 #include <QTimer>
 
@@ -165,6 +168,17 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // its old zone and clamp it onto that zone's output.
             m_tileTargetZones.remove(windowId);
             m_centeredWaylandZones.remove(windowId);
+            // The tiled FACT goes too. This screen has left the managed set,
+            // but TilingStateHelpers would still record the window as tiled, so
+            // the IsTiled rule field stays true and a tiled-scoped border or
+            // title-bar rule keeps applying to a window this handler no longer
+            // manages — with no invalidateRuleCacheForStateChange for the flip.
+            // Both sibling arms clear it (they reach the shared call below);
+            // this one returns above that, so it has to clear its own. Unlike
+            // the two maximize ledgers, whose debt the fullscreen-exit repair
+            // in slotWindowFullScreenChanged eventually pays, nothing else pays
+            // this one short of the next genuine toggle.
+            clearWindowTiledAllScreens(windowId);
             continue;
         }
         // Capture tracked-ness BEFORE demoting: it is the only
@@ -185,7 +199,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // The column mirror goes with them for the windowed-fullscreen arm's
         // reason: this window's strip is ending, so no batch remains to carry
         // a cleared flag back, and the bit would otherwise outlive the mode.
-        releaseColumnMaximized(windowId, w);
+        releaseMaximizedToEdges(windowId, w);
         // Drop stale zone-centering tracking so a later
         // frameGeometryChanged does not re-snap the window into an
         // old autotile zone.
@@ -213,14 +227,25 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // a previous switch (now untracked, user may have moved it)
         // would otherwise be re-teleported to the stale rect on every
         // later switch onto this desktop.
-        const QRectF savedGeo = findPreTileGeometry(windowId);
-        if (savedGeo.isValid() && wasTracked && wasWindowedFs) {
+        //
+        // preTileRestoreRectFor, not a raw findPreTileGeometry: the buckets are
+        // keyed by the output a rect was measured on, and applying one from
+        // ANOTHER output whole moves the window to that monitor rather than
+        // restoring a size — the "window thrown to the other monitor on a
+        // desktop switch" of discussion #1028. The helper hands back such a
+        // rect as size-at-current-position instead, so this pass still does the
+        // un-tiling it exists for.
+        const QRectF savedGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
+        using PlasmaZones::PreTileDecisions::PreTileRestore;
+        const PreTileRestore restore =
+            PlasmaZones::PreTileDecisions::resolvePreTileRestore(savedGeo.isValid(), wasTracked, wasWindowedFs);
+        if (restore == PreTileRestore::QueueForWindowedFullscreen) {
             // The apply below would bail inside applyWindowGeometry on
             // the still-requested fullscreen state (membership is
             // already forgotten, so the exemption no longer fires).
             // Queue it for after the deferred release drops the state.
             windowedFsPreTileRestore.insert(windowId, savedGeo);
-        } else if (savedGeo.isValid() && wasTracked) {
+        } else if (restore == PreTileRestore::Apply) {
             // applyWindowGeometry's moveResize, and the maximize-state
             // clear below, emit windowFrameGeometryChanged
             // synchronously; suppress the VS-crossing detectors
@@ -245,10 +270,10 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // membership and the bit move TOGETHER. A bare clear here
             // would strip a column-maximize member's bit while leaving
             // the effect recorded as still holding it, which is the
-            // exact split m_columnMaximizedWindows' contract forbids.
+            // exact split m_maximizedToEdgesWindows' contract forbids.
             //
             // The GUARD is what earns its place here, not the call behind
-            // it. releaseColumnMaximized already ran unconditionally earlier
+            // it. releaseMaximizedToEdges already ran unconditionally earlier
             // in this same iteration, so membership survives to here in
             // exactly one case: that call SKIPPED a still-fullscreen window
             // and retained the entry on purpose. Re-calling it now skips
@@ -259,9 +284,19 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // member the bare clear, which is precisely the ledger split the
             // paragraph above forbids. Keep the test; do not "simplify" it
             // away on the grounds that the call inside it does nothing.
-            if (m_columnMaximizedWindows.contains(windowId)) {
-                releaseColumnMaximized(windowId, w);
-            } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+            if (m_maximizedToEdgesWindows.contains(windowId)) {
+                releaseMaximizedToEdges(windowId, w);
+                // Requested maximize, and a fullscreen/gesture guard, matching
+                // this arm's two twins. Without the fullscreen term a window
+                // with fullscreen REQUESTED but not yet committed reaches here
+                // — the pass's earlier fullscreen `continue` filters on the
+                // committed bit only, where floatcleanup uses the
+                // requested-OR-committed union — and applyMaximizeSuppressed
+                // then moveResizes a presenting surface to its restore rect,
+                // with the geometry apply below keyed on the requested bit and
+                // so not bailing either.
+            } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+                       && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
                 applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
             }
             // Snap-out: leaving tile-managed sizing.
@@ -277,7 +312,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // VS crossing (the daemon-fallback arm of this same
             // if/else chain re-seeds for exactly this reason).
             m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
-        } else if (wasTracked) {
+        } else if (restore == PreTileRestore::AskDaemon) {
             // No local bucket entry but the window WAS tile-managed
             // here: it was snap-managed when it entered autotile, so
             // saveAndRecordPreTileGeometry deliberately stored
@@ -286,6 +321,14 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // fetch it async and restore once the reply lands.
             // Without this the window stays parked at its tiled
             // frame. Gated on wasTracked: see the capture above.
+            //
+            // NOT reached when the local rect was declined just above as
+            // belonging to another monitor. This fallback is the
+            // "snap-managed on entry, so nothing was ever stored locally"
+            // case, not a second chance at a cross-monitor rect — and it
+            // would grant exactly that: the daemon resolves the geometry
+            // against screenForWindow(), its own possibly-stale tracked
+            // screen, so it can hand back the very rect this pass refused.
             requestDaemonPreTileRestore(w, windowId, screenId);
         }
     }
@@ -380,34 +423,68 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // windows raised to front) when re-entering autotile mode.
     // Only save windows on the current desktop — other desktops' windows
     // are not being toggled and their stacking order is irrelevant here.
-    for (const QString& screenId : removed) {
-        QStringList autotileOrder;
+    //
+    // ONE window pass with a set lookup, not screen-major nesting. The
+    // screen-major form re-resolved getWindowScreenId and getWindowId for every
+    // (screen, window) pair, and both are lookups rather than field reads — the
+    // desktop-switch block later in this file was rewritten away from exactly
+    // that shape, its comment quantifying the cost as tens of thousands of
+    // resolves on a large session. Stacking order is preserved because the
+    // window loop is still walked in order; only the grouping changed.
+    {
+        QHash<QString, QStringList> orderByScreen;
         for (KWin::EffectWindow* w : windows) {
-            if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
-                autotileOrder.append(m_effect->getWindowId(w));
+            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                || !w->isOnCurrentActivity()) {
+                continue;
             }
+            const QString screenId = m_effect->getWindowScreenId(w);
+            if (!removed.contains(screenId)) {
+                continue;
+            }
+            orderByScreen[screenId].append(m_effect->getWindowId(w));
         }
-        if (!autotileOrder.isEmpty()) {
-            m_savedAutotileStackingOrder[screenId] = autotileOrder;
+        for (auto it = orderByScreen.constBegin(); it != orderByScreen.constEnd(); ++it) {
+            if (!it.value().isEmpty()) {
+                m_savedAutotileStackingOrder[it.key()] = it.value();
+            }
         }
     }
 
     // Unmaximize monocle windows on removed screens so they return to
     // normal geometry when resnapped or restored.
+    //
+    // Through windowsOnRemovedScreens rather than re-deriving the screen and
+    // context terms, and that is not only deduplication: the collection set
+    // carries the STICKY skip too, and both releases here need it. KWin's
+    // maximize bit is a global per-window property, exactly like the
+    // setNoBorder the collection loop protects, so stripping it from a
+    // sticky or multi-desktop window while another context still runs a strip
+    // that maximized it un-maximizes that context's column. The windowed-
+    // fullscreen arm above already takes the skip on those grounds; this loop
+    // was the one arm in the pass that did not, and the inconsistency was
+    // unexplained rather than argued.
+    //
+    // slotEnabledChanged's opposite choice does not apply here. Its
+    // context-agnostic drain is justified by the engine being OFF, so no later
+    // pass can release a skipped window — and that case reaches this function
+    // with newScreens empty, where the collection loop's skip does not fire
+    // either. When other screens do still run the engine, a skipped window's
+    // claim is paid by its own context: the batch that re-activates it carries
+    // flagOnWire and the Apply arm re-asserts, and a later full disable drains
+    // through restoreAllMaximizedToEdges.
     for (KWin::EffectWindow* w : windows) {
-        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
-            || !w->isOnCurrentActivity()) {
+        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
             continue;
         }
-        const QString screenId = m_effect->getWindowScreenId(w);
-        if (!removed.contains(screenId)) {
+        const QString windowId = m_effect->getWindowId(w);
+        if (!windowsOnRemovedScreens.contains(windowId)) {
             continue;
         }
-        unmaximizeMonocleWindow(m_effect->getWindowId(w));
+        unmaximizeMonocleWindow(windowId);
         // Same pairing as the demote arm above: the removed screen's strip is
         // gone, so the column mirror has no later batch to un-flag it.
-        releaseColumnMaximized(m_effect->getWindowId(w), w);
+        releaseMaximizedToEdges(windowId, w);
     }
 
     // Clear autotile zone state for entries on REMOVED screens only.
@@ -435,7 +512,10 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
                 continue;
             }
             const QPoint zoneCenter = it.value().center();
-            const auto* output = KWin::effects->screenAt(zoneCenter);
+            // Guarded like every other KWin::effects use in this file (see the
+            // single-model note in slotScreensChanged); a null pointer resolves
+            // the entry through the window's own screen instead.
+            const auto* output = KWin::effects ? KWin::effects->screenAt(zoneCenter) : nullptr;
             const QString entryScreen =
                 output ? m_effect->resolveEffectiveScreenId(zoneCenter, output) : m_effect->getWindowScreenId(mw);
             if (removed.contains(entryScreen)) {
@@ -572,6 +652,19 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                         ++entryCounts[entry.appId][entry.screenId];
                     }
                 }
+                // One model for the pointer in this lambda. The loop below
+                // guards KWin::effects before calling screenAt(), so reading
+                // stackingOrder() off it unguarded here left the two lines
+                // contradicting each other: if the guard's premise held, this
+                // had already crashed; if this was safe, the guard was dead.
+                // The guard is the redundant half — nothing can dispatch a
+                // queued reply after KWin::effects is gone, because aboutToQuit
+                // stops the event loop before the effect is destroyed and there
+                // is no nested event loop anywhere in this tree — but the file
+                // should still state one position rather than both.
+                if (!KWin::effects) {
+                    return;
+                }
                 const auto allWindows = KWin::effects->stackingOrder();
                 for (const auto& entry : entries) {
                     const QString stableId = entry.appId;
@@ -654,11 +747,71 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
             });
 }
 
-void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
+void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch,
+                                       const QVariantMap& screenDesktops)
 {
-    // Invalidate any in-flight loadSettings property reply — this signal
-    // carries a newer screen set (see m_screensSignalGeneration doc).
+    // Drop an announce the compositor has already outrun. This signal is
+    // asynchronous while KWin's desktopChanged is not, so on a rapid switch the
+    // announce for the desktop just LEFT can arrive after the effect is already
+    // on the next one — and acting on it installs that desktop's managed set
+    // while every window filter below reads the CURRENT desktop. The two halves
+    // then describe different desktops, which is how a window on an unmanaged
+    // desktop got tracked against a managed screen's set.
+    //
+    // Only for a desktop switch: the daemon also announces on assignment,
+    // hotplug and settings changes, and those carry no desktop expectation to
+    // disagree with. A newer announce always follows (the daemon re-announces
+    // for the desktop the effect has since reported), so dropping converges
+    // rather than stalling.
+    // Invalidate any in-flight loadSettings property reply BEFORE the staleness
+    // gate below, not after. A dropped announce still means a newer screen set
+    // exists, so a property reply dispatched before it must not be allowed to
+    // land afterwards and assign m_managedScreens raw — that reply path lacks
+    // the full per-screen transition handling. The bump is idempotent and has
+    // no other effect on the drop path.
     ++m_screensSignalGeneration;
+
+    if (isDesktopSwitch && !screenDesktops.isEmpty()) {
+        QHash<QString, int> announcedDesktops;
+        announcedDesktops.reserve(screenDesktops.size());
+        for (auto it = screenDesktops.constBegin(); it != screenDesktops.constEnd(); ++it) {
+            // An a{sv} value arrives either already demarshalled (the property
+            // Get path) or still wrapped in a QDBusVariant (a signal delivered
+            // without a registered argument type), and this gate is fed
+            // exclusively by the SIGNAL. Without the unwrap, toInt() on a
+            // wrapped value yields 0 for every entry, every key mismatches, and
+            // every desktop-switch announce is dropped. Same one-level unwrap
+            // state.cpp:717 and scrollbehaviourparse.h:50 perform.
+            QVariant value = it.value();
+            if (value.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
+                value = qvariant_cast<QDBusVariant>(value).variant();
+            }
+            // Skip an unparseable entry rather than inserting 0, which is not a
+            // valid desktop and would mismatch every reported one.
+            bool ok = false;
+            const int desktop = value.toInt(&ok);
+            if (!ok || desktop < 1) {
+                continue;
+            }
+            // The daemon stamps ENGINE screen ids, which are virtual
+            // ("<phys>/vs:N") on a subdivided output, while the effect reports
+            // desktops keyed by PHYSICAL id only. Comparing the raw keys finds
+            // nothing in common on such a setup, so the gate silently accepts
+            // everything. Normalise to the physical id, which is safe because
+            // the daemon resolves a virtual screen's desktop through its
+            // physical parent — every child of one output carries the same
+            // desktop by construction.
+            announcedDesktops.insert(PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()), desktop);
+        }
+        // Resolved once: the accessor builds its map on each call now that the
+        // effect keys the dedup by output rather than by screen id.
+        const QHash<QString, int> reportedDesktops = m_effect->lastReportedScreenDesktops();
+        if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops, reportedDesktops)) {
+            qCInfo(lcEffect) << "slotScreensChanged: dropping a desktop-switch announce for" << screenDesktops
+                             << "— already on" << reportedDesktops;
+            return;
+        }
+    }
 
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_managedScreens - newScreens;
@@ -698,6 +851,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         }
     }
 
+    // Same single-model point as the reply lambda above: this function guards
+    // KWin::effects at its later repaint sites, so the walk here is guarded too
+    // rather than leaving the file arguing with itself about whether the
+    // pointer can be null on a signal path.
+    if (!KWin::effects) {
+        return;
+    }
     const auto windows = KWin::effects->stackingOrder();
 
     if (!removed.isEmpty()) {
@@ -740,7 +900,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // strip no longer manages, with the ledger still recording the debt.
         // Both are no-ops for a non-member.
         unmaximizeMonocleWindow(wid);
-        releaseColumnMaximized(wid, m_effect->findWindowByIdExact(wid));
+        releaseMaximizedToEdges(wid, m_effect->findWindowByIdExact(wid));
     }
     // Now that the fullscreen state is dropped, land the pre-tile restores the
     // demote pass queued. Same bracket as the inline restore path: the
@@ -759,18 +919,34 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // Same maximize-clear the inline restore branch carries, and the same
         // ledger routing: membership and the bit move together, never one
         // without the other.
-        if (m_columnMaximizedWindows.contains(it.key())) {
-            releaseColumnMaximized(it.key(), w);
-        } else if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
-                   && !kw->isRequestedFullScreen() && !kw->isFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+        if (m_maximizedToEdgesWindows.contains(it.key())) {
+            releaseMaximizedToEdges(it.key(), w);
+            // REQUESTED bits on both axes, never the committed ones. This
+            // project is Wayland-only, where the committed bit trails a client
+            // round-trip — and this arm runs ONE loop body after
+            // releaseWindowedFullscreenState called setFullScreen(false), i.e.
+            // inside the exit gap where the requested bit already reads false
+            // and the committed one is still true. Testing isFullScreen() here
+            // made the clear structurally certain to skip for the exact and
+            // only population this loop serves, so KWin re-asserted the
+            // maximize-area rect and defeated the restore two lines below
+            // (discussion #461). The maximize axis lags the same way in both
+            // directions, and requestedMaximizeMode is what the ledger-owning
+            // releaseMaximizedToEdges and unmaximizeMonocleWindow already read.
+        } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+                   && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
             // The fullscreen and gesture pair every sibling maximize write in
             // this tree carries: maximize() has no fullscreen conditional and
             // would moveResize a presenting surface down to its restore rect,
             // and mid-gesture it snaps the window under the user's pointer.
             //
-            // Unlike releaseColumnMaximized, which skips on the same
-            // conditions and RETAINS membership so a later arm pays the bit,
-            // this is the non-member arm and holds no ledger, so a skip here
+            // releaseMaximizedToEdges skips on the fullscreen and gesture
+            // conditions and RETAINS membership, so a later arm pays the bit.
+            // (It has no committed-fullscreen term either — the claim that it
+            // "skips on the same conditions" was what put an isFullScreen()
+            // test in this arm and in pretilegeometry.cpp's twin, where it made
+            // the clear unreachable.) This is the non-member arm and holds no
+            // ledger, so a skip here
             // is permanent rather than deferred.
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }

@@ -4,6 +4,7 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QLatin1Char>
 #include <QLoggingCategory>
@@ -17,23 +18,11 @@ namespace PhosphorEngine {
 namespace {
 Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
 
-// Instance-identity match for STORE keys. Contract note: ids without a '|'
-// separator only match EXACTLY here — unlike the registry's
-// extractInstanceId, which treats a bare string AS the instance id. The store
-// is only ever keyed with full appId|uuid composites (capture and restore
-// both build them), so a bare id reaching this predicate is foreign input
-// that must not fuzzy-match a composite's uuid component.
-bool sameWindowInstance(const QString& lhs, const QString& rhs)
-{
-    if (lhs == rhs) {
-        return true;
-    }
-    if (!lhs.contains(QLatin1Char('|')) || !rhs.contains(QLatin1Char('|'))) {
-        return false;
-    }
-    const QString lhsInstance = PhosphorIdentity::WindowId::extractInstanceId(lhs);
-    return !lhsInstance.isEmpty() && lhsInstance == PhosphorIdentity::WindowId::extractInstanceId(rhs);
-}
+// Instance-identity match for STORE keys. The predicate, including its refusal
+// to fuzzy-match a separator-less id, lives in PhosphorIdentity so every library
+// that matches records against a window id shares one contract rather than
+// hand-copying it.
+using PhosphorIdentity::WindowId::sameWindowInstance;
 } // namespace
 
 bool WindowPlacementStore::record(WindowPlacement incoming)
@@ -114,6 +103,20 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             }
             // appId changed (mid-session rename): drop the stale entry here and
             // re-insert under the new appId bucket below.
+            //
+            // RE-KEY the open claim rather than dropping it: the record is not
+            // going away, it is moving, and windowId is the composite
+            // `appId|uuid`, so a rename changes the STRING while the record
+            // survives. Dropping would lose a live claim; leaving it would be
+            // worse still — m_claimedBy would keep the old id, so pairingAllows
+            // still finds the key, does NOT take its fail-open branch, and locks
+            // the instance out of every record for the rest of the open.
+            if (const auto owner = m_claimedBy.constFind(stored.windowId); owner != m_claimedBy.constEnd()) {
+                const QString instance = *owner;
+                m_claimedBy.remove(stored.windowId);
+                m_claimedBy.insert(merged.windowId, instance);
+                m_openPairing.insert(instance, merged.windowId);
+            }
             bucket.removeAt(i);
             if (bucket.isEmpty()) {
                 m_byApp.erase(it); // iterator consumed — do not ++it
@@ -156,6 +159,11 @@ void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
                 break;
             }
         }
+        // In production the probe is installed in the WindowTrackingService
+        // constructor, so this tier always runs. It is guarded because a store
+        // used without one (a unit test, or a future embedder) would otherwise
+        // fall straight to the positional last resort below and could delete a
+        // live window's record — the very harm this tier exists to prevent.
         if (victim < 0 && m_liveInstanceProbe) {
             for (int i = 0; i < bucket.size(); ++i) {
                 if (!m_liveInstanceProbe(bucket.at(i).windowId)) {
@@ -164,7 +172,11 @@ void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
                 }
             }
         }
-        bucket.removeAt(victim >= 0 ? victim : 0);
+        const int idx = victim >= 0 ? victim : 0;
+        // Drop any open claim naming the record about to go, or the instance
+        // that claimed it becomes unpairable and restores nothing.
+        dropClaimsNaming(bucket.at(idx).windowId);
+        bucket.removeAt(idx);
     }
 }
 
@@ -255,6 +267,32 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                 // collapse instead.
                 continue;
             }
+            if (other.reclaimEligible) {
+                // A sibling that still holds its cross-screen reclaim credit is
+                // not stale duplicate float memory. It is the evidence
+                // peekForReclaim needs to bring a future same-app window home to
+                // the monitor this record remembers, and pruning it strands that
+                // window silently — nothing else reports a bucket that has lost
+                // its last credit.
+                //
+                // The keeper cannot stand in for it. This collapse runs ONLY
+                // from close-capture paths, and keepWindowId is always the
+                // CLOSING window, whose own credit markInstanceClosed revokes
+                // moments later (WindowTrackingAdaptor::windowClosed captures,
+                // then revokes). So absorbing the credit the way engine slots
+                // and geometry are absorbed would hand it to a record that is
+                // about to lose it anyway. Keeping the sibling is the only place
+                // the credit can survive.
+                //
+                // This does not blunt the collapse's own job. The duplicates it
+                // exists to converge are siblings that closed earlier in THIS
+                // session, and markInstanceClosed revokes unconditionally, so
+                // they still prune. What survives is the un-reopened record
+                // deserialized from disk, whose credit serialize re-derived at
+                // the last save from liveness plus the shutdown-close grace.
+                // That is exactly the set peekForReclaim reads.
+                continue;
+            }
             bool sharesScreen = false;
             for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
                  ++git) {
@@ -289,6 +327,11 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                     keep.engines.insert(eit.key(), eit.value());
                 }
             }
+            // The sibling's reclaim credit needs no absorbing here: a
+            // credit-bearing sibling is never pruned in the first place (see the
+            // reclaimEligible guard above), so everything reaching this point
+            // has already spent or lost its credit.
+            dropClaimsNaming(bucket.at(i).windowId); // same reason as in evictForCapacity
             bucket.removeAt(i);
             removedAny = true;
             changed = true;
@@ -296,6 +339,123 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
         }
     }
     return removedAny;
+}
+
+bool WindowPlacementStore::pairingAllows(const QString& windowId, const WindowPlacement& candidate) const
+{
+    if (m_openPairing.isEmpty()) {
+        return true;
+    }
+    const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto mine = m_openPairing.constFind(instance);
+    if (mine != m_openPairing.constEnd()) {
+        // Fail open on an inconsistent pair. Every record removal drops the
+        // claim naming it, so this should be unreachable; if it ever is not,
+        // locking the instance out of every record would restore NOTHING, which
+        // is strictly worse than the disagreement the claim exists to fix.
+        if (!m_claimedBy.contains(*mine)) {
+            return true;
+        }
+        return candidate.windowId == *mine;
+    }
+    // No claim of its own: it may read anything no OTHER instance has claimed.
+    const auto owner = m_claimedBy.constFind(candidate.windowId);
+    return owner == m_claimedBy.constEnd() || *owner == instance;
+}
+
+void WindowPlacementStore::dropClaimsNaming(const QString& recordWindowId)
+{
+    if (m_claimedBy.isEmpty() || recordWindowId.isEmpty()) {
+        return;
+    }
+    const auto owner = m_claimedBy.constFind(recordWindowId);
+    if (owner == m_claimedBy.constEnd()) {
+        return;
+    }
+    m_openPairing.remove(*owner);
+    m_claimedBy.remove(recordWindowId);
+}
+
+void WindowPlacementStore::releaseOpenClaim(const QString& windowId)
+{
+    if (windowId.isEmpty() || m_openPairing.isEmpty()) {
+        return;
+    }
+    const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto claimed = m_openPairing.constFind(instance);
+    if (claimed == m_openPairing.constEnd()) {
+        return;
+    }
+    m_claimedBy.remove(*claimed);
+    m_openPairing.remove(instance);
+}
+
+std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString& windowId, const QString& appId)
+{
+    if (windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+
+    // Idempotent: an instance that already claimed keeps the same record, so the
+    // open channel and every re-drive that follows it cannot disagree.
+    const auto existing = m_openPairing.constFind(instance);
+    if (existing != m_openPairing.constEnd()) {
+        for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
+            for (const WindowPlacement& p : b.value()) {
+                if (p.windowId == *existing) {
+                    return p;
+                }
+            }
+        }
+        // Unreachable while the removal hooks hold; re-claim rather than trust it.
+        m_claimedBy.remove(*existing);
+        m_openPairing.remove(instance);
+    }
+
+    // 1. The window's own record, when it carries something worth restoring.
+    //    hasRestorableContent is what keeps the slot-less geometry stub every
+    //    open writes under the live uuid from being mistaken for it.
+    for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
+        for (const WindowPlacement& p : b.value()) {
+            if (sameWindowInstance(p.windowId, windowId) && p.hasRestorableContent()) {
+                m_openPairing.insert(instance, p.windowId);
+                m_claimedBy.insert(p.windowId, instance);
+                return p;
+            }
+        }
+    }
+
+    // 2. Newest unclaimed record in the appId bucket that no live sibling owns.
+    if (appId.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto bucket = m_byApp.constFind(appId);
+    if (bucket == m_byApp.constEnd()) {
+        return std::nullopt;
+    }
+    const WindowPlacement* best = nullptr;
+    for (const WindowPlacement& p : bucket.value()) {
+        if (!p.hasRestorableContent()) {
+            continue;
+        }
+        if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId) && !sameWindowInstance(p.windowId, windowId)) {
+            continue; // belongs to a sibling that is still open
+        }
+        const auto owner = m_claimedBy.constFind(p.windowId);
+        if (owner != m_claimedBy.constEnd() && *owner != instance) {
+            continue; // already claimed by a sibling
+        }
+        if (!best || p.sequence > best->sequence) {
+            best = &p;
+        }
+    }
+    if (!best) {
+        return std::nullopt;
+    }
+    m_openPairing.insert(instance, best->windowId);
+    m_claimedBy.insert(best->windowId, instance);
+    return *best;
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
@@ -320,6 +480,14 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
                     if (bucket.isEmpty()) {
                         m_byApp.erase(it);
                     }
+                    // Same release as the appId branch below. Missing it here
+                    // left a permanent claim on a record that no longer exists
+                    // after the commonest shape of all (a daemon restart, where
+                    // the uuid is stable and this branch always wins), and — if
+                    // the claim named a DIFFERENT record than the one consumed —
+                    // held that other record away from every sibling.
+                    dropClaimsNaming(p.windowId);
+                    releaseOpenClaim(windowId);
                     return p;
                 }
             }
@@ -337,19 +505,28 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
                 if (bucket.isEmpty()) {
                     m_byApp.erase(it);
                 }
+                // The record is about to be re-bound to the live window, so the
+                // claim has served its purpose and would otherwise name an id
+                // that no longer exists.
+                dropClaimsNaming(p.windowId);
+                releaseOpenClaim(windowId);
                 return p;
             };
+            // Both passes additionally honour an open claim: this window may
+            // consume the record it claimed at open, and may not consume one a
+            // SIBLING claimed. Without it an already-home window consumed its
+            // sibling's record here and the sibling never restored.
             // First pass: oldest entry satisfying accept AND preferred.
             if (preferred) {
                 for (int i = 0; i < bucket.size(); ++i) {
-                    if (matches(bucket.at(i)) && preferred(bucket.at(i))) {
+                    if (matches(bucket.at(i)) && preferred(bucket.at(i)) && pairingAllows(windowId, bucket.at(i))) {
                         return consumeAt(i);
                     }
                 }
             }
             // Second pass: oldest merely-accepted entry.
             for (int i = 0; i < bucket.size(); ++i) {
-                if (matches(bucket.at(i))) {
+                if (matches(bucket.at(i)) && pairingAllows(windowId, bucket.at(i))) {
                     return consumeAt(i);
                 }
             }
@@ -423,6 +600,9 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                 if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
                     continue; // an open sibling's record is not up for grabs
                 }
+                if (!pairingAllows(windowId, p)) {
+                    continue; // claimed at open by a sibling
+                }
                 if (best < 0 || p.sequence > bucket.at(best).sequence) {
                     best = i;
                 }
@@ -432,6 +612,8 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                 if (bucket.isEmpty()) {
                     m_byApp.erase(it);
                 }
+                dropClaimsNaming(rec->windowId);
+                releaseOpenClaim(windowId);
             }
         }
     }
@@ -441,12 +623,133 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                                   << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
+        // The consumed record's DEATH metadata belongs to the instance that
+        // died, not to the live one adopting its placement — and the append
+        // branch would copy both across. Left alone, a dead sibling's revoked
+        // credit and its close timestamp became the live window's, so this
+        // window's own close later found the credit already false (harmless)
+        // while every save in between read a stale close time for the grace
+        // arm. Reset to the defaults a live window is entitled to; its close
+        // re-revokes through markInstanceClosed.
+        rec->reclaimEligible = true;
+        rec->closedAtMsecs = 0;
         record(*rec);
     } else {
         qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
                                   << appId << "on" << screenId;
     }
+    // Per-open reclaim-credit burn — see the header contract. Hit or miss,
+    // and AFTER any consumption/re-record above (the bucket may have been
+    // erased and re-created by it, so the helper re-finds it). The move-return
+    // excuse lives inside the helper rather than here, so BOTH burn channels
+    // honour it — see markInstanceMovedLive.
+    burnReclaimCredit(windowId, appId);
     return rec;
+}
+
+bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QString& appId)
+{
+    // MOVE RETURN excuse, consumed here rather than at either call site
+    // because there are TWO per-open burn channels and both must honour it:
+    // takeForReopen for tiling-screen arrivals, and the snap adaptor's
+    // open-path resolve for snap-mode ones (see the header). The daemon's
+    // live-release funnel untracked this window in its engine, so the
+    // announce that follows reaches whichever channel it lands in looking
+    // exactly like a first observation while actually being the second half
+    // of a user's move; spending a session-restore credit on it takes the
+    // credit from a sibling that has not reopened yet. One-shot, so the
+    // window's later genuine opens still burn (markInstanceMovedLive).
+    //
+    // AHEAD of the appId guard below: the one-shot answers "was this announce
+    // a move return", which is true whether or not the window has a bucket to
+    // burn from, and leaving it armed past a bucket-less announce would hand
+    // the excuse to some later genuine open instead.
+    if (m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0) {
+        qCDebug(lcPlacementStore) << "burnReclaimCredit: move return for" << windowId << "— burn excused";
+        return false;
+    }
+    if (appId.isEmpty()) {
+        return false;
+    }
+    const auto bit = m_byApp.find(appId);
+    if (bit == m_byApp.end()) {
+        return false;
+    }
+    // Own-instance and live records are skipped: a live window's credit is
+    // revoked by its close (markInstanceClosed), never by an open.
+    int newest = -1;
+    QList<WindowPlacement>& bucket = bit.value();
+    for (int i = 0; i < bucket.size(); ++i) {
+        const WindowPlacement& p = bucket.at(i);
+        if (!p.reclaimEligible || sameWindowInstance(p.windowId, windowId)) {
+            continue;
+        }
+        if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
+            continue;
+        }
+        if (newest < 0 || p.sequence > bucket.at(newest).sequence) {
+            newest = i;
+        }
+    }
+    if (newest < 0) {
+        return false;
+    }
+    bucket[newest].reclaimEligible = false;
+    qCDebug(lcPlacementStore) << "burnReclaimCredit: retired credit of" << bucket.at(newest).windowId << "for open of"
+                              << windowId;
+    return true;
+}
+
+void WindowPlacementStore::markInstanceMovedLive(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_movedLiveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+}
+
+bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool graceEligible)
+{
+    if (windowId.isEmpty()) {
+        return false;
+    }
+    // A window that closed is not coming back to spend its move excuse, and
+    // the instance id is unique so the entry could never fire again — but the
+    // set must not accumulate corpses. This and clear() are the store's only
+    // reap points, and between them they cover both of the daemon's close
+    // funnels: the observed close and the alive-set prune backstop, which
+    // calls this with graceEligible=false. (The TilingAdaptor sibling reaps on
+    // its own four events instead — it is armed from the same line, but the
+    // two sets live in different objects and see different signals.)
+    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    // An OBSERVED close is authoritative and stamps the time. An unobserved one
+    // contributes no time at all and must not overwrite a stamp an earlier
+    // observed close already wrote: logout tears windows down and can push an
+    // alive report through the prune backstop before the final save, and
+    // clearing the stamp there would strip the shutdown grace from exactly the
+    // windows that legitimately earned it — the login reclaim the grace exists
+    // for. Leaving it at its default 0 for a never-stamped record is the
+    // "closed at an unknown earlier moment, no grace" answer serialize() wants.
+    const qint64 now = graceEligible ? QDateTime::currentMSecsSinceEpoch() : 0;
+    bool revoked = false;
+    // Sweep every bucket — appId drift can file one instance's records under
+    // two keys (the releaseEngineSlot rationale), and a surviving credit in
+    // the missed bucket is exactly the teleport this method exists to end.
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (!sameWindowInstance(p.windowId, windowId)) {
+                continue;
+            }
+            if (now > 0) {
+                p.closedAtMsecs = now;
+            }
+            if (p.reclaimEligible) {
+                p.reclaimEligible = false;
+                revoked = true;
+            }
+        }
+    }
+    return revoked;
 }
 
 std::optional<WindowPlacement>
@@ -473,9 +776,13 @@ WindowPlacementStore::peek(const QString& windowId, const QString& appId,
     if (!appId.isEmpty()) {
         const auto it = m_byApp.constFind(appId);
         if (it != m_byApp.constEnd()) {
+            // Honours the same open claim take() does, so the desktop this
+            // read decides and the zone the engine restores come from ONE
+            // record. These two disagreeing is what paired a window's desktop
+            // with a sibling's zone.
             const WindowPlacement* best = nullptr;
             for (const WindowPlacement& p : it.value()) {
-                if (matches(p) && (!best || p.sequence > best->sequence)) {
+                if (matches(p) && pairingAllows(windowId, p) && (!best || p.sequence > best->sequence)) {
                     best = &p;
                 }
             }
@@ -514,6 +821,12 @@ WindowPlacementStore::peekForReclaim(const QString& windowId, const QString& app
         }
         if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
             continue; // an open sibling's record is not evidence about THIS window
+        }
+        if (!p.reclaimEligible) {
+            // No reclaim credit: the record's window closed mid-session (or
+            // its credit was burned by an earlier open). Reopen memory, not
+            // session-restore evidence — see the header's credit bullet.
+            continue;
         }
         if (!best || p.sequence > best->sequence) {
             best = &p;
@@ -580,11 +893,15 @@ bool WindowPlacementStore::clear(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
+    // The move excuse names a record that is going away — same reaping
+    // rationale as markInstanceClosed's.
+    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     bool removed = false;
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (sameWindowInstance(bucket.at(i).windowId, windowId)) {
+                dropClaimsNaming(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 removed = true;
             }
@@ -667,6 +984,7 @@ int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacemen
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (pred(bucket.at(i))) {
+                dropClaimsNaming(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 ++removed;
             }
@@ -703,6 +1021,19 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
             if (keep && !keep(p)) {
                 continue;
             }
+            // Reclaim credit is DERIVED at save time when the probe is wired
+            // (header contract): live windows persist as restore evidence, a
+            // close within the shutdown grace still counts (the logout save),
+            // and everything else — the cross-session graveyard included,
+            // whatever its in-memory credit says — persists credit-less.
+            if (m_liveInstanceProbe) {
+                WindowPlacement stamped = p;
+                stamped.reclaimEligible = m_liveInstanceProbe(p.windowId)
+                    || (p.closedAtMsecs > 0
+                        && QDateTime::currentMSecsSinceEpoch() - p.closedAtMsecs <= ShutdownCloseGraceMs);
+                arr.append(stamped.toJson());
+                continue;
+            }
             arr.append(p.toJson());
         }
         if (!arr.isEmpty()) {
@@ -714,8 +1045,21 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
 
 void WindowPlacementStore::deserialize(const QJsonObject& obj)
 {
+    // WHOLE-STORE REPLACE, and it runs more than once per startup: the daemon
+    // loads through WindowTrackingAdaptor's constructor and again through the
+    // engines' load delegate at finalizeStartup. Both are bringup, before any
+    // window opens, so discarding what is here costs nothing. Calling this
+    // mid-session would not be safe. It would drop every live capture and void
+    // every open claim, so windows already placed this session would lose the
+    // record their engines restore from.
     m_byApp.clear();
     m_sequence = 0;
+    // Every claim named a record in the store being replaced.
+    m_openPairing.clear();
+    m_claimedBy.clear();
+    // Likewise the in-flight move excuses: they describe this session's moves,
+    // and both deserialize callers are startup-time (see the note above).
+    m_movedLiveInstances.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an

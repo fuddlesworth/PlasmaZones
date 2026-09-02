@@ -4,10 +4,12 @@
 // Pure-logic tests for the scroll-managed window decision helpers
 // (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
 // decision (with its clear-in-flight marker arm/consume contract), the
-// column-maximize 3-way batch decision, the counter-assert burst budget,
-// and the compositor-claim release table (which claim answers to which exit
-// scope, the teardown ordering rule, and the retain-on-fullscreen-skip
-// policy). Same header-only reach as test_anchor_uniforms:
+// column-maximize 3-way batch decision (with its toggle-in-flight marker and
+// the two threaded stale-batch walks), the counter-assert burst budget, the
+// compositor-claim release table (which claim answers to which exit scope,
+// the teardown ordering rule, and the retain-on-fullscreen-skip policy), and
+// the size-continuity carry-forward table. Same header-only reach as
+// test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
 
@@ -109,6 +111,11 @@ private Q_SLOTS:
 
     // The full 16-row truth table over
     // (flagOnWire, inSet, kwinMaximized, toggleInFlight).
+    //
+    // RETARGETED, semantics identical: the mirrored engine state is now the
+    // declared maximize-to-edges flag (raw area, both axes) rather than the
+    // measured column maximize; only which flag feeds flagOnWire changed,
+    // so every row and its reasoning carried over verbatim.
     void columnMaximizeTruthTable_data()
     {
         QTest::addColumn<bool>("flagOnWire");
@@ -129,7 +136,7 @@ private Q_SLOTS:
         // Flag off while held: the engine dropped the maximize, so hand the
         // bit back. Release fires even when KWin's bit is already clear —
         // something else cleared it and the membership must still be shed,
-        // which is exactly what releaseColumnMaximized's own no-op guard
+        // which is exactly what releaseMaximizedToEdges's own no-op guard
         // makes cheap.
         QTest::newRow("off/held/kwin0/unarmed") << false << true << false << false << a(MaximizeAction::Release);
         QTest::newRow("off/held/kwin1/unarmed") << false << true << true << false << a(MaximizeAction::Release);
@@ -146,7 +153,7 @@ private Q_SLOTS:
         // maximize() for every tile on every batch.
         QTest::newRow("on/held/kwin1/unarmed") << true << true << true << false << a(MaximizeAction::None);
 
-        // ARMED: a toggleMaximizeColumn is dispatched and unanswered. Exactly
+        // ARMED: a toggleMaximizeToEdges is dispatched and unanswered. Exactly
         // ONE cell moves, and it is the one a stale pre-toggle batch on the
         // restore direction lands in. Every other cell is marker-invariant,
         // which is the property that makes the marker safe to add: it cannot
@@ -177,7 +184,7 @@ private Q_SLOTS:
         QFETCH(bool, toggleInFlight);
         QFETCH(int, expectedAction);
 
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(flagOnWire, inSet, kwinMaximized, toggleInFlight)),
+        QCOMPARE(static_cast<int>(resolveMaximizeToEdgesAction(flagOnWire, inSet, kwinMaximized, toggleInFlight)),
                  expectedAction);
     }
 
@@ -205,7 +212,7 @@ private Q_SLOTS:
         bool kwinMax = false;
         const auto step = [&inSet, &kwinMax](bool flagOnWire) {
             const MaximizeAction action =
-                resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax, /*toggleInFlight=*/false);
+                resolveMaximizeToEdgesAction(flagOnWire, inSet, kwinMax, /*toggleInFlight=*/false);
             // MODELS what the batch arm does with the answer — it does not
             // call it. kwin-effect has no linkable test target, so the arm's
             // own bookkeeping cannot be driven from here; only a wrong
@@ -213,7 +220,7 @@ private Q_SLOTS:
             // step with tiling.cpp's Apply/Release block by hand. It models
             // the UNCONDITIONAL path only, and knowingly diverges twice: the
             // real arm skips the compositor call for a fullscreen window or
-            // one mid user move/resize, and releaseColumnMaximized RETAINS
+            // one mid user move/resize, and releaseMaximizedToEdges RETAINS
             // membership on its fullscreen skip. Neither divergence affects
             // the resolver contract this test pins.
             if (action == MaximizeAction::Apply) {
@@ -264,7 +271,7 @@ private Q_SLOTS:
         bool kwinMax = true;
         bool armed = false;
         const auto step = [&inSet, &kwinMax, &armed](bool flagOnWire) {
-            const MaximizeAction action = resolveColumnMaximizeAction(flagOnWire, inSet, kwinMax, armed);
+            const MaximizeAction action = resolveMaximizeToEdgesAction(flagOnWire, inSet, kwinMax, armed);
             if (action == MaximizeAction::Apply) {
                 inSet = true;
                 kwinMax = true;
@@ -304,22 +311,6 @@ private Q_SLOTS:
         armed = false;
         QCOMPARE(static_cast<int>(step(false)), static_cast<int>(MaximizeAction::None));
         QVERIFY(!inSet);
-    }
-
-    // The marker must never swallow the engine's own answer. An adopt for a
-    // window this effect instance has never seen (daemon still holding the
-    // state across an effect restart) has to land even while armed, or the
-    // restart repair the Apply arm exists for would be lost.
-    void markerNeverSuppressesTheEnginesAnswer()
-    {
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(true, false, false, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Apply));
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(true, false, true, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Apply));
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(false, true, false, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Release));
-        QCOMPARE(static_cast<int>(resolveColumnMaximizeAction(false, true, true, /*toggleInFlight=*/true)),
-                 static_cast<int>(MaximizeAction::Release));
     }
 
     // Counter-assert budget: matching frame never counters.
@@ -368,6 +359,19 @@ private Q_SLOTS:
         start = 0;
         count = 0;
         QVERIFY(shouldCounterAssert(start, count, 10400, true));
+
+        // The COUNT half of that reset is what actually re-arms, and the walk
+        // above cannot see it: a zeroed start is already more than a window
+        // behind 10400, so the rollover arm fires and zeroes the count anyway.
+        // Leaving count at 3 there still passes. Spend the budget again and
+        // re-arm INSIDE the rolling window, where no rollover can cover for it.
+        QVERIFY(shouldCounterAssert(start, count, 10410, true));
+        QVERIFY(shouldCounterAssert(start, count, 10420, true));
+        QVERIFY(!shouldCounterAssert(start, count, 10430, true));
+        count = 0;
+        QVERIFY(shouldCounterAssert(start, count, 10450, true));
+        QCOMPARE(start, qint64(10400));
+        QCOMPARE(count, 1);
     }
 
     // ── Compositor-state claims ────────────────────────────────────────────
@@ -394,22 +398,26 @@ private Q_SLOTS:
         // batch will carry it, so every claim must pay up.
         QTest::newRow("stripExit/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::StripExit) << true;
         QTest::newRow("stripExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::StripExit) << true;
-        QTest::newRow("stripExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::StripExit) << true;
+        QTest::newRow("stripExit/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::StripExit) << true;
 
-        // PassiveFloat — monocle is the ONE deliberate blank in the table.
-        // UntrackFunnel matches StripExit except for monocle, whose blank is
-        // recorded as unresolved rather than decided (see the enum comment).
+        // Two monocle blanks follow, and both are deliberate. UntrackFunnel
+        // matches StripExit except for monocle, whose blank is RECORDED AS
+        // UNRESOLVED rather than decided (see the enum comment): monocle rides
+        // cleanupClosedWindowState's bare scrub on that path instead.
+        // PassiveFloat's monocle blank is DECIDED: re-driving a maximize
+        // restore from a passive float signal has not been shown safe against
+        // the monocle batch that owns that membership.
         QTest::newRow("untrack/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::UntrackFunnel) << false;
         QTest::newRow("untrack/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::UntrackFunnel) << true;
-        QTest::newRow("untrack/column") << c(Claim::ColumnMaximize) << s(ClaimScope::UntrackFunnel) << true;
+        QTest::newRow("untrack/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::UntrackFunnel) << true;
 
         QTest::newRow("passiveFloat/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::PassiveFloat) << false;
         QTest::newRow("passiveFloat/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::PassiveFloat) << true;
-        QTest::newRow("passiveFloat/column") << c(Claim::ColumnMaximize) << s(ClaimScope::PassiveFloat) << true;
+        QTest::newRow("passiveFloat/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::PassiveFloat) << true;
 
         QTest::newRow("modeFlip/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::ModeFlip) << true;
         QTest::newRow("modeFlip/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::ModeFlip) << true;
-        QTest::newRow("modeFlip/column") << c(Claim::ColumnMaximize) << s(ClaimScope::ModeFlip) << true;
+        QTest::newRow("modeFlip/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::ModeFlip) << true;
 
         // FullscreenExitWhileFloating — windowed fullscreen cannot be held
         // here by construction; the arm runs BECAUSE the window left it.
@@ -417,12 +425,12 @@ private Q_SLOTS:
                                         << true;
         QTest::newRow("fsExit/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::FullscreenExitWhileFloating)
                                     << false;
-        QTest::newRow("fsExit/column") << c(Claim::ColumnMaximize) << s(ClaimScope::FullscreenExitWhileFloating)
+        QTest::newRow("fsExit/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::FullscreenExitWhileFloating)
                                        << true;
 
         QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
-        QTest::newRow("teardown/column") << c(Claim::ColumnMaximize) << s(ClaimScope::Teardown) << true;
+        QTest::newRow("teardown/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Teardown) << true;
     }
 
     void claimReleaseTable()
@@ -443,7 +451,7 @@ private Q_SLOTS:
         // remediation, which is why this is pinned rather than left to the
         // enum's declaration order.
         QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::MonocleMaximize));
-        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::ColumnMaximize));
+        QVERIFY(claimReleaseOrder(Claim::WindowedFullscreen) < claimReleaseOrder(Claim::MaximizedToEdges));
     }
 
     void onlyTheMaximizeClaimsRetainOnAFullscreenSkip()
@@ -453,8 +461,66 @@ private Q_SLOTS:
         // exception because its caller sheds membership before the
         // compositor half runs at all.
         QVERIFY(claimRetainsOnFullscreenSkip(Claim::MonocleMaximize));
-        QVERIFY(claimRetainsOnFullscreenSkip(Claim::ColumnMaximize));
+        QVERIFY(claimRetainsOnFullscreenSkip(Claim::MaximizedToEdges));
         QVERIFY(!claimRetainsOnFullscreenSkip(Claim::WindowedFullscreen));
+    }
+
+    void sizeContinuityCarryForwardTable_data()
+    {
+        QTest::addColumn<bool>("declaredRect");
+        QTest::addColumn<bool>("columnAnswered");
+        QTest::addColumn<QSize>("committed");
+        QTest::addColumn<QSize>("column");
+        QTest::addColumn<bool>("carries");
+
+        const QSize column(1610, 879);
+
+        // The ordinary case the mechanism exists for: a client that answered
+        // this column with a slightly different size keeps it, as a pure move.
+        QTest::newRow("client answered smaller") << false << true << QSize(1608, 877) << column << true;
+        // No entry yet, so this batch is the one that offers the real column.
+        QTest::newRow("column not yet answered") << false << false << QSize(1608, 877) << column << false;
+        // Nothing to correct.
+        QTest::newRow("client took the column") << false << true << column << column << false;
+        // A degenerate mid-unmap commit must not centre the window by the
+        // whole column.
+        QTest::newRow("empty committed size") << false << true << QSize() << column << false;
+
+        // THE REGRESSION. A maximize-to-edges column is declared state: its
+        // rect is the raw work area, and carrying a client's own preference
+        // forward commits the window at that preference, centred — which is
+        // "maximize is not full width" exactly as reported.
+        QTest::newRow("declared rect, client answered smaller")
+            << true << true << QSize(833, 790) << QSize(1670, 939) << false;
+        QTest::newRow("declared rect, client took it") << true << true << QSize(1670, 939) << QSize(1670, 939) << false;
+
+        // The paired hazard on the way back out: on the un-maximize batch the
+        // column is restored while the client still holds the raw work area,
+        // and a surviving pre-maximize entry matches the restored size. The
+        // centring maths clamps at zero, so carrying this forward would commit
+        // the maximized size at the restored column's origin.
+        QTest::newRow("stale oversized frame, both axes") << false << true << QSize(1670, 939) << column << false;
+        QTest::newRow("stale oversized frame, width only") << false << true << QSize(1670, 800) << column << false;
+        QTest::newRow("stale oversized frame, height only") << false << true << QSize(1400, 939) << column << false;
+
+        // The equality edges of that same refusal. A frame matching the column
+        // on exactly one axis IS an answer to this column and must still
+        // carry, so these are the rows that fail if either bound in
+        // mayCarryCommittedSize is tightened from <= to <. Without them both
+        // mutations pass the whole table: every other carrying row is strictly
+        // smaller on both axes.
+        QTest::newRow("equal width, shorter height") << false << true << QSize(1610, 877) << column << true;
+        QTest::newRow("equal height, narrower width") << false << true << QSize(1608, 879) << column << true;
+    }
+
+    void sizeContinuityCarryForwardTable()
+    {
+        QFETCH(bool, declaredRect);
+        QFETCH(bool, columnAnswered);
+        QFETCH(QSize, committed);
+        QFETCH(QSize, column);
+        QFETCH(bool, carries);
+        QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
     }
 };
 

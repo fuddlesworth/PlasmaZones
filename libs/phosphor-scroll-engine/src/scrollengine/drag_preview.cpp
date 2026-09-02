@@ -56,6 +56,11 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     slot.width = column.width;
     slot.display = column.display;
     slot.ownedTabbedHeight = column.display == ColumnDisplay::Tabbed && column.heightOwnerId == windowId;
+    // Only when this window is the column's LAST tile, floatWindowInternal's
+    // rule: a shared column survives the drag and keeps its own flag, and
+    // re-asserting it from a returning sibling could re-maximize a column the
+    // user un-maximized mid-hold.
+    slot.maximizedToEdges = column.tiles.size() == 1 && column.maximizedToEdges;
     const QSize minSize = strip.windowMinimumSize(windowId);
     slot.minWidth = minSize.width();
     slot.minHeight = minSize.height();
@@ -111,6 +116,14 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
             if (slot.windowedFullscreen) {
                 strip.setWindowedFullscreen(windowId, true);
             }
+            // And the maximize-to-edges flag the lone-tile capture carried:
+            // declared column state nothing re-derives, so without this an
+            // Escape rebuilds the column un-maximized and the next apply
+            // clears the mirrored KWin bit. Captured false for a shared-column
+            // tile, so this cannot re-flag a column that survived the drag.
+            if (slot.maximizedToEdges) {
+                strip.setMaximizedToEdgesForWindow(windowId, true);
+            }
         }
     }
     return inserted;
@@ -143,6 +156,10 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     preview.windowId = windowId;
     preview.targetScreenId = screenId;
     preview.targetKey = targetKey;
+    // Captured before ANY take or settle below, so a cancel can hand back the
+    // exact pre-drag view along with the slot (the struct's field doc).
+    preview.targetViewAnchorAtBegin = targetState->strip().viewAnchor();
+    preview.targetViewDetachedAtBegin = targetState->strip().viewDetached();
 
     ScrollState* priorState = nullptr;
     const auto it = m_states.windowKeys().constFind(windowId);
@@ -183,7 +200,21 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
                 preview.carried.display = effectiveDefaultColumnDisplay(screenId);
             }
         } else if (preview.priorSlot.column >= 0) {
-            priorState->strip().takeWindow(windowId, layoutParamsForScreen(preview.priorKey.screenId));
+            const ScrollLayoutParams priorParams = layoutParamsForScreen(preview.priorKey.screenId);
+            // Same capture-before-take as the target strip's, for the
+            // cross-key cancel that returns the window home (a same-key take
+            // is the target strip's own and the target capture covers it).
+            if (!preview.priorSameKey) {
+                preview.priorViewAnchorAtBegin = priorState->strip().viewAnchor();
+                preview.priorViewDetachedAtBegin = priorState->strip().viewDetached();
+            }
+            priorState->strip().takeWindow(windowId, priorParams);
+            // The take can leave the view over trailing dead space
+            // (removeWindowInternal keeps it on purpose); this strip stays on
+            // show for the whole hold, so settle it over real columns now —
+            // for the target strip this IS the one settle DETACH-ONCE allows,
+            // and nothing moves it again until drop.
+            priorState->strip().clampViewIntoStrip(priorParams);
             preview.carried = preview.priorSlot;
         } else {
             // Tracked but in NEITHER the strip nor the floating set —
@@ -220,6 +251,9 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             preview.defensiveSlot = captureDragSlot(targetState->strip(), windowId);
         }
         targetState->strip().takeWindow(windowId, params);
+        // Same begin settle as the tracked take above: this strip is the one
+        // under the cursor for the rest of the hold.
+        targetState->strip().clampViewIntoStrip(params);
     }
 
     m_dragInsertPreview = preview;
@@ -290,11 +324,23 @@ void ScrollEngine::commitDragInsertPreview()
     const int postDropColumns =
         strip.columnCount() + ((!p.lastTarget.isValid() || p.lastTarget.newSlot || strip.isEmpty()) ? 1 : 0);
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
+    // The view the drop was AIMED against, captured before the insert can
+    // move the active column (the anchor is active-relative, so reading it
+    // after would answer for the wrong column). reanchorForDropCommit turns
+    // this into the on-screen position the indicator promised.
+    const int preDropViewOffset = strip.relayout(params).viewOffset;
     bool inserted = false;
+    // Whether the drop CREATED a column. The maximize-to-edges flag below
+    // rides only those arms: a join makes the window a tile of a host column
+    // that owns its own presentation, and stamping the carried flag there
+    // would maximize a column the user never asked to maximize (the same
+    // shared-column exclusion the capture makes).
+    bool createdColumn = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
             inserted = strip.insertWindowAt(std::clamp(p.lastTarget.primary, 0, strip.columnCount()), p.windowId,
                                             p.carried.width, p.carried.display, params);
+            createdColumn = inserted;
         } else {
             const int joinColumn = std::clamp(p.lastTarget.primary, 0, strip.columnCount() - 1);
             const int tileIndex = p.lastTarget.secondary >= 0
@@ -313,6 +359,7 @@ void ScrollEngine::commitDragInsertPreview()
     if (!inserted) {
         inserted = strip.insertWindow(p.windowId, p.carried.width, p.carried.display, params, p.carried.minWidth,
                                       p.carried.minHeight, ScrollInsertPosition::Last);
+        createdColumn = inserted;
     }
     if (!inserted) {
         // Never leave the window in the detached limbo (tracked, in neither
@@ -351,7 +398,7 @@ void ScrollEngine::commitDragInsertPreview()
         // exception (a stale true only forces one redundant emit, but the
         // symmetry is the documented contract).
         m_lastAppliedWindowedFs.remove(p.windowId);
-        m_lastAppliedColumnMaximized.remove(p.windowId);
+        m_lastAppliedMaximizedToEdges.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -372,9 +419,21 @@ void ScrollEngine::commitDragInsertPreview()
         if (p.carried.windowedFullscreen) {
             strip.setWindowedFullscreen(p.windowId, true);
         }
+        // Maximize-to-edges, on the column-creating arms only. The zero-motion
+        // restore arm is NOT one of them here: dragPreviewRestoreSlot hands the
+        // flag back itself, on its own slot's terms.
+        if (createdColumn && p.carried.maximizedToEdges) {
+            strip.setMaximizedToEdgesForWindow(p.windowId, true);
+        }
     }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
+    // Override the insert's own policy reanchor: land the dropped column at
+    // the position the indicator promised, moved only as far as full
+    // visibility requires. The policy verdict (OnOverflow centering an
+    // over-wide column) hid every neighbour after a drop; the minimal fit
+    // keeps the strip context the user dropped into on screen.
+    strip.reanchorForDropCommit(preDropViewOffset, params);
     m_states.setKeyForWindow(p.windowId, p.targetKey);
 
     // Drop the last-applied memory so the re-tile emit survives the
@@ -425,6 +484,16 @@ void ScrollEngine::cancelDragInsertPreview()
             if (ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false)) {
                 const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
                 if (dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId)) {
+                    // The restore's structural reanchor answered with the
+                    // policy verdict; an Escape promises the pre-drag view
+                    // back, so re-assert the captured pair raw (the field
+                    // doc on DragInsertPreview) — unless the user steered
+                    // the view with the edge auto-scroll, which the cancel
+                    // keeps (viewScrolledDuringHold's contract).
+                    if (!p.viewScrolledDuringHold) {
+                        targetState->strip().restoreViewAnchor(p.targetViewAnchorAtBegin, params);
+                        targetState->strip().setViewDetached(p.targetViewDetachedAtBegin);
+                    }
                     m_states.setKeyForWindow(p.windowId, p.targetKey);
                     // Same emit-on-change escape as every other restore arm
                     // in this function: the restored slot is typically the
@@ -485,6 +554,17 @@ void ScrollEngine::cancelDragInsertPreview()
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);
         }
+        if (targetState && !p.viewScrolledDuringHold) {
+            // Exact-view half of the Escape promise: begin's settle clamp and
+            // the restore's structural reanchor both moved the anchor, and
+            // neither answer is the view the user actually had. Raw restore,
+            // after BOTH sub-arms — the float arm's strip never changed, so
+            // for it this is a no-op re-assertion of the same pair. An
+            // auto-scrolled hold keeps the scrolled view instead
+            // (viewScrolledDuringHold's contract).
+            targetState->strip().restoreViewAnchor(p.targetViewAnchorAtBegin, params);
+            targetState->strip().setViewDetached(p.targetViewDetachedAtBegin);
+        }
         applyLayout(p.targetScreenId, false);
         // The detach at begin and this restore both mutate persisted strip
         // structure.
@@ -513,6 +593,16 @@ void ScrollEngine::cancelDragInsertPreview()
                 targetState->strip().setWindowHeightIntent(p.windowId, p.carried.height);
                 if (p.carried.windowedFullscreen) {
                     targetState->strip().setWindowedFullscreen(p.windowId, true);
+                }
+                // And the maximize-to-edges flag, with the rest of the carry
+                // set. The insert above opens a column of this window's own,
+                // so the shared-column exclusion cannot be violated, and the
+                // flag names a presentation (the raw work area of whichever
+                // screen holds it) rather than a geometry tied to the prior
+                // one — a window that was maximized when the drag began comes
+                // out of a cancel maximized wherever it lands.
+                if (p.carried.maximizedToEdges) {
+                    targetState->strip().setMaximizedToEdgesForWindow(p.windowId, true);
                 }
             }
             m_states.setKeyForWindow(p.windowId, p.targetKey);
@@ -544,8 +634,15 @@ void ScrollEngine::cancelDragInsertPreview()
             priorState->setFloatingHasFocus(true);
         }
     } else {
-        dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, layoutParamsForScreen(p.priorKey.screenId),
-                               p.priorKey.screenId);
+        const ScrollLayoutParams priorParams = layoutParamsForScreen(p.priorKey.screenId);
+        dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, priorParams, p.priorKey.screenId);
+        // The window went home, and its strip's view goes home with it —
+        // begin captured the pair before the take (the cross-key arm of the
+        // capture), and the restore's structural reanchor just overwrote it
+        // with the policy verdict. No auto-scroll gate here: the scroll only
+        // ever moves the TARGET screen's view, never this prior strip's.
+        priorState->strip().restoreViewAnchor(p.priorViewAnchorAtBegin, priorParams);
+        priorState->strip().setViewDetached(p.priorViewDetachedAtBegin);
         m_lastAppliedRect.remove(p.windowId);
         m_parkedScrollEdge.remove(p.windowId);
     }

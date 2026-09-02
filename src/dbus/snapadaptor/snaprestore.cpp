@@ -164,7 +164,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY,
+                                       int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY,
                                        int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
@@ -187,6 +187,32 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
+    const PhosphorEngine::RestoreReason reason = PhosphorEngine::clampRestoreReasonFromWire(restoreReason);
+    const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;
+    auto* const svc = m_adaptor->service(); // non-null: guarded above
+
+    // Claim this instance's placement record BEFORE anything reads one. At
+    // login every uuid is fresh, so every selector over this appId bucket falls
+    // to the same pool of records. Claiming once pins WHICH record belongs to
+    // this instance for the whole open and for the re-drives that follow it:
+    // without it an already-home window could consume a sibling's record
+    // outright, and a multi-window app's later re-resolve could answer from a
+    // different record than the one its open used.
+    //
+    // Open AND PendingSweep. The sweep re-resolves windows that are already
+    // OPEN, but for the placement store it CAN still be a first touch: a window
+    // whose open resolve arrived before the daemon was ready never got past the
+    // readiness gate above, so it never claimed anything. For one that did
+    // already claim, claimForOpen is idempotent and this is harmless. Without this the pairing guard was
+    // absent in exactly the slow-daemon login the feature exists for.
+    //
+    // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
+    // with stable uuids that route to the store's same-instance branch
+    // (DaemonRestartSweep), so their claim or consumption is already settled.
+    if (isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep) {
+        svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
+    }
+
     // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
     // be routed to a desktop whether or not it snaps (and even when it doesn't
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
@@ -205,6 +231,37 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
+
+    // Per-open reclaim-credit burn, the snap-screen half of the partition
+    // (WindowPlacementStore::burnReclaimCredit documents the tiling half —
+    // takeForReopen, which snap never calls). Runs for genuine OPENS on
+    // SNAP-mode screens only: tiling-screen arrivals burn through their
+    // engine's own open path, and the re-resolve drivers of this slot
+    // (unminimize, the sweeps, the desktop-arrival re-drive) must retire
+    // nothing. Skipped when a tiling claim adopts the window below — the
+    // adopted windowOpened's takeForReopen is that open's burn.
+    //
+    // WHY DesktopArrival DOES NOT BURN. burnReclaimCredit is not idempotent:
+    // each call retires the newest eligible SIBLING's credit, so two calls
+    // for one logical open spend two siblings' credits and strand a window
+    // that has not reopened yet. This slot now always reaches the burn on
+    // the open pass — a window a RouteToDesktop rule sends to another
+    // desktop is parked by the effect and re-enters here with
+    // DesktopArrival, which would be that second call. The arrival is the
+    // continuation of an open that already burned, never an open of its own.
+    // The other producer, the move-to-desktop shortcut, acts on an
+    // already-open window and must retire nothing either.
+    bool reclaimedByTiling = false;
+    const auto burnOpenCredit = [&]() {
+        if (!isOpen || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
+            return;
+        }
+        const QString appId = svc->currentAppIdFor(windowId);
+        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+            svc->placementStore().burnReclaimCredit(windowId, appId);
+        }
+    };
+
     if (!result.shouldSnap) {
         // Nothing snapped this window. A bare RouteToScreen rule (move-to-monitor
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
@@ -225,13 +282,38 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // there. (Managed-screen arrivals reach the reclaim through
         // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
         // fail the effect's canSnapRestore gate never reach this slot at
-        // all — see setCrossScreenTileReclaim's contract.) isOpenPath keeps
-        // the two NON-open drivers of this slot (the unminimize of a
-        // daemon-restart orphan, the pending-restores sweep) from
-        // teleporting a window the user merely unminimized.
+        // all — see setCrossScreenTileReclaim's contract.) The reason gate
+        // keeps the drivers that re-resolve an ALREADY-VISIBLE window (the
+        // unminimize of a daemon-restart orphan, the pending-restores sweep,
+        // the bring-up stacking sweep) from teleporting a window the user is
+        // looking at.
+        //
+        // DesktopArrival is admitted alongside Open, and that is the whole
+        // reason this argument stopped being a bool. It is a CONTINUATION of
+        // an open, not a user action: a RouteToDesktop rule sent this window to
+        // another desktop at open time, the effect parked it while that desktop
+        // was not showing, and this is the re-drive once it landed. The open
+        // pass deliberately placed nothing for it. Denying it the reclaim —
+        // which the bool did, since it is not an open — leaves any window whose
+        // record was tiled on another screen on the no-match float default for
+        // the rest of the session.
+        //
+        // Note this admits the reclaim but NOT the reclaim-credit burn: see
+        // burnOpenCredit above, where the open pass already spent this open's
+        // one credit. Reclaiming reads a credit, burning retires a sibling's.
+        //
+        // This DOES relax the never-move-a-visible-window rule, deliberately.
+        // The effect only drains an arrival once the window's own output is
+        // showing its desktop, so a reclaimed window is on screen at that
+        // moment. The cost is the delayed case: a park held until the user
+        // first visits that desktop much later, where the reclaim lands as a
+        // visible jump. That is the better trade against stranding the window
+        // on the wrong monitor for the whole session.
+        const bool mayReclaim = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
         if (result.deferredToTilingEngine && !routed) {
-            const bool reclaimed = isOpenPath && m_crossScreenTileReclaim
+            const bool reclaimed = mayReclaim && m_crossScreenTileReclaim
                 && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+            reclaimedByTiling = reclaimed;
             if (!reclaimed) {
                 // Non-open, or DECLINED (the claims ask stricter questions —
                 // live sets, context equality, tileability — than the
@@ -247,6 +329,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // writing float state here would record the SPAWN screen — the one
         // the window is leaving. The route owns the placement, which is what
         // the defer's "someone will manage it" promise needed.
+        burnOpenCredit();
         return;
     }
 
@@ -264,6 +347,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // RouteToDesktop above is different: it is emitted before the engine is
     // consulted at all, by design, because a desktop route is independent of
     // whether the window snaps.
+    burnOpenCredit();
 }
 
 bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,

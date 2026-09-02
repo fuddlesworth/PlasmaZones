@@ -355,7 +355,17 @@ Item {
 
             return i18n("Tabbing is unavailable");
         } else if (action === "fullscreen") {
-            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus" || reason === "no_target")
+            // no_target is NOT the same answer as an empty strip here. The
+            // producer sends it only when the float layer holds focus, which
+            // is the commonest reason this shortcut looks like a dead
+            // keybinding, and "no windows" is actively misleading then because
+            // there is a window and the user is looking at it. The source slot
+            // carries the floating window's id rather than a display name, so
+            // the message names the state instead of the window.
+            if (reason === "no_target")
+                return i18n("The focused window is floating, so it has no column to fill");
+
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
                 return noWindowText;
 
             // Unreachable today (the producer emits only the reasons above);

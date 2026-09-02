@@ -94,6 +94,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // The scrolling BEHAVIOUR toggles — context-domain like the sizing slots
     // above, riding the same per-screen override map.
     ActionType::SetScrollAlwaysCenterSingleColumn,
+    ActionType::SetScrollCenterShortColumns,
     ActionType::SetScrollRespectMinimumSize,
     ActionType::SetScrollCropStraddlers,
     ActionType::SetScrollFocusNewWindows,
@@ -854,6 +855,7 @@ private Q_SLOTS:
         // The behaviour toggles and the two enums beside them declare the same
         // {Value} key set.
         rejectsStray(ActionType::SetScrollAlwaysCenterSingleColumn, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollCenterShortColumns, QJsonValue(true));
         rejectsStray(ActionType::SetScrollRespectMinimumSize, QJsonValue(true));
         rejectsStray(ActionType::SetScrollCropStraddlers, QJsonValue(true));
         rejectsStray(ActionType::SetScrollFocusNewWindows, QJsonValue(true));

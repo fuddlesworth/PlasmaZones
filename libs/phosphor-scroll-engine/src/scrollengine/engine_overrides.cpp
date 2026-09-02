@@ -28,25 +28,9 @@
 
 namespace PhosphorScrollEngine {
 namespace {
-// Sanity bounds for tab-indicator overrides arriving through the public
-// per-screen map. Deliberately NOT the rules layer's constants — this library
-// does not depend on phosphor-rules — but the same numbers, because both
-// ultimately mirror the config schema's clamps. They exist to reject a
-// grossly malformed embedder-supplied override, not to re-implement the
-// cascade's validation, so they are wide.
-constexpr int kMinTabIndicatorGap = -64;
-constexpr int kMaxTabIndicatorGap = 64;
-constexpr int kMinTabIndicatorWidth = 1;
-constexpr int kMaxTabIndicatorWidth = 64;
-/// The length proportion's pair, named for the same reason its four siblings
-/// above are rather than living as bare literals at the read: the floor is a
-/// real decision (a proportion small enough to resolve to a sliver reads as a
-/// broken indicator while every setting still reports it on), and hiding it in
-/// a `> 0.0` test made it look like a null check. Mirrors the rules layer's
-/// Min/MaxTabIndicatorLengthRatio by value, hand-copied on the same terms as
-/// the bounds above.
-constexpr qreal kMinTabIndicatorLengthProportion = 0.05;
-constexpr qreal kMaxTabIndicatorLengthProportion = 1.0;
+// The tab-indicator sanity bounds live in enginelimits.h: engine_core.cpp's
+// settings read applies the same ones, and a second copy here is exactly the
+// drift they exist to prevent.
 
 /// Validated int read out of an override map, and the reason every int
 /// resolver in this file goes through it: QVariant::toInt() answers 0 for a
@@ -219,6 +203,11 @@ bool ScrollEngine::effectiveAlwaysCenterSingleColumn(const QVariantMap& override
 {
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::alwaysCenterSingleColumn(),
                                  m_alwaysCenterSingleColumn);
+}
+
+bool ScrollEngine::effectiveCenterShortColumns(const QVariantMap& overrides) const
+{
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::centerShortColumns(), m_centerShortColumns);
 }
 
 bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) const
@@ -582,12 +571,11 @@ bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& 
         || ruleWindowHeightFraction(overrides).has_value()) {
         return false;
     }
-    // exactOnly: a tile height is a PER-WINDOW contract, and the non-exact
-    // default admits a same-app SIBLING's record (the interface documents that
-    // sharing as being for free POSITIONS). Minting one window's sizing intent
-    // out of another instance's remembered rect gives it a height it never
-    // asked for.
-    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
+    // A tile height is a PER-WINDOW contract, and the resolver is per-window by
+    // construction — there is no sharing mode to opt out of. That matters here
+    // specifically: minting one window's sizing intent out of another
+    // instance's remembered rect would give it a height it never asked for.
+    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
         // Not the common case for a genuine spawn — the effect records the
         // pre-tile geometry before it announces the open — but a window the

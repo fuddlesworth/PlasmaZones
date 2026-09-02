@@ -5,9 +5,9 @@
 // daemon manages, which of those run the scrolling engine, the active layout
 // per screen, the daemon-resolved scroll behaviours (the focus-follows-mouse,
 // straddler-crop and strip-axis screen sets, plus the per-WINDOW set naming
-// what the focus-follows-mouse scroll cap refuses), the focus-follows-mouse
-// and wheel-focus settings, and the wheel shortcut registration those settings
-// drive.
+// what the focus-follows-mouse scroll cap refuses), and the focus-follows-mouse
+// and wheel-focus settings. The chord that reads the wheel settings lives in
+// wheelchord.cpp.
 //
 // What unites this file is that every member here is published BY the daemon
 // and consumed by the effect, so all of it is per-session and all of it is
@@ -17,18 +17,20 @@
 // see a transient disagreement. Where that matters the reader takes the raw set
 // deliberately rather than an intersection.
 //
-// Three concerns were split out of this file: monocle and windowed-fullscreen
+// Four concerns were split out of this file: monocle and windowed-fullscreen
 // ownership (windowedfullscreen.cpp), pre-tile geometry (pretilegeometry.cpp),
-// and eligibility plus float shed (floatcleanup.cpp).
+// eligibility plus float shed (floatcleanup.cpp), and the wheel-chord dispatch
+// with the native-fullscreen release both user-verb sites run before their verb
+// (wheelchord.cpp). The wheel SETTINGS stay here, because they are published by
+// the daemon like everything else in this file; only the chord that reads them
+// moved.
 
 #include "tilinghandler.h"
 #include "compositor/scrollbehaviourparse.h"
-#include "handlers/dragtracker.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
-#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
@@ -40,33 +42,10 @@
 #include <QMetaType>
 #include <QVariant>
 
-#include <cmath>
 #include <optional>
+#include <utility> // std::as_const over the collected sets and lists
 
 namespace PlasmaZones {
-
-namespace {
-/// Most strip steps one axis event may spend. Bounds both the work done on
-/// KWin's main thread and the D-Bus fan-out, since each step is its own
-/// message. A real wheel notch is 1.0 and even a coalesced high-resolution
-/// frame stays in single digits, so this only ever truncates garbage.
-constexpr int kMaxWheelStepsPerEvent = 16;
-
-/// One discrete wheel notch, in deltaV120 units. libinput reports high
-/// resolution wheels as fractions of this and KWin passes the value through
-/// unchanged, so dividing by it yields notches directly.
-constexpr qreal kV120PerNotch = 120.0;
-
-/// One notch worth of the smooth `delta` field, used only when the event
-/// carries no deltaV120 (touchpads and other continuous sources). The wheel
-/// itself never lands here: KWin fills deltaV120 for every wheel event.
-///
-/// The value is libinput's legacy degrees-per-detent, which is also the scale
-/// KWin's smooth delta uses for a wheel, so a continuous source has to travel
-/// about as far as one notch to spend a step. Treating that field as notches
-/// directly is what made a single notch fire a whole screenful of steps.
-constexpr qreal kSmoothUnitsPerNotch = 15.0;
-} // namespace
 
 void TilingHandler::clearTiledTracking()
 {
@@ -384,6 +363,110 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
     setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
 }
 
+void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
+{
+    if (screenId.isEmpty()) {
+        // Boundary validation, like every sibling slot in this file. An empty
+        // id is not merely useless here, it is destructive: the retire selects
+        // windows by comparing a screen id against a QHash::value lookup that
+        // answers an empty QString for anything unrecorded, so "" would match
+        // every untracked window and drop its relocation.
+        qCWarning(lcEffect) << "stripContext: dropping announcement with an empty screen id";
+        return;
+    }
+    const auto it = m_stripEpochByScreen.constFind(screenId);
+    const bool known = it != m_stripEpochByScreen.constEnd();
+    if (known && *it == epoch) {
+        return;
+    }
+    m_stripEpochByScreen.insert(screenId, epoch);
+    if (!known) {
+        // FIRST epoch for this screen. Nothing was retained under a previous
+        // strip, so there is nothing to retire — and retiring here would throw
+        // away the state a batch that raced ahead of this announcement just
+        // established. Record and return.
+        qCDebug(lcStripDiag) << "strip context: first epoch for" << screenId << debugLabel;
+        return;
+    }
+    qCDebug(lcStripDiag) << "strip context: retiring strip state for" << screenId << "->" << debugLabel;
+    retireStripScopedState(screenId);
+}
+
+void TilingHandler::retireStripScopedState(const QString& screenId)
+{
+    // THE RETIRE-SET RULE IS ON THIS FUNCTION'S DECLARATION. Read it before
+    // adding or removing anything here. The short form: retire an entry when
+    // what invalidates it is the STRIP changing; keep it when what invalidates
+    // it is the CLIENT responding or the window dying.
+    bool droppedAny = false;
+    for (auto wit = m_effect->m_scrollVisualDelta.begin(); wit != m_effect->m_scrollVisualDelta.end();) {
+        // The recorded screen answers first, and tiled membership answers ONLY
+        // for a window it has nothing to say about. m_notifiedWindowScreens is
+        // written under a narrower condition than the relocation itself: the
+        // apply loop inserts a visual delta for any entry carrying a visual
+        // position, but records the window's screen only when the window is in
+        // m_notifiedWindows, so a window demoted or rolled back between the two
+        // ends up holding a relocation with no recorded screen at all. That
+        // window is the whole reason for the second term, and selecting on the
+        // recorded map alone left it wearing the OUTGOING strip's position for
+        // good.
+        //
+        // The fallback is deliberately NOT ORed in for windows that DO have a
+        // recorded screen, which is the tempting spelling and is wrong in a way
+        // that does not heal. screenForTiledWindow returns the first matching
+        // bucket in hash order, and those buckets go stale — outputchange.cpp
+        // says so at its own recorded-screen fallback, which exists for exactly
+        // that case. A window that has moved to another screen but still sits
+        // in this one's bucket would lose its relocation here, and nothing
+        // would put it back: the only writer of that map is the tile-batch
+        // apply, the other screen's strip did not change so no batch is coming,
+        // and the damage this function issues is scoped to THIS output, so the
+        // window would not even be repainted where it actually is.
+        //
+        // Also not scrollTrackedScreenFor, which looks like the right helper
+        // and is not: it is impure (it reports clip loss as a side effect) and
+        // both of its answer arms are gated on the screen being in
+        // m_scrollingScreens, so for a screen that has already left the
+        // scrolling set it answers empty for every window and this loop would
+        // drop nothing at all.
+        const QString& windowId = wit.key();
+        const auto recordedIt = m_notifiedWindowScreens.constFind(windowId);
+        const bool onThisScreen = recordedIt != m_notifiedWindowScreens.constEnd()
+            ? *recordedIt == screenId
+            : TilingStateHelpers::screenForTiledWindow(m_border, windowId) == screenId;
+        if (onThisScreen) {
+            wit = m_effect->m_scrollVisualDelta.erase(wit);
+            droppedAny = true;
+        } else {
+            ++wit;
+        }
+    }
+    // The per-output view spring is strip-scoped for the same reason and is the
+    // other half of a parked column's drawn position: its offset accumulated
+    // from the OUTGOING strip's travel, and a parked column on the incoming one
+    // would be painted at its own strip position plus a stranger's offset.
+    if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
+        // Both halves, as at every other site that drops an output's strip
+        // motion. forgetOutput alone clears the spring but leaves any armed
+        // transition leg running, and that leg was armed with the OUTGOING
+        // strip's parameters, so the pass would keep capturing and decorating
+        // a strip that is no longer on screen.
+        m_effect->m_stripTransition.outputRemoved(out);
+        m_effect->m_stripViewAnimator->forgetOutput(out);
+        if (KWin::effects) {
+            KWin::effects->addRepaint(KWin::Rect(out->geometry()));
+        }
+    } else if (droppedAny && KWin::effects) {
+        // No output resolves for this id. Screen removal is not the case that
+        // lands here — the effect's own screenRemoved handler has already
+        // dropped this output's transition and spring by then — it is an id
+        // that never named a connected output at all. The relocations just
+        // dropped were paint inputs, so something has to repaint, and full is
+        // the honest fallback rather than skipping it.
+        KWin::effects->addRepaintFull();
+    }
+}
+
 void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped)
 {
     // Any authoritative write voids in-flight property replies, identical
@@ -468,7 +551,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // deliberately and say so at their own site — the bring-up fetch
     // (wiring.cpp) runs before any batch has populated the membership hash,
     // and the bring-up drain (drainDeadSessionState) calls BOTH
-    // restoreAllWindowedFullscreen AND restoreAllColumnMaximized immediately
+    // restoreAllWindowedFullscreen AND restoreAllMaximizedToEdges immediately
     // BEFORE its setScrollingScreens({}, false). A future announceFlipped=false
     // caller that can reach here with live membership owes both restores, or
     // must resolve the leaving screens independently of the announce.
@@ -479,7 +562,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // synchronously into effect handlers, and a raw pointer collected before
     // that is not safe to test with isDeleted() afterwards — that check is
     // undefined on a dangling pointer rather than a guard.
-    QList<QPointer<KWin::EffectWindow>> columnMaximizedLeavingScrolling;
+    QList<QPointer<KWin::EffectWindow>> maximizeClaimsLeavingScrolling;
     {
         const QSet<QString> leavingScrolling = oldSet - newSet;
         for (auto it = announceScreens.constBegin(); it != announceScreens.constEnd(); ++it) {
@@ -518,14 +601,22 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             }
             // The column mirror leaves with the strip for the same reason,
             // and is deferred past the managed-set write below on the same
-            // split: releaseColumnMaximized moveResizes, and doing that while
+            // split: releaseMaximizedToEdges moveResizes, and doing that while
             // m_scrollingScreens still names this screen would re-enter the
             // scrolling paths for a screen that is mid-flip. The destination
             // engine's first batch releases any window it TILES, but one it
             // floats (over maxWindows, excluded, minimize-floated) never gets
             // an entry — which is exactly the case this loop exists for.
-            if (m_columnMaximizedWindows.contains(wid)) {
-                columnMaximizedLeavingScrolling.append(it.key());
+            //
+            // Monocle membership qualifies on its own, not only alongside a
+            // maximize-to-edges claim. The claim table releases all three on a
+            // mode flip, and a monocle-only member here would otherwise not be
+            // collected at all — this loop is the payer for a mode flip that
+            // leaves the engine running (the bulk restoreAll* drains only run
+            // on disable or teardown), and both its release calls are no-ops
+            // for a non-member, so widening the predicate costs nothing.
+            if (m_maximizedToEdgesWindows.contains(wid) || m_monocleMaximizedWindows.contains(wid)) {
+                maximizeClaimsLeavingScrolling.append(it.key());
             }
         }
     }
@@ -534,7 +625,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     for (const QString& wid : std::as_const(windowedFsLeavingScrolling)) {
         releaseWindowedFullscreenState(wid);
     }
-    for (const QPointer<KWin::EffectWindow>& w : std::as_const(columnMaximizedLeavingScrolling)) {
+    for (const QPointer<KWin::EffectWindow>& w : std::as_const(maximizeClaimsLeavingScrolling)) {
         if (w && !w->isDeleted()) {
             const QString wid = m_effect->getWindowId(w);
             // Monocle goes with it. The claim table says a mode flip releases
@@ -544,7 +635,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // window it TILES. No-op for a non-member, and it must precede the
             // column release for the funnel's stated order.
             unmaximizeMonocleWindow(wid);
-            releaseColumnMaximized(wid, w);
+            releaseMaximizedToEdges(wid, w);
         }
     }
 
@@ -727,207 +818,6 @@ void TilingHandler::clearActiveLayoutsForTeardown()
     // the SetOpacity repaint bookend, which neither caller covers on the
     // handover path — see its own doc.
     m_effect->sliceActiveLayoutRulesForUnseededMap();
-}
-
-bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientation orientation,
-                                     Qt::KeyboardModifiers mods, Qt::MouseButtons buttons)
-{
-    // Fast path first, in the order that costs least: the enable setting,
-    // then "does any screen run the strip at all". Every axis event in the
-    // session reaches here, so a session with no scrolling screen pays two
-    // reads and nothing more.
-    // Any bail below drops the banked sub-notch remainder. A partial notch is
-    // only meaningful inside the gesture that produced it, and the gesture is
-    // over the moment we stop claiming events: the user releases the chord,
-    // starts a drag, wheels onto a screen with no strip, or turns the feature
-    // off. Carrying a residue across that boundary makes the NEXT gesture
-    // fire its first step early, or late, depending on the sign.
-    //
-    // Two endings this cannot catch, both benign. The residue they carry is
-    // normally under one notch, so at most one step fires early; the
-    // exception is an event that hit the per-event step cap, which leaves
-    // whatever the cap did not spend:
-    //
-    // A user who stops scrolling and only THEN releases the modifier sends no
-    // further axis event, so nothing runs to clear the residue and it is
-    // spent on the next gesture's first event. Dropping it on entry to every
-    // non-claiming path rather than only the no-match one is what keeps that
-    // window as small as it can be without a timer.
-    //
-    // Switching chord mid-scroll (holding Meta, then adding Shift) is a new
-    // gesture on the same axis, and nothing here keys the accumulator on
-    // WHICH chord claimed the event, so the focus chord's residue carries
-    // into the view chord's first step. Tracking the claiming chord would
-    // close it, at the cost of more state in the one place on this path that
-    // has any.
-    if (!m_wheelFocusEnabled || m_scrollingScreens.isEmpty()) {
-        resetWheelAccumulators();
-        return false;
-    }
-    // A zero delta carries no direction to act on. It reaches us as the
-    // stop/cancel tick that ends a kinetic touchpad stream, and turning it
-    // into a signed verb would scroll the strip one step on every stream end.
-    // That tick IS the end of a stream, so it takes the residue with it.
-    //
-    // Non-finite is refused in the same breath, and it has to be refused
-    // BEFORE the accumulator: NaN passes qFuzzyIsNull, poisons the running
-    // total, and then fails every subsequent magnitude comparison, so the
-    // chord would swallow every event on that axis while firing nothing.
-    //
-    // Gated on deltaV120 being ABSENT, because the notch conversion below
-    // prefers that field and reads `delta` only as a fallback. Testing delta
-    // unconditionally dropped an event carrying a nonzero v120 with a zero or
-    // non-finite smooth delta, and took its banked remainder with it. When
-    // v120 carries the event `delta` is never read, so a NaN there cannot
-    // reach the accumulator either way.
-    const bool useV120 = deltaV120 != 0;
-    if (!useV120 && (qFuzzyIsNull(delta) || !std::isfinite(delta))) {
-        resetWheelAccumulators();
-        return false;
-    }
-    // Convert to NOTCHES before anything downstream looks at the magnitude.
-    // KWin's two delta fields are not notch counts: deltaV120 is 120 per
-    // notch, and the smooth delta is the source's own scale (degrees for a
-    // wheel, pixels for a touchpad). deltaV120 is exact and is what a wheel
-    // always carries, so prefer it and fall back to the smooth field only for
-    // the continuous sources that leave it zero.
-    const qreal notches = deltaV120 != 0 ? deltaV120 / kV120PerNotch : delta / kSmoothUnitsPerNotch;
-    // Not while a window drag is in flight. The shipped defaults cannot
-    // collide (drag activation is Alt, the chords are Meta and Meta+Shift),
-    // but both sides are user-configurable now, and a user who binds the same
-    // modifier to both would otherwise reflow the strip out from under the
-    // window they are dragging, once per wheel notch.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
-        resetWheelAccumulators();
-        return false;
-    }
-    // Focus is tested BEFORE view. The two chords are matched exactly (see
-    // exactModifierMatch), so no event can satisfy both and the order is a
-    // formality for the stock pair — but a user is free to bind the SAME
-    // chord to both, and then this order is the tie-break. Focus wins because
-    // it is the verb that also moves the view, so the other reading loses
-    // nothing the user can see.
-    const bool focusMatch = TriggerParser::anyTriggerHeldExact(m_wheelFocusTriggers, mods, buttons);
-    const bool viewMatch = !focusMatch && TriggerParser::anyTriggerHeldExact(m_wheelViewTriggers, mods, buttons);
-    if (!focusMatch && !viewMatch) {
-        resetWheelAccumulators();
-        return false;
-    }
-    // Resolve the target BEFORE touching the accumulators. wheelTargetScreen
-    // is empty when the chord matched over a screen that does not run the
-    // strip, and that event must pass through to the app underneath whole —
-    // including the sub-notch events, which the accumulator branch below
-    // would otherwise swallow.
-    const QString screenId = wheelTargetScreen();
-    if (screenId.isEmpty()) {
-        resetWheelAccumulators();
-        return false;
-    }
-    // Accumulate to a whole notch before acting, which is the threshold
-    // KWin's axis-shortcut path applied for us before the matching moved
-    // here. A discrete wheel notch normalises to exactly 1.0 and so still
-    // fires on its first event; a touchpad or high-resolution wheel spends
-    // several fractional events per step instead of one verb each.
-    qreal& accum = orientation == Qt::Vertical ? m_wheelAccumVertical : m_wheelAccumHorizontal;
-    qreal& other = orientation == Qt::Vertical ? m_wheelAccumHorizontal : m_wheelAccumVertical;
-    accum += notches;
-    if (qAbs(accum) < 1.0) {
-        // Sub-notch, but still part of the chord gesture: consume it so the
-        // app underneath does not scroll its own content while the user is
-        // mid-step on the strip.
-        return true;
-    }
-    // The sign is fixed for this event; only the magnitude is spent below.
-    const qreal whole = accum > 0 ? 1.0 : -1.0;
-    // Spend the WHOLE accumulated magnitude, not one notch of it. A fast
-    // discrete wheel and a coalesced high-resolution frame can both deliver
-    // more than one notch in a single event, and taking one step per event
-    // there would bank the rest forever: the strip would lag the wheel by a
-    // growing margin and the unspent remainder would be dropped at the end of
-    // the gesture.
-    //
-    // Computed arithmetically and CAPPED rather than looped down. A loop here
-    // is a compositor hang waiting to happen: it runs on KWin's main thread,
-    // and a delta large enough that subtracting 1.0 no longer changes it
-    // never terminates. The cap also bounds the D-Bus fan-out below, since
-    // each step is its own message and no real gesture needs more than a
-    // handful per event.
-    const bool capped = qAbs(accum) > static_cast<qreal>(kMaxWheelStepsPerEvent);
-    const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
-    if (capped) {
-        // TRUNCATE at the cap, do not bank the excess. Subtracting only what
-        // was spent leaves the remainder in the accumulator, and since the cap
-        // binds again on the next event, one garbled delta fires the full 16
-        // steps — sixteen D-Bus messages — on EVERY later event of the gesture
-        // until the chord is released. Discarding makes the behaviour match
-        // what the cap's own doc says it does, and there is nothing worth
-        // keeping: reaching this branch means the delta already exceeded any
-        // real gesture by an order of magnitude.
-        accum = 0.0;
-    } else {
-        // Under the cap the remainder is a genuine sub-notch fraction from a
-        // high-resolution wheel or touchpad, and carrying it is the whole
-        // point of the accumulator.
-        accum -= steps * whole;
-    }
-    // This gesture belongs to one axis. Zeroing the other stops a diagonal
-    // drift from banking a second, opposite step on the axis the user is not
-    // actually scrolling along.
-    other = 0.0;
-    // Sign, not magnitude: one notch is one column (or one view step), and
-    // the engine owns the step size. A wheel DOWN or RIGHT moves toward the
-    // end of the strip, matching niri and the scroll direction of the axis.
-    // Which way that points on screen is resolved downstream against the
-    // screen's own strip axis, so one rule serves a horizontal and a vertical
-    // strip alike and a horizontal (tilted) wheel needs no separate arm.
-    int step = whole > 0 ? 1 : -1;
-    if (m_wheelFocusInverted) {
-        step = -step;
-    }
-    const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
-    qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
-    // One verb per notch. The engine owns the step SIZE, so a two-notch event
-    // is two single steps rather than one double-sized one, which keeps the
-    // strip's own animation identical to scrolling those notches separately.
-    for (int i = 0; i < steps; ++i) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
-                                                       QString(verb), {screenId, step}, QString(verb));
-    }
-    return true;
-}
-
-void TilingHandler::resetWheelAccumulators()
-{
-    m_wheelAccumVertical = 0.0;
-    m_wheelAccumHorizontal = 0.0;
-}
-
-QString TilingHandler::wheelTargetScreen() const
-{
-    if (!m_effect->m_daemonGate.serviceRegistered || !KWin::effects) {
-        return QString();
-    }
-    // The strip that moves is the one under the CURSOR (a wheel chord is a
-    // pointer gesture, not a focus verb): resolve the cursor's effective
-    // screen — virtual subdivisions included — and only forward when it
-    // actually runs the scrolling engine. On any other screen this returns
-    // empty and the caller passes the event through untouched: matching is
-    // per event, not a registration, so nothing is consumed and the app
-    // underneath scrolls normally.
-    const QPointF pos = KWin::effects->cursorPos();
-    const QPoint rounded(qRound(pos.x()), qRound(pos.y()));
-    const auto* output = KWin::effects->screenAt(rounded);
-    if (!output) {
-        return QString();
-    }
-    const QString screenId = m_effect->resolveEffectiveScreenId(rounded, output);
-    // isScrollingScreen, not the raw set: it intersects with the managed union,
-    // so a screen the union already dropped cannot still swallow the chord and
-    // forward a verb the engine no longer owns.
-    if (!isScrollingScreen(screenId)) {
-        return QString();
-    }
-    return screenId;
 }
 
 } // namespace PlasmaZones

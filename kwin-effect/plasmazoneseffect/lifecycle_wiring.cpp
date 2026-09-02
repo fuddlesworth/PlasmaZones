@@ -396,6 +396,70 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         updateAllDecorations();
     });
 
+    // Snap restores for windows the daemon relocated to a desktop that was not
+    // in view (a RouteToDesktop rule, or the move-to-desktop shortcut). The
+    // autotile/scrolling equivalent rides slotScreensChanged's desktop-return
+    // catch-scan; snapping has no membership set to sweep against, so its arm
+    // carries an explicit park list and this is where it is drained.
+    //
+    // Queued, not run inline. Two other desktopChanged handlers feed the daemon
+    // the state this restore is resolved against, and both land in a LATER event
+    // loop turn: scheduleClientAreaReport defers the work-area push through its
+    // own queued continuation, and the per-output desktop report is pushed
+    // further down this function. Driving the resolve synchronously here put the
+    // D-Bus call on the wire ahead of both, so the daemon answered it against the
+    // OUTGOING desktop's work area and screen mode. Deferring to the same later
+    // turn puts this after them in registration order.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (m_snapHandler) {
+                    m_snapHandler->slotDesktopChangedRestoreArrivals();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+
+    // A park can also be held by a window whose desktop is in view but whose
+    // ACTIVITY is not, and that case is released by an activity switch rather
+    // than a desktop one. Same queued shape and the same drain.
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, [this]() {
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (m_snapHandler) {
+                    m_snapHandler->slotDesktopChangedRestoreArrivals();
+                }
+            },
+            Qt::QueuedConnection);
+    });
+
+    // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The zero
+    // point for the other lcStripDiag sites: everything they report is read as
+    // "how long after the switch, if ever". Deliberately a separate connection
+    // rather than folded into a neighbouring lambda, so removing the
+    // instrumentation is a whole-block delete with no behaviour attached to it.
+    //
+    // Registered AFTER three other desktopChanged handlers, and Qt delivers
+    // direct connections in registration order, so this line printing first is
+    // a property of those two not logging under this category rather than
+    // something the ordering guarantees. Both are effect-internal and neither
+    // reaches an lcStripDiag site synchronously today. If a future handler
+    // ahead of this one ever does, move this connect above them rather than
+    // reasoning about the interleaving.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+               KWin::LogicalOutput* output) {
+                if (!lcStripDiag().isDebugEnabled()) {
+                    return;
+                }
+                qCDebug(lcStripDiag) << "desktop switch:"
+                                     << (oldDesktop ? static_cast<int>(oldDesktop->x11DesktopNumber()) : -1) << "->"
+                                     << (newDesktop ? static_cast<int>(newDesktop->x11DesktopNumber()) : -1)
+                                     << "output=" << (output ? output->name() : QStringLiteral("(all)"));
+            });
+
     // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
     // each screen"): report each output's current desktop so the daemon keys its
     // per-screen desktop map off real per-output switches instead of KWin's global
@@ -690,6 +754,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
             m_scrollVisualDelta.remove(cachedId);
+            // The lcStripDiag change-gate shadows that map, so it is bounded
+            // here for the same reason. This is its ONLY sweep anywhere, which
+            // is why its declaration states the looser bound.
+            m_stripDiagLast.remove(cachedId);
             // Windowed-fullscreen membership keeps the same backstop pairing
             // (slotWindowClosed removes it first in every ordering KWin
             // provides; this bounds the map if that ever changes). The
@@ -736,6 +804,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // erase here to keep it bounded across long sessions.
         m_shaderManager.m_lastFullyMaximized.remove(w);
         m_lastPushedCaption.remove(w);
+        // Same raw-pointer-keyed rationale, and address reuse matters here too:
+        // a new window inheriting a dead one's shadow margins would build its
+        // canvas at the wrong size until its first expanded-geometry change.
+        m_surfaceShadowMargins.remove(w);
         // Sibling raw-pointer-keyed hashes — the maximize morph's departure
         // rect and the deferred-install entry. Same bounded-across-long-
         // sessions rationale as above, plus address-reuse safety for the

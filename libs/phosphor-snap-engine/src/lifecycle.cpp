@@ -192,9 +192,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // cross-screen snapped record. Everything downstream must then stay scoped
     // to that record — see the two uses below.
     bool deferredByMode = false;
-    if (m_layoutManager
-        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+    if (!isSnapModeScreen(screenId)) {
         bool crossScreenSnapRestorePending = false;
         if (m_windowTracker) {
             const QString appId = m_windowTracker->currentAppIdFor(windowId);
@@ -504,7 +502,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // per-window RestorePosition rule) for ALL floated windows: when off,
                 // the window comes back floating but stays where KWin placed it.
                 Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
-                if (restoreFloatedPosition && freeGeo.isValid()) {
+                // Key not trusted: this read came from the placement store
+                // directly, not through validatedUnmanagedGeometry, so nothing
+                // has checked that the rect's coordinates actually describe
+                // restoreScreen. A mis-keyed record applied here lands the
+                // window on whatever monitor it was really captured on, while
+                // the floating-on-screen tracking says restoreScreen — the
+                // visible/state desync the comment at the read warns about.
+                if (restoreFloatedPosition && freeGeo.isValid()
+                    && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
@@ -728,6 +734,15 @@ int SnapEngine::currentVirtualDesktopForScreen(const QString& screenId) const
 QString SnapEngine::currentActivity() const
 {
     return m_layoutManager ? m_layoutManager->currentActivity() : QString();
+}
+
+bool SnapEngine::isSnapModeScreen(const QString& screenId) const
+{
+    // Permissive without a layout manager, matching resolveWindowRestore's
+    // ownership gate (the unit-test path).
+    return !m_layoutManager
+        || m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
+        == PhosphorZones::AssignmentEntry::Mode::Snapping;
 }
 
 bool SnapEngine::isEnabled() const noexcept

@@ -483,6 +483,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool,
          QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, which can push other "
                         "windows off screen.")},
+        {CD::centerShortColumnsKey(), CD::scrollingCenterShortColumns(), QMetaType::Bool,
+         QStringLiteral("Center the windows in a column that does not fill the screen, rather than leaving the unused "
+                        "space at the end of the column.")},
         {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool,
          QStringLiteral("When windows reopen after a restart, rebuild their columns with the same order, widths, and "
                         "tab groups.")},
@@ -514,9 +517,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // that predates a range change.
     schema.groups[CD::scrollingDragScrollGroup()] = {
         {CD::enabledKey(), CD::scrollingDragScrollEnabled(), QMetaType::Bool,
-         QStringLiteral("Scroll the strip when a dragged window is held near the edge of the working area.")},
+         QStringLiteral("Scroll the strip when a dragged window is held near the edge of the work area.")},
         {CD::triggerWidthKey(), CD::scrollingDragScrollTriggerWidth(), QMetaType::Int,
-         QStringLiteral("How close to the edge of the working area the pointer has to be before the strip can start "
+         QStringLiteral("How close to the edge of the work area the pointer has to be before the strip can start "
                         "scrolling."),
          clampInt(CD::scrollingDragScrollTriggerWidthMin(), CD::scrollingDragScrollTriggerWidthMax())},
         {CD::delayMsKey(), CD::scrollingDragScrollDelayMs(), QMetaType::Int,
@@ -639,6 +642,9 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Shrinks the focused column along the strip by the configured step.")},
         {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString,
          QStringLiteral("Toggles the focused column between filling the work area and a smaller size.")},
+        {CD::maximizeToEdgesKey(), CD::scrollingMaximizeToEdgesShortcut(), QMetaType::QString,
+         QStringLiteral("Toggles the focused column between covering the whole work area with no gaps and its "
+                        "normal size. This is the state the window's maximize button shows.")},
         {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString,
          QStringLiteral("Grows the focused column to fill the empty space visible on screen. Other columns keep their "
                         "size.")},

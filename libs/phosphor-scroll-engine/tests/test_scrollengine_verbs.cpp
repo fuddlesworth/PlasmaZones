@@ -83,6 +83,7 @@ private Q_SLOTS:
     void emptyScreenFocusCrossesInsteadOfDeadEnding();
     void focusEdgeWithNoNeighbourReportsNoTarget();
     void focusOntoAForeignModeNeighbourDefersToTheDaemon();
+    void windowedFullscreenRefusesWhileTheFloatLayerHoldsFocus();
 
 private:
     /// Bare engine: NO geometry providers and NO auto-echo. Only for tests
@@ -288,8 +289,15 @@ void TestScrollEngineVerbs::absoluteWidthAndHeightIntents()
     // 1px column at relayout, which is the hazard the boundary comment
     // names, and nothing drove this arm before.
     engine->setColumnWidth(ColumnWidth::makeProportion(0.0), QStringLiteral("S1"));
+    // Asserted as a SUCCESS, so the pair below reads as "first applied, second
+    // refused as idempotent" rather than "both floored".
+    QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(state->strip().columns().at(state->strip().activeColumnIndex()).width.proportion, MinColumnWidthFraction);
+    const int beforeRefusal = feedback.count();
     engine->setColumnWidth(ColumnWidth::makeProportion(-2.0), QStringLiteral("S1"));
+    // Pinned so `last()` cannot silently read the previous call's record if
+    // this one ever stops emitting.
+    QCOMPARE(feedback.count(), beforeRefusal + 1);
     // A second floored value compares equal to the stored one, so the verb
     // refuses rather than re-applying — the same idempotence contract the
     // exact-repeat case above pins.
@@ -659,8 +667,9 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
     engine->minimizeColumnWidth(QStringLiteral("S1"));
     engine->resetStripToDefaults(QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 14);
+    QCOMPARE(feedback.count(), 15);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));
@@ -777,7 +786,7 @@ void TestScrollEngineVerbs::registryMinimizedStateGatesTheLayerVerbs()
     // ("app|b" → "b"), and upsert never freezes canonical ids, so the
     // engine's tracked ids are untouched.
     QObject owner;
-    ScrollEngine* engine = threeWindows(&owner);
+    ScrollEngine* engine = providerThreeWindows(&owner);
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
     auto* registry = new PhosphorEngine::WindowRegistry(&owner);
@@ -1067,6 +1076,79 @@ void TestScrollEngineVerbs::focusOntoAForeignModeNeighbourDefersToTheDaemon()
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     engine->setCrossSurfaceResolver(nullptr);
+}
+
+// Meta+Alt+Shift+F on a screen whose FLOAT layer holds focus does nothing at
+// all, and this pins that as the deliberate refusal it is.
+//
+// Reported as "the windowed-fullscreen shortcut has problems". Floating the
+// window you are looking at is the ordinary way to land here — floatWindowInternal
+// sets floatingHasFocus whenever the floated window was the active tile — and
+// from the user's side the next press is indistinguishable from a dead
+// keybinding: no geometry moves, no state flips, and until now nothing was
+// logged either.
+//
+// The refusal itself is correct: a float owns no column, and the alternative
+// is acting on the strip's stale active tile, which would fullscreen a window
+// the user is not looking at. What the test fixes in place is that it must
+// stay OBSERVABLE — the feedback names the floating window that actually holds
+// focus, so the OSD can say which window it means.
+//
+// CHARACTERIZATION, not evidence for a fix: the guard, the token and the
+// source slot all pre-date the logging that made this refusal readable. The
+// test exists so the refusal cannot be quietly turned into an action or lose
+// the name it reports, not to demonstrate that the logging works. Logging
+// needs no test.
+void TestScrollEngineVerbs::windowedFullscreenRefusesWhileTheFloatLayerHoldsFocus()
+{
+    QObject owner;
+    ScrollEngine* engine = providerThreeWindows(&owner);
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // c arrived last and holds focus, so floating it moves the FOCUS SIDE to
+    // the float layer without any compositor round trip.
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    engine->setWindowFloat(QStringLiteral("app|c"), true, QStringLiteral("S1"));
+    QVERIFY(state->floatingHasFocus());
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("fullscreen"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    // The SOURCE slot names the floating window holding focus, not the strip's
+    // stale active tile — that is what lets the OSD refer to what the user is
+    // actually looking at.
+    QCOMPARE(feedback.last().at(3).toString(), QStringLiteral("app|c"));
+
+    // Nothing was flagged behind the refusal, on either the floated window or
+    // the tile the strip still considers active.
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|c")));
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|b")));
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
+
+    // A SECOND press while still floating is refused the same way, so the
+    // refusal is a standing property of the state rather than a one-shot.
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
+    // Handing focus back to the strip makes the very same press work, which is
+    // what identifies the float focus as the whole cause.
+    engine->setWindowFloat(QStringLiteral("app|c"), false, QStringLiteral("S1"));
+    QVERIFY(!state->floatingHasFocus());
+    const QString active = state->strip().activeWindowId();
+    // Pinned: an empty id would let isWindowedFullscreen decide the assertion
+    // below instead of the behaviour under test.
+    QVERIFY(!active.isEmpty());
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 3);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("on"));
+    QVERIFY(state->strip().isWindowedFullscreen(active));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineVerbs)

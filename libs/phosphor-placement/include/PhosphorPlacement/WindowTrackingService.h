@@ -381,17 +381,41 @@ public:
 
     /**
      * @brief Look up a window's free (unmanaged) geometry from the unified
-     *        WindowPlacementStore, with appId fallback, and validate it.
+     *        WindowPlacementStore and validate it.
      *
-     * Combines the windowId lookup, appId fallback, and cross-screen validation
-     * into a single call. Returns nullopt if no geometry is recorded.
+     * PER-WINDOW. It does not fall back to a same-app sibling's record: that
+     * was removed in discussion #1028, where a live window with no record of
+     * its own inherited a dead instance's absolute coordinates and was moved to
+     * whatever monitor that instance last occupied. A window with nothing on
+     * record gets nullopt and should be left where it is.
+     *
+     * SCREEN-LOCAL when the caller names a screen: it will not search other
+     * screens for one. When the caller passes an EMPTY screenId it resolves to
+     * the record's OWN screen instead, which can therefore answer a rect for a
+     * monitor the window has since left. That is deliberate — the alternative
+     * is answering nothing at all for every window snap does not track — but a
+     * caller that knows the window's live screen should pass it rather than
+     * relying on the record.
+     *
+     * The rect is also checked against the screen it is filed under, because
+     * the key alone cannot be trusted — see geometryBelongsToScreen, which the
+     * other readers of this store share.
      *
      * @param windowId        Full window ID
-     * @param screenId        Screen where the window currently is (for cross-screen adjustment)
-     * @param exactOnly       If true, skip the appId fallback (strict per-instance lookup)
+     * @param screenId        Screen to resolve against; empty resolves to the
+     *                        record's own screen
      */
-    std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
-                                                    bool exactOnly = false) const override;
+    std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId) const override;
+
+    /// @copydoc PhosphorEngine::IWindowTrackingService::geometryBelongsToScreen
+    ///
+    /// Forwards to the private geometryOverlapsScreen, which is where the
+    /// semantics (physical-output resolution, size-clamped thresholds,
+    /// fail-open) are documented.
+    bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const override
+    {
+        return geometryOverlapsScreen(geometry, screenId);
+    }
 
     /// Write the window's shared free/float geometry into the unified record (the
     /// single float-back store). See IWindowTrackingService::recordFreeGeometry.
@@ -690,18 +714,23 @@ public:
     /**
      * @brief Get geometry for a zone on a specific screen
      * @param zoneId PhosphorZones::Zone UUID string
-     * @param screenId Screen identifier (empty = primary)
+     * @param screenId Screen identifier. With a screen manager wired this must
+     *        name a resolvable output: an empty or unknown id answers an invalid
+     *        rect rather than measuring the zone against the primary monitor
+     *        (see frameScreenIdResolves in navigation.cpp). Without a screen
+     *        manager there is nothing to resolve against and the primary screen
+     *        is used.
      * @return PhosphorZones::Zone geometry in pixels, or invalid QRect if not found
      */
-    QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const override;
+    QRect zoneGeometry(const QString& zoneId, const QString& screenId) const override;
 
     /**
      * @brief Get combined geometry for multiple zones on a specific screen
      * @param zoneIds List of zone UUID strings
-     * @param screenId Screen identifier (empty = primary)
+     * @param screenId Screen identifier, resolved exactly as zoneGeometry() does.
      * @return Union of all zone geometries, or invalid QRect if none found
      */
-    QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId = QString()) const;
+    QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
     /**
      * @brief Populate the resnap buffer for all screens independently.
@@ -1031,6 +1060,28 @@ private:
     // only re-serializes the fields that actually changed.
     void scheduleSaveState(DirtyMask fields = DirtyAll);
     bool isGeometryOnScreen(const QRect& geometry) const;
+
+    /// Does @p geometry meaningfully overlap the screen named @p screenId?
+    ///
+    /// isGeometryOnScreen asks whether a rect is on ANY screen, which cannot
+    /// tell a rect filed under the right screen from one filed under the wrong
+    /// one — both are "on a screen". This asks the question the per-screen free
+    /// geometry map is keyed on.
+    ///
+    /// The two deliberately DIVERGE in three ways, so do not assume one can
+    /// stand in for the other. This one resolves a virtual screen id to its
+    /// physical output (a floating rect is not confined to one subdivision),
+    /// where isGeometryOnScreen iterates effective ids including the virtual
+    /// sub-screens. This one clamps its thresholds to the window's own size, so
+    /// a window smaller than the 100px floor still passes when it lies wholly
+    /// on its screen; isGeometryOnScreen keeps the flat floor its rescue
+    /// question wants. And this one has no QGuiApplication fallback: with no
+    /// ScreenManager it fails open rather than answering from QScreen.
+    ///
+    /// Fails OPEN (true) when the screen cannot be resolved: an unknown or
+    /// not-yet-configured screen must not silently discard a capture, and an
+    /// embedder with no ScreenManager wired has no opinion to enforce.
+    bool geometryOverlapsScreen(const QRect& geometry, const QString& screenId) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 

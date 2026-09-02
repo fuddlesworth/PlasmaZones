@@ -4,10 +4,13 @@
 #include <PhosphorProtocol/AutotileTypes.h>
 #include <PhosphorProtocol/BridgeTypes.h>
 #include <PhosphorProtocol/DragTypes.h>
+#include <PhosphorProtocol/WindowTypes.h>
 
 #include <QDebug>
 #include <QLatin1String>
 #include <QLoggingCategory>
+
+#include <cstdlib>
 
 namespace PhosphorProtocol {
 
@@ -101,21 +104,27 @@ QString TileRequestEntry::validationError() const
     // and visualX/visualY, which this boundary already clamps for the same
     // reason.
     //
-    // Deliberately generous, and deliberately NOT a screen-bounds check: the
-    // scrolling engine parks off-screen columns entirely outside their
-    // screen rect, so a legitimate park origin sits far outside every output.
-    // An over-strict validator here has already broken that once, dropping
-    // every vertical park at its own validationError. These limits are orders
-    // of magnitude past any real display and only catch garbling.
-    constexpr int kMaxWireExtent = 100000;
-    constexpr int kMaxWireOrigin = 1000000;
-    if (width > kMaxWireExtent || height > kMaxWireExtent) {
+    // The ceilings live in WindowTypes.h so this wire and WindowGeometryEntry's
+    // validator cannot drift apart; the rationale for their size, and for their
+    // deliberately NOT being a screen-bounds check, is written up there.
+    constexpr int kMaxWireExtent = MaxWireExtent;
+    constexpr int kMaxWireOrigin = MaxWireOrigin;
+    // Magnitude, not just the upper bound. A NEGATIVE extent passes an
+    // unsigned-looking `>` test, and the consumer's QRect(x, y, w, h) computes
+    // x + w - 1, which overflows for w == INT_MIN whatever x is. The `< 0`
+    // return above catches it on this path today, and mirroring the sibling
+    // validators here means a later edit to that guard cannot silently reopen
+    // the hole.
+    if (std::abs(static_cast<qint64>(width)) > kMaxWireExtent
+        || std::abs(static_cast<qint64>(height)) > kMaxWireExtent) {
         return QStringLiteral("TileRequestEntry: implausible size (windowId=%1 w=%2 h=%3)")
             .arg(windowId)
             .arg(width)
             .arg(height);
     }
-    if (qAbs(x) > kMaxWireOrigin || qAbs(y) > kMaxWireOrigin) {
+    // Widened before the absolute value: qAbs(INT_MIN) is itself undefined
+    // behaviour in int.
+    if (std::abs(static_cast<qint64>(x)) > kMaxWireOrigin || std::abs(static_cast<qint64>(y)) > kMaxWireOrigin) {
         return QStringLiteral("TileRequestEntry: implausible origin (windowId=%1 x=%2 y=%3)")
             .arg(windowId)
             .arg(x)
@@ -173,22 +182,22 @@ QString TileRequestEntry::validationError() const
     if (windowedFullscreen && monocle) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // Column maximize is a strip placement for the same reason windowed
+    // Maximize-to-edges is a strip placement for the same reason windowed
     // fullscreen is, and it is an ACTION on the same terms (the effect drives
     // KWin's maximize bit from it), so the floating pair is rejected rather
     // than stripped.
-    if (columnMaximized && floating) {
-        return QStringLiteral("TileRequestEntry: columnMaximized on a floating entry (windowId=%1)").arg(windowId);
+    if (maximizedToEdges && floating) {
+        return QStringLiteral("TileRequestEntry: maximizedToEdges on a floating entry (windowId=%1)").arg(windowId);
     }
     // Disjoint producers again: monocle only from the autotile engine's
-    // layout_apply, columnMaximized only from the scroll engine's applyLayout.
+    // layout_apply, maximizedToEdges only from the scroll engine's applyLayout.
     // Acted on, the pair would hand one window's maximize bit to two
     // membership sets with independent exits — precisely the monocle ledger's
     // failure mode.
-    if (columnMaximized && monocle) {
-        return QStringLiteral("TileRequestEntry: columnMaximized on a monocle entry (windowId=%1)").arg(windowId);
+    if (maximizedToEdges && monocle) {
+        return QStringLiteral("TileRequestEntry: maximizedToEdges on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // NOT rejected: columnMaximized together with windowedFullscreen. Unlike
+    // NOT rejected: maximizedToEdges together with windowedFullscreen. Unlike
     // the pairs above these are compatible by design — a maximized column can
     // hold a windowed-fullscreen tile, the flags drive DIFFERENT compositor
     // state (maximize bit vs fullscreen state plus layer demotion), and the

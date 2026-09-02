@@ -13,7 +13,7 @@ import QtQuick
 // child's own override.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Popup decoration surfaces")
-    headerText: i18n("Decoration for the transient popups. \"All Popups\" is the default. Each popup can override it.")
+    headerText: i18n("Decoration for the transient popups. “All Popups” is the default. Each popup can override it.")
     surfaceModel: [
         {
             "surfacePath": "popup",

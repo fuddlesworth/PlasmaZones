@@ -538,6 +538,8 @@ public:
                    setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
     Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
                    NOTIFY scrollingRespectMinimumSizeChanged)
+    Q_PROPERTY(bool scrollingCenterShortColumns READ scrollingCenterShortColumns WRITE setScrollingCenterShortColumns
+                   NOTIFY scrollingCenterShortColumnsChanged)
     Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
                    setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
     Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
@@ -654,6 +656,8 @@ public:
                    setScrollingDecreaseColumnWidthShortcut NOTIFY scrollingDecreaseColumnWidthShortcutChanged)
     Q_PROPERTY(QString scrollingMaximizeColumnShortcut READ scrollingMaximizeColumnShortcut WRITE
                    setScrollingMaximizeColumnShortcut NOTIFY scrollingMaximizeColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingMaximizeToEdgesShortcut READ scrollingMaximizeToEdgesShortcut WRITE
+                   setScrollingMaximizeToEdgesShortcut NOTIFY scrollingMaximizeToEdgesShortcutChanged)
     Q_PROPERTY(QString scrollingExpandColumnShortcut READ scrollingExpandColumnShortcut WRITE
                    setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
     Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
@@ -1615,6 +1619,8 @@ public:
     void setScrollingStickyWindowHandling(int handling);
     bool scrollingRespectMinimumSize() const override;
     void setScrollingRespectMinimumSize(bool respect);
+    bool scrollingCenterShortColumns() const override;
+    void setScrollingCenterShortColumns(bool center);
     bool scrollingRestoreStripsOnLogin() const;
     void setScrollingRestoreStripsOnLogin(bool restore);
     bool scrollingRestoreFloatedWindowsOnLogin() const override;
@@ -1661,6 +1667,8 @@ public:
     void setScrollingDecreaseColumnWidthShortcut(const QString& shortcut);
     QString scrollingMaximizeColumnShortcut() const;
     void setScrollingMaximizeColumnShortcut(const QString& shortcut);
+    QString scrollingMaximizeToEdgesShortcut() const;
+    void setScrollingMaximizeToEdgesShortcut(const QString& shortcut);
     QString scrollingExpandColumnShortcut() const;
     void setScrollingExpandColumnShortcut(const QString& shortcut);
     QString scrollingCycleWindowHeightShortcut() const;
