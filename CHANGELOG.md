@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A tiled window grows into its new space when it becomes the only one**: minimizing or closing the second-to-last window on a tiled monitor hands the survivor the whole screen, and sometimes the survivor kept its old size instead and was centred with dead margins either side. PlasmaZones was reading the window's size while the application was still answering the resize request, mistook the old size for a refusal, and then remembered that mistake so the window never recovered. It now waits for the application's answer before deciding anything. The dead margins were also where moving the mouse focused nothing, which is a large part of why focus following the mouse felt broken after rearranging windows ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035)).
+- **Focus no longer sticks to a window after dragging it in float mode**: with drag-to-float and focus-follows-mouse on, dropping a dragged window pinned focus to it. Hovering other windows did nothing, and after clicking one, sweeping the mouse across the floating window captured focus right back. Moving the mouse over a floating window now leaves focus alone in both directions, so floating windows are focused by clicking, and a drag whose outcome the service discarded no longer leaves the window wrongly marked as floating ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035)).
+- **Keep-floating-above stays on the desktop it belongs to**: with the setting that keeps floating windows above others, windows parked on a desktop with no placement mode could acquire keep-above and hold it until the service was stopped. The flag is now granted only to windows on the desktop you are looking at, and a window that leaves it gets the user's own setting back on the next pass ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035)).
+- **A minimized window frees its tile even when the service was mid-restart**: a window minimized while the service was still reconnecting could keep its tile occupied for the whole session, because the one message that frees it was dropped and never resent. It is resent on every later pass now. The retry that puts a minimized window back also no longer fires the same doomed request in bursts of four after every monitor change when the service has already said the window has nowhere to go ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035)).
+- **The float shortcut acts on the window you meant**: pressing the float toggle right after dropping a dragged window could do nothing twice and then fling the window to a remembered position, because the shortcut looked the window up in bookkeeping the drag had just moved it out of. The shortcut now resolves the window the same way every other float action does ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035)).
+
 ## [3.4.6] - 2026-09-01
 
 ### Added
