@@ -242,6 +242,7 @@ public:
         cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
         m_unfloatRetryAttempts.remove(windowId);
+        m_unfloatExhaustedScreens.remove(windowId);
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
@@ -364,6 +365,16 @@ private:
     QHash<QString, quint64> m_unfloatInFlight;
     quint64 m_unfloatRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
+    /// Screen a window's unfloat retry budget was exhausted on. A budget that
+    /// ran out against a daemon REFUSAL (queryWindowFloating still true after
+    /// every attempt — e.g. an unfloat with no restore target, which keeps the
+    /// window floating and emits nothing) is terminal for that screen: the
+    /// refusal does not depend on the managed-screen set, so the sweep's
+    /// budget refund on every screens change just re-armed a hopeless 4-call
+    /// burst, indefinitely. The refund now requires the window to be on a
+    /// DIFFERENT screen than the one it exhausted on. Cleared with the rest of
+    /// the retry state (success, close, adoption, session reset).
+    QHash<QString, QString> m_unfloatExhaustedScreens;
     // Snap membership retained only as minimize provenance while daemon-owned
     // visual placement state is unavailable.
     QSet<QString> m_restartSnapCandidates;

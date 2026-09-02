@@ -152,6 +152,7 @@ void SnapHandler::clearSnapTracking()
     // depends on. The retry budget is per-session too.
     m_pendingMinimizeFloat.cancelAll();
     m_unfloatRetryAttempts.clear();
+    m_unfloatExhaustedScreens.clear();
     for (auto it = m_unfloatInFlight.cbegin(); it != m_unfloatInFlight.cend(); ++it) {
         m_minimizeFloatedWindows.insert(it.key());
     }
@@ -802,6 +803,7 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                             m_unfloatInFlight.remove(windowId);
                             m_minimizeFloatedWindows.remove(windowId);
                             m_unfloatRetryAttempts.remove(windowId);
+                            m_unfloatExhaustedScreens.remove(windowId);
                             m_effect->slotWindowFloatingChanged(windowId, false, QString());
                         });
             });
@@ -809,8 +811,16 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
 
 void SnapHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
 {
-    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)
-        || m_unfloatRetryAttempts.value(windowId) >= kSnapMaxUnfloatRetries) {
+    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)) {
+        return;
+    }
+    if (m_unfloatRetryAttempts.value(windowId) >= kSnapMaxUnfloatRetries) {
+        // Budget exhausted: record WHERE, so the sweep's refund can tell a
+        // genuine situation change (window on a new screen) from the same
+        // screens-change churn that already failed — see the member doc.
+        if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
+            m_unfloatExhaustedScreens.insert(windowId, m_effect->getWindowScreenId(w));
+        }
         return;
     }
     KWin::EffectWindow* window = m_effect->findWindowById(windowId);
@@ -876,7 +886,21 @@ void SnapHandler::retryVisibleMinimizeFloats()
             }
             continue;
         }
+        // Refuse the refund when the budget was exhausted on THIS screen: the
+        // daemon's refusal (still-floating, no restore target) does not read
+        // the managed-screen set, so re-driving the same dispatch against the
+        // same screen just burns another full retry burst — observed as 4x
+        // setWindowFloatingForScreen(false) groups repeating for minutes
+        // (Discussion #1028). A window that actually moved screens gets its
+        // refund; so does one whose unfloat later succeeds (the marker clears
+        // with the rest of the retry state).
+        if (m_unfloatExhaustedScreens.value(windowId) == screenId) {
+            qCDebug(lcEffect) << "Snap: keeping exhausted unfloat budget for" << windowId << "on unchanged screen"
+                              << screenId;
+            continue;
+        }
         m_unfloatRetryAttempts.remove(windowId);
+        m_unfloatExhaustedScreens.remove(windowId);
         commitUnminimizeUnfloat(window, windowId, screenId);
     }
 }
