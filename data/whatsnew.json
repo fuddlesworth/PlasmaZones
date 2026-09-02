@@ -1,7 +1,7 @@
 {
     "releases": [
         {
-            "version": "3.4.7",
+            "version": "3.4.8",
             "date": "2026-09-02",
             "highlights": [
                 "Removed: Put windows back on their virtual desktop, and the setting for it, since it moved windows around unpredictably while you were still logging in. Rules that route a window to a desktop are unaffected (#1034)",
