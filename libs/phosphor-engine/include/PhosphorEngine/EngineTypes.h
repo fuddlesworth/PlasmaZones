@@ -94,14 +94,15 @@ inline WindowKind clampWindowKindFromWire(int wire)
 /// Why a snap restore is being resolved. Replaces the `isOpenPath` bool the
 /// Snap.resolveWindowRestore wire used to carry.
 ///
-/// The bool conflated FIVE drivers into "open / not open", and two daemon-side
-/// gates read it: the cross-desktop session restore, and the cross-screen tile
-/// reclaim. Both genuinely want "is this an open", so both are `== Open` and
-/// nothing changed for them. What the bool could NOT express is the
-/// DesktopArrival re-drive, which is a login-restore continuation rather than a
-/// user action — it must skip the desktop restore (it has just arrived; moving
-/// it again would bounce it straight back off) while still being eligible for
-/// the reclaim, which the bool permanently denied it.
+/// The bool conflated FIVE drivers into "open / not open". The daemon-side gate
+/// that reads it is the cross-screen tile reclaim, which genuinely wants "is
+/// this an open", so it is `== Open` and nothing changed for it. What the bool
+/// could NOT express is the DesktopArrival re-drive. That is the continuation of
+/// an open whose window a RouteToDesktop rule sent to another desktop, so the
+/// effect parked it and re-drives once the desktop is shown. It is not a user
+/// action and not an open of its own: it must be eligible for the reclaim, which
+/// the bool permanently denied it, while retiring no reclaim credit, since the
+/// open pass that preceded it already spent this open's one credit.
 ///
 /// A third gate reads it on the EFFECT side: the open-path setFrameGeometry
 /// shadow seed, which is what lets the daemon translate a bare RouteToScreen for

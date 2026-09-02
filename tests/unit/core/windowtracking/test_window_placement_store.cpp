@@ -39,6 +39,71 @@ class TestWindowPlacementStore : public QObject
     }
 
 private Q_SLOTS:
+    // A sibling that still holds its cross-screen reclaim credit survives the
+    // close collapse. Driven in the PRODUCTION ORDER, which is what makes this
+    // a real test: WindowTrackingAdaptor::windowClosed captures (and the capture
+    // runs the collapse) and only THEN calls markInstanceClosed. Asserting the
+    // other way round would let a "carry the credit onto the keeper" fix look
+    // correct while being wiped by the revoke that follows.
+    void testCollapsePureFloatSiblings_keepsASiblingThatStillHoldsTheReclaimCredit()
+    {
+        WindowPlacementStore store;
+        const QString appId = QStringLiteral("firefox");
+        const QString closing = QStringLiteral("firefox|closing");
+        const QString persisted = QStringLiteral("firefox|persisted");
+
+        // The un-reopened record from a previous session, still credit-bearing,
+        // sharing a screen with the closing window so it IS a collapse candidate
+        // on geometry alone.
+        store.record(makePlacement(persisted, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(10, 20, 300, 400)));
+        store.record(makePlacement(closing, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(50, 60, 300, 400)));
+        QVERIFY(holdsCredit(store, persisted));
+
+        // Close path, in order: collapse first, revoke second.
+        store.collapsePureFloatSiblings(appId, closing);
+        QVERIFY(store.markInstanceClosed(closing));
+
+        bool persistedSurvives = false;
+        for (const WindowPlacement& p : store.records()) {
+            if (p.windowId == persisted) {
+                persistedSurvives = true;
+            }
+        }
+        QVERIFY2(persistedSurvives, "a credit-bearing sibling must not be pruned by the close collapse");
+        QVERIFY2(holdsCredit(store, persisted), "and it must keep the credit the reclaim reads");
+        QVERIFY2(!holdsCredit(store, closing), "the closing record's own credit is revoked, as before");
+    }
+
+    // The other half of the contract: the guard above must not blunt the
+    // collapse's actual job. A sibling that closed earlier in THIS session has
+    // already had its credit revoked, so it is stale duplicate float memory and
+    // still prunes — which is the case the collapse exists for.
+    void testCollapsePureFloatSiblings_stillPrunesASiblingClosedEarlierThisSession()
+    {
+        WindowPlacementStore store;
+        const QString appId = QStringLiteral("firefox");
+        const QString earlier = QStringLiteral("firefox|earlier");
+        const QString closing = QStringLiteral("firefox|closing");
+
+        store.record(makePlacement(earlier, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(10, 20, 300, 400)));
+        // Its own mid-session close revokes its credit, which is what marks it
+        // as superseded rather than as reclaim evidence.
+        QVERIFY(store.markInstanceClosed(earlier));
+        QVERIFY(!holdsCredit(store, earlier));
+
+        store.record(makePlacement(closing, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(50, 60, 300, 400)));
+
+        QVERIFY2(store.collapsePureFloatSiblings(appId, closing),
+                 "a credit-less same-screen pure-float sibling is still stale duplicate memory");
+        for (const WindowPlacement& p : store.records()) {
+            QVERIFY2(p.windowId != earlier, "the superseded sibling is pruned");
+        }
+    }
+
     void testRecordAndTake_exact()
     {
         WindowPlacementStore store;
@@ -181,43 +246,6 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 0);
     }
 
-    void testGeometryOnlyWriteDoesNotDisarmThePersistedSessionFlag()
-    {
-        // The disarm is scoped to a real ENGINE capture on purpose. Every open
-        // writes a geometry-only record first (recordFreeGeometry and the
-        // bringup frame-geometry seed), so widening that scope by one brace
-        // would disarm every record before any window is placed and silently
-        // kill the cross-desktop restore with no other test failing.
-        WindowPlacementStore store;
-        WindowPlacement seed = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
-                                             WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
-        seed.virtualDesktop = 3;
-        store.record(seed);
-
-        WindowPlacementStore loaded;
-        loaded.deserialize(store.serialize());
-        QVERIFY(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession);
-
-        // Geometry only: no engine slot at all.
-        WindowPlacement geometryOnly;
-        geometryOnly.windowId = QStringLiteral("firefox|u");
-        geometryOnly.appId = QStringLiteral("firefox");
-        geometryOnly.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(5, 6, 700, 800));
-        loaded.record(geometryOnly);
-
-        QVERIFY2(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
-                 "a geometry-only write must leave the one-shot armed");
-
-        // And the positive arm still disarms, so the guard above is not simply
-        // asserting that nothing ever clears the flag.
-        WindowPlacement capture = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
-                                                WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
-        capture.virtualDesktop = 1;
-        loaded.record(capture);
-        QVERIFY2(!loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
-                 "a real engine capture must disarm the one-shot");
-    }
-
     void testClaimForOpenPairsEachInstanceWithItsOwnRecord()
     {
         // Two windows of one app, remembered on DIFFERENT desktops. Before the
@@ -257,7 +285,7 @@ private Q_SLOTS:
         // same record rather than re-choosing.
         QCOMPARE(store.claimForOpen(w1, QStringLiteral("app"))->windowId, claim1->windowId);
 
-        // peek — what the cross-desktop restore reads — agrees with the claim.
+        // peek — the non-consuming read — agrees with the claim.
         QCOMPARE(store.peek(w1, QStringLiteral("app"))->windowId, claim1->windowId);
         QCOMPARE(store.peek(w2, QStringLiteral("app"))->windowId, claim2->windowId);
 
@@ -359,41 +387,6 @@ private Q_SLOTS:
         store.releaseOpenClaim(w1);
         QVERIFY2(store.claimForOpen(w2, QStringLiteral("app")).has_value(),
                  "releasing the claim must hand the record back");
-    }
-
-    void testFromPersistedSessionIsSetByLoadAndNeverSerialized()
-    {
-        // The cross-desktop login restore is armed by this transient flag, and
-        // its whole safety argument is that the flag cannot round-trip: if it
-        // were ever written to session.json, every load would re-arm every
-        // record and windows would be teleported across desktops for the rest
-        // of time rather than once after a logout.
-        WindowPlacementStore store;
-        WindowPlacement p = makePlacement(QStringLiteral("firefox|u"), QStringLiteral("firefox"),
-                                          WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
-        p.virtualDesktop = 3;
-        store.record(p);
-
-        // A live capture is never armed.
-        QVERIFY(!store.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession);
-
-        // A load IS armed — this is the only producer.
-        WindowPlacementStore loaded;
-        loaded.deserialize(store.serialize());
-        QVERIFY2(loaded.peek(QStringLiteral("firefox|u"), QStringLiteral("firefox"))->fromPersistedSession,
-                 "deserialize must arm the one-shot");
-
-        // Asserted on the key BY NAME rather than by round-tripping: a
-        // round-trip comparison would pass even if the flag were written, since
-        // reading it back produces the same value the load sets anyway.
-        const QJsonObject json = loaded.serialize();
-        const QJsonArray bucket = json.value(QStringLiteral("firefox")).toArray();
-        QCOMPARE(bucket.size(), 1);
-        const QJsonObject rec = bucket.at(0).toObject();
-        for (const QString& key : rec.keys()) {
-            QVERIFY2(!key.contains(QStringLiteral("ersisted"), Qt::CaseInsensitive),
-                     qPrintable(QStringLiteral("session flag leaked into serialized output as key: ") + key));
-        }
     }
 
     void testSerializeRoundTrip()
@@ -1603,8 +1596,7 @@ private Q_SLOTS:
         // wholesale — so the dead window's credit revocation and close
         // timestamp rode across onto a window that is very much alive. The
         // consumed record IS the live window's history now; its predecessor's
-        // death metadata is not. (Same hazard the fromPersistedSession clear
-        // on that path exists for.)
+        // death metadata is not.
         WindowPlacementStore store;
         store.record(makePlacement(QStringLiteral("app|dead"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1")));

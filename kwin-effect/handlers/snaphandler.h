@@ -150,10 +150,10 @@ public:
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
     /// @p reason says WHY this resolve is running. It is threaded to the daemon,
-    /// which gates the cross-desktop session restore and the cross-screen tile
-    /// reclaim on it: an unminimize must never teleport a window across
-    /// monitors, while the desktop-arrival re-drive DOES want the reclaim, which
-    /// is the distinction the old isOpenPath bool could not make.
+    /// which gates the cross-screen tile reclaim and the per-open reclaim-credit
+    /// burn on it: an unminimize must never teleport a window across monitors,
+    /// while the desktop-arrival re-drive DOES want the reclaim (but not the
+    /// burn), which is the distinction the old isOpenPath bool could not make.
     /// It defaults to Open so the deferred-routing flush call sites, which
     /// pass neither trailing argument, keep the open-path semantics they rely on
     /// — including the frame-geometry shadow seed that RouteToScreen needs.

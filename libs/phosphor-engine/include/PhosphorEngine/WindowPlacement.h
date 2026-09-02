@@ -125,19 +125,6 @@ struct WindowPlacement
     /// as restore evidence); never written to JSON.
     qint64 closedAtMsecs = 0;
 
-    /// TRANSIENT, never serialized: true only for a record this daemon read back
-    /// from disk at startup and has not yet re-captured live. It is what makes
-    /// the cross-desktop restore (WindowTrackingAdaptor::applyPersistedDesktopRestore)
-    /// a genuine login-time behaviour without a timer — the flag can only ever be
-    /// set on a record that predates this daemon's start, and the first live
-    /// engine capture clears it, so the restore fires at most once per record and
-    /// never for a placement made in this session.
-    ///
-    /// Deliberately absent from sameContentAs: it is not part of the persisted
-    /// content, and letting it count as a change would make the clearing merge
-    /// re-mark the store dirty and reschedule the save timer on every capture.
-    bool fromPersistedSession = false;
-
     bool isValid() const
     {
         return !windowId.isEmpty() && !appId.isEmpty();
@@ -426,22 +413,6 @@ struct WindowPlacement
         // one legacy session behaves exactly as before, and the next save
         // stamps the derived value. Not migration code — a default.
         p.reclaimEligible = obj.value(QLatin1String("liveAtSave")).toBool(true);
-        // fromJson is the primary producer of this flag, but NOT the only one:
-        // WindowPlacementStore::record()'s append branch copies an incoming
-        // record wholesale, so a persisted record replayed through record()
-        // (deserialize) or re-recorded by takeForReopen carries the flag with
-        // it. Both of those are startup-time or already-spent paths.
-        //
-        // Deserialize itself is not unique either. WTA::loadState runs from the
-        // WindowTrackingAdaptor constructor, and again through the engines' load
-        // delegate (wired for the snap, autotile and scroll engines) driven from
-        // Daemon::finalizeStartup, so the store is loaded at least twice per
-        // startup and every load re-arms every record. The flag's correctness
-        // therefore rests on all of those calls being startup-time, which is why
-        // it is ALSO cleared by the first live engine capture rather than
-        // relying on the load being unique. There is no matching key in toJson:
-        // the flag must not survive a save/load round trip.
-        p.fromPersistedSession = true;
         return p;
     }
 };
