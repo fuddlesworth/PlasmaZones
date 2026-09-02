@@ -401,6 +401,18 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
             if (KWin::LogicalOutput* corpseOutput = outputForScreenId(corpseScreen)) {
                 frozen += m_stripViewAnimator->offsetFor(corpseOutput);
             }
+            // A scroll-managed corpse renders ABOVE the strip for the whole
+            // close leg (niri renders closing windows on top the same way).
+            // The engine reflows the survivors immediately on a close, so the
+            // vacated slot's neighbour animates in while the corpse is still
+            // painting; in normal stacking whichever window happens to sit
+            // higher wins those pixels and the two animations visibly fight.
+            // Elevated, the close animation plays out cleanly over the
+            // settling strip. Applies with or without our close shader — a
+            // foreign (KWin) close animation overlaps the reflow the same
+            // way. No teardown needed: the elevation lives on the WindowItem
+            // and dies with the deleted window.
+            w->elevate(true);
         }
         if (!frozen.isNull()) {
             m_scrollCorpseFreeze.insert(w, frozen);
