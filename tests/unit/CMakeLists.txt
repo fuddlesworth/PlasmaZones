@@ -1743,6 +1743,7 @@ target_link_libraries(test_snappingshaders_page_controller
         Qt6::Core
         Qt6::Gui
         PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
+        PhosphorAudio::PhosphorAudio  # shaderpreviewcontroller.h -> ishaderpreviewbackend.h include chain
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
