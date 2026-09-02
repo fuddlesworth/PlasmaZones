@@ -300,19 +300,20 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // The validator is the one thing that differs. canonicalWheelTriggerList
     // drops the AlwaysActive sentinel, which means "match whatever is held"
     // to the subset-matching drag readers but folds to "match only when
-    // NOTHING is held" under the exact matcher these lists are read with, and
-    // it strips the mouse button, since a wheel chord is modifiers only. See
+    // NOTHING is held" under the exact matcher these lists are read with.
+    // Mouse buttons ARE stored: holding a button while turning the wheel is a
+    // legal chord, the same shapes the drag lists take. See
     // canonicalWheelTriggerList for the whole argument.
     schema.groups[CD::scrollingWheelFocusGroup()] = {
         {CD::triggersKey(), CD::scrollingWheelFocusTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier held while turning the wheel to move focus from column to column. Each entry is a "
-                        "{modifier, mouseButton} pair."),
+         QStringLiteral("Modifier or mouse button held while turning the wheel to move focus from column to column. "
+                        "Each entry is a {modifier, mouseButton} pair."),
          canonicalWheelTriggerList},
     };
     schema.groups[CD::scrollingWheelViewGroup()] = {
         {CD::triggersKey(), CD::scrollingWheelViewTriggers(), QMetaType::QVariantList,
-         QStringLiteral("Modifier held while turning the wheel to move the view along the strip without changing which "
-                        "column has focus. Each entry is a {modifier, mouseButton} pair."),
+         QStringLiteral("Modifier or mouse button held while turning the wheel to move the view along the strip "
+                        "without changing which column has focus. Each entry is a {modifier, mouseButton} pair."),
          canonicalWheelTriggerList},
     };
 
