@@ -848,12 +848,22 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
 
-    // Notify autotile engine of focus change so m_windowToScreen is updated
-    if (m_tilingHandler->isManagedScreen(screenId)) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Tiling,
-                                                       QStringLiteral("notifyWindowFocused"), {windowId, screenId},
-                                                       QStringLiteral("notifyWindowFocused"));
-    }
+    // Notify the placement engines of the focus change so m_windowToScreen is
+    // updated. NOT gated on isManagedScreen: the managed set tracks the
+    // CURRENT desktop and is rebuilt only by the daemon's asynchronous
+    // announce, while a cross-desktop activation (taskbar click, alt-tab into
+    // another desktop) fires before either the desktopChanged signal or that
+    // announce lands — so when the desktop being LEFT runs no placement mode
+    // the gate read an empty set and dropped the one report that centers the
+    // destination strip on the clicked window. The daemon routes safely on
+    // its own: reportScreenDesktop above already switched its context to the
+    // destination desktop on the same ordered connection, engineOwningScreen
+    // falls back for exactly this desktop-switch window, and every engine's
+    // windowFocused self-guards on window tracking, so an activation on a
+    // genuinely unmanaged screen is a routed no-op rather than a lost report.
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Tiling,
+                                                   QStringLiteral("notifyWindowFocused"), {windowId, screenId},
+                                                   QStringLiteral("notifyWindowFocused"));
     return true;
 }
 
