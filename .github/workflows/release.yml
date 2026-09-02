@@ -436,15 +436,26 @@ jobs:
         #      and try once more. Single retry is enough — if the
         #      second pass still fails, the failure is real and we
         #      want the release to block rather than loop forever.
+        #
+        #   3. `--allow-downgrade` (added after run 33679573873): the skew
+        #      also happens the other way round — the container image is
+        #      built from a NEWER snapshot than the mirror's metadata
+        #      (image had glibc 2.44, mirror only offered glibc-devel
+        #      2.43), so rpm-build's glibc-devel dep is only satisfiable
+        #      by downgrading glibc. Non-interactive zypper refuses the
+        #      downgrade and exits 4, and no amount of retrying fixes it
+        #      because the mirror can stay behind for hours. Downgrading
+        #      to the mirror's own consistent snapshot is safe on a
+        #      throwaway CI container.
         run: |
           set -euo pipefail
           install_with_retry() {
               zypper -n --gpg-auto-import-keys refresh --force
-              if ! zypper -n install "$@"; then
+              if ! zypper -n install --allow-downgrade "$@"; then
                   echo "::warning::zypper install failed; sleeping 60s and retrying after metadata refresh"
                   sleep 60
                   zypper -n --gpg-auto-import-keys refresh --force
-                  zypper -n install "$@"
+                  zypper -n install --allow-downgrade "$@"
               fi
           }
           install_with_retry git rpm-build rpmdevtools
@@ -463,11 +474,11 @@ jobs:
           set -euo pipefail
           install_with_retry() {
               zypper -n --gpg-auto-import-keys refresh --force
-              if ! zypper -n install "$@"; then
+              if ! zypper -n install --allow-downgrade "$@"; then
                   echo "::warning::zypper install failed; sleeping 60s and retrying after metadata refresh"
                   sleep 60
                   zypper -n --gpg-auto-import-keys refresh --force
-                  zypper -n install "$@"
+                  zypper -n install --allow-downgrade "$@"
               fi
           }
           install_with_retry \
