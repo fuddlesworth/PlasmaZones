@@ -562,7 +562,7 @@ void ScrollEngine::cancelDragInsertPreview()
             // for it this is a no-op re-assertion of the same pair. An
             // auto-scrolled hold keeps the scrolled view instead
             // (viewScrolledDuringHold's contract).
-            targetState->strip().restoreViewAnchor(p.targetViewAnchorAtBegin, layoutParamsForScreen(p.targetScreenId));
+            targetState->strip().restoreViewAnchor(p.targetViewAnchorAtBegin, params);
             targetState->strip().setViewDetached(p.targetViewDetachedAtBegin);
         }
         applyLayout(p.targetScreenId, false);
