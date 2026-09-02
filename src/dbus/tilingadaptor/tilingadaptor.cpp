@@ -666,38 +666,13 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // baked into the parked entry instead.
     PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
     bool ruleRouted = false;
-    bool desktopRuleMatched = false;
     if (m_windowTrackingAdaptor) {
-        const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId,
-                                                                                  &ruleRouted, &desktopRuleMatched);
+        const QString routed =
+            m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId, &ruleRouted);
         if (!routed.isEmpty()) {
             routedEntry.screenId = routed;
         }
     }
-    // Cross-desktop session restore, ahead of every placement path below. A
-    // window whose persisted record names a virtual desktop other than the one
-    // it reopened on is sent back there and dispatched NO FURTHER this time —
-    // the engines insert into the screen's CURRENT desktop context, so placing
-    // it now would tile it into the wrong desktop's state. The effect's
-    // desktop-return catch-scan re-announces it on arrival and this same
-    // dispatch then runs with the two contexts in agreement.
-    //
-    // Suppressed by a matched DESKTOP directive only, not by `ruleRouted`:
-    // applyOpenRoutingForTiling has already emitted this window's RouteToDesktop
-    // move if one matched, and a remembered desktop must not fight an explicit
-    // directive. A RouteToScreen or SnapToZone match (which also sets
-    // `ruleRouted`) says nothing about which desktop the window belongs on, so
-    // gating on that would let a bare move-to-monitor rule silently disable the
-    // remembered desktop here while leaving it on for snapping screens.
-    if (!desktopRuleMatched && m_windowTrackingAdaptor
-        && m_windowTrackingAdaptor->applyPersistedDesktopRestore(routedEntry.windowId)) {
-        // No parked entry to keep: the catch-scan announce is the retry, and a
-        // park would additionally resurrect the window on the next unrelated
-        // screens announce, before it has reached its desktop.
-        removeUnclaimedOpen(routedEntry.windowId);
-        return;
-    }
-
     // An explicit routing/placement directive outranks the
     // remembered-placement reclaim — same precedence the snap facade
     // applies. Keyed on the directive MATCHING, not on a redirect actually

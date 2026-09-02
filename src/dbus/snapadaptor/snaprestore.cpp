@@ -214,41 +214,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // be routed to a desktop whether or not it snaps (and even when it doesn't
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
     // early-return below.
-    const bool desktopRuleMatched = m_adaptor->applyOpenDesktopRouting(windowId, screenId);
-
-    // Cross-desktop session restore — the snap-mode channel's arm of the same
-    // behaviour TilingAdaptor::dispatchWindowOpened runs for the tiling engines.
-    // Ahead of the engine resolve below and returning without snapping: the
-    // window is on its way to a desktop this screen is not showing, and snapping
-    // it into the CURRENT desktop's layout would place it where the user cannot
-    // see it and record a zone on the wrong desktop. The record is deliberately
-    // left unconsumed: the effect parks the window on the desktop move
-    // (SnapHandler::armDesktopArrivalRestore) and re-enters this slot with
-    // RestoreReason::DesktopArrival once that desktop is shown, which is when the zone
-    // resolves against the layout the window actually landed in.
-    //
-    // Suppressed by a matched RouteToDesktop, mirroring the tiling channel: the
-    // rule already named this window's desktop.
-    //
-    // Open only, matching the cross-screen reclaim below: the four non-open
-    // drivers of this slot (the unminimize of a daemon-restart orphan, the
-    // pending-restores sweep, the daemon-restart stacking sweep, and the
-    // desktop-arrival re-drive itself) must not teleport a window across
-    // desktops. DesktopArrival in particular has JUST landed where the record
-    // wanted it — moving it again would bounce it straight back off.
-    //
-    // Behind the disabled-context gate that applySnapResult applies to every
-    // zone placement this file makes. A user who turned PlasmaZones off for this monitor, desktop or
-    // activity expects it to leave their windows alone there, and moving one to
-    // another desktop is the most visible thing it could do. Checked against the
-    // screen the window OPENED on, since that is the context being acted in —
-    // applySnapResult's gate below cannot cover this path, because it keys on a
-    // placement result that does not exist yet here.
-    const bool contextDisabled =
-        m_contextResolver != nullptr && m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
-    if (isOpen && !desktopRuleMatched && !contextDisabled && m_adaptor->applyPersistedDesktopRestore(windowId)) {
-        return;
-    }
+    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);

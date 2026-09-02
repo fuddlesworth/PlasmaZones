@@ -1549,19 +1549,6 @@ public:
         Q_EMIT restoreWindowsToZonesOnLoginChanged();
         Q_EMIT settingsChanged();
     }
-    bool restoreWindowsToDesktopOnLogin() const override
-    {
-        return m_restoreWindowsToDesktopOnLogin;
-    }
-    void setRestoreWindowsToDesktopOnLogin(bool value) override
-    {
-        if (m_restoreWindowsToDesktopOnLogin == value) {
-            return;
-        }
-        m_restoreWindowsToDesktopOnLogin = value;
-        Q_EMIT restoreWindowsToDesktopOnLoginChanged();
-        Q_EMIT settingsChanged();
-    }
     bool snappingRestoreFloatedWindowsOnLogin() const override
     {
         return m_snappingRestoreFloatedWindowsOnLogin;
@@ -3059,7 +3046,6 @@ private:
     bool m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
     bool m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
     bool m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
-    bool m_restoreWindowsToDesktopOnLogin = ConfigDefaults::restoreWindowsToDesktopOnLogin();
     bool m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
     bool m_showOsdOnDesktopSwitch = ConfigDefaults::showOsdOnDesktopSwitch();
     bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();

@@ -1071,9 +1071,9 @@ public:
     /// placementZonesByRule seeds.
     ///
     /// Returns whether a RouteToDesktop rule MATCHED — true even when its target
-    /// failed the 1-based guard and no move was emitted, because the caller uses
-    /// this to suppress applyPersistedDesktopRestore and a rule that owns the
-    /// window's desktop must win whether or not its payload was usable.
+    /// failed the 1-based guard and no move was emitted, so a caller can tell a
+    /// rule that owns the window's desktop from one that never matched,
+    /// whether or not its payload was usable.
     bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as
@@ -1092,15 +1092,8 @@ public:
     /// cross-screen-reclaim veto applies the same precedence the snap facade
     /// does. The two answers are deliberately separate; overloading the empty
     /// return let the two channels drift apart.
-    ///
-    /// @p desktopDirectiveMatched, when non-null, is set true only when a
-    /// RouteToDesktop directive matched. It is deliberately SEPARATE from
-    /// @p directiveMatched, which is also set by RouteToScreen and SnapToZone:
-    /// a rule that pins a window to a monitor says nothing about which virtual
-    /// desktop it belongs on, so it must not suppress the cross-desktop session
-    /// restore. This is the same split the snap facade applies.
     QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
-                                      bool* directiveMatched = nullptr, bool* desktopDirectiveMatched = nullptr);
+                                      bool* directiveMatched = nullptr);
 
     /// Canonical key for daemon-local per-window shadow maps, and the canonical
     /// form sibling adaptors must agree on for per-window state. Window ids
@@ -1138,38 +1131,6 @@ public:
     /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
     /// Returns whether the action MATCHED (see applyOpenDesktopRouting).
     bool emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
-
-    /// Cross-desktop session restore, run on BOTH open channels ahead of any
-    /// placement (TilingAdaptor::dispatchWindowOpened for the tiling engines,
-    /// SnapAdaptor::resolveWindowRestore for snapping).
-    ///
-    /// A Wayland session restores no virtual-desktop membership of its own, so
-    /// every window reopens on whichever desktop is current and a multi-desktop
-    /// layout collapses onto one. The placement records already carry the
-    /// desktop; this asks the compositor to put the window back on it.
-    ///
-    /// Returns TRUE when a move was requested, and the caller must then place
-    /// NOTHING: the window is on its way to a desktop this screen is not
-    /// showing, and the engines insert into the screen's CURRENT context
-    /// (AutotileEngine::currentKeyForScreen and its twins), so placing now would
-    /// tile the window into the wrong desktop's state and immediately strand it
-    /// off-screen. The effect's desktop-return catch-scan
-    /// (TilingHandler::slotScreensChanged) re-announces it when that desktop is
-    /// next shown, and the ordinary restore machinery then runs with the record
-    /// context and the live context finally in agreement — which is also why the
-    /// record must not be consumed here.
-    ///
-    /// Gated on ISettings::restoreWindowsToDesktopOnLogin AND on the record
-    /// carrying WindowPlacement::fromPersistedSession, so it can only fire for a
-    /// placement that predates this daemon's start. It CLEARS that flag on the
-    /// record it acted on, which is what makes "at most once per record" hold
-    /// even when the engine restore declines and never consumes the record.
-    /// Suppressed on BOTH channels by a matched RouteToDesktop directive, and by
-    /// that directive alone: such a rule is an explicit instruction and outranks
-    /// a remembered desktop. It is deliberately NOT suppressed by a RouteToScreen
-    /// or SnapToZone match, which pin the window's monitor or zone and say
-    /// nothing about which virtual desktop it belongs on.
-    bool applyPersistedDesktopRestore(const QString& windowId);
 
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.

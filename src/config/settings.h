@@ -241,8 +241,6 @@ public:
                    setSnappingStickyWindowHandlingInt NOTIFY snappingStickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
-    Q_PROPERTY(bool restoreWindowsToDesktopOnLogin READ restoreWindowsToDesktopOnLogin WRITE
-                   setRestoreWindowsToDesktopOnLogin NOTIFY restoreWindowsToDesktopOnLoginChanged)
     Q_PROPERTY(bool snappingRestoreFloatedWindowsOnLogin READ snappingRestoreFloatedWindowsOnLogin WRITE
                    setSnappingRestoreFloatedWindowsOnLogin NOTIFY snappingRestoreFloatedWindowsOnLoginChanged)
     Q_PROPERTY(bool autotileRestoreFloatedWindowsOnLogin READ autotileRestoreFloatedWindowsOnLogin WRITE
@@ -1076,8 +1074,6 @@ public:
     void setSnappingStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
-    bool restoreWindowsToDesktopOnLogin() const override;
-    void setRestoreWindowsToDesktopOnLogin(bool restore) override;
     bool snappingRestoreFloatedWindowsOnLogin() const override;
     void setSnappingRestoreFloatedWindowsOnLogin(bool restore) override;
     bool autotileRestoreFloatedWindowsOnLogin() const override;

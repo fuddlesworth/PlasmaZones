@@ -241,10 +241,9 @@ bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
         // Logged rather than passed over: the validators above make this
         // unreachable from a stored rule, so seeing it means one of them has
         // been relaxed or bypassed, and the window silently keeps whatever
-        // desktop it opened on while still suppressing its remembered one.
+        // desktop it opened on.
         qCWarning(lcDbusWindow) << "open-routing: matched RouteToDesktop for" << windowId
-                                << "carries an unusable target" << desktop
-                                << "— suppressing the remembered desktop without moving the window";
+                                << "carries an unusable target" << desktop << "— not moving the window";
     }
     return true;
 }
@@ -399,11 +398,8 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
 }
 
 QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
-                                                         bool* directiveMatched, bool* desktopDirectiveMatched)
+                                                         bool* directiveMatched)
 {
-    if (desktopDirectiveMatched) {
-        *desktopDirectiveMatched = false;
-    }
     // Owned by this function, not the caller: a set-only out-param leaves a
     // caller's pre-set value standing on every no-match path, which reads as
     // "a rule matched" and silently vetoes the reclaim.
@@ -422,18 +418,11 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
 
-    // RouteToDesktop is engine-neutral — emit it for autotile windows too. The
-    // return is reported separately from `directiveMatched` so the caller can
-    // suppress the cross-desktop session restore on a DESKTOP directive alone,
-    // the way the snap facade does. Folding it into `directiveMatched` would
-    // let a bare RouteToScreen rule disable the remembered desktop, and leaving
-    // it unreported let a matched RouteToDesktop and the persisted restore both
-    // fire, emitting two conflicting moves for one window on one open.
-    if (const bool desktopRouted = emitRouteToDesktopIfMatched(resolved, windowId); desktopRouted) {
-        if (desktopDirectiveMatched) {
-            *desktopDirectiveMatched = true;
-        }
-    }
+    // RouteToDesktop is engine-neutral — emit it for autotile windows too.
+    // Deliberately NOT folded into `directiveMatched`: a desktop route says
+    // nothing about which monitor the window belongs on, so it must not veto
+    // the cross-screen reclaim the way a RouteToScreen match does.
+    emitRouteToDesktopIfMatched(resolved, windowId);
 
     const auto markMatched = [&] {
         if (directiveMatched) {
