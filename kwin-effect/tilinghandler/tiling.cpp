@@ -2833,15 +2833,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // ORDER NOTE: this write lands AFTER the apply above, so the
                 // synchronous frameGeometryChanged that apply emits re-enters
                 // slotWindowFrameGeometryChanged while this map still holds the
-                // PREVIOUS batch's zone for this window, and the reactive
-                // centring block there is not behind the apply gate. In
-                // practice the previous entry has already been consumed by the
-                // previous apply's own frame change, and when it survives the
-                // window is normally already at that rect so the near-zero
-                // delta arm consumes it harmlessly. Moving the write above the
-                // apply would close the window entirely; it is left here
-                // because the reactive centring is deliberately re-entrant-
-                // driven and the reordering has not been exercised.
+                // PREVIOUS batch's zone for this window. The reactive centring
+                // block there now sits behind the inGeometryApply gate, so the
+                // mid-apply re-entry returns before reaching the map; a
+                // surviving previous-batch entry is overwritten by the
+                // per-entry write below in the same pass, and is otherwise
+                // consumed only by the next out-of-bracket frame change, where
+                // the window is normally already at that rect and the
+                // near-zero delta arm consumes it harmlessly. Moving the
+                // write above the apply would close the window entirely; it is
+                // left here because the reactive centring is deliberately
+                // re-entrant-driven and the reordering has not been exercised.
                 if (isScrollingScreen(snap.screenId)) {
                     // A COLUMN-MAXIMIZED Wayland window arms the counter-assert,
                     // which is otherwise X11-only. The exclusion below is about

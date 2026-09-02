@@ -687,9 +687,15 @@ private:
      * @param window Dragged window (QPointer-protected in the async reply)
      * @param windowId Window identifier
      * @param cancelled True if the drag was cancelled (Escape / external)
+     * @param effectFloatedThisDrag True when the effect floated the window
+     *        optimistically at drag start (captured from
+     *        m_dragActivation.floatedWindowIds BEFORE the dragStopped erase).
+     *        Every no-outcome reply arm reverts that float; deliberately NOT
+     *        defaulted, so a future drag-end call site must decide it
+     *        explicitly rather than silently skipping the revert and
+     *        reintroducing the #1028 focus-follows-mouse latch.
      */
-    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled,
-                     bool effectFloatedThisDrag = false);
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled, bool effectFloatedThisDrag);
     void connectNavigationSignals();
 
     /**
@@ -2305,8 +2311,11 @@ private:
     /// window's SCREEN is on. The mode comes from the per-screen engine
     /// discriminator the tiling handler holds (scrolling, else autotile-managed
     /// is tiling, else snapping), because a floated window carries no mode of
-    /// its own. Consulted by reconcileRuleWindowLayer only when no
-    /// SetWindowLayer rule owns the window.
+    /// its own. Answers false for a window whose desktop is not in view on
+    /// its own output (per-output current-desktop resolve), so an off-desktop
+    /// floater never holds the grant; the reconcile sweep drains a previously
+    /// granted bit on the same pass. Consulted by reconcileRuleWindowLayer
+    /// only when no SetWindowLayer rule owns the window.
     bool keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:

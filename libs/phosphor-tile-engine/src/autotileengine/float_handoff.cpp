@@ -216,6 +216,23 @@ void AutotileEngine::toggleWindowFloatAs(const QString& rawWindowId, const QStri
     }
 
     if (!state) {
+        // Same phantom-key hygiene as setWindowFloat's refusal branch: a
+        // reverse-map key that resolved no containing state stands in the
+        // way of the next dispatch routing through adoption. Sweep it so
+        // this press costs one refusal, not a stuck verb. The phantom test
+        // MUST be setWindowFloat's (keyed state resolved regardless of
+        // desktop, then containment) — the search above is scoped to
+        // CURRENT-desktop states, so a window legitimately tracked in an
+        // off-desktop state reaches this branch too, and sweeping its live
+        // key would orphan that membership.
+        if (m_states.windowKeys().contains(windowId)) {
+            PhosphorTiles::TilingState* keyedState = stateForWindow(windowId);
+            if (!keyedState || !keyedState->containsWindow(windowId)) {
+                qCInfo(PhosphorTileEngine::lcTileEngine)
+                    << "toggleWindowFloat: sweeping phantom reverse-map key for" << windowId;
+                sweepPhantomTracking(windowId);
+            }
+        }
         // Window not tracked by autotile. The opportunistic "is this a
         // floating window I should adopt?" branch that used to live here
         // was the second-order accomplice in a class of cross-engine
@@ -243,9 +260,10 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
 {
     // Branch on the result, like every other mutation site in the engine.
     // toggleFloating returns false for a window this state does not contain;
-    // both current callers validate membership first, so this is unreachable
-    // today — but ignoring it meant a future caller would emit "now tiled" for
-    // an unmanaged window and clear a legitimate snap float downstream.
+    // the sole caller (toggleWindowFloatAs) validates membership first, so
+    // this is unreachable today — but ignoring it meant a future caller would
+    // emit "now tiled" for an unmanaged window and clear a legitimate snap
+    // float downstream.
     if (!state->toggleFloating(windowId)) {
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "performToggleFloat: state does not contain" << windowId << "on screen" << screenId;
@@ -263,6 +281,25 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
     }
     retileAfterOperation(screenId, true);
 
+    // Re-read AFTER the retile: retileAfterOperation runs applyTiling
+    // synchronously, and its overflow pass re-floats the window when the
+    // unfloat landed at or above the tiled cap. Emitting the pre-retile
+    // value would make the FINAL signal subscribers hear contradict the
+    // engine's actual state — the effect's float cache would latch
+    // "not floating" for a window this engine holds floating (the
+    // stale-latch class of Discussion #1028, on the user-visible toggle).
+    const bool actuallyFloating = state->isFloating(windowId);
+    if (actuallyFloating != isNowFloating) {
+        // Announce on the PASSIVE channel, mirroring setWindowFloat's
+        // positional refusal for exactly this situation: the toggle
+        // net-changed nothing, and the active channel's
+        // applyGeometryForFloat would teleport a window the user
+        // repositioned while floating back to its remembered rect.
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "performToggleFloat: overflow pass re-floated" << windowId << "during the retile; announcing floating";
+        Q_EMIT windowFloatingStateSynced(windowId, actuallyFloating, screenId);
+        return;
+    }
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled") << "on screen" << screenId;
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
@@ -360,8 +397,16 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
                                                     << ctx.toScreenId << "- window left unmanaged";
         // Leave no trace: an unmanaged window keeps no min-size entry
         // either (pruneStaleWindows would sweep it eventually, but the
-        // refusal branch's contract is immediate cleanliness).
-        m_windowMinSizes.remove(windowId);
+        // refusal branch's contract is immediate cleanliness). A surviving
+        // SAME-destKey phantom key falls through both guards above (neither
+        // "already adopted" nor "different key" matches it), so sweep it
+        // here too — otherwise the header's adoption-self-corrects promise
+        // has a hole on exactly this refusal arm.
+        if (m_states.windowKeys().contains(windowId)) {
+            sweepPhantomTracking(windowId);
+        } else {
+            m_windowMinSizes.remove(windowId);
+        }
         retileAfterOperation(ctx.toScreenId, true);
         return;
     }
@@ -475,6 +520,18 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     purgePendingFocusForWindow(canonical);
 }
 
+void AutotileEngine::sweepPhantomTracking(const QString& windowId)
+{
+    // See the header doc: shared refusal-sweep, deliberately narrower than
+    // handoffRelease (no releaseEngineSlot, no algorithm removal hook).
+    m_states.removeWindow(windowId);
+    m_windowMinSizes.remove(windowId);
+    m_autotileFloatedWindows.remove(windowId);
+    m_overflow.clearOverflow(windowId);
+    purgeFromPendingOrders(windowId);
+    purgePendingFocusForWindow(windowId);
+}
+
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)
 {
     // Autotile resolves the retile screen from the window's own per-window
@@ -495,6 +552,21 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // floatWindow checks autotile screen membership; unfloatWindow does not
     // (window might be on a screen that was removed from autotile after it was floated)
     if (shouldFloat && !isAutotileScreen(m_states.keyForWindow(windowId).screenId)) {
+        // Refused, not deferred — and the caller was fire-and-forget with its
+        // float cache pre-latched at the requested state, so silence here is
+        // the same stale-latch class as the not-tracked refusal below
+        // (Discussion #1028). Announce the actual outcome, but only when it
+        // DIFFERS from the request: a window genuinely held floating in a
+        // state whose screen left the autotile set already matches the
+        // caller's pre-latch, and a false announcement there would clear a
+        // real engine float. A no-key window names the caller's screen.
+        PhosphorTiles::TilingState* gateState = stateForWindow(windowId);
+        const bool actuallyFloating =
+            gateState && gateState->containsWindow(windowId) && gateState->isFloating(windowId);
+        if (!actuallyFloating) {
+            const QString gateScreenId = m_states.keyForWindow(windowId).screenId;
+            Q_EMIT windowFloatingStateSynced(windowId, false, gateScreenId.isEmpty() ? callerScreenId : gateScreenId);
+        }
         return;
     }
 
@@ -519,17 +591,12 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         const auto keyIt = m_states.windowKeys().constFind(windowId);
         // Capture the screen before the sweep drops the key: the sync below
         // should carry the screen the phantom claimed, falling back to the
-        // caller's live screen for a window with no key at all.
-        QString refusalScreen = keyIt != m_states.windowKeys().constEnd() ? keyIt.value().screenId : callerScreenId;
-        if (refusalScreen.isEmpty()) {
-            refusalScreen = callerScreenId;
-        }
+        // caller's live screen for a window with no key at all (the reverse
+        // map's invariant excludes a keyed entry with an empty screenId).
+        const QString refusalScreen =
+            keyIt != m_states.windowKeys().constEnd() ? keyIt.value().screenId : callerScreenId;
         if (keyIt != m_states.windowKeys().constEnd()) {
-            m_states.removeWindow(windowId);
-            m_windowMinSizes.remove(windowId);
-            m_autotileFloatedWindows.remove(windowId);
-            m_overflow.clearOverflow(windowId);
-            purgeFromPendingOrders(windowId);
+            sweepPhantomTracking(windowId);
         }
         // Relay the refusal. The dispatch that landed here was fire-and-forget
         // on the effect side (the minimize float sends and never reads back),

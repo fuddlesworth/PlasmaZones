@@ -387,8 +387,11 @@ void PlasmaZonesEffect::connectDragTracker()
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
-                // Release keyboard grab before handling drag end
-                if (m_keyboardGrabbed) {
+                // Release keyboard grab before handling drag end. Effects
+                // guard mirrors the dragStarted lambda: DragTracker signals
+                // are less teardown-exposed than D-Bus replies, but the two
+                // lambdas should not drift.
+                if (m_keyboardGrabbed && KWin::effects) {
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
                 }
@@ -455,7 +458,9 @@ void PlasmaZonesEffect::connectDragTracker()
                 // the finish signal (window_connections.cpp), once the
                 // compositor's move genuinely ends — so this call doing nothing
                 // on a multi-button drop is the design, not a dead call.
-                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+                if (KWin::effects) {
+                    m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+                }
             });
 }
 

@@ -177,7 +177,10 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
 bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const
 {
     const WindowAppearanceDefault& def = m_windowAppearanceDefault;
-    if (!def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
+    // Null guard mirrors the sibling reconcilers: the sole caller pre-checks
+    // today, but this is a header-declared helper a future caller can reach
+    // directly.
+    if (!w || !def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
         return false;
     }
     // Only for a window on the CURRENT desktop. The per-screen mode sets
@@ -192,7 +195,18 @@ bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::
     // here resolves the layer to null for that window, and the snapshot
     // restore in reconcileRuleWindowLayer drains the bit on the same sweep;
     // re-entering a desktop this mode manages re-grants it the same way.
-    if (!w->isOnCurrentDesktop()) {
+    //
+    // Resolved against the window's OWN output, not the global current
+    // desktop: under per-output virtual desktops the global read both over-
+    // and under-fires (see SnapHandler::drainDesktopArrivalFor's arm for the
+    // full rationale), and a floating window visible on its own output would
+    // otherwise be denied keep-above whenever the global current is
+    // elsewhere. Falls back to the global reading when the window has no
+    // output.
+    KWin::LogicalOutput* const out = w->screen();
+    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
+    const bool desktopInView = shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
+    if (!desktopInView) {
         return false;
     }
     // Screen mode from the tiling handler's per-screen sets: a scrolling

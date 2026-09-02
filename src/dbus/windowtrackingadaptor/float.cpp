@@ -347,6 +347,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     //     stays a free (unmanaged) window, which is what unfloating a
     //     window snap never tracked means.
     bool recaptureAfterFloatWrite = false;
+    bool skipDestFloatCall = false;
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
         // Autotile AND scrolling destinations adopt via the handoff (their
@@ -379,6 +380,24 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             if (!floating && adopted) {
                 relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             }
+            // A failed FLOAT adoption whose recovery TOOK was already
+            // resolved by guardedHandoff: the window is re-homed into the
+            // source engine as floating and the source's own handoffReceive
+            // announced the truthful floating state (autotile/scroll on the
+            // passive synced channel, snap on the active one — either way it
+            // matches the caller's pre-latch). The dest call below could only
+            // take the no-key refusal branch and announce synced(false) on
+            // top of that recovery — a last-write-wins clobber of durable
+            // float state for a window the source genuinely holds floating.
+            //
+            // Skip ONLY when the recovery verifiably holds the window: with
+            // no source, an empty recover screen, or a double refusal,
+            // guardedHandoff returns false having announced NOTHING, and the
+            // dest refusal branch is then the one edge that corrects the
+            // caller's pre-latched cache (the #1028 stale-latch class).
+            if (floating && !adopted && sourceTracked && source->isWindowTracked(windowId)) {
+                skipDestFloatCall = true;
+            }
         } else if (sourceTracked) {
             source->handoffRelease(windowId);
             relayWindowFloatingChanged(windowId, false, effectiveScreenId);
@@ -402,7 +421,9 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // (possibly stale) tracked association. Without this, unfloating a window
     // that drifted to another monitor while floating non-deterministically
     // teleports it back to its source-monitor zone (Discussion #724).
-    dest->setWindowFloat(windowId, floating, effectiveScreenId);
+    if (!skipDestFloatCall) {
+        dest->setWindowFloat(windowId, floating, effectiveScreenId);
+    }
 
     // Declassify only after the routed engine call above has consumed the
     // suspension bit, and — on the SNAP destination — only when the unfloat

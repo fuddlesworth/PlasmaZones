@@ -310,6 +310,22 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
     if (!skipGeometry) {
+        // Same defensive pair as the batch path below and drag_end's
+        // ApplySnap: pre-seed the tracked screen from the daemon's
+        // authoritative answer (async follow-up frame changes), bracket the
+        // apply (the synchronous one) — an ungated fire here let the
+        // VS-crossing handler resolve a cross-screen apply against stale
+        // state and report a phantom crossing.
+        if (!screenId.isEmpty()) {
+            m_trackedScreenPerWindow[w] = screenId;
+            m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
+        }
+        // Save/restore, not set/clear (nesting-safe).
+        const bool prevInApply = m_daemonGate.inGeometryApply;
+        m_daemonGate.inGeometryApply = true;
+        const auto applyGuard = qScopeGuard([this, prevInApply] {
+            m_daemonGate.inGeometryApply = prevInApply;
+        });
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                              : PhosphorAnimation::ProfilePaths::WindowSnapIn);

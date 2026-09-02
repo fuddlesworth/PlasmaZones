@@ -153,12 +153,15 @@ public:
     /// This exists for the adaptor's post-reclaim ownership check: after a
     /// cross-screen reclaim, the effect's already-queued arrival announce
     /// still carries the ARRIVAL screen, and dispatching it would migrate
-    /// the window straight back. isWindowTracked cannot serve — it answers
-    /// from the raw reverse-map key, which a refused adoption can leave
-    /// dangling (its ~20 callers want exactly that raw semantic, so its
-    /// meaning must not change). isWindowManaged/isWindowTiled cannot serve
-    /// either — both exclude engine-floating windows, which a reclaim can
-    /// legitimately produce.
+    /// the window straight back. isWindowTracked cannot serve — its contract
+    /// is PER-ENGINE: SnapEngine and ScrollEngine answer from the raw
+    /// reverse-map key, which a refused adoption can leave dangling, while
+    /// AutotileEngine verifies membership as well (a phantom key answers
+    /// false there — see its override doc for why that engine needed the
+    /// stricter form). Callers wanting one uniform answer across engines
+    /// cannot get it from that predicate. isWindowManaged/isWindowTiled
+    /// cannot serve either — both exclude engine-floating windows, which a
+    /// reclaim can legitimately produce.
     ///
     /// CURRENT-context only, and that restriction is what keeps the check
     /// from suppressing repair. A reclaim's adoption always keys by the home
