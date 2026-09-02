@@ -121,6 +121,30 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 //   decoration_render.cpp  — surfacePresentShader, alongside the two paths that
 //                            consume the program it compiles
 
+QRectF PlasmaZonesEffect::surfaceWindowRect(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return {};
+    }
+    const QRectF frame = w->frameGeometry();
+    // No margins recorded yet (a window whose connections have not been made,
+    // or one that has never emitted windowExpandedGeometryChanged): fall back to
+    // the raw pair, preserving the previous behaviour for anything this cache
+    // does not cover. The isEmpty guard is the one the three call sites used to
+    // carry individually.
+    const auto it = m_surfaceShadowMargins.constFind(w);
+    if (it == m_surfaceShadowMargins.constEnd()) {
+        const QRectF expanded = w->expandedGeometry();
+        return expanded.isEmpty() ? frame : expanded;
+    }
+    if (frame.isEmpty()) {
+        return frame;
+    }
+    // The frame grown by the last CONSISTENT margins. See the declaration for
+    // why this is reconstructed rather than read from expandedGeometry().
+    return frame.marginsAdded(*it);
+}
+
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                                 KWin::GLShader* captureRestoreShader)
 {
@@ -205,10 +229,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // decoration-shadow margin of its own (borderless windows). apply()
     // presents the composite on a matching padded quad.
     const qreal pad = bit->outerPadding;
-    QRectF windowRect = w->expandedGeometry();
-    if (windowRect.isEmpty()) {
-        windowRect = w->frameGeometry();
-    }
+    // NOT expandedGeometry() raw — see surfaceWindowRect's declaration for the
+    // stale-rect case this exists to reject.
+    const QRectF windowRect = surfaceWindowRect(w);
     const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, scale);
     const QRectF logicalGeometry = canvas.logicalGeometry;
     const qreal captureScale = canvas.captureScale;
