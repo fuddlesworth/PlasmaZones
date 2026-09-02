@@ -508,6 +508,35 @@ public:
         return m_suppressMaximizeChanged > 0;
     }
 
+    /// Drop KWin's maximize state before a SNAP-mode zone placement lands.
+    ///
+    /// A zone placement is authoritative over the window's geometry, but a
+    /// KWin-maximized window carries two pieces of state a bare moveResize
+    /// never touches: the maximize bit itself (which KWin re-enforces against
+    /// the zone rect, and which the client keeps re-asserting through its
+    /// configure acks) and geometryRestore (which can sit on ANOTHER monitor
+    /// entirely — the screen the window was last maximized on). Left standing,
+    /// the next maximize press toggles OFF and KWin restores the window
+    /// cross-screen; the daemon then reads the teleport as the user moving the
+    /// window off its zone and unsnaps it (the #1028-family report's Brave
+    /// trace: commitSnap on one screen, windowScreenChanged-unsnap two seconds
+    /// later).
+    ///
+    /// Seeds geometryRestore with @p zoneRect FIRST, so the restore moveResize
+    /// inside maximize() goes straight to the zone — one configure, on the
+    /// target screen, with no interim hop through a stale rect whose async
+    /// Wayland ack could land on the wrong output and re-trigger the very
+    /// unsnap this exists to prevent.
+    ///
+    /// Lives on this handler rather than the effect because the maximize
+    /// OWNERSHIP LEDGERS live here: a window whose maximize the engine holds
+    /// (monocle, maximize-to-edges) is skipped — those bits are handed back by
+    /// their own release arms, and writing over them would strand the ledger.
+    /// No-op for a window that is not KWin-maximized, so call sites need no
+    /// pre-check. Callers apply the zone rect immediately after, under their
+    /// own inGeometryApply bracket or not — this method brackets its own write.
+    void demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect);
+
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker
     /// so a lost clear (whose flag-off echo will never arrive) cannot latch

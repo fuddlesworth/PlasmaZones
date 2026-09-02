@@ -144,6 +144,77 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     kw->maximize(mode);
 }
 
+void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect)
+{
+    if (!w || w->isDeleted() || !zoneRect.isValid()) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // REQUESTED mode, matching every sibling maximize write in this file: on
+    // Wayland the committed bit trails a client round-trip, and the window the
+    // demote exists for (snapped straight out of a maximized state) is exactly
+    // the one mid-transition.
+    if (kw->requestedMaximizeMode() == KWin::MaximizeRestore) {
+        return;
+    }
+    // Engine-owned maximize claims are handed back by their own release arms
+    // (the ledger contract at the top of this file). A snap placement for such
+    // a window arrives only after untrack has already routed the claim through
+    // its release; a demote racing ahead of that would clear a bit the ledger
+    // still records as held.
+    const QString windowId = m_effect->getWindowId(w);
+    if (!windowId.isEmpty()
+        && (m_monocleMaximizedWindows.contains(windowId) || m_maximizedToEdgesWindows.contains(windowId))) {
+        return;
+    }
+    // Fullscreen and gesture guards, the pair every sibling maximize write
+    // carries: maximize() has no fullscreen conditional and would moveResize a
+    // presenting surface down to its restore rect, and mid-gesture it snaps
+    // the window out from under the user's pointer. The ApplySnap caller
+    // cancels its interactive move before calling here, so a still-set flag
+    // means a gesture this placement does not own.
+    if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
+        return;
+    }
+    qCInfo(lcEffect) << "Demoting KWin maximize for snap placement of" << windowId << "into" << zoneRect;
+    // On Wayland the committed echo of this restore arrives with the
+    // suppression counter back at 0 (the platform split window_connections.cpp
+    // documents for the monocle writes) and would read as a genuine
+    // unmaximize edge: the maximize lambda would replay a WindowMaximize
+    // morph anchored at the full-monitor pre-frame over the snap-in leg.
+    // Pre-write the edge tracker so the echo takes the no-edge branch — its
+    // only side effect, cancelAxisOnlyMaximize, no-ops for a window that is
+    // not scroll-tiled. That branch skips two writes the edge branch owed
+    // this transition, so pay them here: drop any pending morph a just-prior
+    // genuine maximize edge armed (the zone-rect commit would otherwise
+    // complete it through the geometry hook and replay the same wrong
+    // morph), and refresh the IsMaximized rule verdict.
+    m_effect->m_shaderManager.noteMaximizeDemotedForSnap(w);
+    m_effect->invalidateRuleCacheForStateChange(windowId);
+    // Zone rect FIRST, so the restore moveResize inside maximize() lands
+    // directly on the placement's target — never on a stale restore rect
+    // whose screen the window is not being placed on (the cross-screen
+    // teleport this method exists to prevent; see the declaration).
+    kw->setGeometryRestore(KWin::RectF(zoneRect));
+    // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY — the same
+    // edge unmaximizeMonocleWindow guards. The rect it moves to is the zone
+    // rect on the placement's own screen, so no tracker re-seed is owed
+    // here: the zone apply that follows immediately re-stamps the tracked
+    // screen through its own frame-change processing (for an X11 client the
+    // committed rect can differ by constrainTileGeometry's centring shift, a
+    // one-apply transient that same processing heals). Save/restore so the
+    // bracket nests inside ApplySnap's.
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
+    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
+}
+
 void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
 {
     // Pay the claims the batch arms took but could not apply mid-gesture.

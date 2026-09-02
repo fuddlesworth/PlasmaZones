@@ -320,6 +320,17 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             m_trackedScreenPerWindow[w] = screenId;
             m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
         }
+        // Genuine snap commit only (same trio the tracking discriminator
+        // below tests): a float-restore places FREE geometry, where KWin's
+        // maximize is the user's business, and an autotile-managed screen's
+        // maximize belongs to TilingHandler's own ledgers. After the
+        // pre-seed above, whose coverage the demote's committed configure
+        // rides; before the bracketed apply.
+        const bool demoteForSnap =
+            !zoneId.isEmpty() && !screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId);
+        if (demoteForSnap) {
+            m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
+        }
         // Save/restore, not set/clear (nesting-safe).
         const bool prevInApply = m_daemonGate.inGeometryApply;
         m_daemonGate.inGeometryApply = true;
@@ -328,7 +339,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         });
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                            QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
     }
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
@@ -531,8 +543,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // genuinely un-snaps the window regardless of visibility.
             const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
             if (!skipMinimizedRestore) {
+                // Snap placements only (the discriminator below): a non-empty
+                // authoritative screenId that is not autotile-managed marks a
+                // real zone commit, and a surviving KWin maximize would fight
+                // its rect and arm a cross-screen restore.
+                const bool demoteForSnap = !p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId);
+                if (demoteForSnap) {
+                    m_tilingHandler->demoteMaximizeForSnapPlacement(p.window, p.geometry);
+                }
                 applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                                    /*skipAnimation=*/false, batchProfilePath);
+                                    /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(),
+                                    /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
             }
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real
