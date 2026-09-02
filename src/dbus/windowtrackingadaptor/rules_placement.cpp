@@ -216,10 +216,10 @@ bool WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::Res
         return false;
     }
     // MATCHED is the answer this function gives, and it does not depend on the
-    // target being usable. A matched RouteToDesktop owns this window's desktop,
-    // so both callers must suppress their remembered-desktop restore either way
-    // — letting it step in behind a malformed target would apply a desktop the
-    // user's rule overrode. Hence one return, with the emit conditional inside.
+    // target being usable: a rule that named this window's desktop matched
+    // whether or not its payload survived the guard below. Hence one return,
+    // with the emit conditional inside. No production caller reads the answer
+    // today; the routing tests are its consumer.
     //
     // The read is deliberately defensive even though stored rules cannot reach
     // the else. Both routes into the store validate this parameter against the

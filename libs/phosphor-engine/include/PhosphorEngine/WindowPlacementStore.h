@@ -273,18 +273,18 @@ public:
 
     /// Reserve, once per opening window instance, the record that instance owns.
     ///
-    /// WHY THIS EXISTS. Two independent selectors read a record for the same
-    /// opening window: the daemon's cross-desktop restore through peek() (newest
-    /// first) and the engines' restore through take() / takeForReopen(). At login
-    /// every uuid is fresh, so both always fall to their appId branch, and their
-    /// orders differ — a multi-window app got one record's DESKTOP paired with a
-    /// different record's ZONE. Worse, an already-home window could consume a
-    /// SIBLING's record, so that sibling never returned to its desktop at all.
+    /// WHY THIS EXISTS. The two open channels both select a record for the same
+    /// opening window: the snap channel through SnapAdaptor::resolveWindowRestore
+    /// and the tiling channel through TilingAdaptor::dispatchWindowOpened, which
+    /// reaches take() / takeForReopen(). At login every uuid is fresh, so both
+    /// always fall to their appId branch, and their orders differ. Without a
+    /// reservation an already-home window could consume a SIBLING's record,
+    /// leaving that sibling with nothing to restore from, and a window's later
+    /// re-drives could answer from a different record than its own open used.
     ///
-    /// The fix has to be a RESERVATION, never a predicate. "Skip armed records"
-    /// or "skip non-same-instance records" both look right and both destroy the
-    /// feature: after a logout EVERY record is persisted-armed and NONE is
-    /// same-instance, so such a predicate refuses the whole bucket. Instead the
+    /// The fix has to be a RESERVATION, never a predicate. "Skip non-same-instance
+    /// records" looks right and destroys the behaviour: after a logout NO record
+    /// is same-instance, so such a predicate refuses the whole bucket. Instead the
     /// first daemon-side touch of an opening window claims one record, and every
     /// later reader honours that claim.
     ///

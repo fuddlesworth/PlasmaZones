@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- **Putting windows back on their virtual desktop after login**: PlasmaZones used to send a window that reopened on the wrong virtual desktop back to the one it was recorded on, controlled by Put windows back on their virtual desktop under General → Session restore. In practice it was hard to predict, since it moved windows around on its own while you were still logging in, so it has been taken out along with its setting. Windows now stay on whichever desktop the session puts them on. Rules that route a window to a particular desktop are unaffected.
+- **Putting windows back on their virtual desktop after login**: PlasmaZones used to send a window that reopened on the wrong virtual desktop back to the one it was recorded on, controlled by Put windows back on their virtual desktop under General → Session restore. In practice it was hard to predict, since it moved windows around on its own while you were still logging in, so it has been taken out along with its setting. Windows now stay on whichever desktop the session puts them on. Rules that route a window to a particular desktop are unaffected. ([#1034](https://github.com/fuddlesworth/PlasmaZones/pull/1034))
 
 ## [3.4.6] - 2026-09-01
 

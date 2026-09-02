@@ -220,7 +220,7 @@ private Q_SLOTS:
         // same record rather than re-choosing.
         QCOMPARE(store.claimForOpen(w1, QStringLiteral("app"))->windowId, claim1->windowId);
 
-        // peek — what the cross-desktop restore reads — agrees with the claim.
+        // peek — the non-consuming read — agrees with the claim.
         QCOMPARE(store.peek(w1, QStringLiteral("app"))->windowId, claim1->windowId);
         QCOMPARE(store.peek(w2, QStringLiteral("app"))->windowId, claim2->windowId);
 

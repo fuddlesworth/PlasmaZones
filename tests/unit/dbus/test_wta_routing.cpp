@@ -10,9 +10,6 @@
  */
 
 #include "wta_convenience_fixture.h"
-#include "dbus/tilingadaptor/tilingadaptor.h"
-#include "helpers/AutotileTestHelpers.h"
-#include <PhosphorTileEngine/AutotileEngine.h>
 
 #include <QScopeGuard>
 
@@ -276,10 +273,9 @@ private Q_SLOTS:
         });
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        // The RETURN is load-bearing, not just the signal: both open channels
-        // use it to suppress the cross-desktop session restore, so a rule that
-        // names a desktop is not fought by a remembered one. Asserting only the
-        // spy would leave that half untested.
+        // The RETURN is asserted as well as the signal. No production caller
+        // reads it today, so these tests are what holds the "reports a match"
+        // half of the contract; asserting only the spy would leave it untested.
         QVERIFY2(m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1")),
                  "a matched RouteToDesktop must report the match to its caller");
         QCOMPARE(desktopSpy.count(), 1);
@@ -330,9 +326,8 @@ private Q_SLOTS:
 
     void testApplyOpenDesktopRouting_reportsNoMatchWithoutARuleStore()
     {
-        // The defensive guard. false is the permissive answer here, so an
-        // inverted sense would silently suppress every persisted restore on
-        // both channels rather than failing loudly.
+        // The defensive guard. false is the "no rule named a desktop" answer, so
+        // an inverted sense would have every window look rule-routed.
         auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
         m_wta->setWindowRegistry(registry);
         m_wta->setWindowMetadata(QStringLiteral("inst10"), QStringLiteral("deskapp"), QString(), QString(), QString(),
@@ -344,6 +339,30 @@ private Q_SLOTS:
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
         QVERIFY(!m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst10"), QStringLiteral("DP-1")));
         QCOMPARE(desktopSpy.count(), 0);
+    }
+
+    // The wire clamp, asserted directly. Its consumers are the reason gates in
+    // SnapAdaptor::resolveWindowRestore (the cross-screen reclaim and the
+    // per-open credit burn), so a garbled value reading as anything but Open
+    // would silently skip a genuine restore. Every named reason must survive the
+    // round trip, and everything else must land on Open rather than on whichever
+    // enumerator happens to sit at that ordinal.
+    void testClampRestoreReasonFromWire_unknownValuesReadAsOpen()
+    {
+        using PhosphorEngine::RestoreReason;
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::Open)),
+                 RestoreReason::Open);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::Unminimize)),
+                 RestoreReason::Unminimize);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::PendingSweep)),
+                 RestoreReason::PendingSweep);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DesktopArrival)),
+                 RestoreReason::DesktopArrival);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DaemonRestartSweep)),
+                 RestoreReason::DaemonRestartSweep);
+
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(9999), RestoreReason::Open);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(-1), RestoreReason::Open);
     }
 
     // A BARE RouteToScreen rule (no SnapToZone) must move the opening window to the

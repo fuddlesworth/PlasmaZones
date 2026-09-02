@@ -1070,10 +1070,11 @@ public:
     /// so a ScreenId-scoped rule resolves; reuses the per-window evaluator cache
     /// placementZonesByRule seeds.
     ///
-    /// Returns whether a RouteToDesktop rule MATCHED — true even when its target
+    /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
     /// failed the 1-based guard and no move was emitted, so a caller can tell a
-    /// rule that owns the window's desktop from one that never matched,
-    /// whether or not its payload was usable.
+    /// rule that owns the window's desktop from one that never matched, whether
+    /// or not its payload was usable. No production caller reads this today; the
+    /// routing tests assert it, which is why it is not void.
     bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as

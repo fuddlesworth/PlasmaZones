@@ -18,10 +18,10 @@ namespace PhosphorEngine {
 namespace {
 Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
 
-// Instance-identity match for STORE keys. The predicate — including its refusal
-// to fuzzy-match a separator-less id — now lives in PhosphorIdentity so the
-// daemon's cross-desktop restore matches records the same way rather than
-// hand-copying the contract into another library.
+// Instance-identity match for STORE keys. The predicate, including its refusal
+// to fuzzy-match a separator-less id, lives in PhosphorIdentity so every library
+// that matches records against a window id shares one contract rather than
+// hand-copying it.
 using PhosphorIdentity::WindowId::sameWindowInstance;
 } // namespace
 
@@ -301,6 +301,15 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                     keep.engines.insert(eit.key(), eit.value());
                 }
             }
+            // NOT absorbed: the sibling's reclaim credit. That is a known gap,
+            // not an oversight. On the primary close path the collapse runs
+            // inside captureWindowPlacement, which WindowTrackingAdaptor calls
+            // BEFORE markInstanceClosed, so the keeper here is the closing
+            // window's own record and is about to have its credit revoked
+            // anyway — carrying the pruned sibling's credit onto it would be
+            // wiped by that same sweep. Preserving the credit needs an ordering
+            // change across the close path, which is a decision this collapse
+            // cannot make locally.
             dropClaimsNaming(bucket.at(i).windowId); // same reason as in evictForCapacity
             bucket.removeAt(i);
             removedAny = true;
@@ -368,7 +377,7 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
     const QString instance = PhosphorIdentity::WindowId::extractInstanceId(windowId);
 
     // Idempotent: an instance that already claimed keeps the same record, so the
-    // desktop restore and the engine restore that follow it cannot disagree.
+    // open channel and every re-drive that follows it cannot disagree.
     const auto existing = m_openPairing.constFind(instance);
     if (existing != m_openPairing.constEnd()) {
         for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
@@ -1019,9 +1028,9 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     // loads through WindowTrackingAdaptor's constructor and again through the
     // engines' load delegate at finalizeStartup. Both are bringup, before any
     // window opens, so discarding what is here costs nothing. Calling this
-    // mid-session would not be safe — it would drop every live capture and
-    // re-arm every record's cross-desktop one-shot, teleporting windows that
-    // had already been placed.
+    // mid-session would not be safe. It would drop every live capture and void
+    // every open claim, so windows already placed this session would lose the
+    // record their engines restore from.
     m_byApp.clear();
     m_sequence = 0;
     // Every claim named a record in the store being replaced.

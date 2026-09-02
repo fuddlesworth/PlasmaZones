@@ -300,8 +300,8 @@ public:
     P_CONFIG_KEY(keepOnResolutionChangeKey, "KeepOnResolutionChange")
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
-    // Also used by the top-level WindowRestore group for the mode-neutral
-    // cross-desktop restore — the group disambiguates, so the key stays generic.
+    // Shared by Snapping.Behavior.WindowHandling and Scrolling.Behavior, so the
+    // group disambiguates and the key stays generic.
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
     // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
     // Scrolling.Behavior — restore a FLOATED (unsnapped / untiled) window to its

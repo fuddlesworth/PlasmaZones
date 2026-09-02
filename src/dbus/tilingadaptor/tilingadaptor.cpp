@@ -645,10 +645,10 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
-    // Claim this instance's placement record before any selector reads one —
-    // the same reason the snap channel does it at the head of
-    // resolveWindowRestore. The cross-desktop restore below and the engine
-    // dispatch after it must agree on WHICH record belongs to this window.
+    // Claim this instance's placement record before any selector reads one, the
+    // same reason the snap channel does it at the head of resolveWindowRestore.
+    // The two open channels and every later re-drive must agree on WHICH record
+    // belongs to this window.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* svc = m_windowTrackingAdaptor->service();
         svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
