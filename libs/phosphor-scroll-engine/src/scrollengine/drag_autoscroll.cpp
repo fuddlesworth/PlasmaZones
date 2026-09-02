@@ -288,6 +288,11 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     bool moved = false;
     if (step != 0) {
         moved = state->strip().scrollViewBy(step, params);
+        if (moved) {
+            // The user is steering the view now; cancel keeps it (the
+            // struct's field doc) instead of restoring the begin capture.
+            preview.viewScrolledDuringHold = true;
+        }
         if (!moved) {
             // Pinned at an end. Drop the residue so a long hold there does
             // not bank up travel that releases as a lurch the moment the

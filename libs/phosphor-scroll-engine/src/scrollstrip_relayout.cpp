@@ -581,6 +581,77 @@ void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params
     m_viewAnchor = anchor;
 }
 
+void ScrollStrip::reanchorForDropCommit(int oldViewOffset, const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0) {
+        m_viewAnchor = 0;
+        m_viewDetached = false;
+        return;
+    }
+    // The drop OWNS the view the way a pan does, so the latch is SET, not
+    // cleared — and above the degenerate-area guard, for
+    // reanchorAfterFocusChange's reason (the latch answers "who owns the
+    // view", which needs no layout maths). Without it the applyLayout the
+    // commit runs immediately afterwards re-applies the centering policy
+    // through updateViewForFocus and undoes this anchor on the same pass —
+    // under Always unconditionally, and under OnOverflow for exactly the
+    // over-wide column this function exists to keep beside its neighbour.
+    // The next focus change re-attaches through reanchorAfterFocusChange,
+    // same as any pan.
+    m_viewDetached = true;
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there): every arm below would write garbage over the persisted anchor.
+    if (mainExtent(params) <= 0) {
+        return;
+    }
+    // A maximized-to-edges column has exactly ONE correct position
+    // (focusAnchorFor documents why); the fit maths below would pin it to a
+    // viewport edge measured in gapped coordinates.
+    if (m_columns.at(m_activeColumnIdx).maximizedToEdges) {
+        m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
+        return;
+    }
+    const int viewMain = mainExtent(params);
+    const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
+    // Where the indicator promised the column: the hit-test that produced the
+    // drop target resolved against the pre-insert view, so the column's strip
+    // position minus that view offset IS the promised on-screen position. The
+    // Never fit then moves the view only as far as full visibility requires —
+    // an in-view drop stays put, an off-view one lands flush at the entering
+    // edge with the neighbour on the other side still visible.
+    int pos = columnStripPos(m_activeColumnIdx, params) - oldViewOffset;
+    if (colMain >= viewMain || pos < 0) {
+        pos = 0;
+    } else if (pos + colMain > viewMain) {
+        pos = viewMain - colMain;
+    }
+    m_viewAnchor = clampedAnchorFor(m_activeColumnIdx, pos, params);
+}
+
+void ScrollStrip::clampViewIntoStrip(const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0) {
+        return;
+    }
+    // Degenerate-area guard, same as clampedAnchor's: the clamp would
+    // collapse ANY anchor to 0 against a zero-width work area.
+    if (mainExtent(params) <= 0) {
+        return;
+    }
+    // TRAILING edge only, unlike clampedAnchor's both-edge bound: a leading
+    // overhang (negative derived viewOffset) is how the centering mutators
+    // deliberately express a centered short strip, and flattening it here
+    // would pin a lone centered column flush to the edge for the whole hold.
+    // The dead space the drag settle exists to reclaim is only ever past the
+    // trailing end — the detach take shortened the strip under a view that
+    // pointed at the vanished columns.
+    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    const int maxViewOffset = qMax(0, stripExtentPx(params) - mainExtent(params));
+    if (activeMainPos - m_viewAnchor > maxViewOffset) {
+        m_viewAnchor = activeMainPos - maxViewOffset;
+    }
+}
+
 void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
 {
     // A detached view belongs to the user's pan, not to the policy (class
