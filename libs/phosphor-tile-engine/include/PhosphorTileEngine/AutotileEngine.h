@@ -148,8 +148,21 @@ public:
      * @brief Check if a window is currently tracked in any autotile state.
      *
      * Used by the drag protocol (beginDrag) to decide whether to apply an
-     * immediate free-floating-size restore when a tiled window is picked up.
-     * Reads the reverse window→key map which is authoritative.
+     * immediate free-floating-size restore when a tiled window is picked up,
+     * and by the float/handoff routing in WindowTrackingAdaptor to choose
+     * between this engine and the adoption handoff.
+     *
+     * MEMBERSHIP-VERIFIED, not a bare reverse-map lookup. The reverse
+     * window→key map is not authoritative on its own: a refused insert can
+     * leave a key pointing at a state that does not hold the window
+     * (Discussion #1028), and every consumer of this predicate then misroutes
+     * — beginDrag floats a window the engine does not hold, and the float
+     * adaptor dispatches setWindowFloat into the not-tracked refusal instead
+     * of the adoption handoff that would repair the state. The per-site
+     * phantom-key sweeps close known producers of that mismatch; verifying
+     * membership here closes the CLASS, so a producer nobody has found yet
+     * degrades into a routing decision that self-corrects through adoption
+     * rather than a silent dead-end.
      */
     bool isWindowTracked(const QString& windowId) const override
     {
@@ -157,7 +170,9 @@ public:
         // screenForTrackedWindow): callers pass raw daemon/effect composite
         // ids, and a mutated-appId window must still resolve to its
         // tracked entry.
-        return m_states.hasWindow(canonicalizeForLookup(windowId));
+        const QString canonical = canonicalizeForLookup(windowId);
+        const auto* state = m_states.forWindow(canonical);
+        return state && state->containsWindow(canonical);
     }
 
     /**

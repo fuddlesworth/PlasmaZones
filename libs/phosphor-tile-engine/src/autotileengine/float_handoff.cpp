@@ -88,7 +88,21 @@ void AutotileEngine::toggleFocusedWindowFloat()
         return;
     }
 
-    performToggleFloat(state, focused, screenId);
+    // Route through the validated toggle, not performToggleFloat directly.
+    // The focus slot is stamped with no membership check (setFocusedWindow
+    // stores any id), so it can name a window this state does not contain —
+    // a drag-drop handoff adopts the window into the (screen,desktop) state
+    // keyed at receive time while the focus slot of the state resolved here
+    // still names it. Calling performToggleFloat with that id failed its
+    // membership test ("state does not contain") and the shortcut silently
+    // did nothing, twice, before a later press resolved the right state and
+    // teleported the window to its stored free-float rect (Discussion #1028,
+    // the post-drop Meta+F misfire). toggleWindowFloatAs canonicalizes,
+    // verifies membership on this screen, and falls back to a cross-screen
+    // search of current-desktop states — exactly the repair this mismatch
+    // needs — and reports an honest window_not_tracked when the window is
+    // genuinely not ours.
+    toggleWindowFloatAs(focused, screenId, QStringLiteral("float"));
 }
 
 void AutotileEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
@@ -470,9 +484,9 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
     // engine's stale-screen hazard guard: it re-homes the window's tiling-state
     // membership when the window is focused on a different autotile screen, so
     // by unfloat time the tracked screen is the window's real monitor. The
-    // effect-provided screen is therefore redundant for this engine; accept it
-    // to satisfy the shared interface.
-    Q_UNUSED(callerScreenId)
+    // effect-provided screen is therefore redundant for RESOLUTION here; its
+    // one use is the not-tracked refusal below, where a window with no key
+    // has no tracked screen to name in the sync.
     if (!warnIfEmptyWindowId(rawWindowId, shouldFloat ? "floatWindow" : "unfloatWindow")) {
         return;
     }
@@ -503,6 +517,13 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
         // caches that follow it, matching every other sweep in this engine) so
         // the NEXT dispatch routes through adoption instead.
         const auto keyIt = m_states.windowKeys().constFind(windowId);
+        // Capture the screen before the sweep drops the key: the sync below
+        // should carry the screen the phantom claimed, falling back to the
+        // caller's live screen for a window with no key at all.
+        QString refusalScreen = keyIt != m_states.windowKeys().constEnd() ? keyIt.value().screenId : callerScreenId;
+        if (refusalScreen.isEmpty()) {
+            refusalScreen = callerScreenId;
+        }
         if (keyIt != m_states.windowKeys().constEnd()) {
             m_states.removeWindow(windowId);
             m_windowMinSizes.remove(windowId);
@@ -510,6 +531,17 @@ void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat
             m_overflow.clearOverflow(windowId);
             purgeFromPendingOrders(windowId);
         }
+        // Relay the refusal. The dispatch that landed here was fire-and-forget
+        // on the effect side (the minimize float sends and never reads back),
+        // and the effect's float cache was typically pre-latched at the
+        // requested state before the call went out. Sweeping the key repairs
+        // ROUTING for the next dispatch, but says nothing to the subscriber
+        // whose cache is now wrong — one lost minimize float leaves its zone
+        // occupied for the session (Discussion #1028). Announce the actual
+        // outcome: this engine does not hold the window, so its autotile
+        // float bit is not set. Same contract as the adaptor's untracked
+        // unfloat arm ("the not-floating edge must always reach subscribers").
+        Q_EMIT windowFloatingStateSynced(windowId, false, refusalScreen);
         return;
     }
 
