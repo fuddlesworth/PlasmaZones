@@ -18,8 +18,9 @@
 // node (interior and edge alike) is free, coupled only to its NEIGHBOURS at
 // ideal spacing, so a drag propagates node to node as a wave. No interior
 // pinning — a rigid centre with wiggling edges read as a jiggling blob.
-// Integrated in fixed <=10 ms
-// substeps with KWin's ring-mean smoothing; a generic caller need only
+// Integrated in <=10 ms
+// substeps (full 10 ms chunks plus a partial final step, KWin's scheme)
+// with KWin's ring-mean smoothing; a generic caller need only
 // init, feed the live rect each frame, and read displacements.
 
 #pragma once
@@ -29,8 +30,8 @@
 
 namespace PlasmaZones {
 
-/// Tunable spring constants. Defaults mirror KWin's middle "wobbliness"
-/// preset (set_2); a pack may override via its metadata so a stiff jello
+/// Tunable spring constants. Defaults mirror KWin's default "wobbliness"
+/// preset (pset[0]); a pack may override via its metadata so a stiff jello
 /// and a loose flag can share this one solver.
 struct MeshSimParams
 {
@@ -60,7 +61,6 @@ struct MeshSim
     bool constraint[kCount] = {};
 
     MeshSimParams params;
-    QPointF lastFrameTopLeft;
     bool initialized = false;
     /// False once the lattice has energy; the caller keeps the transition
     /// alive (and repainting) until this reads true again after release.
