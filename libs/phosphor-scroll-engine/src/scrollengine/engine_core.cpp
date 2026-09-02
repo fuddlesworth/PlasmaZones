@@ -278,12 +278,6 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // lifecycle edges like its order twin, or the seed sits armed and
         // re-anchors a view the user has since moved, several transitions later.
         m_pendingInitialFocus.remove(screenId);
-        // The close-settle hold goes with the strip it was holding, on the
-        // same terms pruneStatesForRemovedScreen drops it for a departed
-        // output (engine_closehold.cpp documents why it is hygiene here
-        // rather than a live defect).
-        m_closeReflowHoldUntil.remove(screenId);
-        m_closeReflowFlushScheduled.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -1294,11 +1288,6 @@ void ScrollEngine::refreshConfigFromSettings()
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
     m_centerShortColumns = settings->scrollingCenterShortColumns();
     m_smartGaps = settings->scrollingSmartGaps();
-    // Bounded like every other cast/derived read here: the value is derived
-    // daemon-side from the animation duration, but nothing stops a future
-    // implementor handing back garbage, and a multi-second hold would read
-    // as the strip hanging after every close.
-    m_closeReflowDelayMs = qBound(0, settings->scrollingCloseReflowDelayMs(), kMaxCloseReflowDelayMs);
 
     // Tab-indicator geometry. The numeric fields get the same reject-and-keep
     // guard as the POSITION cast below (NOT the Fixed-width read above, which
@@ -1430,16 +1419,6 @@ void ScrollEngine::scheduleRetileForScreen(const QString& screenId)
         this,
         [this, screenId]() {
             if (m_pendingRetiles.remove(screenId) && m_scrollingScreens.contains(screenId)) {
-                // Close-settle hold, THIRD arm — and the one that made the
-                // other two look broken: the daemon's tiled-count gate turns
-                // every close's own placementChanged into an identical-set
-                // re-push, which lands here one turn later to reflow the strip
-                // the hold had just deferred. Swallowing it loses nothing; the
-                // flush is this same apply, one hold later. engine_closehold.cpp
-                // carries the full account.
-                if (deferForCloseReflowHold(screenId)) {
-                    return;
-                }
                 applyLayout(screenId);
             }
         },

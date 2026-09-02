@@ -58,18 +58,6 @@ public:
     /// ConfigDefaults::scrollingSmartGaps.)
     virtual bool scrollingSmartGaps() const = 0;
 
-    /// Milliseconds to hold a CLOSE-triggered reflow so the closing window's
-    /// disappear animation plays over an unchanged strip before the
-    /// neighbours move in. The daemon derives it from the animation
-    /// duration (0 when animations are off). DEFAULTED, not pure: 0 —
-    /// reflow immediately — is the historical behaviour and the answer for
-    /// every implementor that has not heard of the option, including the
-    /// test stubs.
-    virtual int scrollingCloseReflowDelayMs() const
-    {
-        return 0;
-    }
-
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
     virtual int scrollingCenterFocusedColumn() const = 0;
     virtual bool scrollingAlwaysCenterSingleColumn() const = 0;

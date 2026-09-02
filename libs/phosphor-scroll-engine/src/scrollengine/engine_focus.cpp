@@ -199,14 +199,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // now — a background one re-derives on the applyLayout its own desktop
     // return runs, which is the pass that used to return early.
     if (key == currentKeyForScreen(key.screenId)) {
-        // Close-settle hold, second arm: the compositor's successor pick
-        // lands here milliseconds after a close, and its reanchor reflow
-        // moving the neighbours would defeat the hold windowClosed just
-        // started. The anchor/focus state above is already updated — only
-        // the geometry emission waits; the scheduled flush replays it.
-        if (!deferForCloseReflowHold(key.screenId)) {
-            applyLayout(key.screenId, false);
-        }
+        applyLayout(key.screenId, false);
     } else {
         // Background context: the strip's focus and anchor moved above, but
         // no geometry batch carries it — and the desktop return that brings
