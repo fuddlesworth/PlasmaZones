@@ -180,6 +180,20 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
         return;
     }
     qCInfo(lcEffect) << "Demoting KWin maximize for snap placement of" << windowId << "into" << zoneRect;
+    // On Wayland the committed echo of this restore arrives with the
+    // suppression counter back at 0 (the platform split window_connections.cpp
+    // documents for the monocle writes) and would read as a genuine
+    // unmaximize edge: the maximize lambda would replay a WindowMaximize
+    // morph anchored at the full-monitor pre-frame over the snap-in leg.
+    // Pre-write the edge tracker so the echo takes the no-edge branch — its
+    // only side effect, cancelAxisOnlyMaximize, no-ops for a window that is
+    // not scroll-tiled. That branch skips two writes the edge branch owed
+    // this transition, so pay them here: drop any pending morph a just-prior
+    // genuine maximize edge armed (the zone-rect commit would otherwise
+    // complete it through the geometry hook and replay the same wrong
+    // morph), and refresh the IsMaximized rule verdict.
+    m_effect->m_shaderManager.noteMaximizeDemotedForSnap(w);
+    m_effect->invalidateRuleCacheForStateChange(windowId);
     // Zone rect FIRST, so the restore moveResize inside maximize() lands
     // directly on the placement's target — never on a stale restore rect
     // whose screen the window is not being placed on (the cross-screen
@@ -187,10 +201,12 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     kw->setGeometryRestore(KWin::RectF(zoneRect));
     // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY — the same
     // edge unmaximizeMonocleWindow guards. The rect it moves to is the zone
-    // rect on the placement's own screen, so no tracker re-seed is owed here:
-    // the callers that cross screens pre-seed the daemon's authoritative
-    // answer before calling, and the zone apply that follows immediately is
-    // the same rect. Save/restore so the bracket nests inside ApplySnap's.
+    // rect on the placement's own screen, so no tracker re-seed is owed
+    // here: the zone apply that follows immediately re-stamps the tracked
+    // screen through its own frame-change processing (for an X11 client the
+    // committed rect can differ by constrainTileGeometry's centring shift, a
+    // one-apply transient that same processing heals). Save/restore so the
+    // bracket nests inside ApplySnap's.
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
     const auto geomGuard = qScopeGuard([this, prevInApply] {

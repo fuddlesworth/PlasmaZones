@@ -956,8 +956,16 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     // AFTER the capture (freeGeometryForCapture reads the maximize state to
     // substitute the true free rect), BEFORE the apply: a surviving KWin
     // maximize fights the zone rect and arms a cross-screen restore.
+    // Deliberately UNGATED on isManagedScreen (the daemon_apply sites gate
+    // because their slots also carry float restores): this path always
+    // commits a zone placement and applies the rect unconditionally, the
+    // demote already skips engine-held claims internally, and gating only
+    // the demote would leave the maximize fighting the rect on managed
+    // screens — the defect it exists to fix.
     m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
-    m_effect->applyWindowGeometry(targetWindow, geometry);
+    m_effect->applyWindowGeometry(targetWindow, geometry, false, false, PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                                  QRectF(), QRectF(),
+                                  /*demoteMaximizeOnDeferredReplay=*/true);
 
     // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
     // to get the virtual screen ID (not just the physical output).

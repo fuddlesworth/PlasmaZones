@@ -307,7 +307,8 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
             m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                          PhosphorAnimation::ProfilePaths::WindowLayoutSwitch);
+                                          PhosphorAnimation::ProfilePaths::WindowLayoutSwitch, QRectF(), QRectF(),
+                                          /*demoteMaximizeOnDeferredReplay=*/true);
         }
     });
 }
