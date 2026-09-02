@@ -514,8 +514,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // directly (single DOF), while the free-sheet neighbour springs can
         // reach ~2x sheetStiffness at the highest lattice mode, so take
         // max(gripStiffness, 2*sheetStiffness). Cap moveFactor to 80% of the
-        // bound for margin; the shipped KWin preset (k=0.018, gk=0.16,
-        // mf=0.16, drag=0.82) sits at ~70% and is left untouched.
+        // bound for margin; the shipped KWin default preset (k=0.15,
+        // gk=0.15, drag=0.80, mf=0.10) computes a limit of 0.096, so the
+        // clamp trims its moveFactor by ~4% — imperceptible, and the margin
+        // is worth more than exact preset parity.
         constexpr qreal kMeshSubstepMs = 10.0; // matches mesh_sim.cpp integrator step
         const qreal effectiveK = qMax(transition.meshParams.gripStiffness, 2.0 * transition.meshParams.stiffness);
         if (effectiveK > 0.0) {

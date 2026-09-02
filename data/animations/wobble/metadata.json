@@ -26,16 +26,16 @@
             "id": "sheetStiffness",
             "name": "Sheet stiffness",
             "type": "float",
-            "default": 0.018,
+            "default": 0.15,
             "min": 0.005,
-            "max": 0.08,
+            "max": 0.3,
             "description": "How rigidly the body holds its shape, where lower values drape more like loose cloth"
         },
         {
             "id": "gripStiffness",
             "name": "Grip strength",
             "type": "float",
-            "default": 0.16,
+            "default": 0.15,
             "min": 0.03,
             "max": 0.5,
             "description": "How tightly the grabbed point tracks the cursor, where higher values keep it pinned under the pointer"
@@ -44,7 +44,7 @@
             "id": "springiness",
             "name": "Springiness",
             "type": "float",
-            "default": 0.82,
+            "default": 0.8,
             "min": 0.6,
             "max": 0.97,
             "description": "How much the sheet oscillates before settling, where lower values drift to rest and higher values bounce like jelly"
@@ -53,7 +53,7 @@
             "id": "moveFactor",
             "name": "Responsiveness",
             "type": "float",
-            "default": 0.16,
+            "default": 0.1,
             "min": 0.05,
             "max": 0.4,
             "description": "How quickly the sheet reacts to the drag, where lower values feel heavier"
