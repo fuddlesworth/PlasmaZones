@@ -253,7 +253,6 @@ void initMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const
     // trailing drape falls out of the soft neighbour springs + the tight
     // grip alone.
     sim.lastFrameTopLeft = frame.topLeft();
-    sim.accumMs = 0.0;
     sim.settled = false;
     sim.initialized = true;
 }
@@ -264,14 +263,20 @@ void stepMeshSim(MeshSim& sim, const QRectF& frame, qreal deltaMs)
         return;
     }
     updateOrigins(sim, frame);
-    sim.accumMs += qBound(0.0, deltaMs, 200.0);
+    // Drain the WHOLE frame delta, KWin-style: full 10 ms chunks then a
+    // partial final step, leaving no remainder. Carrying a remainder in an
+    // accumulator (the previous scheme) makes some frames advance the
+    // lattice zero times at refresh rates whose frame time is not a
+    // multiple of the step (6.9 ms at 144 Hz), while the window itself
+    // moves every frame — visible jitter.
+    qreal remaining = qBound(0.0, deltaMs, 200.0);
     qreal accSum = 0.0;
     qreal velSum = 0.0;
-    bool stepped = false;
-    while (sim.accumMs >= kIntegrationStepMs) {
-        sim.accumMs -= kIntegrationStepMs;
-        integrateOne(sim, frame, kIntegrationStepMs);
-        stepped = true;
+    const bool stepped = remaining > 0.0;
+    while (remaining > 0.0) {
+        const qreal dt = qMin(remaining, kIntegrationStepMs);
+        remaining -= dt;
+        integrateOne(sim, frame, dt);
     }
     if (stepped) {
         for (int i = 0; i < MeshSim::kCount; ++i) {

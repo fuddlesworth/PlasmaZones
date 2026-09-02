@@ -34,16 +34,16 @@ namespace PlasmaZones {
 /// and a loose flag can share this one solver.
 struct MeshSimParams
 {
-    // Sheet stiffness: LOW so the body drapes and trails like fabric rather
-    // than snapping back. Grip stiffness is separate and HIGH so the grabbed
-    // point stays under the cursor while the rest hangs off it — a dragged
-    // cloth, not a jiggling blob. `drag` is KWin's velocity-RETENTION factor
-    // (higher = more oscillation, counter-intuitively); kept modest so the
-    // sheet settles by drifting, not by ringing (the "pudding" bounce).
-    qreal stiffness = 0.018;
-    qreal gripStiffness = 0.16;
-    qreal drag = 0.82;
-    qreal moveFactor = 0.16;
+    // Defaults are KWin wobblywindows' default preset (pset[0]: stiffness
+    // 0.15, drag 0.80, move_factor 0.10) so the out-of-the-box feel matches
+    // the native effect. KWin uses ONE stiffness for grip and sheet alike;
+    // gripStiffness stays a separate knob so a pack can still split them,
+    // but defaults equal. `drag` is KWin's velocity-RETENTION factor
+    // (higher = more oscillation, counter-intuitively).
+    qreal stiffness = 0.15;
+    qreal gripStiffness = 0.15;
+    qreal drag = 0.80;
+    qreal moveFactor = 0.10;
 };
 
 struct MeshSim
@@ -61,7 +61,6 @@ struct MeshSim
 
     MeshSimParams params;
     QPointF lastFrameTopLeft;
-    qreal accumMs = 0.0;
     bool initialized = false;
     /// False once the lattice has energy; the caller keeps the transition
     /// alive (and repainting) until this reads true again after release.
