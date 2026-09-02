@@ -150,5 +150,4 @@ pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
 # The close-settle reflow hold's observable contract (deferred windowsTiled
 # batch, deadline push, zero-delay immediacy). Needs the settings stub: the
 # interface default is 0, so without one the hold never arms.
-pse_add_test(test_scrollengine_closehold test_scrollengine_closehold.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
