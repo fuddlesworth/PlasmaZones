@@ -1178,24 +1178,6 @@
         <translation>Ändra markering</translation>
     </message>
     <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderIdCommand.cpp" line="15"/>
-        <source>Change Shader Effect</source>
-        <comment>@action</comment>
-        <translation>Ändra shadereffekt</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="17"/>
-        <source>Change Shader Parameter</source>
-        <comment>@action</comment>
-        <translation>Ändra shaderparameter</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="29"/>
-        <source>Change Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>Ändra shaderparametrar</translation>
-    </message>
-    <message>
         <location filename="../src/editor/undo/commands/ChangeZOrderCommand.cpp" line="13"/>
         <source>Change Z-Order</source>
         <comment>@action</comment>
@@ -1244,17 +1226,17 @@
         <translation>Rensa åsidosättning av kantmellanrum</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="179"/>
+        <location filename="../src/editor/main.cpp" line="178"/>
         <source>Create new layout</source>
         <translation>Skapa ny layout</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="182"/>
+        <location filename="../src/editor/main.cpp" line="181"/>
         <source>Scrolling template ID to edit</source>
         <translation>ID för rullningsmallen som ska redigeras</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="184"/>
+        <location filename="../src/editor/main.cpp" line="183"/>
         <source>Create new scrolling template</source>
         <translation>Skapa ny rullningsmall</translation>
     </message>
@@ -1296,30 +1278,30 @@
         <translation>Fyll zon</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="659"/>
+        <location filename="../src/editor/controller/layout.cpp" line="646"/>
         <source>Invalid layout data format</source>
         <translation>Ogiltigt format på layoutdata</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1152"/>
-        <location filename="../src/editor/controller/layout.cpp" line="1190"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1094"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1132"/>
         <source>File path cannot be empty</source>
         <translation>Filsökvägen får inte vara tom</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1159"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1101"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="657"/>
         <source>Failed to import layout: %1</source>
         <translation>Kunde inte importera layout: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1170"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1112"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="664"/>
         <source>That file is not a layout this app can read.</source>
         <translation>Den filen är inte en layout som appen kan läsa.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1213"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1155"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="470"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="476"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="709"/>
@@ -1328,24 +1310,24 @@
         <translation>Kunde inte skriva exporten. Kontrollera att mappen är skrivbar.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1195"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1137"/>
         <source>No layout loaded to export</source>
         <translation>Ingen layout inläst att exportera</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1202"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1144"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="700"/>
         <source>Failed to export layout: %1</source>
         <translation>Kunde inte exportera layout: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="624"/>
+        <location filename="../src/editor/controller/layout.cpp" line="611"/>
         <location filename="../src/editor/services/DBusLayoutService.cpp" line="40"/>
         <source>Layout ID cannot be empty</source>
         <translation>Layout-ID får inte vara tomt</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="175"/>
+        <location filename="../src/editor/main.cpp" line="174"/>
         <source>Layout ID to edit</source>
         <translation>Layout-ID att redigera</translation>
     </message>
@@ -1417,7 +1399,7 @@
         <translation>Inget placeringsläge är påslaget</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="629"/>
+        <location filename="../src/editor/controller/layout.cpp" line="616"/>
         <source>Layout service not initialized</source>
         <translation>Layouttjänsten är inte initierad</translation>
     </message>
@@ -1440,7 +1422,7 @@
         <translation>Flytta zon</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="570"/>
+        <location filename="../src/editor/controller/layout.cpp" line="568"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="276"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="284"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
@@ -1448,7 +1430,7 @@
         <translation>Ny layout</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="180"/>
+        <location filename="../src/editor/main.cpp" line="179"/>
         <source>Open in read-only preview mode</source>
         <translation>Öppna i skrivskyddat förhandsgranskningsläge</translation>
     </message>
@@ -1497,12 +1479,6 @@
         <translation>file</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="272"/>
-        <source>Reset Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>Återställ shaderparametrar</translation>
-    </message>
-    <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="189"/>
         <source>Resize %1 Zones</source>
         <comment>@action</comment>
@@ -1529,7 +1505,7 @@
         <translation>Skicka längst bak</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="963"/>
+        <location filename="../src/editor/controller/layout.cpp" line="918"/>
         <source>Services not initialized</source>
         <translation>Tjänsterna är inte initierade</translation>
     </message>
@@ -1552,13 +1528,7 @@
         <translation>Dela zon</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="288"/>
-        <source>Switch Shader Effect</source>
-        <comment>@action</comment>
-        <translation>Byt shadereffekt</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/main.cpp" line="177"/>
+        <location filename="../src/editor/main.cpp" line="176"/>
         <source>Target screen name</source>
         <translation>Namn på målskärm</translation>
     </message>
@@ -1599,7 +1569,7 @@
         <translation>Uppdatera färg för %1 zoner</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="170"/>
+        <location filename="../src/editor/main.cpp" line="169"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Visuell layouteditor för PlasmaZones</translation>
     </message>
@@ -2219,8 +2189,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="241"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="303"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="72"/>
         <source>Window</source>
         <translation>Fönster</translation>
@@ -2386,7 +2356,7 @@
         <translation>Skärm</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="425"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="433"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="270"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="367"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="75"/>
@@ -5202,7 +5172,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="149"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="388"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="36"/>
         <source>Animations</source>
         <translation>Animeringar</translation>
@@ -5394,7 +5364,7 @@
         <translation>Panelindelad</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="508"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="516"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation>Popup-fönster</translation>
@@ -5413,6 +5383,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="127"/>
+        <location filename="../src/settings/pages/snappingshaderspagecontroller.cpp" line="260"/>
         <source>Global default</source>
         <translation>Global standard</translation>
     </message>
@@ -8736,7 +8707,7 @@
         <translation>pekare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="302"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="310"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="54"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="646"/>
@@ -9125,8 +9096,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="306"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="314"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="379"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
@@ -10000,10 +9971,10 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="204"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="271"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="321"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="391"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="490"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="279"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="498"/>
         <source>General</source>
         <translation>Allmänt</translation>
     </message>
@@ -10035,8 +10006,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="259"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="414"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="501"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="422"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="509"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation>Fönster</translation>
@@ -10095,8 +10066,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="248"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="308"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="374"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="316"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="382"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="85"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="90"/>
@@ -10106,122 +10077,127 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="253"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="379"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="321"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="387"/>
         <source>Quick Shortcuts</source>
         <translation>Snabbgenvägar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="255"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="474"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="521"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="261"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="482"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="529"/>
         <source>Shaders</source>
         <translation>Shaders</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="263"/>
+        <source>Shader Library</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="337"/>
         <source>Templates</source>
         <translation>Mallar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="357"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="78"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="242"/>
         <source>Tabs</source>
         <translation>Flikar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="363"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
         <source>Strip Selector</source>
         <translation>Remsväljare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="407"/>
         <source>Transitions</source>
         <translation>Övergångar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="408"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="416"/>
         <source>Motion</source>
         <translation>Rörelse</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="447"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="455"/>
         <source>Window Motion</source>
         <translation>Fönsterrörelse</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="454"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="462"/>
         <source>Window Dragging</source>
         <translation>Fönsterdragning</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="495"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="503"/>
         <source>Surfaces</source>
         <translation>Ytor</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="430"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="438"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="520"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
         <source>Shell</source>
         <translation>Skal</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="518"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="526"/>
         <source>Decoration Sets</source>
         <translation>Dekorationsuppsättningar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="287"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="410"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="497"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="418"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="505"/>
         <source>Library</source>
         <translation>Bibliotek</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="182"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="451"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="115"/>
         <source>Scrolling</source>
         <translation>Rullning</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="417"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="504"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="425"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation>OSD:er</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="422"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="430"/>
         <source>Overlays</source>
         <translation>Överlägg</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="457"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="465"/>
         <source>Side Panels</source>
         <translation>Sidopaneler</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="459"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="467"/>
         <source>Widgets</source>
         <translation>Widgetar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="464"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="472"/>
         <source>Layout Editor</source>
         <translation>Layoutredigerare</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="467"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="475"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation>Förinställningar</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="472"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="480"/>
         <source>Motion Sets</source>
         <translation>Rörelseuppsättningar</translation>
     </message>
@@ -10575,63 +10551,63 @@
         <translation>Dina inställningar importerades, men animationssidorna visar fortfarande de gamla. Öppna inställningsfönstret igen för att se de importerade värdena.</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="369"/>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="413"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="376"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="420"/>
         <source>File path cannot be empty</source>
         <comment>@info</comment>
         <translation>Filsökvägen får inte vara tom</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="373"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="380"/>
         <source>No shader selected to save</source>
         <comment>@info</comment>
         <translation>Ingen shader vald att spara</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="389"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="396"/>
         <source>Failed to save preset: %1</source>
         <comment>@info</comment>
         <translation>Kunde inte spara förinställningen: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="399"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="406"/>
         <source>Failed to write preset file: %1</source>
         <comment>@info</comment>
         <translation>Kunde inte skriva förinställningsfilen: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="420"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="427"/>
         <source>Failed to open preset file: %1</source>
         <comment>@info</comment>
         <translation>Kunde inte öppna förinställningsfilen: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="428"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="435"/>
         <source>Invalid preset file: %1</source>
         <comment>@info</comment>
         <translation>Ogiltig förinställningsfil: %1</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="432"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="439"/>
         <source>Preset file must contain a JSON object</source>
         <comment>@info</comment>
         <translation>Förinställningsfilen måste innehålla ett JSON-objekt</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="439"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="446"/>
         <source>Preset file missing shader ID</source>
         <comment>@info</comment>
         <translation>Förinställningsfilen saknar shader-ID</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="444"/>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="449"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="451"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="456"/>
         <source>Shader in preset is no longer available</source>
         <comment>@info</comment>
         <translation>Shadern i förinställningen är inte längre tillgänglig</translation>
     </message>
     <message>
-        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="459"/>
+        <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="466"/>
         <source>Preset file has malformed parameters</source>
         <comment>@info</comment>
         <translation>Förinställningsfilen har felaktiga parametrar</translation>
@@ -11301,128 +11277,123 @@
         <translation>Felavisering</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="228"/>
         <source>Layout Editor</source>
         <comment>@title</comment>
         <translation>Layoutredigerare</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="228"/>
         <source>Scrolling Template Editor</source>
         <comment>@title</comment>
         <translation>Redigerare för rullningsmallar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="799"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="797"/>
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>Avsluta helskärm</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="822"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
         <source>Exit Fullscreen (F11)</source>
         <translation>Avsluta helskärm (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="850"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="886"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="932"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="848"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="884"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="930"/>
         <source>Unsaved Changes</source>
         <comment>@title:window</comment>
         <translation>Osparade ändringar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="851"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="849"/>
         <source>You have unsaved changes. What would you like to do?</source>
         <comment>@info</comment>
         <translation>Du har osparade ändringar. Vad vill du göra?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="887"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="885"/>
         <source>Switching to %1 will load that screen&apos;s layout. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Att byta till %1 läser in den skärmens layout. Vad vill du göra med dina osparade ändringar?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="931"/>
         <source>Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Att öppna en annan layout ersätter den du redigerar. Vad vill du göra med dina osparade ändringar?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="931"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Att öppna något annat ersätter mallen du redigerar. Vad vill du göra med dina ändringar som inte sparats?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="960"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="958"/>
         <source>Import Layout</source>
         <comment>@title:window</comment>
         <translation>Importera layout</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="961"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="973"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="975"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="1004"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="959"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="971"/>
         <source>JSON files (*.json)</source>
         <comment>@item:inlistbox</comment>
         <translation>JSON-filer (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="961"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="975"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="1004"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="959"/>
         <source>All files (*)</source>
         <comment>@item:inlistbox</comment>
         <translation>Alla filer (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="972"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="970"/>
         <source>Export Layout</source>
         <comment>@title:window</comment>
         <translation>Exportera layout</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="998"/>
         <source>Layout Editor Help</source>
         <comment>@title:window</comment>
         <translation>Hjälp för layoutredigeraren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="998"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
         <translation>Hjälp för rullningsmallsredigeraren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1035"/>
         <source>Layout saved successfully</source>
         <comment>@info</comment>
         <translation>Layouten sparades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1035"/>
         <source>Template saved</source>
         <comment>@info</comment>
         <translation>Mallen sparades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1039"/>
         <source>Layout exported</source>
         <comment>@info</comment>
         <translation>Layout exporterad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1058"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1046"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>Kunde inte läsa in layout: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1062"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1050"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>Kunde inte spara layout: %1</translation>
@@ -12682,428 +12653,283 @@
         <translation>Dra för att ändra storlek på zonen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="347"/>
-        <source>Shader Settings</source>
-        <comment>@title:window</comment>
-        <translation>Shaderinställningar</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="468"/>
-        <source>Enable effect:</source>
-        <comment>@label</comment>
-        <translation>Aktivera effekt:</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="469"/>
-        <source>Enable shader effect</source>
-        <comment>@option:check</comment>
-        <translation>Aktivera shadereffekt</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="484"/>
-        <source>Shader:</source>
-        <comment>@label</comment>
-        <translation>Shader:</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
-        <source>Select shader…</source>
-        <comment>@action:button</comment>
-        <translation>Välj shader…</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="528"/>
-        <source>No description available</source>
-        <comment>@info:placeholder</comment>
-        <translation>Ingen beskrivning tillgänglig</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="554"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="472"/>
         <source>by %1</source>
         <comment>@info shader author</comment>
         <translation>av %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="557"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="475"/>
         <source>v%1</source>
         <comment>@info shader version</comment>
         <translation>v%1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="560"/>
-        <source>(User shader)</source>
-        <comment>@info user-installed shader</comment>
-        <translation>(Användarshader)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="626"/>
-        <source>Apply a built-in preset</source>
-        <comment>@info:tooltip</comment>
-        <translation>Verkställ en inbyggd förinställning</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="629"/>
-        <source>Presets</source>
-        <comment>@action:button</comment>
-        <translation>Förinställningar</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="709"/>
-        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
-        <comment>@info</comment>
-        <translation>Aktivera shadereffekten för att konfigurera visuella effekter för zonöverlägg.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="730"/>
-        <source>Dismiss</source>
-        <comment>@action:button</comment>
-        <translation>Stäng</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="742"/>
-        <source>Load Preset</source>
-        <comment>@action:button</comment>
-        <translation>Läs in förinställning</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="744"/>
-        <source>Load shader settings from a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>Läs in shaderinställningar från en förinställningsfil</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="756"/>
-        <source>Save Preset</source>
-        <comment>@action:button</comment>
-        <translation>Spara förinställning</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
-        <source>Save current shader settings as a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>Spara aktuella shaderinställningar som en förinställningsfil</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="775"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="777"/>
-        <source>Apply</source>
-        <comment>@action:button</comment>
-        <translation>Verkställ</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="778"/>
-        <source>Apply the shader settings and close the dialog</source>
-        <translation>Verkställ shaderinställningarna och stäng dialogrutan</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="915"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="902"/>
         <source>No error details available.</source>
         <comment>@info shader preview</comment>
         <translation>Inga feldetaljer tillgängliga.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
-        <source>Loading preview…</source>
-        <comment>@info:placeholder</comment>
-        <translation>Läser in förhandsgranskning…</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="939"/>
         <location filename=".qml-stubs/src/shared/ShaderParamsEditor.qml.cpp" line="137"/>
         <source>Choose %1</source>
         <comment>@title:window</comment>
         <translation>Välj %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="954"/>
-        <source>Choose Image</source>
-        <comment>@title:window</comment>
-        <translation>Välj bild</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
-        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</source>
-        <comment>@item:inlistbox</comment>
-        <translation>Bildfiler (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="974"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="979"/>
         <source>Save Shader Preset</source>
         <comment>@title:window</comment>
         <translation>Spara shaderförinställning</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="1003"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="994"/>
         <source>Load Shader Preset</source>
         <comment>@title:window</comment>
         <translation>Läs in shaderförinställning</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="79"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="78"/>
         <source>Currently selected screen for layout editing</source>
         <comment>@info</comment>
         <translation>Aktuellt vald skärm för layoutredigering</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="79"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="78"/>
         <source>Select screen for layout editing</source>
         <comment>@info</comment>
         <translation>Välj skärm för layoutredigering</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="158"/>
         <source>Layout:</source>
         <comment>@label</comment>
         <translation>Layout:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="158"/>
         <source>Template:</source>
         <comment>@label</comment>
         <translation>Mall:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="174"/>
         <source>Preview</source>
         <comment>@info</comment>
         <translation>Förhandsgranskning</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="204"/>
         <source>Layout name</source>
         <comment>@label</comment>
         <translation>Layoutnamn</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="204"/>
         <source>Template name</source>
         <comment>@label</comment>
         <translation>Mallnamn</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Enter name for the layout</source>
         <comment>@info</comment>
         <translation>Ange ett namn för layouten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Enter name for the template</source>
         <comment>@info</comment>
         <translation>Ange ett namn för mallen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="241"/>
         <source>%1/%2</source>
         <comment>@info</comment>
         <translation>%1/%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="246"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="245"/>
         <source>Character count: %1 of %2</source>
         <comment>@info</comment>
         <translation>Teckenantal: %1 av %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="246"/>
         <source>Shows how many characters are used in the layout name</source>
         <comment>@info</comment>
         <translation>Visar hur många tecken som används i layoutnamnet</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="348"/>
         <source>Undo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>Ångra: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="348"/>
         <source>Undo</source>
         <comment>@action:tooltip</comment>
         <translation>Ångra</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="350"/>
         <source>Undo</source>
         <comment>@action</comment>
         <translation>Ångra</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="365"/>
         <source>Redo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>Gör om: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="365"/>
         <source>Redo</source>
         <comment>@action:tooltip</comment>
         <translation>Gör om</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="367"/>
         <source>Redo</source>
         <comment>@action</comment>
         <translation>Gör om</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="390"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="389"/>
         <source>Layout-specific settings (gaps)</source>
         <comment>@tooltip</comment>
         <translation>Layoutspecifika inställningar (mellanrum)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="391"/>
         <source>Layout Settings</source>
         <comment>@action</comment>
         <translation>Layoutinställningar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="392"/>
         <source>Configure per-layout gap overrides</source>
         <comment>@info</comment>
         <translation>Konfigurera layoutspecifika åsidosättningar av mellanrum</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="414"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="413"/>
         <source>Layout visibility (per monitor/desktop/activity)</source>
         <comment>@tooltip</comment>
         <translation>Layoutens synlighet (per skärm/skrivbord/aktivitet)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="416"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="415"/>
         <source>Layout Visibility</source>
         <comment>@action</comment>
         <translation>Layoutens synlighet</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="417"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="416"/>
         <source>Configure where this layout appears in the zone selector</source>
         <comment>@info</comment>
         <translation>Konfigurera var den här layouten visas i zonväljaren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="430"/>
-        <source>Shader effect settings</source>
-        <comment>@tooltip</comment>
-        <translation>Inställningar för shadereffekt</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="432"/>
-        <source>Shader Settings</source>
-        <comment>@action</comment>
-        <translation>Shaderinställningar</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
-        <source>Configure visual shader effects for zones</source>
-        <comment>@info</comment>
-        <translation>Konfigurera visuella shadereffekter för zoner</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="457"/>
         <source>Import layout from file</source>
         <comment>@tooltip</comment>
         <translation>Importera layout från fil</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="459"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="435"/>
         <source>Import Layout</source>
         <comment>@action</comment>
         <translation>Importera layout</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="436"/>
         <source>Import a layout from a JSON file</source>
         <comment>@info</comment>
         <translation>Importera en layout från en JSON-fil</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="445"/>
         <source>Export layout to file</source>
         <comment>@tooltip</comment>
         <translation>Exportera layout till fil</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="471"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="447"/>
         <source>Export Layout</source>
         <comment>@action</comment>
         <translation>Exportera layout</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="448"/>
         <source>Export the current layout to a JSON file</source>
         <comment>@info</comment>
         <translation>Exportera den aktuella layouten till en JSON-fil</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="462"/>
         <source>Exit fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Avsluta helskärmsläge (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="462"/>
         <source>Enter fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Aktivera helskärmsläge (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="465"/>
         <source>Exit Fullscreen</source>
         <comment>@action</comment>
         <translation>Avsluta helskärm</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="465"/>
         <source>Fullscreen</source>
         <comment>@action</comment>
         <translation>Helskärm</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="490"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="466"/>
         <source>Toggle fullscreen editing mode</source>
         <comment>@info</comment>
         <translation>Växla läget för helskärmsredigering</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="497"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="473"/>
         <source>Quick reference guide (F1)</source>
         <comment>@tooltip</comment>
         <translation>Snabbreferensguide (F1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="499"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="475"/>
         <source>Help</source>
         <comment>@action</comment>
         <translation>Hjälp</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="500"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="476"/>
         <source>Open quick reference guide</source>
         <comment>@info</comment>
         <translation>Öppna snabbreferensguiden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="512"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="488"/>
         <source>Close editor</source>
         <comment>@tooltip</comment>
         <translation>Stäng redigeraren</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="514"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="490"/>
         <source>Close</source>
         <comment>@action</comment>
         <translation>Stäng</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="515"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="491"/>
         <source>Close the layout editor</source>
         <comment>@info</comment>
         <translation>Stäng layoutredigeraren</translation>
@@ -14546,6 +14372,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="177"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="146"/>
         <source>Current: %1</source>
         <translation>Aktuell: %1</translation>
     </message>
@@ -16776,7 +16603,7 @@
         <translation>Börja om från början i redigeraren</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="341"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="59"/>
         <source>Columns</source>
         <translation>Kolumner</translation>
@@ -17447,6 +17274,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="172"/>
         <source>Choose an overlay shader…</source>
         <translation>Välj en överläggsshader…</translation>
     </message>
@@ -19519,12 +19347,12 @@
         <translation>Tilldela zonlayouter till tangentbordsgenvägar för snabbt byte.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="22"/>
-        <source>Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor&apos;s appearance section.</source>
-        <translation>Bläddra bland installerade shaders för fästöverlägget. Tilldela en shader till en layout från layouteditorns utseendesektion.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="23"/>
+        <source>Browse installed snapping overlay shaders. Assign a shader on the Shaders page, as a global default or per layout.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="28"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="29"/>
         <source>Used by %n layout</source>
         <comment>@info shader usage section header (snapping overlay)</comment>
         <translation>
@@ -19533,7 +19361,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="31"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="32"/>
         <source>%n layout</source>
         <comment>@info shader usage chip (snapping overlay)</comment>
         <translation>
@@ -23177,6 +23005,46 @@
         <source>None</source>
         <comment>@item:inlistbox no modifier key selected</comment>
         <translation>Ingen</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="74"/>
+        <source>None</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="79"/>
+        <source>(missing: %1)</source>
+        <translation type="unfinished">(saknas: %1)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="138"/>
+        <source>Using global default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="164"/>
+        <source>Shader:</source>
+        <translation type="unfinished">Shader:</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="173"/>
+        <source>Global default overlay shader</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="173"/>
+        <source>Overlay shader for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="55"/>
+        <source>The global default applies to every layout. Each layout card can override it. Install more packs from the Shader Library page.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="61"/>
+        <source>Global Default</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>
