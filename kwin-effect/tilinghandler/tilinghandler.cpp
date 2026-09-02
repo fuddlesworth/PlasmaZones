@@ -243,6 +243,20 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         if (!m_effect->isTileableWindow(w) || !m_effect->shouldHandleWindow(w)) {
             return;
         }
+        // A floating window under the cursor neither receives hover focus nor
+        // is looked through — a plain return, symmetric with the active-window
+        // float pause above. Both halves are needed to avoid a one-way focus
+        // trap: activating a float on hover hands it focus, the active-float
+        // pause then freezes FFM, and with keep-floating-above the float
+        // overlaps the tiled stack so any cursor sweep across its frame
+        // re-captures focus that only a manual click can move away — the
+        // #1028 "sticky window". A `continue` would be the #461 steal in a
+        // new coat: focusing a tiled window underneath a visible overlay the
+        // cursor is actually on. Floats are click-to-focus, in both
+        // directions.
+        if (m_effect->isWindowFloating(m_effect->getWindowId(w))) {
+            return;
+        }
         // Also block focus for windows below the minimum size threshold.
         // These are normal windows (pass isTileableWindow) but too small
         // for autotile — e.g., emoji picker, small utilities. Without this,
