@@ -40,7 +40,8 @@ namespace {
 constexpr int EndDragTimeoutMs = 500;
 } // namespace
 
-void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled)
+void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled,
+                                    bool effectFloatedThisDrag)
 {
     // Single entry point for drag-end dispatch.
     // Sends endDrag, receives a PhosphorProtocol::DragOutcome, and applies exactly the
@@ -56,6 +57,57 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // wrong drag's state. Capturing a local is the same staleness guard the
     // beginDrag reply gets from m_dragActivation.generation.
     const bool startedFloating = m_dragActivation.startedFloating;
+
+    // Revoke the drag-start optimistic float on every arm that applies no
+    // outcome. In Float mode the effect floats a tracked window synchronously
+    // at drag start (handleDragToFloat → applyFloatCleanup) without telling
+    // the daemon; only ApplySnap and ApplyFloat ever settle that write. The
+    // other four exits — NoOp (the daemon re-inserted the window, e.g. a
+    // drag-insert re-tile with the trigger held), CancelSnap, an errored
+    // reply, and the timeout — used to leave the FloatingCache latched at
+    // "floating" for a window the daemon still tiles. FFM pauses while the
+    // active window floats, and the keep-floating-above grant rides the same
+    // cache, so one such drag froze focus-follows-mouse for the window's
+    // whole life (Discussion #1028). Route the revert through
+    // slotWindowFloatingChanged(false): it is the authoritative not-floating
+    // edge consumer — cache write, passive shed, and the unconditional rule
+    // reconcile that drains the keep-above grant — so the revert behaves
+    // exactly as if the daemon had announced the truth.
+    //
+    // `startedFloating` guards the genuinely-floating case: a window that was
+    // already floating before the drag keeps its float on a cancelled drop.
+    const auto revertOptimisticDragFloat = [this, windowId, startedFloating, effectFloatedThisDrag]() {
+        if (!effectFloatedThisDrag || startedFloating) {
+            return;
+        }
+        // Staleness guard: these arms fire up to EndDragTimeoutMs after
+        // dispatch, and the user may have re-grabbed the SAME window by then.
+        // A stale revert would flip the cache to not-floating mid-drag and
+        // strip the new drag's floatedWindowIds marker (via
+        // slotWindowFloatingChanged's passive shed), so its own drag-end arms
+        // could no longer revert. DragTracker state clears at dragStopped, so
+        // a live drag on this window at reply time can only be a successor.
+        //
+        // Skip ONLY when the successor actually OWNS a float marker. Both
+        // drag-start float producers gate on !isWindowFloating, so a
+        // successor grabbing a window whose cache is still latched from THIS
+        // drag floats nothing and inserts no marker — its own arms then see
+        // startedFloating=true and revert nothing, making this stale revert
+        // the only one left. In that case it is safe (no marker to strip)
+        // and needed.
+        if (m_dragTracker->isDragging() && m_dragTracker->draggedWindowId() == windowId
+            && m_dragActivation.floatedWindowIds.contains(windowId)) {
+            qCDebug(lcEffect) << "endDrag revert skipped — successor drag owns the float state for" << windowId;
+            return;
+        }
+        QString screenId;
+        if (KWin::EffectWindow* live = findWindowByIdExact(windowId)) {
+            screenId = getWindowScreenId(live);
+        }
+        qCInfo(lcEffect) << "endDrag applied no outcome — reverting drag-start float for" << windowId << "on"
+                         << screenId;
+        slotWindowFloatingChanged(windowId, false, screenId);
+    };
 
     // Identity of the interactive move/resize this drag belongs to, captured
     // synchronously at dispatch. The four rescue sites in the reply lambda
@@ -112,13 +164,19 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // QPointer: the `handled` handshake already prevents a double-delete, but
     // a raw watcher capture would still dangle if that invariant ever slips.
     connect(timeoutTimer, &QTimer::timeout, this,
-            [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer]() {
+            [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer,
+             revertOptimisticDragFloat]() {
                 if (*handled) {
                     return;
                 }
                 *handled = true;
                 qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
                                     << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
+                // No outcome will ever arrive, so the drag-start float is
+                // unsettled — revoke it rather than latch it. A late daemon
+                // reply is discarded by `handled`, and any real daemon-side
+                // float lands later through its own windowFloatingChanged.
+                revertOptimisticDragFloat();
                 // The window still sits wherever the user dropped it, on whatever
                 // screen that is, so a crossing the handlers deferred during the
                 // drag has to be re-resolved even though no outcome ever arrived.
@@ -131,8 +189,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     timeoutTimer->start(EndDragTimeoutMs);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, handled, timeoutTimer, startedFloating,
-             dragMoveGeneration](QDBusPendingCallWatcher* w) {
+            [this, safeWindow, windowId, handled, timeoutTimer, startedFloating, dragMoveGeneration,
+             revertOptimisticDragFloat](QDBusPendingCallWatcher* w) {
                 // True only while THIS drag's interactive move is still the one
                 // KWin is running, and only when the left button is already up
                 // (the case the rescues exist for: KWin waits for the last
@@ -167,6 +225,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 QDBusPendingReply<PhosphorProtocol::DragOutcome> reply = *w;
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
+                    revertOptimisticDragFloat();
                     drainDragSuppressedRuleInvalidations();
                     return;
                 }
@@ -177,6 +236,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // based on a corrupted payload.
                     qCWarning(lcEffect) << "endDrag outcome rejected:" << err
                                         << "— dropping without applying any action for" << windowId;
+                    revertOptimisticDragFloat();
                     drainDragSuppressedRuleInvalidations();
                     return;
                 }
@@ -189,7 +249,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 case PhosphorProtocol::DragOutcome::CancelSnap:
                     // Daemon handled any internal cleanup. CancelSnap returns
                     // the window to its pre-drag state, so its snap-managed
-                    // status is unchanged — nothing for the effect to retrack.
+                    // status is unchanged — nothing for the effect to retrack,
+                    // EXCEPT the effect's own drag-start float, which the
+                    // daemon never knew about: on a Float-mode drag the daemon
+                    // re-inserting the window (a held-trigger drag-insert
+                    // settles as NoOp) or cancelling leaves it tiled on the
+                    // daemon side while the effect's cache said floating.
                     //
                     // Deliberately NO interactive-move rescue here, and none in
                     // NotifyDragOutUnsnap either. Only ApplyFloat, ApplySnap and
@@ -200,6 +265,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // move alive until the last button comes up is the correct
                     // behaviour for any window. Ending it here would cut a
                     // gesture short mid-drag.
+                    revertOptimisticDragFloat();
                     break;
 
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
@@ -208,6 +274,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Snapped → unsnapped flips the Mode / IsSnapped rule fields;
                     // re-resolve now (symmetric with the snap-commit path below).
                     invalidateRuleCacheForStateChange(windowId);
+                    // Belt-and-braces: this outcome fires for a snap-zone
+                    // drag-out, which should be mutually exclusive with an
+                    // engine-bypass drag-start float (the only
+                    // effectFloatedThisDrag producer) — the revert is a no-op
+                    // then. If daemon and effect ever diverge enough to pair
+                    // them, the daemon's answer ("unsnapped, not floating")
+                    // wins and the optimistic write must not outlive it.
+                    revertOptimisticDragFloat();
                     break;
 
                 case PhosphorProtocol::DragOutcome::ApplyFloat: {
@@ -227,6 +301,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // re-pollute the scrubbed id caches and record a daemon
                     // float for a dead id.
                     if (!safeWindow || safeWindow->isDeleted()) {
+                        // The float outcome cannot be applied, so the
+                        // drag-start optimistic float must not outlive it —
+                        // the not-floating edge tolerates a dead window
+                        // (empty screenId, owner-screen fallback).
+                        revertOptimisticDragFloat();
                         break;
                     }
                     // Same rescue as ApplySnap / RestoreSize, but END rather
@@ -324,6 +403,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // through the D-Bus reply latency (same hygiene as the
                     // batch apply path).
                     if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                        // Outcome not applied (dead or fullscreen window):
+                        // revert the drag-start optimistic float, same as the
+                        // no-outcome arms. The fullscreen half is a LIVE
+                        // window whose cache would otherwise stay latched.
+                        revertOptimisticDragFloat();
                         break;
                     }
                     const QRect snapGeometry = outcome.toRect();
@@ -413,6 +497,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
                 case PhosphorProtocol::DragOutcome::RestoreSize: {
                     if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                        // Same revert rationale as the ApplySnap bail above.
+                        revertOptimisticDragFloat();
                         break;
                     }
                     // Drag-to-unsnap: apply pre-snap width/height at current
@@ -478,6 +564,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     m_snapHandler->clearWindowSnapped(windowId);
                     // Unsnapped — flips the Mode / IsSnapped rule fields; re-resolve.
                     invalidateRuleCacheForStateChange(windowId);
+                    // Same belt-and-braces as NotifyDragOutUnsnap above: a
+                    // snap-managed restore should never pair with an
+                    // engine-bypass drag-start float, so this is a no-op —
+                    // unless the two views diverged, and then the daemon's
+                    // "restored, not floating" answer wins.
+                    revertOptimisticDragFloat();
                     break;
                 }
                 }

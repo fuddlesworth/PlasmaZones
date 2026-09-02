@@ -206,12 +206,33 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
     if (isMinimizeFloated(windowId)) {
         if (enteringAutotile) {
             m_untiledMinimizeFloats.insert(windowId);
-            if (m_effect->m_daemonGate.serviceRegistered) {
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
-                    QStringLiteral("setWindowFloatingForScreen"));
-            }
+        }
+        // Re-assert the daemon-side float on EVERY claim pass, not only when
+        // entering autotile. Each claim site in this file inserts its local
+        // sets unconditionally but gates the setWindowFloatingForScreen send
+        // on serviceRegistered, so a claim that runs while the daemon is
+        // between "registering bridge" and "Bridge registered" (a restarted
+        // daemon's managedScreensChanged arrives through the surviving
+        // signal connection before the async registerBridge reply lands)
+        // writes the local half and drops the daemon half. The guaranteed
+        // post-registration re-announce (onDaemonReady -> loadSettings ->
+        // notifyWindowsAddedBatch) reaches THIS branch for the still-
+        // minimized window — with enteringAutotile=false — and returning
+        // without sending discarded the one reconciliation pass the gate's
+        // design relies on. The effect then holds a minimize-float the
+        // daemon never heard of, its tiling slot stays seeded, and the zone
+        // is never freed (Discussion #1028, "minimized windows got frozen").
+        //
+        // The daemon side is an explicit re-assert consumer: it re-marks the
+        // suspension float from the registry's minimized bit and dedupes the
+        // broadcast, so repeats are absorbed. The in-flight guard is
+        // load-bearing: isMinimizeFloated also covers m_unfloatInFlight, and
+        // a float=true re-assert racing a live unfloat would countermand it.
+        if (m_effect->m_daemonGate.serviceRegistered && !m_unfloatInFlight.contains(windowId)) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                QStringLiteral("setWindowFloatingForScreen"));
         }
         return;
     }

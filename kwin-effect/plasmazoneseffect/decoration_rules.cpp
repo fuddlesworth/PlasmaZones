@@ -177,14 +177,44 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
 bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const
 {
     const WindowAppearanceDefault& def = m_windowAppearanceDefault;
-    if (!def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
+    // Null guard mirrors the sibling reconcilers: the sole caller pre-checks
+    // today, but this is a header-declared helper a future caller can reach
+    // directly.
+    if (!w || !def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
+        return false;
+    }
+    // Only for a window on the CURRENT desktop. The per-screen mode sets
+    // below are resolved against the current desktop (the daemon re-announces
+    // them on every desktop switch), so they say nothing about the desktop an
+    // off-desktop window actually lives on — and the reconcile sweep runs for
+    // every window on every desktop. Without this gate, sitting on a tiled
+    // desktop granted keep-above to every FloatingCache-floating window
+    // parked on an UNASSIGNED desktop of the same screen, on every sweep, so
+    // the bit stuck until effect teardown restored it (Discussion #1028,
+    // "windows on non-assigned desktops got keep-above"). Answering false
+    // here resolves the layer to null for that window, and the snapshot
+    // restore in reconcileRuleWindowLayer drains the bit on the same sweep;
+    // re-entering a desktop this mode manages re-grants it the same way.
+    //
+    // Resolved against the window's OWN output, not the global current
+    // desktop: under per-output virtual desktops the global read both over-
+    // and under-fires (see SnapHandler::drainDesktopArrivalFor's arm for the
+    // full rationale), and a floating window visible on its own output would
+    // otherwise be denied keep-above whenever the global current is
+    // elsewhere. Falls back to the global reading when the window has no
+    // output.
+    KWin::LogicalOutput* const out = w->screen();
+    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
+    const bool desktopInView = shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
+    if (!desktopInView) {
         return false;
     }
     // Screen mode from the tiling handler's per-screen sets: a scrolling
     // screen is a managed screen also in the scrolling set, any other
-    // managed screen is autotile, and an unmanaged screen is snapping. The
-    // FloatingCache only ever holds windows an engine floated, so a screen
-    // with placement disabled contributes no floats to begin with.
+    // managed screen is autotile, and an unmanaged screen is snapping. Note
+    // the FloatingCache is a mode-agnostic union and KEEPS a window's entry
+    // when it moves to a context no engine manages (the stale-float
+    // contract), which is why the desktop gate above must not rely on it.
     const QString screenId = getWindowScreenId(w, windowId);
     if (m_tilingHandler->isScrollingScreen(screenId)) {
         return def.keepFloatingAboveScrolling;

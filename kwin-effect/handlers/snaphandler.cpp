@@ -38,6 +38,20 @@ static constexpr int kSnapMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
 static constexpr int kSnapUnfloatRetryDelayMs = 250;
 static constexpr int kSnapMaxUnfloatRetries = 3;
 
+// Per-output "is this window's desktop in view where it lives" reading.
+// The global isOnCurrentDesktop() both over- and under-fires under
+// per-output virtual desktops (some other output switched to this window's
+// desktop, or its own output switched while the global current is
+// elsewhere — see drainDesktopArrivalFor's arm). Falls back to the global
+// reading when the window has no output. Shared by every visibility gate
+// in this file so they cannot drift.
+static bool isOnOwnOutputCurrentDesktop(KWin::EffectWindow* w)
+{
+    KWin::LogicalOutput* const out = w->screen();
+    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
+    return shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
+}
+
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -84,7 +98,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     // with updateAllDecorations): redirecting an invisible window through the border
     // shader is wasted work. When the user switches to that window's desktop, the
     // desktopChanged → updateAllDecorations connection rebuilds its border.
-    if (w->isOnCurrentDesktop()) {
+    if (isOnOwnOutputCurrentDesktop(w)) {
         m_effect->updateWindowDecoration(windowId, w);
     }
 }
@@ -152,6 +166,7 @@ void SnapHandler::clearSnapTracking()
     // depends on. The retry budget is per-session too.
     m_pendingMinimizeFloat.cancelAll();
     m_unfloatRetryAttempts.clear();
+    m_unfloatExhaustedScreens.clear();
     for (auto it = m_unfloatInFlight.cbegin(); it != m_unfloatInFlight.cend(); ++it) {
         m_minimizeFloatedWindows.insert(it.key());
     }
@@ -400,7 +415,7 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         // pause FFM via the occlusion bail (or pollute id caches below).
         // isHiddenByShowDesktop: belt-and-braces behind the showing-desktop
         // bail above, for the frame where peek engages mid-scan.
-        if (!w || w->isDeleted() || w->isMinimized() || w->isHiddenByShowDesktop() || !w->isOnCurrentDesktop()
+        if (!w || w->isDeleted() || w->isMinimized() || w->isHiddenByShowDesktop() || !isOnOwnOutputCurrentDesktop(w)
             || !w->isOnCurrentActivity()) {
             continue;
         }
@@ -482,7 +497,17 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // Unguarded like this function's other tilingHandler()
                 // derefs: m_tilingHandler is declared before m_snapHandler
                 // on the effect, so it outlives every SnapHandler call.
+                // Budget survives the hop (anti-ping-pong contract, same as the
+                // claim-pass adoption in minimizefloat.cpp): seed autotile
+                // BEFORE clearing snap's maps.
+                m_effect->tilingHandler()->seedUnfloatRetryBudget(windowId, m_unfloatRetryAttempts.value(windowId));
                 m_effect->tilingHandler()->adoptMinimizeFloated(windowId, /*untiled=*/true);
+                // Ownership left snap: retry state describing a claim snap no
+                // longer holds must not survive to poison a later hop back
+                // (a stale exhausted marker would durably refuse the sweep's
+                // refund for a window with a fresh budget).
+                m_unfloatRetryAttempts.remove(windowId);
+                m_unfloatExhaustedScreens.remove(windowId);
             } else {
                 m_minimizeFloatedWindows.insert(windowId);
                 // Refund the retry budget on the countermand's snap-side
@@ -491,8 +516,13 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // mid-flight, the NEXT unminimize's commit would otherwise
                 // start with zero retries. Kept inside the non-autotile
                 // branch so the refund's documented scoping (never reset by
-                // a screen snap refuses to handle) holds.
+                // a screen snap refuses to handle) holds. The exhausted
+                // marker is part of the retry state and clears with it: a
+                // re-minimize is a genuine situation change, and a stale
+                // marker would make the sweep skip a window whose refunded
+                // budget is fresh.
                 m_unfloatRetryAttempts.remove(windowId);
+                m_unfloatExhaustedScreens.remove(windowId);
             }
             return;
         }
@@ -500,8 +530,10 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             return;
         }
         // Refund below the autotile bail: a minimize on a screen snap refuses
-        // to handle must not reset snap's retry budget for that window.
+        // to handle must not reset snap's retry budget for that window. The
+        // exhausted marker clears with the budget (see the countermand arm).
         m_unfloatRetryAttempts.remove(windowId);
+        m_unfloatExhaustedScreens.remove(windowId);
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
             return;
@@ -713,8 +745,8 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
             // re-minimized, or left the current desktop/activity while
             // the queries were in flight (restoring an off-desktop window
             // would snap it through the wrong desktop's snap state).
-            if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized() || !safeWindow->isOnCurrentDesktop()
-                || !safeWindow->isOnCurrentActivity()) {
+            if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()
+                || !isOnOwnOutputCurrentDesktop(safeWindow.data()) || !safeWindow->isOnCurrentActivity()) {
                 return;
             }
             qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
@@ -802,6 +834,7 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                             m_unfloatInFlight.remove(windowId);
                             m_minimizeFloatedWindows.remove(windowId);
                             m_unfloatRetryAttempts.remove(windowId);
+                            m_unfloatExhaustedScreens.remove(windowId);
                             m_effect->slotWindowFloatingChanged(windowId, false, QString());
                         });
             });
@@ -809,8 +842,24 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
 
 void SnapHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
 {
-    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)
-        || m_unfloatRetryAttempts.value(windowId) >= kSnapMaxUnfloatRetries) {
+    if (!m_effect->m_daemonGate.serviceRegistered || m_pendingUnminimizeUnfloat.contains(windowId)) {
+        return;
+    }
+    if (m_unfloatRetryAttempts.value(windowId) >= kSnapMaxUnfloatRetries) {
+        // Budget exhausted: record WHERE, so the sweep's refund can tell a
+        // genuine situation change (window on a new screen) from the same
+        // screens-change churn that already failed — see the member doc.
+        // Exact resolve only: the fuzzy appId fallback could record a same-app
+        // sibling's screen, and an empty screen (virtual defs not loaded yet)
+        // would make the sweep's marker compare match every unresolvable
+        // window. A skipped stamp merely degrades to the pre-marker refund
+        // behaviour for that window.
+        if (KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId)) {
+            const QString exhaustedScreen = m_effect->getWindowScreenId(w);
+            if (!exhaustedScreen.isEmpty()) {
+                m_unfloatExhaustedScreens.insert(windowId, exhaustedScreen);
+            }
+        }
         return;
     }
     KWin::EffectWindow* window = m_effect->findWindowById(windowId);
@@ -870,13 +919,43 @@ void SnapHandler::retryVisibleMinimizeFloats()
             // hand every adopted window a fresh budget (same rule as the
             // deferred-commit transfer's refund placement).
             if (!autotile->offerMinimizeEdge(window)) {
+                // Same exhausted-screen refusal as the snap arm below: a
+                // transfer this screen already refused a full burst for gets
+                // no fresh budget from the same screens-change churn — only a
+                // genuine screen change refunds (Discussion #1028's burst
+                // shape, on the transfer arm).
+                const auto exhaustedIt = m_unfloatExhaustedScreens.constFind(windowId);
+                if (exhaustedIt != m_unfloatExhaustedScreens.constEnd() && exhaustedIt.value() == screenId) {
+                    qCDebug(lcEffect) << "Snap: keeping exhausted transfer budget for" << windowId
+                                      << "on unchanged autotile screen" << screenId;
+                    continue;
+                }
                 qCInfo(lcEffect) << "Snap: autotile refused visible-float transfer, re-arming retry:" << windowId;
                 m_unfloatRetryAttempts.remove(windowId);
+                m_unfloatExhaustedScreens.remove(windowId);
                 scheduleUnminimizeUnfloatRetry(windowId);
             }
             continue;
         }
+        // Refuse the refund when the budget was exhausted on THIS screen: the
+        // daemon's refusal (still-floating, no restore target) does not read
+        // the managed-screen set, so re-driving the same dispatch against the
+        // same screen just burns another full retry burst — observed as 4x
+        // setWindowFloatingForScreen(false) groups repeating for minutes
+        // (Discussion #1028). A window that actually moved screens gets its
+        // refund; so does one whose unfloat later succeeds (the marker clears
+        // with the rest of the retry state).
+        // contains() first: value() on a missing key is a null QString, which
+        // would spuriously match a window whose screen resolves empty during
+        // output churn.
+        const auto snapExhaustedIt = m_unfloatExhaustedScreens.constFind(windowId);
+        if (snapExhaustedIt != m_unfloatExhaustedScreens.constEnd() && snapExhaustedIt.value() == screenId) {
+            qCDebug(lcEffect) << "Snap: keeping exhausted unfloat budget for" << windowId << "on unchanged screen"
+                              << screenId;
+            continue;
+        }
         m_unfloatRetryAttempts.remove(windowId);
+        m_unfloatExhaustedScreens.remove(windowId);
         commitUnminimizeUnfloat(window, windowId, screenId);
     }
 }
@@ -953,14 +1032,34 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
     // resize, corrupting the pre-tile entry with zone dimensions.
     ensurePreSnapGeometryStored(targetWindow, m_effect->getWindowId(targetWindow), targetWindow->frameGeometry());
-    m_effect->applyWindowGeometry(targetWindow, geometry);
 
-    // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
-    // to get the virtual screen ID (not just the physical output).
+    // Derive screen from the target geometry center BEFORE the apply. Use
+    // resolveEffectiveScreenId to get the virtual screen ID (not just the
+    // physical output).
     QPoint geoCenter = geometry.center();
     const auto* output = KWin::effects->screenAt(geoCenter);
     QString screenId =
         output ? m_effect->resolveEffectiveScreenId(geoCenter, output) : m_effect->getWindowScreenId(targetWindow);
+
+    // Same defensive pair as every other daemon-driven apply site (the batch
+    // path in daemon_apply.cpp and drag_end's ApplySnap): the pre-seed covers
+    // async follow-up frame changes, the bracket covers the synchronous one —
+    // snap-assist selection can be cross-screen, and an ungated fire here let
+    // the VS-crossing handler resolve the new position against stale state
+    // and report a phantom crossing before the windowSnapped below landed.
+    if (!screenId.isEmpty()) {
+        m_effect->m_trackedScreenPerWindow[targetWindow] = screenId;
+        m_effect->tilingHandler()->updateNotifiedScreen(m_effect->getWindowId(targetWindow), screenId);
+    }
+    {
+        // Save/restore, not set/clear (nesting-safe).
+        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+        m_effect->m_daemonGate.inGeometryApply = true;
+        const auto applyGuard = qScopeGuard([this, prevInApply] {
+            m_effect->m_daemonGate.inGeometryApply = prevInApply;
+        });
+        m_effect->applyWindowGeometry(targetWindow, geometry);
+    }
 
     if (m_effect->isDaemonReady("snap assist windowSnapped")) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Snap,
@@ -1046,7 +1145,7 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
                 continue;
             }
 
-            if (w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            if (w->isMinimized() || !isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
                 qCDebug(lcEffect) << "snap-all: skipping minimized/other-desktop window" << appId;
                 continue;
             }
@@ -1196,7 +1295,7 @@ void SnapHandler::slotPendingRestoresAvailable()
             }
 
             // Skip minimized or invisible windows
-            if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+            if (window->isMinimized() || !isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
                 continue;
             }
 
@@ -1277,17 +1376,9 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
         return false;
     }
     // Measured against the window's OWN output, matching the arm in
-    // slotWindowDesktopMoveRequested. isOnCurrentDesktop() reads the global
-    // current desktop, which under per-output virtual desktops both
-    // over-fires (some other output switched to this window's desktop, so
-    // it is still not visible where it lives) and under-fires (its own
-    // output switched to it while the global current is elsewhere, so the
-    // park would sit unspent until an unrelated switch). Falls back to the
-    // global reading when the window has no output.
-    KWin::LogicalOutput* const out = window->screen();
-    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
-    const bool desktopInView = shownHere ? window->isOnDesktop(shownHere) : window->isOnCurrentDesktop();
-    if (!desktopInView || !window->isOnCurrentActivity()) {
+    // slotWindowDesktopMoveRequested — the shared helper at the top of this
+    // file carries the full over-/under-fire rationale.
+    if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
         return false; // Still waiting for its desktop.
     }
     if (window->isMinimized()) {
