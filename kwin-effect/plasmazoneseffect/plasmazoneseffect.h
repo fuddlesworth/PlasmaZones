@@ -688,7 +688,8 @@ private:
      * @param windowId Window identifier
      * @param cancelled True if the drag was cancelled (Escape / external)
      */
-    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled,
+                     bool effectFloatedThisDrag = false);
     void connectNavigationSignals();
 
     /**
