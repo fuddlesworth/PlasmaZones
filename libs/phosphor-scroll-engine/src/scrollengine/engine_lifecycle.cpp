@@ -1163,14 +1163,21 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
     // DETACH-ONCE (drag_preview.cpp): a live drag-insert preview on this
-    // screen owns the view for the rest of the hold, and picking the dragged
-    // window up activates it. Handing the view back here would slide the
-    // layout under a stationary cursor, the hazard applyLayout's own
-    // dragPreviewSteersView guard exists for. screensMatch, not ==, for that
-    // guard's reason. Read before the focus move so both outcomes below share
-    // one answer.
+    // screen owns the view for the rest of the hold. screensMatch, not ==,
+    // for the applyLayout guard's reason.
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, key.screenId);
+    if (dragPreviewSteersView) {
+        // Not just the hand-back arms: the focusWindow call itself reanchors
+        // on a column change, and a genuine mid-hold report is exactly how a
+        // focus-follows-mouse hover crossing the strip's windows slides the
+        // layout under a stationary cursor — the DETACH-ONCE hazard. Nothing
+        // is lost by dropping the whole report: commit focuses the dropped
+        // window itself, and cancel restores the captured view, so the
+        // strip's focus slot at release is decided by the drag's own ending
+        // either way.
+        return;
+    }
     const bool focusMoved = state->strip().focusWindow(windowId, params);
     // A view still detached AFTER the focus move is one no re-anchor took
     // back, and there are two ways to arrive here holding one. focusWindow
@@ -1198,7 +1205,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // The report must NAME the active window: a minimized tile in the active
     // column is refused by focusWindow without becoming the column's active
     // tile, and that report has no claim on the view.
-    const bool activeReport = state->strip().activeWindowId() == windowId && !dragPreviewSteersView;
+    const bool activeReport = state->strip().activeWindowId() == windowId;
     const bool handBackView = state->strip().viewDetached() && activeReport;
     // ATTACHED-view twin of the hand-back: the report names the active window,
     // focusWindow refused it (same column), and there is no detach latch to

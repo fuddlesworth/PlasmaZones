@@ -99,6 +99,10 @@ private Q_SLOTS:
     void edgeAutoScrollDeclinesOnAnEmptyStrip();
     void dragCommitPreservesTheWindowsMinimumSize();
     void freshAdoptionSeedsNoMinimumSizeUntilTheDaemonPushes();
+    void beginSettlesTheViewOverRealColumns();
+    void cancelRestoresThePreDragView();
+    void commitLandsTheDropWhereTheIndicatorPromised();
+    void focusReportsAreDroppedWhileAPreviewSteersTheView();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -1960,6 +1964,129 @@ void TestScrollEngineDragInsert::freshAdoptionSeedsNoMinimumSizeUntilTheDaemonPu
     engine->windowMinSizeUpdated(QStringLiteral("ghost"), 700, 400);
     QCOMPARE(stateFor(engine, QStringLiteral("S1"))->strip().windowMinimumSize(QStringLiteral("ghost")),
              QSize(700, 400));
+}
+
+void TestScrollEngineDragInsert::beginSettlesTheViewOverRealColumns()
+{
+    // Begin's detach shortens the strip; a view panned to the far end then
+    // hangs over dead space (removeWindowInternal keeps it on purpose for an
+    // ordinary close), and the user would be aiming a drop at wallpaper.
+    // Begin's settle clamp reclaims it — the one settle DETACH-ONCE allows.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    // Three 600px columns on a 1200px viewport: focusing "c" as it opened
+    // already put the view at the far end.
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), 600);
+
+    // Detaching the MIDDLE column leaves a+c, which exactly fill the
+    // viewport — every view offset but 0 stares at dead space.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), 0);
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::cancelRestoresThePreDragView()
+{
+    // The Escape promise is an EXACT restore, view included: begin's settle
+    // clamp and the restore's structural reanchor both moved the anchor, and
+    // neither answer is where the user had scrolled the strip.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(state->strip().scrollViewBy(-200, engineParams()));
+    const int pannedView = viewX(engine, QStringLiteral("S1"));
+    const int pannedAnchor = state->strip().viewAnchor();
+    QVERIFY(state->strip().viewDetached());
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    engine->cancelDragInsertPreview();
+
+    QCOMPARE(state->strip().windowsInOrder(),
+             (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    QCOMPARE(state->strip().viewAnchor(), pannedAnchor);
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), pannedView);
+}
+
+void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
+{
+    // The regression this whole family fixes: under a centering policy the
+    // commit's structural reanchor centered a column too wide to share the
+    // viewport with either neighbour, pushing EVERY other window off screen
+    // — the drop read as the window flying away from the strip. The drop
+    // re-anchor instead lands the column where the indicator promised and
+    // moves only as far as full visibility requires, keeping the neighbour's
+    // near edge on screen.
+    QObject owner;
+    auto* settings = new ScrollTestUtils::StubScrollSettings(&owner);
+    // 900px columns on the 1200px viewport: no two fit together, which is
+    // exactly the overflow the centering arms fire on.
+    settings->widthValue = 0.75;
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    // The settled strip is "a" alone at view 0; the leading slot's indicator
+    // sits at the viewport's left edge.
+    DragTarget target;
+    target.primary = 0;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("b")), 0);
+    // Flush left, as promised — NOT centered (Always centering would put the
+    // anchor at 150 and the view at -150, with "a" entirely off screen).
+    // And it survives the commit's own applyLayout: the drop owns the view
+    // the way a pan does, so updateViewForFocus cannot hand it back to the
+    // policy on the same pass.
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), 0);
+    QVERIFY(state->strip().viewDetached());
+    // The neighbour's near edge is on screen (its column starts at 900 on a
+    // 1200px viewport), which is what "the strip did not fly away" means.
+    const QRect neighbour = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    QVERIFY(!neighbour.isNull());
+    QCOMPARE(Ax::mainPos(neighbour), 900);
+}
+
+void TestScrollEngineDragInsert::focusReportsAreDroppedWhileAPreviewSteersTheView()
+{
+    // DETACH-ONCE's focus hole: a genuine focus report mid-hold (a
+    // focus-follows-mouse hover crossing the strip's windows) used to route
+    // through focusWindow's column-change reanchor and slide the layout
+    // under the stationary cursor. The whole report is dropped while a
+    // preview steers the screen — commit and cancel both decide the ending
+    // focus themselves.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("c"), QStringLiteral("S1")));
+    const QString activeBefore = state->strip().activeWindowId();
+    const int anchorBefore = state->strip().viewAnchor();
+    const int viewBefore = viewX(engine, QStringLiteral("S1"));
+
+    // FFM hover lands on the far column mid-hold.
+    engine->windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+
+    QCOMPARE(state->strip().activeWindowId(), activeBefore);
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), viewBefore);
+    engine->cancelDragInsertPreview();
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

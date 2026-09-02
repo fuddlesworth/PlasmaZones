@@ -343,6 +343,27 @@ struct DragInsertPreview
     /// in defensiveSlot.
     bool defensivelyDetached = false;
     FloatRestore defensiveSlot;
+    /// The TARGET strip's view (anchor + detach latch) as it stood BEFORE
+    /// begin's detach take and settle clamp. An Escape promises an exact
+    /// restore, and the slot alone does not deliver it: dragPreviewRestoreSlot
+    /// routes through the structural reanchor, whose policy verdict can leave
+    /// the view somewhere the user never scrolled it. Restored raw on every
+    /// cancel arm that hands the window back to the target strip.
+    int targetViewAnchorAtBegin = 0;
+    bool targetViewDetachedAtBegin = false;
+    /// True once the edge auto-scroll actually moved the view during this
+    /// hold. Gates the cancel-time view restore OFF: the scroll was the
+    /// user's own deliberate motion, and the shipped contract ("stays where
+    /// a drag scrolled it") says an Escape keeps it — restoring the captured
+    /// pair is for the holds where nothing but begin's settle and the
+    /// restore's policy reanchor moved the view.
+    bool viewScrolledDuringHold = false;
+    /// The PRIOR strip's view for a cross-key drag, captured for the same
+    /// reason: begin's take shortens that strip too, and the cancel that
+    /// returns the window home must return its view with it. Only meaningful
+    /// when hadPriorState && !priorSameKey && the prior state existed.
+    int priorViewAnchorAtBegin = 0;
+    bool priorViewDetachedAtBegin = false;
     bool hadPriorState = false;
     PhosphorEngine::PlacementStateKey priorKey;
     /// Whole-key comparison (screen AND desktop AND activity): a

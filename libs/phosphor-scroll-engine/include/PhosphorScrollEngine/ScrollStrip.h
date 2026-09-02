@@ -576,6 +576,31 @@ public:
     /// but stays in the exported signature: every sibling anchor mutator
     /// takes it, and dropping it is an ABI break for no gain.
     void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
+    /// Drag-drop re-anchor (ScrollEngine::commitDragInsertPreview): land the
+    /// just-dropped ACTIVE column at the on-screen position the drop
+    /// indicator promised — its strip position minus @p oldViewOffset, the
+    /// view offset captured BEFORE the commit's insert — then move the view
+    /// the MINIMUM that makes the column fully visible (the Never fit),
+    /// regardless of the configured centering policy. The policy's OnOverflow
+    /// arm centers a column too wide to share the viewport with either
+    /// neighbour, which after a drop hides every other window and reads as
+    /// the drop having flown away; the minimal fit keeps whatever neighbour
+    /// still fits on screen beside it. A maximized-to-edges column keeps its
+    /// one correct position (focusAnchorFor's reason). SETS the detach
+    /// latch: the drop owns the view the way a pan does, or the applyLayout
+    /// the commit runs next would hand it straight back to the centering
+    /// policy; the next focus change re-attaches as usual.
+    void reanchorForDropCommit(int oldViewOffset, const ScrollLayoutParams& params);
+    /// Drag-begin settle (ScrollEngine::beginDragInsertPreview): after the
+    /// detach take shortens the strip, pull a view that now hangs past the
+    /// TRAILING strip edge back over real columns. removeWindowInternal
+    /// deliberately leaves that dead space on an ordinary close; during a
+    /// drag hold it is what the user must aim a drop at, so the begin settle
+    /// reclaims it. Trailing edge ONLY: a leading overhang is how the
+    /// centering mutators deliberately express a centered short strip, and
+    /// a view already in range is untouched. The detach latch is left alone
+    /// — a pan still owns a clamped view.
+    void clampViewIntoStrip(const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no
     /// scroll" baseline. A DETACHED view is left entirely alone, not even
