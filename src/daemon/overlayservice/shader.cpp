@@ -131,7 +131,9 @@ OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverri
     if (!m_settings || !screenLayout) {
         return {};
     }
-    return m_settings->overlayShaderTree().resolve(screenLayout->id().toString());
+    // m_overlayShaderTree is the cached settings tree (see the member doc);
+    // reading through ISettings here would re-parse the store per call.
+    return m_overlayShaderTree.resolve(screenLayout->id().toString());
 }
 
 bool OverlayService::anyScreenUsesShader() const
@@ -209,7 +211,7 @@ void OverlayService::startShaderAnimation()
         m_audioProvider->setOptions(opts);
     }
 
-    qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
+    qCDebug(lcOverlay) << "Shader animation started at" << frameRate << "fps";
 }
 
 void OverlayService::stopShaderAnimation()

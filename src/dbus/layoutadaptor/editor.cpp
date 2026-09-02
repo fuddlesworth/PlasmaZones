@@ -177,7 +177,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     QJsonObject obj = *objOpt;
     QString idStr = obj[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
-    // Handle autotile layout settings updates (gaps, visibility, shader only)
+    // Handle autotile layout settings updates (gaps and visibility only)
     if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
         QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
         // D-Bus boundary: an id of exactly "autotile:" passes isAutotile but
@@ -283,8 +283,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // forms and maps a missing key to Any, which is the reset this branch wants.
     layout->setAspectRatioClassInt(static_cast<int>(
         PhosphorLayout::ScreenClassification::fromJsonValue(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey])));
-
-    // Update shader settings
 
     // Update visibility allow-lists
     {

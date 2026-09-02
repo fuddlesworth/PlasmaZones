@@ -25,22 +25,14 @@ namespace SettingsDbusQueries {
  *         are omitted and callers must fall back to their own defaults.
  *
  * Collapses N individual getSetting() round-trips into one, which is the primary reason
- * this helper exists. Both editor startup hot paths use it: refreshGlobalGapOverlaySettings()
- * in gaps.cpp, and the CAVA/audio key set in shader.cpp.
+ * this helper exists. The editor startup hot path uses it:
+ * refreshGlobalGapOverlaySettings() in gaps.cpp.
  *
  * Returns an empty map if
  * the daemon is unreachable or the call times out (500 ms cap); callers
  * should treat missing keys and empty maps the same way (use defaults).
  */
 QVariantMap querySettingsBatch(const QStringList& keys);
-
-/**
- * @brief Query a boolean setting from the daemon via D-Bus
- * @param settingKey The setting key to query
- * @param defaultValue Value to return if query fails
- * @return The setting value, or defaultValue if unavailable
- */
-bool queryBoolSetting(const QString& settingKey, bool defaultValue);
 
 } // namespace SettingsDbusQueries
 

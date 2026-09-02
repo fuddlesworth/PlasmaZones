@@ -90,6 +90,25 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 2);
         QVERIFY(s.overlayShaderTree().isEmpty());
     }
+
+    void testOverlayShaderTree_parameterOnlyChangeFiresAndPersists()
+    {
+        // Pins that the no-op gate compares PARAMETERS too: a same-shader
+        // write with a changed parameter map must fire the signal and land
+        // on disk (a future operator== that ignored parameters would leave
+        // this suite green while parameter edits stop saving).
+        IsolatedConfigGuard guard;
+        Settings s;
+        OverlayShaderTree tree;
+        tree.setOverride(kLayoutId, {QStringLiteral("neon-city"), {{QStringLiteral("speed"), 1.0}}});
+        s.setOverlayShaderTree(tree);
+
+        QSignalSpy spy(&s, &Settings::overlayShaderTreeChanged);
+        tree.setOverride(kLayoutId, {QStringLiteral("neon-city"), {{QStringLiteral("speed"), 2.0}}});
+        s.setOverlayShaderTree(tree);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(s.overlayShaderTree().resolve(kLayoutId).parameters.value(QStringLiteral("speed")).toDouble(), 2.0);
+    }
 };
 
 QTEST_MAIN(TestSettingsOverlayShaderTree)

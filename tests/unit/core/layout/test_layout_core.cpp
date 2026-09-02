@@ -118,6 +118,20 @@ private Q_SLOTS:
         layout.clearDirty();
         layout.setUseFullScreenGeometry(true);
         QVERIFY(layout.isDirty());
+
+        // Aspect-ratio classification: an edit that fails to mark dirty
+        // would skip saveLayout, the exact defect class this slot pins.
+        layout.clearDirty();
+        layout.setAspectRatioClass(::PhosphorLayout::AspectRatioClass::Ultrawide);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setMinAspectRatio(1.5);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setMaxAspectRatio(2.5);
+        QVERIFY(layout.isDirty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -584,10 +598,14 @@ private Q_SLOTS:
         QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("overlayDisplayMode")).toInt(), 1);
         QCOMPARE(settings.value(QStringLiteral("outerGapLeft")).toInt(), 3);
-        // shaderId/shaderParams are no longer settings keys: overlay shader
-        // assignments live in the config's OverlayShaderTree since schema v7.
+        QCOMPARE(settings.value(QStringLiteral("hiddenFromSelector")).toBool(), true);
+        // shaderId/shaderParams are no longer settings keys (overlay shader
+        // assignments live in the config's OverlayShaderTree since schema
+        // v7): the fixture carries them inline, and the store must neither
+        // extract them into settings nor strip them from the structural half.
         QVERIFY(!settings.contains(QStringLiteral("shaderId")));
         QVERIFY(!settings.contains(QStringLiteral("shaderParams")));
+        QVERIFY(structural.contains(QStringLiteral("shaderId")));
         const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
         QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
     }
@@ -747,7 +765,14 @@ private:
             {QStringLiteral("outerGapRight"), 4},
             {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("hiddenFromSelector"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
+            // Legacy-shaped extras a pre-v4 file could still carry inline:
+            // NOT in layoutSettingKeys, so the runtime store must neither
+            // extract nor strip them (the frozen v4 relocation is what moves
+            // them; post-v7 the sidecar lift retires them entirely).
+            {QStringLiteral("shaderId"), QStringLiteral("legacy-pack")},
+            {QStringLiteral("shaderParams"), QJsonObject{{QStringLiteral("k"), 1}}},
             {QStringLiteral("zones"), QJsonArray{zone}},
         };
     }

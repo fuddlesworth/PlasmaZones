@@ -271,7 +271,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // additionalProperties open — so of everything mergeSettings injects,
         // only showZoneNumbers is type-checked here. The rest (the gap/padding
         // values, overlayDisplayMode, autoAssign, hiddenFromSelector,
-        // useFullScreenGeometry, shaderId/shaderParams, the zoneAppearance
+        // useFullScreenGeometry, the zoneAppearance
         // block) passes unexamined and is left to fromJson's own per-key
         // coercion. What this gate is really for is the structural surface the
         // sidecar can no longer reach: mergeSettings re-emits the zones array

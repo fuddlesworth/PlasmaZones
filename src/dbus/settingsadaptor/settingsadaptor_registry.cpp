@@ -6,7 +6,7 @@
 //     getSetting/setSetting D-Bus surface (REGISTER_* macro block,
 //     enum-validated custom setters, JSON profile-tree blob round-trips) and
 //     calls the three per-mode slices
-//   * validProfileTreeBlob — shared wire validation for the two profile-tree
+//   * validProfileTreeBlob — shared wire validation for the three profile-tree
 //     blob setters
 //
 // The registry is split across FOUR TUs, one per family, all filling the same
@@ -66,11 +66,12 @@ bool isWindowScopeToken(const QString& requested)
     return requested == WAS::Tiled || requested == WAS::Normal || requested == WAS::All;
 }
 
-// Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
-// AND surface decoration tree) accepted over D-Bus.
+// Shared wire-size cap for the JSON profile-tree blobs (animation shader
+// tree, surface decoration tree, and overlay shader tree) accepted over
+// D-Bus.
 constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
 
-// Shared wire validation for the two profile-tree blob setters: gate on UTF-8
+// Shared wire validation for the three profile-tree blob setters: gate on UTF-8
 // byte length — for multi-byte payloads QString::size() undercounts what a
 // 64 KiB wire frame encodes to — and require a top-level JSON object. Fills
 // @p outDoc with the parsed document on success.

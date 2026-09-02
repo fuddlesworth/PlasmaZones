@@ -135,8 +135,8 @@ set(plasmazones_core_SRCS
     config/configmigration_v4rules.cpp
     config/configmigration_v4finalize.cpp
     config/configmigration_v5.cpp
-    config/configmigration_v7.cpp
     config/configmigration_v6.cpp
+    config/configmigration_v7.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
@@ -451,10 +451,10 @@ install(TARGETS plasmazones_rendering
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-# plasmazones_shaderpreview: shared zone-shader live-preview feed. Used by BOTH
-# the editor and the settings app (each injects its own IShaderPreviewBackend);
-# deliberately NOT linked by the daemon so the audio (CAVA) + preview deps stay
-# out of the compositor service.
+# plasmazones_shaderpreview: shared zone-shader live-preview feed. Used by the
+# settings app (which injects its own IShaderPreviewBackend); deliberately NOT
+# linked by the daemon so the audio (CAVA) + preview deps stay out of the
+# compositor service.
 set(plasmazones_shaderpreview_SRCS
     shaderpreview/ishaderpreviewbackend.h
     shaderpreview/shaderpreviewcontroller.h
@@ -742,7 +742,6 @@ endif()
 
 set(plasmazones_editor_SRCS
     editor/main.cpp
-    daemon/rendering/vulkansupport.cpp
     editor/EditorController.cpp
     editor/EditorGapsModel.cpp
     editor/EditorGapsModel.h

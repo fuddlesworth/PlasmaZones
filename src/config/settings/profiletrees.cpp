@@ -264,16 +264,6 @@ OverlayShaderTree Settings::overlayShaderTree() const
     return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(map));
 }
 
-OverlayShaderTree Settings::committedOverlayShaderTree() const
-{
-    // Baseline snapshot, not the live store — mirrors isKeyModified()'s
-    // m_baseline lookup, same as the two committed getters above.
-    const QVariantMap map = m_baseline.value(ConfigDefaults::snappingOverlayShadersGroup())
-                                .value(ConfigDefaults::overlayShaderTreeKey())
-                                .toMap();
-    return OverlayShaderTree::fromJson(QJsonObject::fromVariantMap(map));
-}
-
 void Settings::setOverlayShaderTree(const OverlayShaderTree& tree)
 {
     refreshCleanBackendFromDisk();

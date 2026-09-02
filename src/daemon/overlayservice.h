@@ -788,7 +788,7 @@ private:
     void refreshVisibleWindows();
 
     // Connect to a PhosphorZones::Layout's layoutModified signal so live edits from the editor
-    // (shader id/params, zone geometry, appearance) propagate to the live overlay
+    // (zone geometry, appearance, overlay display mode) propagate to the live overlay
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
@@ -1045,6 +1045,13 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    /// Cached copy of ISettings::overlayShaderTree(). The settings getter
+    /// re-reads the store and re-parses JSON on every call, and
+    /// effectiveOverlayShader() sits on the per-audio-frame path
+    /// (useShaderForScreen per screen at CAVA rate) plus twice per screen in
+    /// create/updateOverlayWindow. Refreshed in setSettings and on
+    /// overlayShaderTreeChanged.
+    OverlayShaderTree m_overlayShaderTree;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
     AutotileActiveResolver m_autotileActiveResolver;

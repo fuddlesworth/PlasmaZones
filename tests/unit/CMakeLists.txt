@@ -1723,6 +1723,24 @@ target_link_libraries(test_decorationpagecontroller
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
+add_executable(test_snappingshaders_page_controller
+    settings/pages/test_snappingshaders_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/snappingshaderspagecontroller.cpp
+    # installShaderPack forwards into the shared installer, so the symbol is
+    # needed at link even though the suite does not exercise it.
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+)
+target_link_libraries(test_snappingshaders_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_snappingshaders_page_controller COMMAND test_snappingshaders_page_controller)
+
 # Data surface behind the settings app's live decoration preview: chain
 # composition, the extended-FBO padding request, and the degraded paths a
 # browsing user can reach (unknown pack, no registry). Links only the preview

@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Overlay shader assignment moved from the layout editor into the settings app**: which shader a zone overlay draws is a display preference rather than part of a layout, so the editor's shader dialog is gone and assignments now live on the Shaders page under Snapping in the settings app. The new page has one card for the global default and one per layout, each with the same shader picker and parameter editor the dialog had, and the Shader Library page next to it browses and installs packs. Existing per-layout assignments are carried over automatically on the first start after updating. ([#1006](https://github.com/fuddlesworth/PlasmaZones/pull/1006))
+
 ## [3.4.8] - 2026-09-02
 
 ### Removed

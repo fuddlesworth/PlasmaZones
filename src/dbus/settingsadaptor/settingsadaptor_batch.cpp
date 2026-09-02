@@ -60,7 +60,10 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
         return false;
     }
 
-    // Stop any pending debounced save — we will save synchronously below
+    // Stop any pending debounced save; remember whether one was queued, so
+    // the conditional save below still flushes earlier setSetting() writes
+    // even when this batch itself changes nothing.
+    const bool hadPendingSave = m_saveTimer->isActive();
     m_saveTimer->stop();
 
     // Block all m_settings signals during the batch — each setter emits its own
@@ -119,10 +122,9 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
         }
     }
 
-    // Save once with all values applied
-    m_settings->save();
-
-    // Re-emit what the blocker suppressed, now that the whole batch is committed.
+    // Re-emit what the blocker suppressed, now that the whole batch is applied.
+    // (The single save happens after the change scan below, so a batch that
+    // changed nothing does not rewrite config.json on disk.)
     //
     // Per-property NOTIFYs are needed, not just the aggregate: the adaptor runs
     // in the daemon process, and daemon components connect to individual NOTIFY
@@ -232,6 +234,11 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // (not on the adaptor) reaches BOTH in-process listeners and the D-Bus bus:
     // the constructor relays ISettings::settingsChanged to the adaptor's own
     // D-Bus settingsChanged signal.
+    if (anyChanged || hadPendingSave) {
+        // Save once with all values applied (also flushes the cancelled
+        // debounced save from earlier single-key writes).
+        m_settings->save();
+    }
     if (anyChanged) {
         QMetaObject::invokeMethod(m_settings, &ISettings::settingsChanged);
     }

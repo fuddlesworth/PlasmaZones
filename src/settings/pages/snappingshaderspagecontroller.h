@@ -103,7 +103,10 @@ public:
     // ── Assignment surface ────────────────────────────────────────────────
 
     /// Every layout an override card can target: `{id, name}` rows from
-    /// the layout registry, sorted by name. `id` is the UUID-with-braces.
+    /// the layout registry, sorted by name (case-insensitively). `id` is
+    /// the UUID-with-braces. Overrides whose layout no longer exists in
+    /// the registry are appended as `{id, name: "", missing: true}` rows
+    /// so a stale assignment stays visible and clearable.
     Q_INVOKABLE QVariantList assignableLayouts() const;
 
     /// True iff @p path (a layout UUID) carries a direct override.
@@ -125,10 +128,6 @@ public:
     /// layout path explicitly suppresses the baseline shader for that
     /// layout; on "" it clears the global default.
     Q_INVOKABLE void setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params);
-
-    /// Replace just the parameters of the node at @p path, keeping its
-    /// shader. No-op when the path has no direct node ("" always has one).
-    Q_INVOKABLE void setShaderParameters(const QString& path, const QVariantMap& params);
 
     /// Drop the override at @p path so the layout inherits the baseline
     /// again. Rejected for "" (clear the baseline via setShaderOverride

@@ -23,6 +23,7 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include "core/types/overlayshadertree.h"
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -1733,11 +1734,6 @@ public:
     void setOverlayShaderTree(const OverlayShaderTree& tree) override;
     QString overlayShaderTreeJson() const override;
     void setOverlayShaderTreeJson(const QString& json) override;
-
-    /// The committed-baseline overlay shader tree — same role and rationale
-    /// as committedDecorationProfileTree() above, with no prune and no seed
-    /// overlay (the schema default is the bare empty tree).
-    OverlayShaderTree committedOverlayShaderTree() const override;
 
     // Decorations.Performance — PhosphorConfig::Store-backed.
     bool decorationAnimateFocusedOnly() const override;

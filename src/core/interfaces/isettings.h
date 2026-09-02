@@ -13,10 +13,6 @@
 
 #include "plasmazones_export.h"
 #include "core/types/enums.h"
-// Included rather than forward-declared: committedOverlayShaderTree()'s
-// inline default body returns the tree by value, which needs the complete
-// type here.
-#include "core/types/overlayshadertree.h"
 #include "settings_interfaces.h"
 
 // Explicit rather than transitive: the drop indicator's no-palette colour IS
@@ -34,6 +30,8 @@ class DecorationProfileTree;
 }
 
 namespace PlasmaZones {
+
+class OverlayShaderTree;
 
 namespace isettings_detail {
 /// The drop indicator's colour when nothing can resolve one: the shipped zone
@@ -201,14 +199,10 @@ public:
     // + per-layout-UUID overrides) under Snapping.OverlayShaders. Flat
     // counterpart of the two trees above; same typed-getter + JSON-facade
     // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
-    // ride the facade. The committed getter mirrors
-    // committedDecorationProfileTree for per-page Discard compares.
+    // ride the facade. No committed getter: per-page Discard rides the
+    // generic baseline-map path (the decoration one is Settings-only too).
     virtual OverlayShaderTree overlayShaderTree() const = 0;
     virtual void setOverlayShaderTree(const OverlayShaderTree& tree) = 0;
-    virtual OverlayShaderTree committedOverlayShaderTree() const
-    {
-        return overlayShaderTree();
-    }
     virtual QString overlayShaderTreeJson() const = 0;
     virtual void setOverlayShaderTreeJson(const QString& json) = 0;
 
@@ -779,6 +773,8 @@ Q_SIGNALS:
     void outerGapLeftChanged();
     void outerGapRightChanged();
     void adjacentThresholdChanged();
+    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
+
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
     void minimumZoneDisplaySizePxChanged();
@@ -1010,8 +1006,6 @@ Q_SIGNALS:
 
     // Surface decoration settings
     void decorationProfileTreeChanged();
-    // Zone-overlay shader assignments
-    void overlayShaderTreeChanged();
     void decorationAnimateFocusedOnlyChanged();
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();

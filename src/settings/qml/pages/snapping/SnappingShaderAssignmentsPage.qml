@@ -25,15 +25,34 @@ SettingsFlickable {
 
     property var _layouts: []
 
+    // Reassigning a plain array resets the Repeater wholesale (every card
+    // delegate is destroyed and recreated, dropping per-card latch and
+    // collapse state), so only publish a new array when the list content
+    // actually changed. shaderProfileChanged fires for every tree write,
+    // including the card's own parameter edits, where the layout list is
+    // identical.
     function _refreshLayouts() {
-        page._layouts = page.bridge ? page.bridge.assignableLayouts() : [];
+        var next = page.bridge ? page.bridge.assignableLayouts() : [];
+        var cur = page._layouts;
+        if (next.length === cur.length) {
+            var same = true;
+            for (var i = 0; i < next.length; i++) {
+                if (next[i].id !== cur[i].id || next[i].name !== cur[i].name || next[i].missing !== cur[i].missing) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same)
+                return;
+        }
+        page._layouts = next;
     }
 
     Component.onCompleted: page._refreshLayouts()
 
     Connections {
         target: page.bridge
-        function onShaderProfileChanged(path) {
+        function onShaderProfileChanged() {
             page._refreshLayouts();
         }
     }
@@ -51,7 +70,6 @@ SettingsFlickable {
             Layout.fillWidth: true
             Layout.bottomMargin: Kirigami.Units.smallSpacing
             type: Kirigami.MessageType.Information
-            visible: true
             text: i18n("The global default applies to every layout. Each layout card can override it. Install more packs from the Shader Library page.")
         }
 
@@ -70,7 +88,7 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 assignmentPath: modelData.id
-                cardLabel: modelData.name.length > 0 ? modelData.name : modelData.id
+                cardLabel: modelData.missing ? i18n("Deleted layout") : (modelData.name.length > 0 ? modelData.name : i18n("Unnamed layout"))
             }
         }
     }

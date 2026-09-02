@@ -747,6 +747,25 @@ private Q_SLOTS:
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
     }
 
+    /// The v6→v7 arm of the same path, required by the version-pin policy in
+    /// profileFormatTracksConfigSchemaVersion: migrateV6ToV7 is stamp-only
+    /// for the config root, so a v6-stamped profile's delta must load and
+    /// apply unchanged under a current-version store.
+    void olderProfileV6FileMigratesForward()
+    {
+        const QUuid id = QUuid::createUuid();
+        QJsonObject delta;
+        delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+        QVERIFY(writeProfileFileFixture(id, 6, delta));
+
+        ProfileStore store(makeCurrentVersionConfig());
+        const QVariantList rows = store.availableProfiles();
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(store.activateProfile(id.toString()));
+        QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
+        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
     /// The version guards around the forward migration: a file older than
     /// the readable floor and a file newer than the build are refused, while
     /// a pre-v6 CHILD whose delta overrides zone colours is KEPT with those

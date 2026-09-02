@@ -127,10 +127,12 @@ private Q_SLOTS:
 
         const QJsonObject after = readJson(ConfigDefaults::configFilePath());
         // Full-chain run through ensureJsonConfig, so the file ends at the
-        // CURRENT schema version (v7 stamps on top of the v6 output this
-        // test is really about); the frozen v6 step output is asserted by
-        // the direct-step case below.
-        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 7);
+        // CURRENT schema version (later stamps land on top of the v6 output
+        // this test is really about); the frozen v6 step output is asserted
+        // by the direct-step case below. ConfigSchemaVersion, not a literal:
+        // the next bump is not a v5→v6 concern (test_profilestore.cpp:653
+        // keeps the single deliberate literal-pin tripwire).
+        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
         // Every colour was a palette snapshot: each key becomes the EXPLICIT
         // empty sentinel (delta-safe spelling of "follow the palette"); the
         // Labels group keeps the unrelated FontFamily key.
@@ -205,7 +207,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject after = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), 7);
+        QCOMPARE(after.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
         const QJsonObject colorsOut = colorsAfter(after);
         QCOMPARE(colorsOut.value(QStringLiteral("Highlight")).toString(), QStringLiteral("#80112233"));
         QCOMPARE(colorsOut.value(QStringLiteral("Border")).toString(), QStringLiteral("#c85294e2"));

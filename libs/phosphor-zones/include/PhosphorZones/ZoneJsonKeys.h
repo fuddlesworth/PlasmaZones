@@ -74,8 +74,6 @@ inline constexpr QLatin1String SystemSourcePath{"systemSourcePath"}; ///< Origin
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
 inline constexpr QLatin1String Category{"category"}; ///< 0=Manual, 1=Autotile
 
-// Shader-binding keys (per-zone shader pipeline overrides).
-
 // Visibility-filtering keys (which screens / desktops / activities
 // the layout is offered on).
 inline constexpr QLatin1String HiddenFromSelector{"hiddenFromSelector"};

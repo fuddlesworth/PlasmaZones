@@ -453,12 +453,16 @@ void Layout::removeZoneAt(int index)
 void Layout::clearZones()
 {
     if (!m_zones.isEmpty()) {
-        for (auto* zone : m_zones) {
+        // Detach BEFORE emitting zoneRemoved, matching removeZone/removeZoneAt:
+        // an observer reading zones() from the handler must see the coherent
+        // post-state (here, the empty list), not the zone still attached.
+        const QVector<Zone*> removed = m_zones;
+        m_zones.clear();
+        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
+        for (auto* zone : removed) {
             Q_EMIT zoneRemoved(zone);
             zone->deleteLater();
         }
-        m_zones.clear();
-        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
     }

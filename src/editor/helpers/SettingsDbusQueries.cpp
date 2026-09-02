@@ -10,26 +10,9 @@
 
 #include <QDBusError>
 #include <QDBusMessage>
-#include <QDBusVariant>
 
 namespace PlasmaZones {
 namespace SettingsDbusQueries {
-
-namespace {
-
-/// Unwrap a getSetting() reply into a plain QVariant. Returns an invalid
-/// QVariant on D-Bus error or if the reply shape is wrong. The daemon
-/// answers with an `sv` (variant-of-variant) so we have to step through
-/// QDBusVariant once.
-QVariant unwrapGetSetting(const QDBusMessage& reply)
-{
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-    return reply.arguments().constFirst().value<QDBusVariant>().variant();
-}
-
-} // namespace
 
 QVariantMap querySettingsBatch(const QStringList& keys)
 {
@@ -64,16 +47,6 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         qCWarning(lcDbus) << "getSettings() failed:" << err.message() << "(type" << err.type() << ")";
     }
     return QVariantMap();
-}
-
-bool queryBoolSetting(const QString& settingKey, bool defaultValue)
-{
-    const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {settingKey}));
-    if (!value.isValid()) {
-        return defaultValue;
-    }
-    return value.toBool();
 }
 
 } // namespace SettingsDbusQueries

@@ -1226,17 +1226,17 @@
         <translation>Wyczyść zastąpienie odstępu krawędziowego</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="178"/>
+        <location filename="../src/editor/main.cpp" line="104"/>
         <source>Create new layout</source>
         <translation>Utwórz nowy układ</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="181"/>
+        <location filename="../src/editor/main.cpp" line="107"/>
         <source>Scrolling template ID to edit</source>
         <translation>Identyfikator szablonu przewijania do edycji</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="183"/>
+        <location filename="../src/editor/main.cpp" line="109"/>
         <source>Create new scrolling template</source>
         <translation>Utwórz nowy szablon przewijania</translation>
     </message>
@@ -1278,30 +1278,30 @@
         <translation>Wypełnij strefę</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="646"/>
+        <location filename="../src/editor/controller/layout.cpp" line="647"/>
         <source>Invalid layout data format</source>
         <translation>Nieprawidłowy format danych układu</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1094"/>
-        <location filename="../src/editor/controller/layout.cpp" line="1132"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1095"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1133"/>
         <source>File path cannot be empty</source>
         <translation>Ścieżka pliku nie może być pusta</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1101"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1102"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="657"/>
         <source>Failed to import layout: %1</source>
         <translation>Nie udało się zaimportować układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1112"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1113"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="664"/>
         <source>That file is not a layout this app can read.</source>
         <translation>Ten plik nie jest układem, który ta aplikacja potrafi odczytać.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1155"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1156"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="470"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="476"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="709"/>
@@ -1310,24 +1310,30 @@
         <translation>Nie udało się zapisać eksportu. Sprawdź, czy w folderze można zapisywać.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1137"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1138"/>
         <source>No layout loaded to export</source>
         <translation>Nie wczytano żadnego układu do wyeksportowania</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1144"/>
+        <location filename="../src/editor/controller/layout.cpp" line="108"/>
+        <source>VS%1</source>
+        <comment>@item fallback name for an unnamed virtual screen</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/layout.cpp" line="1145"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="700"/>
         <source>Failed to export layout: %1</source>
         <translation>Nie udało się wyeksportować układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="611"/>
+        <location filename="../src/editor/controller/layout.cpp" line="612"/>
         <location filename="../src/editor/services/DBusLayoutService.cpp" line="40"/>
         <source>Layout ID cannot be empty</source>
         <translation>Identyfikator układu nie może być pusty</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="174"/>
+        <location filename="../src/editor/main.cpp" line="100"/>
         <source>Layout ID to edit</source>
         <translation>Identyfikator układu do edycji</translation>
     </message>
@@ -1399,7 +1405,7 @@
         <translation>Żaden tryb rozmieszczania nie jest włączony</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="616"/>
+        <location filename="../src/editor/controller/layout.cpp" line="617"/>
         <source>Layout service not initialized</source>
         <translation>Usługa układów nie została zainicjowana</translation>
     </message>
@@ -1422,7 +1428,7 @@
         <translation>Przenieś strefę</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="568"/>
+        <location filename="../src/editor/controller/layout.cpp" line="569"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="276"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="284"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
@@ -1430,7 +1436,7 @@
         <translation>Nowy układ</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="179"/>
+        <location filename="../src/editor/main.cpp" line="105"/>
         <source>Open in read-only preview mode</source>
         <translation>Otwórz w trybie podglądu tylko do odczytu</translation>
     </message>
@@ -1505,7 +1511,7 @@
         <translation>Przenieś na spód</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="918"/>
+        <location filename="../src/editor/controller/layout.cpp" line="919"/>
         <source>Services not initialized</source>
         <translation>Usługi nie zostały zainicjowane</translation>
     </message>
@@ -1528,7 +1534,7 @@
         <translation>Podziel strefę</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="176"/>
+        <location filename="../src/editor/main.cpp" line="102"/>
         <source>Target screen name</source>
         <translation>Nazwa docelowego ekranu</translation>
     </message>
@@ -1569,7 +1575,7 @@
         <translation>Zaktualizuj barwę stref (%1)</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="169"/>
+        <location filename="../src/editor/main.cpp" line="95"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Wizualny edytor układów dla PlasmaZones</translation>
     </message>
@@ -5392,7 +5398,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="127"/>
-        <location filename="../src/settings/pages/snappingshaderspagecontroller.cpp" line="260"/>
+        <location filename="../src/settings/pages/snappingshaderspagecontroller.cpp" line="262"/>
         <source>Global default</source>
         <translation>Globalne domyślne</translation>
     </message>
@@ -14389,7 +14395,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="177"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="271"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="146"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="203"/>
         <source>Current: %1</source>
         <translation>Bieżące: %1</translation>
     </message>
@@ -17306,7 +17312,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="229"/>
         <source>Choose an overlay shader…</source>
         <translation>Wybierz shader nakładki…</translation>
     </message>
@@ -23061,43 +23067,53 @@
         <translation>Brak</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="89"/>
         <source>None</source>
         <translation type="unfinished">Brak</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="79"/>
-        <source>(missing: %1)</source>
-        <translation type="unfinished">(brak: %1)</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="94"/>
+        <source>Missing shader %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="195"/>
         <source>Using global default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="221"/>
         <source>Shader:</source>
         <translation type="unfinished">Shader:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="173"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="230"/>
         <source>Global default overlay shader</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="173"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentCard.qml.cpp" line="230"/>
         <source>Overlay shader for %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="55"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="73"/>
         <source>The global default applies to every layout. Each layout card can override it. Install more packs from the Shader Library page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="61"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="79"/>
         <source>Global Default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="91"/>
+        <source>Deleted layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShaderAssignmentsPage.qml.cpp" line="91"/>
+        <source>Unnamed layout</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

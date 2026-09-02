@@ -508,8 +508,6 @@ private:
     // Geometry mode: zones use full screen (true) or available area excluding panels (false)
     bool m_useFullScreenGeometry = false;
 
-    // Shader support
-
     // Aspect ratio classification
     ::PhosphorLayout::AspectRatioClass m_aspectRatioClass = ::PhosphorLayout::AspectRatioClass::Any;
     qreal m_minAspectRatio = 0.0; // 0 = not set (use class matching)

@@ -16,6 +16,7 @@
 #include <QLatin1String>
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -29,6 +30,32 @@ constexpr QLatin1String kTreeBaseline{"baseline"};
 constexpr QLatin1String kTreeOverrides{"overrides"};
 constexpr QLatin1String kNodeShaderId{"shaderId"};
 constexpr QLatin1String kNodeParameters{"parameters"};
+
+/// Remove the two relocated shader keys from every object-valued sidecar
+/// entry, dropping entries left empty. Returns true when anything changed.
+bool stripShaderKeys(QJsonObject& sidecar)
+{
+    bool dirty = false;
+    const QJsonObject snapshot = sidecar;
+    for (auto it = snapshot.constBegin(); it != snapshot.constEnd(); ++it) {
+        if (!it.value().isObject()) {
+            continue;
+        }
+        QJsonObject entry = it.value().toObject();
+        if (!entry.contains(kSidecarShaderId) && !entry.contains(kSidecarShaderParams)) {
+            continue;
+        }
+        entry.remove(kSidecarShaderId);
+        entry.remove(kSidecarShaderParams);
+        if (entry.isEmpty()) {
+            sidecar.remove(it.key());
+        } else {
+            sidecar.insert(it.key(), entry);
+        }
+        dirty = true;
+    }
+    return dirty;
+}
 } // namespace
 
 void ConfigMigration::migrateV6ToV7(QJsonObject& root)
@@ -72,39 +99,34 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         sidecar = doc.object();
     }
 
-    // Collect the shader entries and stage the stripped sidecar. An entry
-    // with an empty shaderId is stripped without lifting (it meant "no
-    // shader", which is the tree's inherit/baseline default).
+    // Collect the shader entries to lift. An entry with an empty shaderId is
+    // stripped without lifting: it meant "no shader", which is the tree's
+    // inherit/baseline default, and any orphaned shaderParams riding such an
+    // entry are dropped by design (parameters are meaningless without a
+    // shader). Non-UUID keys (the "autotile:<algoId>" entries the pre-v7
+    // editor could stamp shader keys onto) are also stripped without lifting:
+    // the tree's override paths are layout UUIDs only, so a lifted autotile
+    // key could never be resolved and would sit in the config as junk.
     QJsonObject lifted; // uuid → {shaderId, parameters}
-    QJsonObject strippedSidecar = sidecar;
-    bool sidecarDirty = false;
     for (auto it = sidecar.constBegin(); it != sidecar.constEnd(); ++it) {
         if (!it.value().isObject()) {
             continue;
         }
-        QJsonObject entry = it.value().toObject();
-        if (!entry.contains(kSidecarShaderId) && !entry.contains(kSidecarShaderParams)) {
+        const QJsonObject entry = it.value().toObject();
+        const QString shaderId = entry.value(kSidecarShaderId).toString();
+        if (shaderId.isEmpty() || QUuid::fromString(it.key()).isNull()) {
             continue;
         }
-        const QString shaderId = entry.value(kSidecarShaderId).toString();
-        if (!shaderId.isEmpty()) {
-            QJsonObject node;
-            node.insert(kNodeShaderId, shaderId);
-            const QJsonValue params = entry.value(kSidecarShaderParams);
-            if (params.isObject() && !params.toObject().isEmpty()) {
-                node.insert(kNodeParameters, params.toObject());
-            }
-            lifted.insert(it.key(), node);
+        QJsonObject node;
+        node.insert(kNodeShaderId, shaderId);
+        const QJsonValue params = entry.value(kSidecarShaderParams);
+        if (params.isObject() && !params.toObject().isEmpty()) {
+            node.insert(kNodeParameters, params.toObject());
         }
-        entry.remove(kSidecarShaderId);
-        entry.remove(kSidecarShaderParams);
-        if (entry.isEmpty()) {
-            strippedSidecar.remove(it.key());
-        } else {
-            strippedSidecar.insert(it.key(), entry);
-        }
-        sidecarDirty = true;
+        lifted.insert(it.key(), node);
     }
+    QJsonObject strippedSidecar = sidecar;
+    const bool sidecarDirty = stripShaderKeys(strippedSidecar);
 
     if (!sidecarDirty) {
         return true; // fully idempotent — nothing left to move
@@ -157,8 +179,29 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         }
     }
 
-    // Strip the relocated keys from the sidecar. A failure here retries on
-    // the next run; the existing-entry-wins merge above keeps that safe.
+    // Strip the relocated keys from the sidecar. Re-read it FRESH here
+    // rather than rewriting the entry-time snapshot: the daemon's runtime
+    // LayoutSettingsStore rewrites this file without taking the migration
+    // lock, so a snapshot rewrite could clobber a concurrent save (a
+    // hiddenFromSelector or autotile toggle landing during this one-shot
+    // lift). Stripping from a just-read copy preserves such writes; nothing
+    // post-v7 writes shader keys, so re-stripping the fresh copy is safe.
+    // A failure here retries on the next run; the existing-entry-wins merge
+    // above keeps that safe.
+    {
+        QFile sf(sidecarPath);
+        if (sf.open(QIODevice::ReadOnly)) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                QJsonObject fresh = doc.object();
+                if (!stripShaderKeys(fresh)) {
+                    return true; // someone else already stripped it
+                }
+                strippedSidecar = fresh;
+            }
+        }
+    }
     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, strippedSidecar)) {
         qWarning("ConfigMigration: failed to strip overlay shader keys from %s", qPrintable(sidecarPath));
         return false;

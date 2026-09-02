@@ -906,8 +906,8 @@ Kirigami.Dialog {
         }
     }
 
-    // Color picker for color params (child of the dialog root, mirroring the
-    // editor's ShaderSettingsDialog). Outlives any param row destroyed mid-edit.
+    // Color picker for color params, kept as a child of the dialog root so it
+    // outlives any param row destroyed mid-edit.
     ColorDialog {
         id: shaderColorDialog
 

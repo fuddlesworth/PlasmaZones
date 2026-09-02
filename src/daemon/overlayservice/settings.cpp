@@ -39,6 +39,9 @@ void OverlayService::setSettings(ISettings* settings)
         }
 
         m_settings = settings;
+        // Seed the cached overlay shader tree for the new source (cleared
+        // when settings detach so no stale assignments survive).
+        m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
 
         // Connect to new settings signals
         if (m_settings) {
@@ -152,6 +155,9 @@ void OverlayService::setSettings(ISettings* settings)
             // hook (see observeLayout below). No coalescing needed here: tree
             // writes arrive one per user action, not per drag frame.
             connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
+                // Refresh the cached tree BEFORE the recreate/refresh below
+                // re-resolves shaders through effectiveOverlayShader().
+                m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
                 if (m_visible) {
                     recreateOverlayWindowsOnTypeMismatch();
                 }
@@ -303,8 +309,8 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             ++it;
         }
     }
-    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
-    // shaderParams, zones, appearance, etc.). Without this hook the editor's
+    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (zones,
+    // appearance, overlay display mode, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
     // restart, since PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged only fires on switch.
     //

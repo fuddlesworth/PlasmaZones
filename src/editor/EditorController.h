@@ -210,6 +210,9 @@ class EditorController : public QObject
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
+    /// PlasmaZones::MaxLayoutNameLength for QML name fields, so the cap
+    /// cannot silently desync from the C++ clamp.
+    Q_PROPERTY(int maxLayoutNameLength READ maxLayoutNameLength CONSTANT)
 
 public:
     explicit EditorController(QObject* parent = nullptr);
@@ -288,6 +291,10 @@ public:
     void refreshUsableAreaInsets();
     bool canPaste() const;
     UndoController* undoController() const;
+    int maxLayoutNameLength() const
+    {
+        return MaxLayoutNameLength;
+    }
 
     // Font settings getters
     QString labelFontFamily() const
@@ -759,6 +766,11 @@ Q_SIGNALS:
     void layoutExported();
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
+    /// Relayed from ILayoutService::errorOccurred. The service's messages are
+    /// self-describing ("Failed to load layout: …"), so QML toasts them
+    /// verbatim; layoutLoadFailed/layoutSaveFailed carry only the
+    /// controller-side failures whose toast adds the operation prefix.
+    void serviceErrorOccurred(const QString& error);
     void editorClosed();
 
     // Validation signals

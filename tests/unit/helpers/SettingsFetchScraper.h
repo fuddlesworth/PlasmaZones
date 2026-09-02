@@ -659,9 +659,10 @@ inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccoun
 /// The editor's PRIMITIVES are discovered the same way the effect's wrappers are, but from
 /// the other end: any function whose body issues the `getSetting` / `getSettings` D-Bus call
 /// is a fetcher. That covers today's query*Setting / querySettingsBatch helpers, and it also
-/// covers a generic bus caller written tomorrow — the editor already has one
-/// (ShaderDbusQueries::callSettings) that dispatches adaptor methods, and nothing but this
-/// stops someone pointing it at getSetting where no scrape would ever see the key.
+/// covers a generic bus caller written tomorrow — the editor once had one
+/// (the since-removed ShaderDbusQueries::callSettings) that dispatched adaptor methods, and
+/// nothing but this stops someone pointing such a caller at getSetting where no scrape would
+/// ever see the key.
 ///
 /// A fetcher's call sites must NAME their keys: a literal in the argument list, or a named
 /// QStringList of literals declared in the same file (the batch shape). Every element of

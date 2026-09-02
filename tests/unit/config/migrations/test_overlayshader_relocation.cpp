@@ -34,12 +34,36 @@ private:
         return QJsonDocument::fromJson(f.readAll()).object();
     }
 
-    static void writeJson(const QString& path, const QJsonObject& obj)
+    static QByteArray readBytes(const QString& path)
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        return f.readAll();
+    }
+
+    // [[nodiscard]] bool rather than QVERIFY-in-void: a QVERIFY failure in a
+    // void helper returns from the HELPER only, letting the slot continue
+    // against a missing fixture (see test_migration_v5_to_v6.cpp's note).
+    [[nodiscard]] static bool writeJson(const QString& path, const QJsonObject& obj)
     {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(obj).toJson());
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        return f.write(QJsonDocument(obj).toJson()) >= 0;
+    }
+
+    [[nodiscard]] static bool writeRaw(const QString& path, const QByteArray& bytes)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        return f.write(bytes) >= 0;
     }
 
     static QJsonObject treeFromConfig(const QJsonObject& root)
@@ -63,30 +87,39 @@ private:
         return id;
     }
 
-    /// A v7-stamped config root plus a sidecar carrying shader keys for
-    /// layoutA (with params), an empty-shader entry for layoutB, and one
-    /// clean entry.
-    void seedFixture()
+    /// A v7-stamped config root plus a sidecar carrying: shader keys for
+    /// layoutA (with params), an empty-shader entry for layoutB, a clean
+    /// entry, an "autotile:*" entry with a shader (the pre-v7 editor could
+    /// stamp those), a params-only entry with no shaderId, and the store's
+    /// own _version stamp.
+    [[nodiscard]] bool seedFixture()
     {
-        writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}});
+        if (!writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}})) {
+            return false;
+        }
         const QJsonObject params{{QStringLiteral("intensity"), 0.5}};
-        writeJson(ConfigDefaults::layoutSettingsFilePath(),
-                  QJsonObject{
-                      {layoutA(),
-                       QJsonObject{{QStringLiteral("zonePadding"), 8},
-                                   {QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")},
-                                   {QStringLiteral("shaderParams"), params}}},
-                      {layoutB(), QJsonObject{{QStringLiteral("shaderId"), QString()}}},
-                      {QStringLiteral("{cccc0000-0000-0000-0000-000000000000}"),
-                       QJsonObject{{QStringLiteral("zonePadding"), 4}}},
-                  });
+        return writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                         QJsonObject{
+                             {QStringLiteral("_version"), 1},
+                             {layoutA(),
+                              QJsonObject{{QStringLiteral("zonePadding"), 8},
+                                          {QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")},
+                                          {QStringLiteral("shaderParams"), params}}},
+                             {layoutB(), QJsonObject{{QStringLiteral("shaderId"), QString()}}},
+                             {QStringLiteral("{cccc0000-0000-0000-0000-000000000000}"),
+                              QJsonObject{{QStringLiteral("zonePadding"), 4}}},
+                             {QStringLiteral("autotile:master-stack"),
+                              QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}},
+                             {QStringLiteral("{dddd0000-0000-0000-0000-000000000000}"),
+                              QJsonObject{{QStringLiteral("shaderParams"), params}}},
+                         });
     }
 
 private Q_SLOTS:
     void testLift_movesShaderEntriesAndStripsSidecar()
     {
         IsolatedConfigGuard guard;
-        seedFixture();
+        QVERIFY(seedFixture());
 
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
 
@@ -98,16 +131,25 @@ private Q_SLOTS:
                  0.5);
         // The empty-shader entry meant "no shader" — stripped, never lifted.
         QVERIFY(!overrides.contains(layoutB()));
+        // Non-UUID (autotile) keys and params-only entries are stripped
+        // without lifting: an autotile override could never be resolved and
+        // orphaned params are meaningless without a shader.
+        QVERIFY(!overrides.contains(QStringLiteral("autotile:master-stack")));
+        QVERIFY(!overrides.contains(QStringLiteral("{dddd0000-0000-0000-0000-000000000000}")));
+        QCOMPARE(overrides.size(), 1);
         // No baseline is synthesised.
         QVERIFY(!tree.contains(QStringLiteral("baseline")));
 
         // Sidecar: shader keys gone, unrelated keys intact, the emptied
-        // layoutB entry pruned.
+        // entries pruned, the store's _version stamp untouched.
         const QJsonObject sidecar = readJson(ConfigDefaults::layoutSettingsFilePath());
         QVERIFY(!sidecar.value(layoutA()).toObject().contains(QStringLiteral("shaderId")));
         QVERIFY(!sidecar.value(layoutA()).toObject().contains(QStringLiteral("shaderParams")));
         QCOMPARE(sidecar.value(layoutA()).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
         QVERIFY(!sidecar.contains(layoutB()));
+        QVERIFY(!sidecar.contains(QStringLiteral("autotile:master-stack")));
+        QVERIFY(!sidecar.contains(QStringLiteral("{dddd0000-0000-0000-0000-000000000000}")));
+        QCOMPARE(sidecar.value(QStringLiteral("_version")).toInt(), 1);
         // The tree parses through the runtime value type.
         const OverlayShaderTree parsed = OverlayShaderTree::fromJson(tree);
         QCOMPARE(parsed.resolve(layoutA()).shaderId, QStringLiteral("cosmic-flow"));
@@ -116,13 +158,15 @@ private Q_SLOTS:
     void testLift_isIdempotentAndKeepsEditedTreeEntry()
     {
         IsolatedConfigGuard guard;
-        seedFixture();
+        QVERIFY(seedFixture());
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        const QByteArray afterFirstBytes = readBytes(ConfigDefaults::configFilePath());
         const QJsonObject afterFirst = readJson(ConfigDefaults::configFilePath());
 
-        // Second run: nothing left to move, no writes, identical output.
+        // Second run: nothing left to move, byte-identical config (pins the
+        // sidecarDirty short-circuit, not just content equality).
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
-        QCOMPARE(readJson(ConfigDefaults::configFilePath()), afterFirst);
+        QCOMPARE(readBytes(ConfigDefaults::configFilePath()), afterFirstBytes);
 
         // A retry against a STALE sidecar (pass 2 failed scenario): the
         // already-lifted tree entry wins — a since-edited assignment must
@@ -137,10 +181,11 @@ private Q_SLOTS:
         group.insert(QStringLiteral("OverlayShaderTree"), tree);
         snapping.insert(QStringLiteral("OverlayShaders"), group);
         root.insert(QStringLiteral("Snapping"), snapping);
-        writeJson(ConfigDefaults::configFilePath(), root);
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), root));
         // Restore the stale sidecar copy.
-        writeJson(ConfigDefaults::layoutSettingsFilePath(),
-                  QJsonObject{{layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}});
+        QVERIFY(writeJson(
+            ConfigDefaults::layoutSettingsFilePath(),
+            QJsonObject{{layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}}));
 
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
         const QJsonObject node = treeFromConfig(readJson(ConfigDefaults::configFilePath()))
@@ -156,9 +201,70 @@ private Q_SLOTS:
     void testLift_missingSidecarIsNoOpSuccess()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}});
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}}));
+        const QByteArray before = readBytes(ConfigDefaults::configFilePath());
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        // The config is not rewritten (no spurious empty-group write).
+        QCOMPARE(readBytes(ConfigDefaults::configFilePath()), before);
         QVERIFY(treeFromConfig(readJson(ConfigDefaults::configFilePath())).isEmpty());
+    }
+
+    void testLift_missingConfigLeavesSidecarForRetry()
+    {
+        IsolatedConfigGuard guard;
+        // Sidecar with a pending lift but NO config file (interrupted fresh
+        // install): the relocation reports success, does nothing, and leaves
+        // the sidecar intact so a later run can retry.
+        const QJsonObject sidecar{
+            {layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}};
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(), sidecar));
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QVERIFY(!QFile::exists(ConfigDefaults::configFilePath()));
+        QCOMPARE(readJson(ConfigDefaults::layoutSettingsFilePath()), sidecar);
+    }
+
+    void testLift_corruptFilesAreHandled()
+    {
+        IsolatedConfigGuard guard;
+        // Unparseable sidecar: skipped with success, left untouched.
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}}));
+        QVERIFY(writeRaw(ConfigDefaults::layoutSettingsFilePath(), QByteArrayLiteral("{not json")));
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), QByteArrayLiteral("{not json"));
+
+        // Unparseable CONFIG with a pending lift: the relocation fails
+        // WITHOUT stripping the sidecar (a strip-before-lift regression
+        // would lose the assignment).
+        const QJsonObject sidecar{
+            {layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}};
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(), sidecar));
+        QVERIFY(writeRaw(ConfigDefaults::configFilePath(), QByteArrayLiteral("{not json")));
+        QVERIFY(!ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QCOMPARE(readJson(ConfigDefaults::layoutSettingsFilePath()), sidecar);
+    }
+
+    void testLift_runsFromEnsureJsonConfig()
+    {
+        IsolatedConfigGuard guard;
+        // End-to-end wiring: a v6-stamped config plus a fat sidecar, driven
+        // through ensureJsonConfig (not the relocation function directly).
+        // Deleting the finalize-path relocate calls must fail this test.
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 6}}));
+        QVERIFY(writeJson(ConfigDefaults::layoutSettingsFilePath(),
+                          QJsonObject{{layoutA(),
+                                       QJsonObject{{QStringLiteral("zonePadding"), 8},
+                                                   {QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}}));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJson(ConfigDefaults::configFilePath());
+        QVERIFY(root.value(QStringLiteral("_version")).toInt() >= 7);
+        const QJsonObject overrides = treeFromConfig(root).value(QStringLiteral("overrides")).toObject();
+        QCOMPARE(overrides.value(layoutA()).toObject().value(QStringLiteral("shaderId")).toString(),
+                 QStringLiteral("cosmic-flow"));
+        const QJsonObject sidecar = readJson(ConfigDefaults::layoutSettingsFilePath());
+        QVERIFY(!sidecar.value(layoutA()).toObject().contains(QStringLiteral("shaderId")));
+        QCOMPARE(sidecar.value(layoutA()).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
     }
 
     // ── OverlayShaderTree value-type contracts ───────────────────────────

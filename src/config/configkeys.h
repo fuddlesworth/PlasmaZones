@@ -396,6 +396,16 @@ public:
     P_CONFIG_KEY(gridColumnsKey, "GridColumns")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Snapping.OverlayShaders
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // OverlayShaderTree JSON blob — zone-overlay shader assignments
+    // (global baseline + per-layout overrides), nested under
+    // Snapping.OverlayShaders. Replaces the pre-v7 per-layout
+    // shaderId/shaderParams that lived in the layout-settings sidecar.
+    P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -548,12 +558,6 @@ public:
     // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
     // map), whereas the animation default is a bare {}.
     P_CONFIG_KEY(decorationProfileTreeKey, "DecorationProfileTree")
-
-    // OverlayShaderTree JSON blob — zone-overlay shader assignments
-    // (global baseline + per-layout overrides), nested under
-    // Snapping.OverlayShaders. Replaces the pre-v7 per-layout
-    // shaderId/shaderParams that lived in the layout-settings sidecar.
-    P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Decorations.Performance

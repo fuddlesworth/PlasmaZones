@@ -105,7 +105,8 @@ QVariantList EditorController::screenModel() const
                 }
             }
             if (vsDisplayName.isEmpty()) {
-                vsDisplayName = QStringLiteral("VS%1").arg(vsIndex + 1);
+                vsDisplayName =
+                    PhosphorI18n::tr("VS%1", "@item fallback name for an unnamed virtual screen").arg(vsIndex + 1);
             }
             entry[QStringLiteral("displayName")] = vsDisplayName;
         } else {

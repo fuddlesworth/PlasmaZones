@@ -15,6 +15,8 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
+#include <QSet>
+
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -88,18 +90,37 @@ QVariantList SnappingShadersPageController::assignableLayouts() const
     if (!m_layoutRegistry)
         return {};
     QVariantList out;
+    QSet<QString> knownIds;
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)
             continue;
+        const QString id = layout->id().toString();
+        knownIds.insert(id);
         QVariantMap entry;
-        entry.insert(QLatin1String("id"), layout->id().toString());
+        entry.insert(QLatin1String("id"), id);
         entry.insert(QLatin1String("name"), layout->name());
         out.append(entry);
     }
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QLatin1String("name")).toString() < b.toMap().value(QLatin1String("name")).toString();
+        return a.toMap().value(QLatin1String("name")).toString().toLower()
+            < b.toMap().value(QLatin1String("name")).toString().toLower();
     });
+    // Overrides for layouts that no longer exist would otherwise be
+    // invisible on the assignments page (and un-clearable from any UI).
+    // Append them after the live rows so the user can still clear them.
+    if (m_settings) {
+        const QStringList overridden = m_settings->overlayShaderTree().overriddenLayouts();
+        for (const QString& layoutId : overridden) {
+            if (knownIds.contains(layoutId))
+                continue;
+            QVariantMap entry;
+            entry.insert(QLatin1String("id"), layoutId);
+            entry.insert(QLatin1String("name"), QString());
+            entry.insert(QLatin1String("missing"), true);
+            out.append(entry);
+        }
+    }
     return out;
 }
 
@@ -137,25 +158,6 @@ void SnappingShadersPageController::setShaderOverride(const QString& path, const
         tree.setBaseline(node);
     else
         tree.setOverride(path, node);
-    m_settings->setOverlayShaderTree(tree);
-}
-
-void SnappingShadersPageController::setShaderParameters(const QString& path, const QVariantMap& params)
-{
-    if (!m_settings)
-        return;
-    OverlayShaderTree tree = m_settings->overlayShaderTree();
-    if (path.isEmpty()) {
-        OverlayShaderProfile node = tree.baseline();
-        node.parameters = params;
-        tree.setBaseline(node);
-    } else {
-        if (!tree.hasOverride(path))
-            return;
-        OverlayShaderProfile node = tree.directOverride(path);
-        node.parameters = params;
-        tree.setOverride(path, node);
-    }
     m_settings->setOverlayShaderTree(tree);
 }
 
@@ -276,7 +278,8 @@ QVariantList SnappingShadersPageController::shaderEffectUsages(const QString& ef
         layoutRows.append(entry);
     }
     std::sort(layoutRows.begin(), layoutRows.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
+        return a.toMap().value(QLatin1String("label")).toString().toLower()
+            < b.toMap().value(QLatin1String("label")).toString().toLower();
     });
     out.append(layoutRows);
     return out;
