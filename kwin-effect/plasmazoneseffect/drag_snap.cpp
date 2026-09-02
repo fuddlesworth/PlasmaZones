@@ -89,6 +89,12 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // the `reply.argumentAt<4>() && window` check above),
                         // so frameGeometry() needs no null-guard here.
                         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
+                    // A surviving KWin maximize fights the zone rect and arms
+                    // a cross-screen restore — drop it before the apply. Runs
+                    // AFTER the pre-snap capture, whose freeGeometryForCapture
+                    // reads the maximize state to substitute the true free
+                    // rect; demoting first would consume it.
+                    m_tilingHandler->demoteMaximizeForSnapPlacement(window, geo);
                     applyWindowGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for

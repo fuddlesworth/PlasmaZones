@@ -311,6 +311,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
     if (!skipGeometry) {
+        // Genuine snap commit only (same trio the tracking discriminator
+        // below tests): a float-restore places FREE geometry, where KWin's
+        // maximize is the user's business, and an autotile-managed screen's
+        // maximize belongs to TilingHandler's own ledgers.
+        if (!zoneId.isEmpty() && !screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId)) {
+            m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
+        }
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                              : PhosphorAnimation::ProfilePaths::WindowSnapIn);
@@ -516,6 +523,13 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // genuinely un-snaps the window regardless of visibility.
             const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
             if (!skipMinimizedRestore) {
+                // Snap placements only (the discriminator below): a non-empty
+                // authoritative screenId that is not autotile-managed marks a
+                // real zone commit, and a surviving KWin maximize would fight
+                // its rect and arm a cross-screen restore.
+                if (!p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId)) {
+                    m_tilingHandler->demoteMaximizeForSnapPlacement(p.window, p.geometry);
+                }
                 applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
                                     /*skipAnimation=*/false, batchProfilePath);
             }

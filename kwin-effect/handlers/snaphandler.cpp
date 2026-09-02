@@ -953,6 +953,10 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
     // resize, corrupting the pre-tile entry with zone dimensions.
     ensurePreSnapGeometryStored(targetWindow, m_effect->getWindowId(targetWindow), targetWindow->frameGeometry());
+    // AFTER the capture (freeGeometryForCapture reads the maximize state to
+    // substitute the true free rect), BEFORE the apply: a surviving KWin
+    // maximize fights the zone rect and arms a cross-screen restore.
+    m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
     m_effect->applyWindowGeometry(targetWindow, geometry);
 
     // Derive screen from the applied geometry center. Use resolveEffectiveScreenId

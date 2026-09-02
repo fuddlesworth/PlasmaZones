@@ -372,6 +372,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         if (KWin::Window* kw = rescuableMove()) {
                             kw->cancelInteractiveMoveResize();
                         }
+                        // After the cancel (its gesture guard must see the
+                        // flags clear), before the apply: a surviving KWin
+                        // maximize would fight the zone rect and leave a
+                        // cross-screen restore armed — see the declaration.
+                        m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow, snapGeometry);
                         applyWindowGeometry(safeWindow, snapGeometry);
                     }
                     // Drag-drop snap committed — record in snapping's border set,
