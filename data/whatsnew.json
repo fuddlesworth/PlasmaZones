@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.4.7",
+            "date": "2026-09-02",
+            "highlights": [
+                "Removed: Put windows back on their virtual desktop, and the setting for it, since it moved windows around unpredictably while you were still logging in. Rules that route a window to a desktop are unaffected (#1034)",
+                "Fixed: dropping a dragged window into the scrolling strip lands its column where the drop indicator promised, instead of stranding a wide window alone on the screen with the rest of the strip scrolled out of sight (#1037)",
+                "Fixed: snapping a maximized window into a zone clears the compositor's maximize first, so it stops re-inflating over the zone and no longer teleports to the other monitor when maximized again (#1036)",
+                "Fixed: the last window on a tiled monitor grows into the whole screen instead of sitting centered with dead margins where focus follows mouse went numb (#1035)",
+                "Fixed: with drag-to-float and focus follows mouse on, focus no longer sticks to a dropped floating window, and floating windows are focused by clicking (#1035)",
+                "Fixed: a window minimized while the service was restarting frees its tile instead of holding it for the whole session (#1035)",
+                "Fixed: a rule moving a window to another desktop, or closing a floating window, no longer costs another window of the same app its remembered monitor (#1034)",
+                "Fixed: wobbly windows stop jittering during a drag, and the default wobble now feels like KWin's own (#1038)",
+                "Fixed: resizing an X11 window that draws no shadow, Steam among them, no longer smears its edge pixels across the resize animation (#1039)"
+            ]
+        },
+        {
             "version": "3.4.6",
             "date": "2026-09-01",
             "highlights": [

@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.4.7] - 2026-09-02
 
 ### Removed
 
@@ -23,6 +23,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A minimized window frees its tile even while the service is restarting**: a window minimized while the service was still reconnecting could keep its tile occupied for the whole session, because the one message that frees it was dropped and never resent. It is resent on every later pass now, and a request the service has to refuse is answered with the window's real state instead of being dropped, so the tile is freed either way. The retry that puts a minimized window back also no longer fires the same doomed request in bursts of four after every monitor change when the service has already said the window has nowhere to go. ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035))
 - **The float shortcut acts on the window you meant**: right after dropping a dragged window, two presses of the float toggle could each do nothing and a later one could fling the window to a remembered position, because the shortcut looked the window up in bookkeeping the drag had just moved it out of. The shortcut now resolves the window the same way every other float action does. ([#1035](https://github.com/fuddlesworth/PlasmaZones/pull/1035))
 - **Snapping a maximized window into a zone no longer leaves the maximize armed against it**: dropping a maximized window into a zone moved it, but the compositor still considered it maximized, so it kept re-inflating to the full screen over the zone, and the position it would return to on unmaximize stayed wherever it was last maximized. On two monitors that meant one press of the maximize button later, the window teleported back to the other monitor at its old size and PlasmaZones read the jump as you moving it, dropping the snap it had just made. Every way a window lands in a zone (dropping it there, the keyboard shortcuts, snap assist, a monitor change, and a window that opens maximized straight into a remembered zone) now clears the compositor's maximize first and aims its return position at the zone itself. Maximizing a snapped window afterwards still works, and unmaximizing returns it to its zone on the same monitor ([#1036](https://github.com/fuddlesworth/PlasmaZones/pull/1036)).
+- **Wobbly windows stop jittering during a drag, and the default feel now matches KWin's**: the wobble simulation only advanced in whole 10 ms steps and carried the remainder of each frame over to the next, so some frames moved the window without moving the wobble mesh at all, which showed as jitter while dragging. Each frame now advances the simulation by exactly the time that passed, the way KWin's own wobbly windows does. The default stiffness also sat far looser than KWin's, and the stiffest setting the slider allowed was still below KWin's default, so that feel was unreachable. The defaults now match KWin's preset and the slider range reaches it. ([#1038](https://github.com/fuddlesworth/PlasmaZones/pull/1038))
+- **Resizing an X11 window no longer smears its edges across the animation**: during an animated resize, an X11 application that draws no shadow of its own, Steam among them, had its outermost row of pixels stretched across the animation's padding ring, which showed as colored streaks around the window until the animation ended. Wayland windows never showed it because the same region falls in their transparent shadow band. The area outside the window is now treated as transparent on both. The animation could also briefly measure its drawing canvas from a window rectangle the compositor had not updated yet, which X11 leaves stale for a moment after a resize, so the canvas could run more than a thousand pixels past the real window. The canvas and the window snapshot are now measured from the window's real frame. ([#1039](https://github.com/fuddlesworth/PlasmaZones/pull/1039))
 
 ## [3.4.6] - 2026-09-01
 
@@ -2108,7 +2110,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.7...HEAD
+[3.4.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...v3.4.7
 [3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
 [3.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.4...v3.4.5
 [3.4.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.3...v3.4.4
