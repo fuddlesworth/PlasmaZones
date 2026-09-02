@@ -30,6 +30,14 @@ constexpr QLatin1String kTreeBaseline{"baseline"};
 constexpr QLatin1String kTreeOverrides{"overrides"};
 constexpr QLatin1String kNodeShaderId{"shaderId"};
 constexpr QLatin1String kNodeParameters{"parameters"};
+// One-shot marker stamped into the Snapping.OverlayShaders group by the same
+// atomic write as the lift. Once present, later runs only STRIP the sidecar
+// and never merge from it again — so an override the user removed after a
+// failed sidecar strip cannot be resurrected from the stale sidecar copy on
+// the retry. JsonBackend round-trips unknown keys, so ordinary Settings
+// saves preserve it. Pinned locally like the sidecar spellings above: this
+// is migration-internal state, not a settings key.
+constexpr QLatin1String kLiftedMarkerKey{"SidecarLifted"};
 
 /// Remove the two relocated shader keys from every object-valued sidecar
 /// entry, dropping entries left empty. Returns true when anything changed.
@@ -90,8 +98,17 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
                      qPrintable(sidecarPath));
             return true; // unreadable sidecar is the layout store's problem, not a migration failure
         }
+        const QByteArray raw = sf.readAll();
+        // Cheap steady-state bail: this runs on every startup forever, and
+        // once the one-time lift is done the file never carries the shader
+        // keys again — skip the JSON parse when the bytes cannot contain
+        // them. (kSidecarShaderParams is not a substring of kSidecarShaderId
+        // or vice versa, so both are checked.)
+        if (!raw.contains(kSidecarShaderId.latin1()) && !raw.contains(kSidecarShaderParams.latin1())) {
+            return true;
+        }
         QJsonParseError err;
-        const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll(), &err);
+        const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
         if (err.error != QJsonParseError::NoError || !doc.isObject()) {
             qWarning("ConfigMigration: overlay-shader relocation skipping unparseable %s", qPrintable(sidecarPath));
             return true;
@@ -158,19 +175,29 @@ bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
         }
         QJsonObject root = doc.object();
         QJsonObject group = groupObjectAtPath(root, ConfigKeys::snappingOverlayShadersGroup());
+        // The lift merges from the sidecar at most ONCE (see kLiftedMarkerKey).
+        // On a retry after a failed sidecar strip, the user may have edited OR
+        // REMOVED lifted assignments meanwhile; the config is authoritative,
+        // so a marked config takes nothing more from the stale sidecar.
+        const bool alreadyLifted = group.value(kLiftedMarkerKey).toBool();
         QJsonObject tree = group.value(ConfigKeys::overlayShaderTreeKey()).toObject();
         QJsonObject overrides = tree.value(kTreeOverrides).toObject();
         bool treeDirty = false;
-        for (auto it = lifted.constBegin(); it != lifted.constEnd(); ++it) {
-            if (overrides.contains(it.key())) {
-                continue; // already lifted on an earlier run — that copy is live
+        if (!alreadyLifted) {
+            for (auto it = lifted.constBegin(); it != lifted.constEnd(); ++it) {
+                if (overrides.contains(it.key())) {
+                    continue; // already present (edited copy) — that copy is live
+                }
+                overrides.insert(it.key(), it.value());
+                treeDirty = true;
             }
-            overrides.insert(it.key(), it.value());
-            treeDirty = true;
         }
-        if (treeDirty) {
-            tree.insert(kTreeOverrides, overrides);
-            group.insert(ConfigKeys::overlayShaderTreeKey(), tree);
+        if (treeDirty || !alreadyLifted) {
+            if (treeDirty) {
+                tree.insert(kTreeOverrides, overrides);
+                group.insert(ConfigKeys::overlayShaderTreeKey(), tree);
+            }
+            group.insert(kLiftedMarkerKey, true);
             setGroupAtSegments(root, ConfigKeys::snappingOverlayShadersGroup().split(QLatin1Char('.')), group);
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root)) {
                 qWarning("ConfigMigration: failed to write lifted overlay shader tree to %s", qPrintable(jsonPath));

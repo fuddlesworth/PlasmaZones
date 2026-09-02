@@ -378,6 +378,10 @@ p_add_test(test_settings_animation_profile config/settings/test_settings_animati
 # autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
 p_add_test(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
+# QTEST_MAIN constructing Settings needs QGuiApplication: link Qt6::Gui
+# explicitly rather than riding plasmazones_core's coincidental PUBLIC edge
+# (the p_add_test doc block above spells out the hazard).
+target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Gui)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
@@ -430,6 +434,9 @@ p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
 p_add_test(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
+# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion (see the
+# p_add_test doc block).
+target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Gui)
 
 # Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.

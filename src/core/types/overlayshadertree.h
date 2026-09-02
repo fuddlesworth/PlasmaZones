@@ -42,7 +42,12 @@ public:
 
     bool operator==(const OverlayShaderProfile& other) const
     {
-        return shaderId == other.shaderId && parameters == other.parameters;
+        // JSON-normalized parameter compare: a parameter map built in C++
+        // (int variants) must compare equal to the same values read back
+        // from disk (doubles), or a re-applied identical assignment would
+        // defeat the settings setters' value-equality no-op gates.
+        return shaderId == other.shaderId
+            && QJsonObject::fromVariantMap(parameters) == QJsonObject::fromVariantMap(other.parameters);
     }
     bool operator!=(const OverlayShaderProfile& other) const
     {
@@ -78,6 +83,10 @@ public:
     OverlayShaderProfile resolve(const QString& layoutId) const;
     OverlayShaderProfile directOverride(const QString& layoutId) const;
     bool hasOverride(const QString& layoutId) const;
+    /// Overridden layout ids in sorted order — deterministic and identical
+    /// whether the tree was built in-session or reloaded from JSON (whose
+    /// object keys are sorted), so no consumer can come to depend on an
+    /// order that does not survive a restart.
     QStringList overriddenLayouts() const;
     bool isEmpty() const;
 
@@ -113,7 +122,6 @@ public:
 private:
     OverlayShaderProfile m_baseline;
     QHash<QString, OverlayShaderProfile> m_overrides;
-    QStringList m_insertionOrder;
 };
 
 } // namespace PlasmaZones

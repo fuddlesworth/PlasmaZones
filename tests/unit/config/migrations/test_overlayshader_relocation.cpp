@@ -198,6 +198,35 @@ private Q_SLOTS:
         QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(layoutA()));
     }
 
+    void testLift_removedOverrideIsNotResurrectedOnRetry()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(seedFixture());
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+
+        // Simulate a failed sidecar strip: restore the stale sidecar copy...
+        QVERIFY(writeJson(
+            ConfigDefaults::layoutSettingsFilePath(),
+            QJsonObject{{layoutA(), QJsonObject{{QStringLiteral("shaderId"), QStringLiteral("cosmic-flow")}}}}));
+        // ...and the user then REMOVING the lifted override via the UI
+        // (which, with only this override and no baseline, sparse-deletes
+        // the whole tree key but leaves the group's lifted marker).
+        QJsonObject root = readJson(ConfigDefaults::configFilePath());
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject group = snapping.value(QStringLiteral("OverlayShaders")).toObject();
+        group.remove(QStringLiteral("OverlayShaderTree"));
+        snapping.insert(QStringLiteral("OverlayShaders"), group);
+        root.insert(QStringLiteral("Snapping"), snapping);
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), root));
+
+        // The retry must strip the stale sidecar WITHOUT re-lifting the
+        // removed assignment (the group's SidecarLifted marker gates the
+        // merge to at most one run).
+        QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
+        QVERIFY(treeFromConfig(readJson(ConfigDefaults::configFilePath())).isEmpty());
+        QVERIFY(!readJson(ConfigDefaults::layoutSettingsFilePath()).contains(layoutA()));
+    }
+
     void testLift_missingSidecarIsNoOpSuccess()
     {
         IsolatedConfigGuard guard;

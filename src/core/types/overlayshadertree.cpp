@@ -50,7 +50,9 @@ bool OverlayShaderTree::hasOverride(const QString& layoutId) const
 
 QStringList OverlayShaderTree::overriddenLayouts() const
 {
-    return m_insertionOrder;
+    QStringList ids = m_overrides.keys();
+    ids.sort();
+    return ids;
 }
 
 bool OverlayShaderTree::isEmpty() const
@@ -62,17 +64,12 @@ void OverlayShaderTree::setOverride(const QString& layoutId, const OverlayShader
 {
     if (layoutId.isEmpty())
         return;
-    if (!m_overrides.contains(layoutId))
-        m_insertionOrder.append(layoutId);
     m_overrides.insert(layoutId, profile);
 }
 
 bool OverlayShaderTree::clearOverride(const QString& layoutId)
 {
-    if (m_overrides.remove(layoutId) == 0)
-        return false;
-    m_insertionOrder.removeAll(layoutId);
-    return true;
+    return m_overrides.remove(layoutId) != 0;
 }
 
 void OverlayShaderTree::setBaseline(const OverlayShaderProfile& profile)
@@ -87,8 +84,8 @@ QJsonObject OverlayShaderTree::toJson() const
         obj[QLatin1String(JsonFieldBaseline)] = m_baseline.toJson();
     if (!m_overrides.isEmpty()) {
         QJsonObject overrides;
-        for (const QString& layoutId : m_insertionOrder)
-            overrides[layoutId] = m_overrides.value(layoutId).toJson();
+        for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
+            overrides[it.key()] = it.value().toJson();
         obj[QLatin1String(JsonFieldOverrides)] = overrides;
     }
     return obj;
@@ -109,10 +106,11 @@ OverlayShaderTree OverlayShaderTree::fromJson(const QJsonObject& obj)
 
 bool OverlayShaderTree::operator==(const OverlayShaderTree& other) const
 {
-    // Insertion order is a serialization detail, not identity — resolve()
-    // ignores it, so equality does too (unlike the animation tree, whose
-    // operator== also compares order; see the order-insensitive compare the
-    // decoration setter had to build around that).
+    // Order-free by construction: overrides live in a hash and every
+    // ordered view (overriddenLayouts, toJson via QJsonObject) is sorted,
+    // so equality has no order component to consider (unlike the animation
+    // tree, whose operator== also compares order; see the order-insensitive
+    // compare the decoration setter had to build around that).
     return m_baseline == other.m_baseline && m_overrides == other.m_overrides;
 }
 
