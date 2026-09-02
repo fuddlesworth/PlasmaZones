@@ -824,6 +824,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     if (KWin::Window* kwSeed = w->window()) {
         m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
     }
+
+    // Shadow-margin cache for surfaceWindowRect(). Seed from the window's
+    // current rects (nothing is resizing at connect time, so the pair agrees),
+    // then refresh on every windowExpandedGeometryChanged. The body — and the
+    // write-side invariants: never refresh from a paint-time sample, refuse
+    // implausible margins — lives beside surfaceWindowRect in surfacelayers.cpp.
+    refreshSurfaceShadowMargins(w);
+    connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
+            &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
                 if (!window) {

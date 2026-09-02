@@ -121,6 +121,80 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 //   decoration_render.cpp  — surfacePresentShader, alongside the two paths that
 //                            consume the program it compiles
 
+QRectF PlasmaZonesEffect::surfaceWindowRect(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return {};
+    }
+    const QRectF frame = w->frameGeometry();
+    // No margins recorded yet (a window whose connections have not been made,
+    // or one that has never emitted windowExpandedGeometryChanged): fall back to
+    // the raw pair, preserving the previous behaviour for anything this cache
+    // does not cover. The isEmpty guard is the one the three call sites used to
+    // carry individually.
+    const auto it = m_surfaceShadowMargins.constFind(w);
+    if (it == m_surfaceShadowMargins.constEnd()) {
+        const QRectF expanded = w->expandedGeometry();
+        return expanded.isEmpty() ? frame : expanded;
+    }
+    if (frame.isEmpty()) {
+        return frame;
+    }
+    // The frame grown by the last CONSISTENT margins. See the declaration for
+    // why this is reconstructed rather than read from expandedGeometry().
+    return frame.marginsAdded(*it);
+}
+
+// Shadow-margin cache refresh for surfaceWindowRect() above. Seeded at
+// connect time (setupWindowConnections — nothing is resizing then, so the
+// pair agrees) and re-run on every windowExpandedGeometryChanged, which is
+// the one moment KWin has just recomputed the expanded rect against the live
+// frame.
+//
+// A resize is exactly the interval where those two disagree (see
+// surfaceWindowRect's declaration for the measured X11 case), so the cache
+// must never be refreshed from an arbitrary paint-time sample: doing that
+// would launder the stale value into the very cache that exists to reject
+// it. This function, driven by that signal and the connect-time seed, is the
+// only writer.
+void PlasmaZonesEffect::refreshSurfaceShadowMargins(KWin::EffectWindow* window)
+{
+    if (!window) {
+        return;
+    }
+    const QRectF frame = window->frameGeometry();
+    const QRectF expanded = window->expandedGeometry();
+    if (frame.isEmpty() || expanded.isEmpty()) {
+        return;
+    }
+    // Shadows only ever grow the frame. A negative margin would mean the
+    // expanded rect does not contain the frame, which is not a shadow and
+    // must not be baked in — clamp at zero rather than shrinking the canvas
+    // below the window on some future KWin quirk.
+    const QMarginsF margins(qMax(0.0, frame.left() - expanded.left()), qMax(0.0, frame.top() - expanded.top()),
+                            qMax(0.0, expanded.right() - frame.right()), qMax(0.0, expanded.bottom() - frame.bottom()));
+    // Sanity cap, and it is load-bearing rather than defensive. Reading the
+    // expanded rect is now safe, but this WRITE still samples both rects at
+    // once: if the signal ever arrives while the frame is settled and the
+    // expanded rect is not (the reverse of the measured ordering, where the
+    // frame leads and the expanded rect lags ~25 ms), the stale value would
+    // be cached as a margin and every later frame would rebuild the canvas
+    // from it — turning a 25 ms glitch into a permanent one.
+    //
+    // A shadow wider or taller than the window it surrounds is not a
+    // shadow. The measured stale sample would have cached a 1374 px bottom
+    // margin on a 678 px window; the real margins are 65/53/65/77 against
+    // frames from 628 to 2052 px, three orders of magnitude clear of this
+    // bound. Reject the update and keep the last good margins.
+    if (margins.left() > frame.width() || margins.right() > frame.width() || margins.top() > frame.height()
+        || margins.bottom() > frame.height()) {
+        qCWarning(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
+                            << "frame" << frame << "expanded" << expanded;
+        return;
+    }
+    m_surfaceShadowMargins.insert(window, margins);
+}
+
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                                 KWin::GLShader* captureRestoreShader)
 {
@@ -205,10 +279,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // decoration-shadow margin of its own (borderless windows). apply()
     // presents the composite on a matching padded quad.
     const qreal pad = bit->outerPadding;
-    QRectF windowRect = w->expandedGeometry();
-    if (windowRect.isEmpty()) {
-        windowRect = w->frameGeometry();
-    }
+    // NOT expandedGeometry() raw — see surfaceWindowRect's declaration for the
+    // stale-rect case this exists to reject.
+    const QRectF windowRect = surfaceWindowRect(w);
     const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, scale);
     const QRectF logicalGeometry = canvas.logicalGeometry;
     const qreal captureScale = canvas.captureScale;

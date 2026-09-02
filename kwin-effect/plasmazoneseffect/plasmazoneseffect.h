@@ -64,6 +64,7 @@
 #include <QVarLengthArray>
 #include <QTimer>
 #include <QHash>
+#include <QMargins> // QMarginsF, m_surfaceShadowMargins' value type
 #include <QFont> // scrollTabIndicatorFont's return type
 #include <QPointer>
 #include <QRect>
@@ -1427,6 +1428,42 @@ private:
     /// Raw-pointer-keyed; erased in the windowDeleted cleanup with its
     /// siblings.
     QHash<KWin::EffectWindow*, QString> m_lastPushedCaption;
+    /// Last CONSISTENT shadow margins (expandedGeometry - frameGeometry) per
+    /// window, the input surfaceWindowRect() reconstructs the canvas base from.
+    /// Seeded when the window's connections are made and refreshed on every
+    /// windowExpandedGeometryChanged, which is the one moment KWin guarantees
+    /// the two rects agree. Raw-pointer-keyed; erased in the windowDeleted
+    /// cleanup with its siblings.
+    QHash<KWin::EffectWindow*, QMarginsF> m_surfaceShadowMargins;
+    /// The rect every surface canvas is built from: the frame grown by the last
+    /// consistent shadow margins, NEVER expandedGeometry() read raw.
+    ///
+    /// expandedGeometry() can transiently answer for the window's PREVIOUS frame
+    /// rect. Measured on KWin 6.7.4 with an X11 client (Steam): a shrink from
+    /// 1908x2052 to 1908x678 left expandedGeometry() reporting the old 2052
+    /// height for 25 ms while frameGeometry(), bufferGeometry() and
+    /// clientGeometry() had all already moved. Steam carries no shadow at all,
+    /// so that value was not a stale shadow — it was a stale copy of the old
+    /// frame rect. The canvas built from it ran 1374 px past the window, and the
+    /// chain painted its border and backdrop pane across the overhang: a band of
+    /// blurred wallpaper below the window, framed as if the window were still
+    /// there. A Wayland client (ghastty) driven through the SAME four-step
+    /// resize never diverged, KWin applying frame, shadow and item tree together
+    /// at the client's commit.
+    ///
+    /// Reconstructing rather than reading raw is what makes this ordering-proof:
+    /// the margins are a property of the window's decoration, not of its size,
+    /// so carrying them across a resize is correct by construction and needs no
+    /// assumption about whether the frame or the expanded signal lands first.
+    QRectF surfaceWindowRect(KWin::EffectWindow* w) const;
+    /// The margin cache's ONE refresh path: recompute @p window's shadow
+    /// margins from the live frame/expanded pair and store them when
+    /// plausible. Called at connect time (setupWindowConnections seeds it)
+    /// and on every windowExpandedGeometryChanged; defined in
+    /// surfacelayers.cpp beside surfaceWindowRect, which consumes it. The
+    /// write-side invariants (why it must never run from a paint-time
+    /// sample, and the implausible-margin refusal) live on the definition.
+    void refreshSurfaceShadowMargins(KWin::EffectWindow* window);
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 

@@ -762,6 +762,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // erase here to keep it bounded across long sessions.
         m_shaderManager.m_lastFullyMaximized.remove(w);
         m_lastPushedCaption.remove(w);
+        // Same raw-pointer-keyed rationale, and address reuse matters here too:
+        // a new window inheriting a dead one's shadow margins would build its
+        // canvas at the wrong size until its first expanded-geometry change.
+        m_surfaceShadowMargins.remove(w);
         // Sibling raw-pointer-keyed hashes — the maximize morph's departure
         // rect and the deferred-install entry. Same bounded-across-long-
         // sessions rationale as above, plus address-reuse safety for the

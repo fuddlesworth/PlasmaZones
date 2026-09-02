@@ -31,6 +31,7 @@
 
 #include <chrono>
 #include <type_traits>
+#include <epoxy/gl.h>
 
 #include "compositor/windowanimator.h"
 
@@ -48,6 +49,33 @@ struct SnapshotExtent
     qreal scale = 1.0;
     QSize textureSize;
 };
+
+// Wrap mode for the old-content snapshot textures. CLAMP_TO_BORDER (default
+// border colour: transparent black), NOT CLAMP_TO_EDGE.
+//
+// A surface-extent morph samples the pad ring OUTSIDE the card, and oldColor()
+// addresses the snapshot there at t outside [0,1]. For a Wayland client the
+// snapshot spans the expanded rect, so those samples land in its transparent
+// shadow band and fade out. An X11 client with no shadow (Steam) has
+// expanded == frame: the snapshot has NO margin at all, and CLAMP_TO_EDGE
+// smeared the outermost row of window pixels across the whole ring — streaked
+// edges on every animated resize, on exactly the client class whose ring has
+// no shadow to hide under. A transparent border reproduces the Wayland
+// behaviour for free. Cost: GL_LINEAR blends the card's outermost half-texel
+// against transparent for a margin-less snapshot, which is strictly better
+// than the smear it replaces.
+//
+// Desktop GL has border clamp in core; on GLES it needs 3.2 or the
+// EXT_texture_border_clamp extension (same enum value), so fall back to the
+// old smear rather than an INVALID_ENUM where neither is present.
+GLenum snapshotWrapMode()
+{
+    static const GLenum mode =
+        (epoxy_is_desktop_gl() || epoxy_gl_version() >= 32 || epoxy_has_gl_extension("GL_EXT_texture_border_clamp"))
+        ? GL_CLAMP_TO_BORDER
+        : GL_CLAMP_TO_EDGE;
+    return mode;
+}
 
 SnapshotExtent snapshotExtentFor(const QRectF& logicalGeometry, const KWin::LogicalOutput* screen)
 {
@@ -132,7 +160,16 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // (For the ordinary case src IS window, so this expression covers both —
     // an earlier ternary here had identical arms and only implied a
     // distinction that does not exist.)
-    const QRectF logicalGeometry = src->expandedGeometry();
+    // surfaceWindowRect, NOT raw expandedGeometry(): this capture runs on the
+    // FIRST paint frame after a geometry change, which is inside the window
+    // where an X11 client's expandedGeometry() still answers for the OLD frame
+    // rect (measured: 1908x2052 against a settled 678-tall frame, 8 ms after
+    // the resize). The draw side maps this snapshot with the SETTLED rect on
+    // every later frame, so a capture spanning the stale rect is sampled as if
+    // it spanned the true one — the old content lands shrunk and misplaced for
+    // the whole cross-fade. Capturing over the reconstructed rect keeps the
+    // capture and the draw in the same geometry by construction.
+    const QRectF logicalGeometry = surfaceWindowRect(src);
     const auto [scale, textureSize] = snapshotExtentFor(logicalGeometry, screen);
     if (textureSize.isEmpty()) {
         if (foreignSrc) {
@@ -156,7 +193,7 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         return;
     }
     tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+    tex->setWrapMode(snapshotWrapMode());
 
     KWin::GLFramebuffer fbo(tex.get());
     if (!fbo.valid()) {
@@ -388,8 +425,8 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     // committed the arriving window to it (moveResize updates frameGeometry
     // synchronously; the no-op-skip bail in applyWindowGeometry relies on the
     // same fact), and the composite was folded at that same rect. The capture
-    // spans the ARRIVING window's expanded rect so the snapshot lives in the
-    // coordinate system iAnchorRectInTexture describes; the clip against the
+    // spans the ARRIVING window's reconstructed surface rect so the snapshot
+    // lives in the coordinate system iAnchorRectInTexture describes; the clip against the
     // source's canvas trims the sliver where the two clients' shadow padding
     // disagrees, which stays cleared like every out-of-canvas band.
     //
@@ -433,7 +470,14 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
         armFallback();
         return;
     }
-    const QRectF logicalGeometry = window->expandedGeometry();
+    // surfaceWindowRect, NOT raw expandedGeometry(), for the same reason the
+    // lazy capture reads it: this seed runs right after the moveResize that
+    // committed the arriving tab, which is exactly the window where an X11
+    // client's expandedGeometry() can still answer for the PREVIOUS (park)
+    // rect. The seed is one-shot, so a stale rect would misregister the old
+    // side for the whole leg; the reconstructed rect is the settled rect
+    // iAnchorRectInTexture converges on, by construction.
+    const QRectF logicalGeometry = surfaceWindowRect(window);
     const auto [scale, textureSize] = snapshotExtentFor(logicalGeometry, window->screen());
     if (textureSize.isEmpty()) {
         armFallback();
@@ -450,7 +494,7 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
         return;
     }
     tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+    tex->setWrapMode(snapshotWrapMode());
     KWin::GLFramebuffer fbo(tex.get());
     KWin::GLFramebuffer srcFbo(comp);
     if (!fbo.valid() || !srcFbo.valid()) {
@@ -495,12 +539,12 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     fbo.blitFromFramebuffer(KWin::Rect(srcPx.x(), srcPx.y(), srcPx.width(), srcPx.height()),
                             KWin::Rect(dstPx.x(), dstPx.y(), dstPx.width(), dstPx.height()), GL_LINEAR);
     KWin::GLFramebuffer::popFramebuffer();
-    // expandedGeometry in the trace: the map above assumes it still holds the
-    // pre-park column rect when the seed runs. If a Wayland commit ever lands
-    // the park BEFORE this install, the mismatch is visible only here — the
-    // blit itself would quietly seed a sliver (srcClipped stays non-empty for
-    // most park positions).
-    qCDebug(lcEffect) << "tabSwap seed OK from pre-park composite, canvas" << mp.canvasGeo << "src expanded"
+    // The dest rect in the trace: the map above assumes the SOURCE's canvas
+    // still holds the pre-park column rect when the seed runs. If a Wayland
+    // commit ever lands the park BEFORE this install, the mismatch is visible
+    // only here — the blit itself would quietly seed a sliver (srcClipped
+    // stays non-empty for most park positions).
+    qCDebug(lcEffect) << "tabSwap seed OK from pre-park composite, canvas" << mp.canvasGeo << "dest rect"
                       << logicalGeometry << "src px" << srcPx << "dst px" << dstPx;
     transition.oldSnapshot = std::move(tex);
     transition.needsSnapshot = false;
@@ -579,10 +623,11 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
         // spelling of the invariant, not two.
         const auto bit = m_windowDecorations.find(frozenWindowId);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
-            QRectF textureGeo = window->expandedGeometry();
-            if (textureGeo.isEmpty()) {
-                textureGeo = window->frameGeometry();
-            }
+            // Through surfaceWindowRect for the same reason the fold and the
+            // backdrop do: this anchors the present against the rect the canvas
+            // was BUILT from, and a raw expandedGeometry() read here would
+            // re-anchor a correctly-built canvas on a stale rect.
+            const QRectF textureGeo = surfaceWindowRect(window);
             if (textureGeo.isEmpty()) {
                 return;
             }
