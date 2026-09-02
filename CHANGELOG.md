@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A window could stop returning to its own monitor after a rule moved it to another desktop**: when a rule sent a window to a virtual desktop that was not on screen, PlasmaZones used up two of the app's monitor memories instead of one. Another window of the same app could then reopen on the wrong monitor and stay there. ([#1034](https://github.com/fuddlesworth/PlasmaZones/pull/1034))
+- **A window could stop reopening on the monitor it was last used on**: closing a floating window could throw away what PlasmaZones remembered about another window of the same app that had not been reopened yet since login. A later window of that app then opened on the wrong monitor. ([#1034](https://github.com/fuddlesworth/PlasmaZones/pull/1034))
+
 ### Removed
 
 - **Putting windows back on their virtual desktop after login**: PlasmaZones used to send a window that reopened on the wrong virtual desktop back to the one it was recorded on, controlled by Put windows back on their virtual desktop under General → Session restore. In practice it was hard to predict, since it moved windows around on its own while you were still logging in, so it has been taken out along with its setting. Windows now stay on whichever desktop the session puts them on. Rules that route a window to a particular desktop are unaffected. ([#1034](https://github.com/fuddlesworth/PlasmaZones/pull/1034))

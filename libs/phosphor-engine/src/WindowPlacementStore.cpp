@@ -267,6 +267,32 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                 // collapse instead.
                 continue;
             }
+            if (other.reclaimEligible) {
+                // A sibling that still holds its cross-screen reclaim credit is
+                // not stale duplicate float memory. It is the evidence
+                // peekForReclaim needs to bring a future same-app window home to
+                // the monitor this record remembers, and pruning it strands that
+                // window silently — nothing else reports a bucket that has lost
+                // its last credit.
+                //
+                // The keeper cannot stand in for it. This collapse runs ONLY
+                // from close-capture paths, and keepWindowId is always the
+                // CLOSING window, whose own credit markInstanceClosed revokes
+                // moments later (WindowTrackingAdaptor::windowClosed captures,
+                // then revokes). So absorbing the credit the way engine slots
+                // and geometry are absorbed would hand it to a record that is
+                // about to lose it anyway. Keeping the sibling is the only place
+                // the credit can survive.
+                //
+                // This does not blunt the collapse's own job. The duplicates it
+                // exists to converge are siblings that closed earlier in THIS
+                // session, and markInstanceClosed revokes unconditionally, so
+                // they still prune. What survives is the un-reopened record
+                // deserialized from disk, whose credit serialize re-derived at
+                // the last save from liveness plus the shutdown-close grace.
+                // That is exactly the set peekForReclaim reads.
+                continue;
+            }
             bool sharesScreen = false;
             for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
                  ++git) {
@@ -301,15 +327,10 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                     keep.engines.insert(eit.key(), eit.value());
                 }
             }
-            // NOT absorbed: the sibling's reclaim credit. That is a known gap,
-            // not an oversight. On the primary close path the collapse runs
-            // inside captureWindowPlacement, which WindowTrackingAdaptor calls
-            // BEFORE markInstanceClosed, so the keeper here is the closing
-            // window's own record and is about to have its credit revoked
-            // anyway — carrying the pruned sibling's credit onto it would be
-            // wiped by that same sweep. Preserving the credit needs an ordering
-            // change across the close path, which is a decision this collapse
-            // cannot make locally.
+            // The sibling's reclaim credit needs no absorbing here: a
+            // credit-bearing sibling is never pruned in the first place (see the
+            // reclaimEligible guard above), so everything reaching this point
+            // has already spent or lost its credit.
             dropClaimsNaming(bucket.at(i).windowId); // same reason as in evictForCapacity
             bucket.removeAt(i);
             removedAny = true;

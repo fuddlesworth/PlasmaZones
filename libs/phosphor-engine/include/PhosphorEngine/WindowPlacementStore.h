@@ -328,12 +328,19 @@ public:
     /// freshest authority for its app's float-back on that screen, so duplicate
     /// siblings (left by rapid open/close or overlapping short-lived instances)
     /// are stale. Records bound to a still-OPEN window (per the live-instance
-    /// probe) are never pruned, and a pruned sibling's engine slots and
-    /// other-screen geometry are absorbed fill-gaps-only. Without the
-    /// collapse, a consuming reopen — take()'s oldest-first for snap, or a
-    /// probe-excluded tail for the tiling engines — can rotate a reopening
-    /// window between the duplicates: it "opens in a different spot each
-    /// time."
+    /// probe) are never pruned, nor are records that still hold their
+    /// cross-screen reclaim credit: that credit is what homes a future same-app
+    /// window on the monitor the record remembers, and the kept record cannot
+    /// inherit it. PRECONDITION: call this only from a close capture, where
+    /// keepWindowId is the closing window. Every current call site enforces that
+    /// by gating on a non-empty authoritative close screen, and it is what makes
+    /// the credit unabsorbable — markInstanceClosed revokes the keeper's own
+    /// credit immediately after the capture that runs this. A pruned sibling's
+    /// engine slots and other-screen geometry are absorbed fill-gaps-only.
+    /// Without the collapse, a consuming reopen — take()'s oldest-first for
+    /// snap, or a probe-excluded tail for the tiling engines — can rotate a
+    /// reopening window between the duplicates: it "opens in a different spot
+    /// each time."
     ///
     /// Returns true if at least one sibling was removed, so the caller can mark
     /// its persistence dirty: the preceding record() may have been a

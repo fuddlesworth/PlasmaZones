@@ -39,6 +39,71 @@ class TestWindowPlacementStore : public QObject
     }
 
 private Q_SLOTS:
+    // A sibling that still holds its cross-screen reclaim credit survives the
+    // close collapse. Driven in the PRODUCTION ORDER, which is what makes this
+    // a real test: WindowTrackingAdaptor::windowClosed captures (and the capture
+    // runs the collapse) and only THEN calls markInstanceClosed. Asserting the
+    // other way round would let a "carry the credit onto the keeper" fix look
+    // correct while being wiped by the revoke that follows.
+    void testCollapsePureFloatSiblings_keepsASiblingThatStillHoldsTheReclaimCredit()
+    {
+        WindowPlacementStore store;
+        const QString appId = QStringLiteral("firefox");
+        const QString closing = QStringLiteral("firefox|closing");
+        const QString persisted = QStringLiteral("firefox|persisted");
+
+        // The un-reopened record from a previous session, still credit-bearing,
+        // sharing a screen with the closing window so it IS a collapse candidate
+        // on geometry alone.
+        store.record(makePlacement(persisted, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(10, 20, 300, 400)));
+        store.record(makePlacement(closing, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(50, 60, 300, 400)));
+        QVERIFY(holdsCredit(store, persisted));
+
+        // Close path, in order: collapse first, revoke second.
+        store.collapsePureFloatSiblings(appId, closing);
+        QVERIFY(store.markInstanceClosed(closing));
+
+        bool persistedSurvives = false;
+        for (const WindowPlacement& p : store.records()) {
+            if (p.windowId == persisted) {
+                persistedSurvives = true;
+            }
+        }
+        QVERIFY2(persistedSurvives, "a credit-bearing sibling must not be pruned by the close collapse");
+        QVERIFY2(holdsCredit(store, persisted), "and it must keep the credit the reclaim reads");
+        QVERIFY2(!holdsCredit(store, closing), "the closing record's own credit is revoked, as before");
+    }
+
+    // The other half of the contract: the guard above must not blunt the
+    // collapse's actual job. A sibling that closed earlier in THIS session has
+    // already had its credit revoked, so it is stale duplicate float memory and
+    // still prunes — which is the case the collapse exists for.
+    void testCollapsePureFloatSiblings_stillPrunesASiblingClosedEarlierThisSession()
+    {
+        WindowPlacementStore store;
+        const QString appId = QStringLiteral("firefox");
+        const QString earlier = QStringLiteral("firefox|earlier");
+        const QString closing = QStringLiteral("firefox|closing");
+
+        store.record(makePlacement(earlier, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(10, 20, 300, 400)));
+        // Its own mid-session close revokes its credit, which is what marks it
+        // as superseded rather than as reclaim evidence.
+        QVERIFY(store.markInstanceClosed(earlier));
+        QVERIFY(!holdsCredit(store, earlier));
+
+        store.record(makePlacement(closing, appId, WindowPlacement::stateFree(), QStringLiteral("snap"),
+                                   QStringLiteral("DP-1"), QRect(50, 60, 300, 400)));
+
+        QVERIFY2(store.collapsePureFloatSiblings(appId, closing),
+                 "a credit-less same-screen pure-float sibling is still stale duplicate memory");
+        for (const WindowPlacement& p : store.records()) {
+            QVERIFY2(p.windowId != earlier, "the superseded sibling is pruned");
+        }
+    }
+
     void testRecordAndTake_exact()
     {
         WindowPlacementStore store;
