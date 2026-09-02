@@ -826,54 +826,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
 
     // Shadow-margin cache for surfaceWindowRect(). Seed from the window's
-    // current rects — nothing is resizing at connect time, so the pair agrees —
-    // then refresh on every windowExpandedGeometryChanged, which is the one
-    // moment KWin has just recomputed the expanded rect against the live frame.
-    //
-    // A resize is exactly the interval where those two disagree (see
-    // surfaceWindowRect's declaration for the measured X11 case), so the cache
-    // must never be refreshed from an arbitrary paint-time sample: doing that
-    // would launder the stale value into the very cache that exists to reject
-    // it. This signal, and the connect-time seed, are the only two writers.
-    const auto refreshShadowMargins = [this](KWin::EffectWindow* window) {
-        if (!window) {
-            return;
-        }
-        const QRectF frame = window->frameGeometry();
-        const QRectF expanded = window->expandedGeometry();
-        if (frame.isEmpty() || expanded.isEmpty()) {
-            return;
-        }
-        // Shadows only ever grow the frame. A negative margin would mean the
-        // expanded rect does not contain the frame, which is not a shadow and
-        // must not be baked in — clamp at zero rather than shrinking the canvas
-        // below the window on some future KWin quirk.
-        const QMarginsF margins(qMax(0.0, frame.left() - expanded.left()), qMax(0.0, frame.top() - expanded.top()),
-                                qMax(0.0, expanded.right() - frame.right()),
-                                qMax(0.0, expanded.bottom() - frame.bottom()));
-        // Sanity cap, and it is load-bearing rather than defensive. Reading the
-        // expanded rect is now safe, but this WRITE still samples both rects at
-        // once: if the signal ever arrives while the frame is settled and the
-        // expanded rect is not (the reverse of the measured ordering, where the
-        // frame leads and the expanded rect lags ~25 ms), the stale value would
-        // be cached as a margin and every later frame would rebuild the canvas
-        // from it — turning a 25 ms glitch into a permanent one.
-        //
-        // A shadow wider or taller than the window it surrounds is not a
-        // shadow. The measured stale sample would have cached a 1374 px bottom
-        // margin on a 678 px window; the real margins are 65/53/65/77 against
-        // frames from 628 to 2052 px, three orders of magnitude clear of this
-        // bound. Reject the update and keep the last good margins.
-        if (margins.left() > frame.width() || margins.right() > frame.width() || margins.top() > frame.height()
-            || margins.bottom() > frame.height()) {
-            qCWarning(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
-                                << "frame" << frame << "expanded" << expanded;
-            return;
-        }
-        m_surfaceShadowMargins.insert(window, margins);
-    };
-    refreshShadowMargins(w);
-    connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this, refreshShadowMargins);
+    // current rects (nothing is resizing at connect time, so the pair agrees),
+    // then refresh on every windowExpandedGeometryChanged. The body — and the
+    // write-side invariants: never refresh from a paint-time sample, refuse
+    // implausible margins — lives beside surfaceWindowRect in surfacelayers.cpp.
+    refreshSurfaceShadowMargins(w);
+    connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
+            &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
                 if (!window) {

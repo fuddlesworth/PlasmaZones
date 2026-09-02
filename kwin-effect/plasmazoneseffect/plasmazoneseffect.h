@@ -1456,6 +1456,14 @@ private:
     /// so carrying them across a resize is correct by construction and needs no
     /// assumption about whether the frame or the expanded signal lands first.
     QRectF surfaceWindowRect(KWin::EffectWindow* w) const;
+    /// The margin cache's ONE refresh path: recompute @p window's shadow
+    /// margins from the live frame/expanded pair and store them when
+    /// plausible. Called at connect time (setupWindowConnections seeds it)
+    /// and on every windowExpandedGeometryChanged; defined in
+    /// surfacelayers.cpp beside surfaceWindowRect, which consumes it. The
+    /// write-side invariants (why it must never run from a paint-time
+    /// sample, and the implausible-margin refusal) live on the definition.
+    void refreshSurfaceShadowMargins(KWin::EffectWindow* window);
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 

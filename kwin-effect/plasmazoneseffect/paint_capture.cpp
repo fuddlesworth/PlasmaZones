@@ -425,8 +425,8 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     // committed the arriving window to it (moveResize updates frameGeometry
     // synchronously; the no-op-skip bail in applyWindowGeometry relies on the
     // same fact), and the composite was folded at that same rect. The capture
-    // spans the ARRIVING window's expanded rect so the snapshot lives in the
-    // coordinate system iAnchorRectInTexture describes; the clip against the
+    // spans the ARRIVING window's reconstructed surface rect so the snapshot
+    // lives in the coordinate system iAnchorRectInTexture describes; the clip against the
     // source's canvas trims the sliver where the two clients' shadow padding
     // disagrees, which stays cleared like every out-of-canvas band.
     //
@@ -470,7 +470,14 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
         armFallback();
         return;
     }
-    const QRectF logicalGeometry = window->expandedGeometry();
+    // surfaceWindowRect, NOT raw expandedGeometry(), for the same reason the
+    // lazy capture reads it: this seed runs right after the moveResize that
+    // committed the arriving tab, which is exactly the window where an X11
+    // client's expandedGeometry() can still answer for the PREVIOUS (park)
+    // rect. The seed is one-shot, so a stale rect would misregister the old
+    // side for the whole leg; the reconstructed rect is the settled rect
+    // iAnchorRectInTexture converges on, by construction.
+    const QRectF logicalGeometry = surfaceWindowRect(window);
     const auto [scale, textureSize] = snapshotExtentFor(logicalGeometry, window->screen());
     if (textureSize.isEmpty()) {
         armFallback();
@@ -532,12 +539,12 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     fbo.blitFromFramebuffer(KWin::Rect(srcPx.x(), srcPx.y(), srcPx.width(), srcPx.height()),
                             KWin::Rect(dstPx.x(), dstPx.y(), dstPx.width(), dstPx.height()), GL_LINEAR);
     KWin::GLFramebuffer::popFramebuffer();
-    // expandedGeometry in the trace: the map above assumes it still holds the
-    // pre-park column rect when the seed runs. If a Wayland commit ever lands
-    // the park BEFORE this install, the mismatch is visible only here — the
-    // blit itself would quietly seed a sliver (srcClipped stays non-empty for
-    // most park positions).
-    qCDebug(lcEffect) << "tabSwap seed OK from pre-park composite, canvas" << mp.canvasGeo << "src expanded"
+    // The dest rect in the trace: the map above assumes the SOURCE's canvas
+    // still holds the pre-park column rect when the seed runs. If a Wayland
+    // commit ever lands the park BEFORE this install, the mismatch is visible
+    // only here — the blit itself would quietly seed a sliver (srcClipped
+    // stays non-empty for most park positions).
+    qCDebug(lcEffect) << "tabSwap seed OK from pre-park composite, canvas" << mp.canvasGeo << "dest rect"
                       << logicalGeometry << "src px" << srcPx << "dst px" << dstPx;
     transition.oldSnapshot = std::move(tex);
     transition.needsSnapshot = false;
