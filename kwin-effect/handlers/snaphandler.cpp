@@ -1032,7 +1032,6 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
     // resize, corrupting the pre-tile entry with zone dimensions.
     ensurePreSnapGeometryStored(targetWindow, m_effect->getWindowId(targetWindow), targetWindow->frameGeometry());
-
     // Derive screen from the target geometry center BEFORE the apply. Use
     // resolveEffectiveScreenId to get the virtual screen ID (not just the
     // physical output).
@@ -1051,6 +1050,17 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         m_effect->m_trackedScreenPerWindow[targetWindow] = screenId;
         m_effect->tilingHandler()->updateNotifiedScreen(m_effect->getWindowId(targetWindow), screenId);
     }
+    // AFTER the pre-snap capture (freeGeometryForCapture reads the maximize
+    // state to substitute the true free rect) and the pre-seed above (the
+    // demote's committed configure is exactly the async follow-up it covers),
+    // BEFORE the apply: a surviving KWin maximize fights the zone rect and
+    // arms a cross-screen restore. Deliberately UNGATED on isManagedScreen
+    // (the daemon_apply sites gate because their slots also carry float
+    // restores): this path always commits a zone placement and applies the
+    // rect unconditionally, the demote already skips engine-held claims
+    // internally, and gating only the demote would leave the maximize
+    // fighting the rect on managed screens — the defect it exists to fix.
+    m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
     {
         // Save/restore, not set/clear (nesting-safe).
         const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
@@ -1058,7 +1068,9 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         const auto applyGuard = qScopeGuard([this, prevInApply] {
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
-        m_effect->applyWindowGeometry(targetWindow, geometry);
+        m_effect->applyWindowGeometry(targetWindow, geometry, false, false,
+                                      PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                                      /*demoteMaximizeOnDeferredReplay=*/true);
     }
 
     if (m_effect->isDaemonReady("snap assist windowSnapped")) {

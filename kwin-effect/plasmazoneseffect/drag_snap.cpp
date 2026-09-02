@@ -89,7 +89,25 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // the `reply.argumentAt<4>() && window` check above),
                         // so frameGeometry() needs no null-guard here.
                         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
-                    applyWindowGeometry(window, geo, false, skipAnimation);
+                    // A surviving KWin maximize fights the zone rect and arms
+                    // a cross-screen restore — drop it before the apply. Runs
+                    // AFTER the pre-snap capture, whose freeGeometryForCapture
+                    // reads the maximize state to substitute the true free
+                    // rect; demoting first would consume it.
+                    //
+                    // Deliberately UNGATED on isManagedScreen, unlike the
+                    // daemon_apply sites: their slots also carry float
+                    // restores, so they ride the pre-existing commit
+                    // discriminator, while this funnel always commits a zone
+                    // placement and applies the rect unconditionally below.
+                    // Engine-held claims are already skipped inside the
+                    // demote, and gating only the demote here would leave the
+                    // maximize fighting the rect on managed screens — the
+                    // defect this call exists to fix.
+                    m_tilingHandler->demoteMaximizeForSnapPlacement(window, geo);
+                    applyWindowGeometry(window, geo, false, skipAnimation,
+                                        PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                                        /*demoteMaximizeOnDeferredReplay=*/true);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
                     // a resolved snap-mode screen (autotile windows are tracked
@@ -261,7 +279,8 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
 
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
                                             bool skipAnimation, const QString& profilePath,
-                                            const QRectF& originOverride, const QRectF& visualTargetOverride)
+                                            const QRectF& originOverride, const QRectF& visualTargetOverride,
+                                            bool demoteMaximizeOnDeferredReplay)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -397,7 +416,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         *conn =
             connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
                     [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
-                     visualTargetOverride](KWin::EffectWindow*) {
+                     visualTargetOverride, demoteMaximizeOnDeferredReplay](KWin::EffectWindow*) {
                         disconnect(*conn);
                         // Drop the handle on every exit, not just the applying
                         // one: a stale entry would make the next defer for this
@@ -435,6 +454,16 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                             endRestoreSuppression(safeWindow.data());
                             return;
                         }
+                        // Pay the demote claim the caller's mid-gesture bail
+                        // skipped (see the header doc): the gesture is over
+                        // now, so the demote's isUserMove/isUserResize guard
+                        // passes, and it must run before the moveResize below
+                        // for the same reason it runs before the immediate
+                        // apply — a surviving KWin maximize fights the zone
+                        // rect and arms a cross-screen restore.
+                        if (demoteMaximizeOnDeferredReplay) {
+                            m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow.data(), geo);
+                        }
                         // Re-assert the self-caused-frame-change guard the
                         // original (batch) apply held — without it the
                         // synchronous frame change from this moveResize
@@ -453,7 +482,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                         // snapshots from defer time; the batch-generation guard above
                         // already dropped the replay if anything moved since.
                         applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
-                                            visualTargetOverride);
+                                            visualTargetOverride, demoteMaximizeOnDeferredReplay);
                     });
         m_deferredGeometryReplay.insert(window, *conn);
         return;
