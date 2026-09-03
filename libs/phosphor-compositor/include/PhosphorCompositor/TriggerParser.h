@@ -160,8 +160,10 @@ inline bool exactModifierMatch(int modifierSetting, Qt::KeyboardModifiers mods)
  * buttons held, so wheeling while a button happens to be down still works.
  * The cost is that the shadowing this matcher prevents on the modifier axis
  * survives on the button axis — a modifier-only chord swallows events meant
- * for the same modifier plus a button. Callers that care should offer
- * modifiers only, which is what the scroll-key rows do.
+ * for the same modifier plus a button. Callers that care should author
+ * modifier-only or button-only chords, never combined — which is the shape
+ * the scroll-key capture UI enforces, so the shadowing pair takes a
+ * hand-edited config.
  *
  * DragModifier::AlwaysActive does NOT survive this matcher's semantics:
  * modifierMaskFor has no case for it, so it folds to Qt::NoModifier and the
