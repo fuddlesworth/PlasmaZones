@@ -582,8 +582,17 @@ public:
     virtual void commitDragInsertPreview()
     {
     }
-    virtual void cancelDragInsertPreview()
+    /// @p dragStillActive: the previewed window is still under an interactive
+    /// move when the cancel runs (mid-drag trigger release, or a screen /
+    /// desktop change during the drag). An engine that keeps the window
+    /// MANAGED while its preview is live (autotile) must then keep
+    /// suppressing geometry emission for it during the cancel's own retile —
+    /// applying the tile rect would resize the window in the user's hand
+    /// (discussion #1028: float-drag + tap the insert trigger = window grows).
+    /// The drop-time cancel passes false so the window snaps back as before.
+    virtual void cancelDragInsertPreview(bool dragStillActive = false)
     {
+        Q_UNUSED(dragStillActive)
     }
     virtual QString dragInsertPreviewScreenId() const
     {
@@ -730,11 +739,13 @@ public:
     /// until drop, and fighting it yanks the window from the cursor (and a
     /// per-ack reconcile pins size intents to transient drag frames). The
     /// daemon sets it at beginDrag and clears it before the drop is
-    /// finalized, so commit/float paths apply normally. Today the daemon
-    /// calls this on the SCROLL engine only, and only ScrollEngine
-    /// overrides it: autotile also retiles mid-drag but exempts the dragged
-    /// window inside applyTiling's emit filter instead. Override this when
-    /// an engine has no such filter of its own.
+    /// finalized, so commit/float paths apply normally. The daemon calls
+    /// this on BOTH placement engines for every drag: ScrollEngine gates
+    /// applyLayout emission and ack reconciliation on it, AutotileEngine
+    /// gates applyTiling's geometry emission — its preview/cancel filters
+    /// cover only the preview's own lifecycle, and retiles from other
+    /// sources (a deferred geometry-retry, a neighbour opening or closing)
+    /// need this drag-long mark (discussion #1028).
     virtual void setInteractiveDragWindow(const QString& windowId)
     {
         Q_UNUSED(windowId)

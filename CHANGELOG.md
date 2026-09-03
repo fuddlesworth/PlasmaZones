@@ -5,6 +5,13 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Letting go of the insert key mid-drag no longer resizes the window in your hand**: with drag set to float the window, tapping the insert key while dragging and then releasing it without dropping made the window jump to its old tile size while you were still holding it. Cancelling the insert preview now leaves the dragged window alone until you drop it. ([#1028](https://github.com/fuddlesworth/PlasmaZones/discussions/1028))
+- **Focus no longer follows the mouse on desktops without a placement mode**: switching from a tiled desktop to one with no mode assigned could leave focus-follows-mouse running there, so newly opened windows kept trading focus on hover. The switch could be announced to the compositor effect with a desktop it had already moved past, the announcement was rejected as stale, and no corrected one followed. One is now always sent after every desktop change, so the effect ends up with the right answer. ([#1028](https://github.com/fuddlesworth/PlasmaZones/discussions/1028))
+
 ## [3.4.9] - 2026-09-02
 
 ### Added
@@ -2121,7 +2128,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...HEAD
+[3.4.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...v3.4.9
 [3.4.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...v3.4.8
 [3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
 [3.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.4...v3.4.5

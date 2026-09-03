@@ -171,12 +171,24 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
         // Roll back the prior-state capture so we don't leave the engine in a bad state.
         if (!preview.evictedWindowId.isEmpty()) {
             targetState->setFloating(preview.evictedWindowId, false);
+            // Paired with the markOverflow in the eviction block above, like
+            // the cancel path's restore: the victim is tiled again, so a
+            // standing mark would misclassify it everywhere the overflow
+            // KIND matters (capturePlacement, recoverIfRoom).
+            m_overflow.clearOverflow(preview.evictedWindowId);
         }
         if (preview.hadPriorState && preview.priorSameScreen) {
             // Same-screen: we only mutated the floating flag (if priorFloating).
             // Re-float to restore the original state.
             if (preview.priorFloating) {
                 targetState->setFloating(windowId, true);
+                // Restore the KIND of float too (the cancel path's idiom):
+                // the capture above cleared the overflow mark, and a
+                // floating-but-unmarked window reads as a user float that
+                // recoverIfRoom never auto-recovers.
+                if (preview.priorOverflow) {
+                    m_overflow.markOverflow(windowId, screenId);
+                }
             }
         } else if (preview.hadPriorState) {
             // Cross-screen: we removed from prior state and added to target.
@@ -288,13 +300,39 @@ void AutotileEngine::commitDragInsertPreview()
     }
 }
 
-void AutotileEngine::cancelDragInsertPreview()
+void AutotileEngine::cancelDragInsertPreview(bool dragStillActive)
 {
     if (!m_dragInsertPreview) {
         return;
     }
     const DragInsertPreview p = *m_dragInsertPreview;
     m_dragInsertPreview.reset();
+
+    // Mid-drag cancel (insert trigger released, or the screen/desktop changed
+    // under a live drag): the user is still holding the window, so the retiles
+    // below must keep skipping its geometry exactly as the preview filter did.
+    // Without this, resetting the preview first meant the cancel's own retile
+    // applied the tile rect to the window in the user's hand — a float-mode
+    // drag visibly grew to tile size the moment the trigger was released
+    // (discussion #1028 follow-up). The drop-time cancel passes false and
+    // keeps the snap-back behaviour.
+    //
+    // Identity gate: the adaptor derives dragStillActive from session
+    // liveness, so a stale preview swept at the START of a new drag arrives
+    // here with dragStillActive=true even though nobody holds ITS window —
+    // suppressing the snap-back would park that window at the previewed rect.
+    // When the daemon's interactive-drag mark is set and names a different
+    // window, trust the mark over the flag. An empty mark (engine driven
+    // without a daemon, as in the unit tests) keeps the flag's word.
+    if (dragStillActive && !m_interactiveDragWindow.isEmpty() && m_interactiveDragWindow != p.windowId) {
+        dragStillActive = false;
+    }
+    if (dragStillActive) {
+        m_dragCancelFilterWindowId = p.windowId;
+    }
+    const auto clearCancelFilter = qScopeGuard([this] {
+        m_dragCancelFilterWindowId.clear();
+    });
 
     PhosphorTiles::TilingState* targetState = tilingStateForScreen(p.targetScreenId);
 
@@ -362,6 +400,16 @@ void AutotileEngine::cancelDragInsertPreview()
     if (p.hadPriorState && !p.priorSameScreen) {
         retileAfterOperation(p.priorKey.screenId, /*operationSucceeded=*/true);
     }
+}
+
+void AutotileEngine::setInteractiveDragWindow(const QString& windowId)
+{
+    // Deliberately NO retile on clear, mirroring the scroll engine: every
+    // drop path finalizes on its own (commit retiles unfiltered, ApplyFloat
+    // floats the window out and that write retiles, a cancelled move has
+    // KWin restore the frame), and a defensive retile here would race the
+    // async float call.
+    m_interactiveDragWindow = canonicalizeForLookup(windowId);
 }
 
 int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
