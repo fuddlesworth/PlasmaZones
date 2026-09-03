@@ -293,23 +293,6 @@ Item {
                         }
                     }
 
-                    // The stand-in taskbar entry the minimize collapses
-                    // into. Drawn as real pixels (not just fed to the
-                    // shader) so the funnel visibly lands ON something; a
-                    // faint slot when the card is up, tinted while
-                    // swallowed.
-                    Rectangle {
-                        visible: field.iconPhase && root._class === "appearance"
-                        x: field.iconRect.x
-                        y: field.iconRect.y
-                        width: field.iconRect.width
-                        height: field.iconRect.height
-                        radius: Kirigami.Units.smallSpacing
-                        color: Qt.alpha(Kirigami.Theme.highlightColor, 0.35)
-                        border.width: 1
-                        border.color: Kirigami.Theme.highlightColor
-                    }
-
                     // Live capture of the card for uTexture0 — the same
                     // separate-pass FBO a real leg builds. Parked off-screen
                     // (a ShaderEffectSource is itself renderable and
