@@ -129,7 +129,7 @@ private Q_SLOTS:
     void noModelCreatesNothing();
     void aLateWriteWarnsAndDoesNotRebuild();
     void aFailingDelegateRowIsSkipped();
-    void countChangedFiresOncePerBuild();
+    void countChangedDoesNotRefireAfterBuild();
 
 private:
     /// Build a root Item containing a PerScreenPanels with `delegateBody`
@@ -407,11 +407,12 @@ void TestPerScreenPanels::aFailingDelegateRowIsSkipped()
     QCOMPARE(root->findChildren<PanelWindow*>().size(), 0);
 }
 
-void TestPerScreenPanels::countChangedFiresOncePerBuild()
+void TestPerScreenPanels::countChangedDoesNotRefireAfterBuild()
 {
-    // The change-gated countChanged: exactly one emission for a build that
-    // produced rows (asserted via a queued check since the build runs
-    // during component completion), none for an empty build.
+    // Named for what it can actually pin: the build runs inside component
+    // completion before any spy can attach, so the single-emission half is
+    // unobservable here; what this asserts is the one-shot contract — no
+    // re-fire after the build settles.
     QQmlEngine engine;
     std::unique_ptr<QObject> root(buildRoot(engine, 2, QStringLiteral("PanelWindow { }"), nullptr));
     QVERIFY(root);

@@ -92,39 +92,51 @@ void TestBarWidgetTypes::theDefaultBarLayoutOnlyUsesRegisteredIds()
     // Escaped literals rather than raw strings: moc's preprocessor mis-parses
     // a raw string containing parentheses and quotes, and fails this file
     // with "missing ')' in macro usage".
-    // DotMatchesEverything with a LAZY bracket match so a Groups list
-    // reformatted across multiple lines still parses; the plain `.*` form
-    // silently dropped any multi-line list from the guard while the
-    // vacuous-parse check below stayed green on the remaining ones.
-    static const QRegularExpression groupsProperty(
-        QStringLiteral("property\\s+var\\s+(?:left|center|right)Groups\\s*:\\s*(\\[[\\s\\S]*?\\])\\s*$"),
-        QRegularExpression::MultilineOption);
-    static const QRegularExpression quotedId(QStringLiteral("\"([^\"]+)\""));
-    // The declaration count anchors the guard: every `<side>Groups:` in the
-    // source must have produced a parsed literal, so a formatting change
-    // that defeats the bracket match fails loudly instead of shrinking
-    // coverage in silence.
+    // Balance-aware extraction, not a regex capture over the literal: any
+    // regex form has a truncation mode (a lazy multi-line match ends at
+    // the first `]` that reaches end-of-line, a greedy one swallows the
+    // next declaration), and a truncated match still LOOKS parsed, so no
+    // count check catches it. Locating each declaration and scanning to
+    // the matching bracket by depth is format-proof: one-line and
+    // reformatted multi-line lists both extract in full.
     static const QRegularExpression groupsDeclaration(
-        QStringLiteral("property\\s+var\\s+(?:left|center|right)Groups\\s*:"));
+        QStringLiteral("property\\s+var\\s+(?:left|center|right)Groups\\s*:\\s*"));
+    static const QRegularExpression quotedId(QStringLiteral("\"([^\"]+)\""));
 
     QStringList layoutIds;
     int parsedDeclarations = 0;
-    auto declarations = groupsProperty.globalMatch(source);
+    int declaredCount = 0;
+    auto declarations = groupsDeclaration.globalMatch(source);
     while (declarations.hasNext()) {
+        const auto match = declarations.next();
+        ++declaredCount;
+        const qsizetype open = match.capturedEnd(0);
+        if (open >= source.size() || source.at(open) != QLatin1Char('[')) {
+            continue; // counted but not parsed: the QCOMPARE below fails loudly
+        }
+        int depth = 0;
+        qsizetype close = open;
+        for (; close < source.size(); ++close) {
+            const QChar c = source.at(close);
+            if (c == QLatin1Char('[')) {
+                ++depth;
+            } else if (c == QLatin1Char(']') && --depth == 0) {
+                break;
+            }
+        }
+        if (depth != 0) {
+            continue; // unbalanced: same loud failure below
+        }
         ++parsedDeclarations;
-        const QString literal = declarations.next().captured(1);
+        const QString literal = source.mid(open, close - open + 1);
         auto ids = quotedId.globalMatch(literal);
         while (ids.hasNext()) {
             layoutIds << ids.next().captured(1);
         }
     }
-
-    int declaredCount = 0;
-    auto declared = groupsDeclaration.globalMatch(source);
-    while (declared.hasNext()) {
-        declared.next();
-        ++declaredCount;
-    }
+    // Every declaration must have produced a fully-extracted literal, so a
+    // formatting change that defeats the extraction fails loudly instead
+    // of shrinking coverage in silence.
     QCOMPARE(parsedDeclarations, declaredCount);
 
     // Guard the guard: a parse that silently found nothing would pass
