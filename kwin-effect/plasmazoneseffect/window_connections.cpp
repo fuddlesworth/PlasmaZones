@@ -912,12 +912,27 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 //
                 // The counter is raised by every bracketed maximize write this
                 // handler makes, not only the column-maximize ones, so the
-                // monocle apply and release skip here too. That is the same
-                // judgement applied consistently: motion this effect authored
-                // is animated by the batch that authored it, which routes the
-                // leg onto WindowMaximize itself (monocleBitWritten /
-                // monocleBitReleased in the tile batch), not by a second morph
-                // replayed over it from this handler.
+                // monocle apply and release skip here too on X11. That is the
+                // same judgement applied consistently: motion this effect
+                // authored is animated by the batch that authored it, which
+                // routes the leg onto WindowMaximize itself (monocleBitWritten
+                // / monocleBitReleased in the tile batch), not by a second
+                // morph replayed over it from this handler.
+                //
+                // On Wayland the MONOCLE echo has no skip here: it arrives with
+                // the counter back at 0, and the interception above declines
+                // it because a monocle screen is not scrolling. It falls
+                // through to beginMaximizeShaderMorph, and what keeps the
+                // batch the single owner there is tryBeginShaderForEvent's
+                // same-effect short-circuit: the batch's WindowMaximize leg is
+                // still live, resolves to the same pack, and is kept rather
+                // than superseded. The morph then only re-asserts the
+                // endpoints the batch already installed (toGeometry becomes
+                // the frame the client committed, and fromGeometry is left
+                // alone once the snapshot exists, or re-read from the same
+                // m_preMaximizeFrame capture the batch anchored on). One leg,
+                // one owner, on both platforms; the echo is absorbed rather
+                // than skipped.
                 if (m_tilingHandler && m_tilingHandler->isSuppressingMaximizeChanged()) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;

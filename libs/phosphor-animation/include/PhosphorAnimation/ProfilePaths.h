@@ -423,8 +423,12 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///
 /// SSOT for "what shader does this event animate with out of the box". Two
 /// families default to a shader:
-///   • Window SNAP (snap in/out, layout-switch) → "window-morph" (geometry
-///     cross-fade), run by the kwin-effect. The interactive-drag leaf
+///   • Window GEOMETRY legs (snap in/out, layout-switch, maximize) →
+///     "window-morph" (geometry cross-fade), run by the kwin-effect. Maximize
+///     is in the set because the engines route their own column and monocle
+///     maximizes through it, and that default counts as pack ownership for
+///     the stock-effect suppression, so KWin's own maximize effect is
+///     unloaded by default. The interactive-drag leaf
 ///     (`window.movement.move`) carries NO default — a crossfade pack
 ///     cannot drive a held drag, and the move-class packs (wobble) stay
 ///     opt-in.

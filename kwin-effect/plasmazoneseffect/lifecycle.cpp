@@ -237,11 +237,13 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         // Whole-session unload, and the assigned pack now plays for every
         // maximize source. A maximize on a scroll-managed tile is claimed by
         // the strip's maximize-to-edges verb, and a monocle tile's maximize
-        // is written by the tile batch; both skip the shader install in the
-        // windowMaximizedStateChanged handler (window_connections.cpp) so the
-        // batch that authored the resize is the single owner of the leg, and
-        // that batch routes it onto WindowMaximize itself
-        // (slotWindowsTileRequested, maximizeLegThisBatch). Unmanaged windows
+        // is written by the tile batch; the batch that authored the resize
+        // routes the leg onto WindowMaximize itself (slotWindowsTileRequested,
+        // maximizeLegThisBatch) and is its single owner. The
+        // windowMaximizedStateChanged handler (window_connections.cpp) skips
+        // the column echo outright, and the monocle echo either skips (X11,
+        // under the suppression counter) or is absorbed by the same-effect
+        // short-circuit onto the batch's live leg (Wayland). Unmanaged windows
         // take the native path (beginMaximizeShaderMorph). Same pack, one
         // owner per leg, on every screen.
         wanted << QStringLiteral("maximize");

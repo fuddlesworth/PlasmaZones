@@ -279,8 +279,14 @@ bool eventPathResolvesPerWindow(const QString& path)
     // check the claim rather than trust it:
     //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
     //                          (open/close/focus) and daemon_apply (minimize)
-    //   window.movement.maximize / .move
+    //   window.movement.move — tryBeginShaderForEvent from window_connections
+    //   window.movement.maximize
     //                        — tryBeginShaderForEvent from window_connections
+    //                          (beginMaximizeShaderMorph, the KWin-native path)
+    //                          AND applyWindowGeometry from the tile batch
+    //                          (slotWindowsTileRequested) for the column
+    //                          maximize-to-edges and monocle legs the engines
+    //                          author themselves
     //   window.movement.snapIn / .snapOut / .layoutSwitch
     //                        — applyWindowGeometry's resolve in drag_snap, and
     //                          every other applyWindowGeometry caller that takes
@@ -321,8 +327,11 @@ QString eventClassForPath(const QString& path)
     }
     // Geometry legs carry an old rect and a new rect (snap/layoutSwitch/
     // maximize) — the rest of the window.movement sub-tree, including its
-    // cascade parent. Maximize IS a geometry change with a before/after
-    // rect, so morph can drive it even though it isn't a built-in default.
+    // cascade parent. The four geometry leaves (snapIn, snapOut,
+    // layoutSwitch, maximize) all carry the window-morph built-in default
+    // (defaultShaderEffectIdForPath); maximize joined the set once the
+    // engines started routing their own column and monocle maximizes through
+    // it. The move leaf above is the sub-tree's one exception.
     if (path == WindowMovement || path.startsWith(movementPrefix)) {
         return EventClassGeometry;
     }

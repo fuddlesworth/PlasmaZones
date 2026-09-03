@@ -159,7 +159,7 @@ PHOSPHORANIMATION_EXPORT QString shaderPathIsolationRoot(const QString& path);
 
 /// Resolve @p path against @p tree, applying the built-in per-event default
 /// shader (ProfilePaths::defaultShaderEffectIdForPath, e.g. "window-morph" for
-/// window snap events) when the path is TRULY UNSET — i.e. neither it nor any
+/// the window geometry events) when the path is TRULY UNSET — i.e. neither it nor any
 /// ancestor carries an override. An explicit "None" (an engaged-empty
 /// override) IS an override, so it is respected and the default is NOT applied.
 ///

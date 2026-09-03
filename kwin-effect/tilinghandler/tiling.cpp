@@ -1955,11 +1955,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // event, not a snap: it rides window.movement.maximize so
                     // the pack assigned there plays, the same node the
                     // KWin-native path (beginMaximizeShaderMorph) uses for an
-                    // unmanaged window. The native handler skips this window
-                    // on purpose (isSuppressingMaximizeChanged) so the two
-                    // never double-install. A batch that re-asserts an
-                    // already-maximized monocle tile is a plain placement and
-                    // stays on snapIn.
+                    // unmanaged window. The two never double-install: on X11
+                    // the native handler skips this window under the
+                    // suppression counter (isSuppressingMaximizeChanged), and
+                    // on Wayland its later echo short-circuits onto this very
+                    // leg (window_connections.cpp spells out the absorb). A
+                    // batch that re-asserts an already-maximized monocle tile
+                    // is a plain placement and stays on snapIn.
                     m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   monocleBitWritten ? PhosphorAnimation::ProfilePaths::WindowMaximize
@@ -2684,11 +2686,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // (column maximize-to-edges either way, monocle release)
                     // is the user's maximize event and rides
                     // window.movement.maximize, so the pack assigned there
-                    // plays; every other placement is a snap. The KWin-native
-                    // handler in window_connections.cpp skips these windows
-                    // (interceptMaximizeRequest / isSuppressingMaximizeChanged)
-                    // precisely so that this apply is the single owner of the
-                    // maximize leg.
+                    // plays; every other placement is a snap. This apply is the
+                    // single owner of the maximize leg: the KWin-native handler
+                    // in window_connections.cpp skips the column echo
+                    // (interceptMaximizeRequest) and the X11 monocle echo
+                    // (isSuppressingMaximizeChanged), and the Wayland monocle
+                    // echo is absorbed by the same-effect short-circuit onto
+                    // the leg installed here.
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   maximizeLegThisBatch ? PhosphorAnimation::ProfilePaths::WindowMaximize
                                                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn,
