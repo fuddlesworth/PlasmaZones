@@ -122,12 +122,11 @@ HOME_N="$NEST/home"
 
 # Refuse to wipe a LIVE session's state out from under it. Existence of the
 # socket inode is not liveness (a crashed compositor leaves it behind), so
-# probe for a process holding it and quietly unlink a stale one — otherwise
-# a crash would lock the harness out until a manual rm. Without fuser the
-# probe cannot answer, so the guard fails CLOSED (refuses) rather than
-# unlinking what might be a live session's socket. PZ_NESTED_FORCE=1 skips
-# the check either way and unlinks; note that a compositor still holding
-# the old socket keeps running orphaned and must be killed by hand.
+# probe /proc/net/unix for a bound listener on the path and quietly unlink
+# a stale one — otherwise a crash would lock the harness out until a manual
+# rm. PZ_NESTED_FORCE=1 skips the check and unlinks; note that a compositor
+# still holding the old socket keeps running orphaned and must be killed by
+# hand.
 # Socket name, so two worktrees can each run a nested session at once (kwin
 # takes a lockfile named after it, and a second session on the same name dies
 # with "could not add wayland socket"). Pair a distinct PZ_NESTED_SOCKET with
@@ -152,13 +151,15 @@ if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     exit 1
 fi
 if [ -S "$SOCK" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
-    if ! command -v fuser >/dev/null 2>&1; then
-        echo "$SOCK exists and fuser is unavailable to tell live from stale;" >&2
-        echo "install psmisc, remove the socket by hand, or re-run with PZ_NESTED_FORCE=1" >&2
-        exit 1
-    fi
-    if fuser -s "$SOCK" 2>/dev/null; then
-        echo "a nested session is live (a process holds $SOCK);" >&2
+    # Liveness probe via /proc/net/unix, which lists every bound unix
+    # socket by the path given at bind time. fuser is the wrong tool here
+    # and was observed false-negating on a live compositor: a bound
+    # listening socket shows up in the holder's fd table as
+    # socket:[inode], not as the filesystem path, so a path-keyed fuser
+    # finds nothing and the guard waves a second run through to wipe the
+    # live session's state.
+    if awk -v p="$SOCK" '$NF == p { found = 1 } END { exit !found }' /proc/net/unix; then
+        echo "a nested session is live (a process has $SOCK bound);" >&2
         echo "kill it first, or re-run with PZ_NESTED_FORCE=1" >&2
         exit 1
     fi
@@ -172,7 +173,12 @@ rm -f "$SOCK"
 # previous env.sh names a bus whose socket is still there, a session is live
 # in THIS tree.
 if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
-    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
+    # The exclusion class MUST stop at ',' too: dbus-run-session addresses
+    # look like unix:path=/tmp/dbus-XXX,guid=..., and letting the capture
+    # run through the comma yields a path with ',guid=...' glued on, whose
+    # -S test always fails — the guard then never fires and a second run
+    # wipes a LIVE session's state (observed exactly that way).
+    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;,'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
     if [ -n "$OLDBUS" ] && [ -S "$OLDBUS" ]; then
         echo "a nested session is live in $NEST (its bus socket $OLDBUS still exists);" >&2
         echo "point PZ_NESTED_DIR somewhere else, kill that session, or re-run with PZ_NESTED_FORCE=1" >&2

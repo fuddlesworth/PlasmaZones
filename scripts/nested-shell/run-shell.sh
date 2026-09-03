@@ -61,31 +61,51 @@ if [ ! -x "$REPO/$BUILD/bin/phosphor-shell" ]; then
     exit 1
 fi
 
-# The launcher execs the compositor in the foreground; background it and
-# keep its log where the sibling scripts document it. Its own guards
-# handle a stale or live session in this NEST.
-"$REPO/scripts/nested-kwin/run-nested.sh" "$@" > "$RUNTIME_DIR/pz-shell-launch.log" 2>&1 &
+# A stale env.sh from a crashed previous session must not satisfy the wait
+# below — the launcher deletes and rewrites it, and breaking on the stale
+# one races the launcher's home wipe (which would eat the seed) and can key
+# the socket wait on a dead inode. Record the pre-launch file's identity
+# (inode + mtime; the launcher always mv's a fresh tmp file into place, so
+# the fresh one never matches) and wait for a DIFFERENT env.sh.
+mkdir -p "$NEST"
+PRE_ENV_ID=$(stat -c '%i %Y' "$NEST/env.sh" 2>/dev/null || echo none)
+
+# The launcher execs the compositor in the foreground; background it with
+# its output on a per-NEST temp name, renamed to the documented
+# compositor.log once the session is confirmed up. Per-NEST (not a shared
+# name in $RUNTIME_DIR) so concurrent per-worktree sessions cannot clobber
+# each other's launch output; a temp name (not compositor.log itself) so
+# this invocation cannot truncate a LIVE session's log before the
+# launcher's guard refuses; and a same-directory rename so the
+# compositor's open log fd stays on the very inode the final path names.
+# The launcher's own guards handle a stale or live session in this NEST.
+"$REPO/scripts/nested-kwin/run-nested.sh" "$@" > "$NEST/compositor.log.launch" 2>&1 &
 LAUNCHER_PID=$!
 
-# env.sh is written just before kwin execs, so its appearance is the
+# env.sh is written just before kwin execs, so a FRESH env.sh is the
 # up-signal. The launcher exiting first means its guards refused — surface
 # its log instead of spinning the full timeout.
+env_fresh() {
+    [ "$(stat -c '%i %Y' "$NEST/env.sh" 2>/dev/null || echo none)" != "$PRE_ENV_ID" ] \
+        && [ -f "$NEST/env.sh" ]
+}
 for _ in $(seq 1 100); do
-    [ -f "$NEST/env.sh" ] && break
+    env_fresh && break
     if ! kill -0 "$LAUNCHER_PID" 2>/dev/null; then
         echo "nested launcher exited before the session came up; its output:" >&2
-        cat "$RUNTIME_DIR/pz-shell-launch.log" >&2
+        cat "$NEST/compositor.log.launch" >&2
         exit 1
     fi
     sleep 0.1
 done
-if [ ! -f "$NEST/env.sh" ]; then
-    echo "timed out waiting for $NEST/env.sh; launcher output:" >&2
-    cat "$RUNTIME_DIR/pz-shell-launch.log" >&2
+if ! env_fresh; then
+    echo "timed out waiting for a fresh $NEST/env.sh; launcher output:" >&2
+    cat "$NEST/compositor.log.launch" >&2
     exit 1
 fi
-# The compositor's own log lives with the session state from here on.
-mv "$RUNTIME_DIR/pz-shell-launch.log" "$NEST/compositor.log"
+# Session confirmed up: give the log its documented name. Same-directory
+# rename, so the compositor's open fd and the path stay one inode.
+mv "$NEST/compositor.log.launch" "$NEST/compositor.log"
 
 # Give the compositor a moment to bind its wayland socket — env.sh lands
 # a hair before the exec.
