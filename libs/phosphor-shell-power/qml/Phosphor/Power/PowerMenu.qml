@@ -81,7 +81,11 @@ Item {
     //
     // Hoisted rather than inlined into the Repeater's `model`, so the array is
     // built once. An inline literal re-evaluates and rebuilds every delegate,
-    // which resets focus and hover mid-interaction.
+    // which resets focus and hover mid-interaction. For the same reason the
+    // entries carry no Theme reads: `accent` is a semantic NAME resolved to a
+    // Theme token inside the tile delegate, so a live retheme retints tiles
+    // in place instead of rebuilding the array (and every tile) via this
+    // binding's Theme dependencies.
     //
     // `available` and `run` are functions, not values: capability answers
     // arrive asynchronously from logind and move with lid state, swap and
@@ -93,7 +97,7 @@ Item {
             "icon": "system-suspend",
             "key": "S",
             "code": Qt.Key_S,
-            "accent": Theme.info,
+            "accent": "info",
             "row": 0,
             "available": s => root._offered(s.canSuspend),
             "run": s => s.suspend()
@@ -104,7 +108,7 @@ Item {
             "icon": "system-suspend-hibernate",
             "key": "H",
             "code": Qt.Key_H,
-            "accent": Theme.tertiary,
+            "accent": "tertiary",
             "row": 0,
             "available": s => root._offered(s.canHibernate),
             "run": s => s.hibernate()
@@ -118,7 +122,7 @@ Item {
             "icon": "system-lock-screen",
             "key": "L",
             "code": Qt.Key_L,
-            "accent": Theme.primary,
+            "accent": "primary",
             "row": 0,
             // The default action: drawn filled and focused on open. One flag
             // rather than three separate `id === "lock"` tests, which is the
@@ -133,7 +137,7 @@ Item {
             "icon": "system-log-out",
             "key": "O",
             "code": Qt.Key_O,
-            "accent": Theme.secondary,
+            "accent": "secondary",
             "row": 1,
             "available": () => true,
             "run": s => s.logout()
@@ -144,7 +148,7 @@ Item {
             "icon": "system-reboot",
             "key": "R",
             "code": Qt.Key_R,
-            "accent": Theme.warning,
+            "accent": "warning",
             "row": 1,
             "available": s => root._offered(s.canReboot),
             "run": s => s.reboot()
@@ -155,7 +159,7 @@ Item {
             "icon": "system-shutdown",
             "key": "P",
             "code": Qt.Key_P,
-            "accent": Theme.error,
+            "accent": "error",
             "row": 1,
             "available": s => root._offered(s.canPowerOff),
             "run": s => s.powerOff()
@@ -237,7 +241,10 @@ Item {
             spacing: Tokens.spacing_l
 
             Text {
-                text: qsTr("SESSION")
+                // Translated in natural casing; the shout is styling, and
+                // casing rules differ per locale.
+                text: qsTr("Session")
+                font.capitalization: Font.AllUppercase
                 color: Theme.on_surface_variant
                 font.pixelSize: Tokens.font_size_label_s
                 font.weight: Tokens.font_weight_medium
@@ -288,7 +295,28 @@ Item {
                             label: modelData.label
                             iconName: modelData.icon
                             shortcut: modelData.key
-                            accent: modelData.accent
+                            // Resolved HERE, not in the actions array, so a
+                            // retheme retints this binding alone instead of
+                            // rebuilding the array and every tile with it.
+                            // The switch reads the Theme properties directly,
+                            // so each is a tracked dependency.
+                            accent: {
+                                switch (modelData.accent) {
+                                case "info":
+                                    return Theme.info;
+                                case "tertiary":
+                                    return Theme.tertiary;
+                                case "primary":
+                                    return Theme.primary;
+                                case "secondary":
+                                    return Theme.secondary;
+                                case "warning":
+                                    return Theme.warning;
+                                case "error":
+                                    return Theme.error;
+                                }
+                                return Theme.on_surface_variant;
+                            }
                             primary: modelData.isDefault === true
 
                             onActivated: root._invoke(modelData)

@@ -24,6 +24,10 @@ BarWidget {
     // Re-evaluated when playerCount changes; the metadata properties below
     // carry their own NOTIFY so the readout tracks the current track.
     // Typed so QML nulls it automatically if the player is destroyed.
+    // Safe against count-neutral replacement (unlike a nodeAt(0) pattern):
+    // MprisHost emits playerCountChanged on every add AND remove
+    // individually, so even an ownership transfer (remove+add, count
+    // N->N-1->N) notifies twice and this binding re-resolves each time.
     readonly property MprisPlayer player: host.playerCount > 0 ? host.playerAt(0) : null
     readonly property string trackTitle: root.player ? root.player.trackTitle : ""
     readonly property string trackArtist: root.player ? root.player.trackArtist : ""
@@ -44,14 +48,17 @@ BarWidget {
     // merely paused.
     readonly property string _stateWord: {
         if (root.isPlaying)
-            return "Playing";
+            return qsTr("Playing");
         if (root.player && root.player.playbackState === MprisPlayer.Stopped)
-            return "Stopped";
-        return "Paused";
+            return qsTr("Stopped");
+        return qsTr("Paused");
     }
 
     function _toggle() {
-        if (root.player)
+        // Guarded here rather than only at the pointer path so every
+        // caller honours the capability: the assistive-tech press action
+        // is not suppressed by MouseArea.enabled.
+        if (root.player && root._controllable)
             root.player.togglePlaying();
     }
 
@@ -117,7 +124,7 @@ BarWidget {
         // carries the full quad because it is the shared button atom and is
         // meant to work wherever a focused surface hosts it.
         Accessible.role: Accessible.Button
-        Accessible.name: root.isPlaying ? "Pause" : "Play"
+        Accessible.name: root.isPlaying ? qsTr("Pause") : qsTr("Play")
         Accessible.onPressAction: root._toggle()
 
         onClicked: root._toggle()

@@ -9,5 +9,5 @@
 
 BarIconButton {
     iconName: "system-shutdown"
-    label: "Power"
+    label: qsTr("Power")
 }

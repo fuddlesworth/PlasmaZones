@@ -102,7 +102,15 @@ public:
     // every default-constructed PopoutRequest reuses one refcounted
     // QString rather than allocating a fresh "default" per construction.
     // Shells issuing popouts on every focus change benefit from this.
-    static inline const QString DefaultScope = QStringLiteral("default");
+    // A function-local static, not a header-scope inline QString: the
+    // inline form gains a static initializer plus exit-time destructor in
+    // every linking binary and sits in SIOF territory; the local static
+    // initializes on first use instead.
+    static const QString& defaultScope()
+    {
+        static const QString scope = QStringLiteral("default");
+        return scope;
+    }
 
     // Stable identifier for this popout. Examples are "control-center"
     // or "launcher". Used by isOpen, toggle, and closeAll. Two requests
@@ -139,7 +147,7 @@ public:
     // callers that don't care all share one scope. Common patterns
     // are "default" for one popout per process, or "screen-DP-1"
     // when the shell wants one cooperative popout per output.
-    QString scope = DefaultScope;
+    QString scope = defaultScope();
 
     // Whether the popout should request keyboard focus on open.
     // Modals typically yes. Cooperatives sometimes no. The bar's

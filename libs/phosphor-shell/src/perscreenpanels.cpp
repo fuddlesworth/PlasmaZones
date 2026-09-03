@@ -116,8 +116,23 @@ void PerScreenPanels::build()
         const QModelIndex idx = m_model->index(row, 0);
 
         QVariantMap modelData;
+        QScreen* rowScreen = nullptr;
         for (auto it = roles.cbegin(); it != roles.cend(); ++it) {
-            modelData.insert(QString::fromUtf8(it.value()), m_model->data(idx, it.key()));
+            const QString roleName = QString::fromUtf8(it.value());
+            // The `screen` role is deliberately NOT exposed through
+            // modelData: the map snapshots a raw QScreen*, and on monitor
+            // hot-unplug that pointer dangles for the window until
+            // ShellEngine's debounced reload tears the engine down — a
+            // delegate binding reading `modelData.screen.name` would
+            // dereference a freed QScreen. Delegates that need the output
+            // read the PanelWindow.screen property instead, which is
+            // QPointer-backed and reads null once the screen dies. The
+            // value is still used below to point the panel at its output.
+            if (roleName == QLatin1String("screen")) {
+                rowScreen = m_model->data(idx, it.key()).value<QScreen*>();
+                continue;
+            }
+            modelData.insert(roleName, m_model->data(idx, it.key()));
         }
 
         // Context parented to `this` so it dies with us. The instance is
@@ -159,7 +174,7 @@ void PerScreenPanels::build()
         // delegate would sever that binding.
         if (auto* panel = qobject_cast<PanelWindow*>(obj)) {
             if (!panel->screen()) {
-                panel->setScreen(modelData.value(QStringLiteral("screen")).value<QScreen*>());
+                panel->setScreen(rowScreen);
             }
         } else {
             // Not fatal — a non-panel delegate still gets created and

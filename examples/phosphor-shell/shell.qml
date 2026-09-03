@@ -98,10 +98,11 @@ Item {
     Connections {
         target: BarRegistry
 
-        // `source` is the bar widget that fired. Unused here because the
-        // session menu is screen-centred, but a bar-anchored surface needs it
-        // to pick which output's bar it hangs from.
-        function onWidgetActivated(id: string, source: Item): void {
+        // The signal also carries `source` (the bar widget that fired),
+        // dropped from this handler's signature because the session menu is
+        // screen-centred; a bar-anchored surface takes it to pick which
+        // output's bar it hangs from.
+        function onWidgetActivated(id: string): void {
             if (id === "power")
                 root.togglePowerMenu();
         }

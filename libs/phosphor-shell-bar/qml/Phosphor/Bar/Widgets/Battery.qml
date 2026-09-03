@@ -32,7 +32,7 @@ BarWidget {
     }
 
     Accessible.role: Accessible.Indicator
-    Accessible.name: "Battery " + root.percent + " percent" + (root.charging ? ", charging" : "")
+    Accessible.name: root.charging ? qsTr("Battery %1 percent, charging").arg(root.percent) : qsTr("Battery %1 percent").arg(root.percent)
 
     Row {
         id: row

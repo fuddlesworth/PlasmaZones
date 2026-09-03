@@ -37,7 +37,7 @@ BarWidget {
     contentHeight: row.implicitHeight
 
     Accessible.role: Accessible.PageTabList
-    Accessible.name: "Workspaces"
+    Accessible.name: qsTr("Workspaces")
 
     Row {
         id: row

@@ -35,12 +35,12 @@ BarWidget {
     contentHeight: root.iconSize
 
     Accessible.role: Accessible.Indicator
-    Accessible.name: root.powered ? "Bluetooth on" : "Bluetooth off"
+    Accessible.name: root.powered ? qsTr("Bluetooth on") : qsTr("Bluetooth off")
 
     Kirigami.Icon {
         anchors.centerIn: parent
-        width: 18
-        height: 18
+        width: root.iconSize
+        height: root.iconSize
         // breeze ships no bare bluetooth-* names; these are the ones it
         // actually carries, so both states draw a real glyph rather than the
         // unknown-icon fallback.

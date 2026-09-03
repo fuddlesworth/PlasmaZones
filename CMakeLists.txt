@@ -161,6 +161,18 @@ option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
 
+# The shell tier is exempt from the portable Qt-only invariant: the bar and
+# power modules hard-require KF6 Kirigami (icon resolution through
+# Kirigami.Icon), so a Qt-only shell build has nothing to draw icons with.
+# Fail here with the reason rather than letting the nested
+# find_package(KF6Kirigami REQUIRED) raise a bare not-found later.
+if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
+    message(FATAL_ERROR
+        "BUILD_PHOSPHOR_SHELL requires USE_KDE_FRAMEWORKS=ON: the shell tier "
+        "(libs/phosphor-shell-bar, libs/phosphor-shell-power) depends on KF6 "
+        "Kirigami for icon rendering and has no Qt-only fallback.")
+endif()
+
 if(USE_KDE_FRAMEWORKS)
     add_compile_definitions(USE_KDE_FRAMEWORKS)
 

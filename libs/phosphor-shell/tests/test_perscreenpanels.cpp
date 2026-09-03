@@ -127,6 +127,9 @@ private Q_SLOTS:
     void modelDataIsExposedToTheDelegate();
     void noDelegateCreatesNothing();
     void noModelCreatesNothing();
+    void aLateWriteWarnsAndDoesNotRebuild();
+    void aFailingDelegateRowIsSkipped();
+    void countChangedFiresOncePerBuild();
 
 private:
     /// Build a root Item containing a PerScreenPanels with `delegateBody`
@@ -234,19 +237,34 @@ void TestPerScreenPanels::panelsGetTheirScreenAssigned()
     }
 
     QQmlEngine engine;
-    std::unique_ptr<QObject> root(buildRoot(engine, 2, QStringLiteral("PanelWindow { }"), nullptr));
+    // objectName carries the row's name so each panel is identified by ROW,
+    // not by findChildren enumeration position, which nothing pins.
+    std::unique_ptr<QObject> root(
+        buildRoot(engine, 2, QStringLiteral("PanelWindow { objectName: modelData.name }"), nullptr));
     QVERIFY(root);
 
     const auto found = root->findChildren<PanelWindow*>();
     QCOMPARE(found.size(), 2);
-    for (int row = 0; row < found.size(); ++row) {
-        QVERIFY2(found.at(row)->screen() != nullptr, "panel was not pointed at an output");
+    for (auto* panel : found) {
+        QVERIFY2(panel->screen() != nullptr, "panel was not pointed at an output");
     }
-    // Row 0 must get row 0's screen. Without this the shell would put
-    // every bar on whatever ShellEngine defaults to, which is the primary
-    // output — the exact bug per-screen bars exist to fix, and one that
-    // looks identical to "it works" on a single-monitor desk.
-    QCOMPARE(found.at(0)->screen(), RealScreenModel::screenForRow(0));
+
+    // The row-to-screen MAPPING needs two distinct outputs: with one, every
+    // row maps to the same pointer and the "every bar on the primary
+    // output" regression this documents could never fail here. Skip that
+    // half loudly, the way anExplicitScreenBindingIsNotOverwritten does.
+    if (QGuiApplication::screens().size() < 2) {
+        QSKIP("single output; row-to-screen mapping is indistinguishable and was not exercised");
+    }
+    for (int row = 0; row < 2; ++row) {
+        auto* panel = root->findChild<PanelWindow*>(QStringLiteral("SCREEN-%1").arg(row));
+        QVERIFY2(panel != nullptr, "panel for the row was not found by name");
+        // Row N must get row N's screen. Without this the shell would put
+        // every bar on whatever ShellEngine defaults to — the exact bug
+        // per-screen bars exist to fix, and one that looks identical to
+        // "it works" on a single-monitor desk.
+        QCOMPARE(panel->screen(), RealScreenModel::screenForRow(row));
+    }
 }
 
 void TestPerScreenPanels::anExplicitScreenBindingIsNotOverwritten()
@@ -349,6 +367,63 @@ Item {
     QVERIFY(panels);
     QCOMPARE(panels->count(), 0);
     QCOMPARE(root->findChildren<PanelWindow*>().size(), 0);
+}
+
+void TestPerScreenPanels::aLateWriteWarnsAndDoesNotRebuild()
+{
+    QQmlEngine engine;
+    RealScreenModel* model = nullptr;
+    std::unique_ptr<QObject> root(buildRoot(engine, 2, QStringLiteral("PanelWindow { }"), &model));
+    QVERIFY(root);
+    auto* panels = root->property("panels").value<PerScreenPanels*>();
+    QVERIFY(panels);
+    QCOMPARE(panels->count(), 2);
+
+    // Enumeration is one-shot: a post-build model swap must warn (the
+    // documented diagnostic, without which the author stares at a component
+    // that never appears) and change nothing.
+    auto* replacement = new RealScreenModel(3, &engine);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("will not rebuild")));
+    panels->setModel(replacement);
+    QCOMPARE(panels->count(), 2);
+    QCOMPARE(root->findChildren<PanelWindow*>().size(), 2);
+}
+
+void TestPerScreenPanels::aFailingDelegateRowIsSkipped()
+{
+    QQmlEngine engine;
+    // The delegate declares a required property nobody supplies (the build
+    // uses create(context), not initialProperties), so every row's create()
+    // returns null; the loop must warn per row, skip, and leave a coherent
+    // zero-instance state rather than aborting the build.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Failed to create panel for screen row")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Failed to create panel for screen row")));
+    std::unique_ptr<QObject> root(
+        buildRoot(engine, 2, QStringLiteral("PanelWindow { required property int mustHave }"), nullptr));
+    QVERIFY(root);
+    auto* panels = root->property("panels").value<PerScreenPanels*>();
+    QVERIFY(panels);
+    QCOMPARE(panels->count(), 0);
+    QCOMPARE(root->findChildren<PanelWindow*>().size(), 0);
+}
+
+void TestPerScreenPanels::countChangedFiresOncePerBuild()
+{
+    // The change-gated countChanged: exactly one emission for a build that
+    // produced rows (asserted via a queued check since the build runs
+    // during component completion), none for an empty build.
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root(buildRoot(engine, 2, QStringLiteral("PanelWindow { }"), nullptr));
+    QVERIFY(root);
+    auto* panels = root->property("panels").value<PerScreenPanels*>();
+    QVERIFY(panels);
+    QCOMPARE(panels->count(), 2);
+
+    // The build already ran, so a spy can only pin that nothing re-fires
+    // afterwards (the one-shot contract).
+    QSignalSpy countSpy(panels, &PerScreenPanels::countChanged);
+    QTest::qWait(50);
+    QCOMPARE(countSpy.count(), 0);
 }
 
 QTEST_MAIN(TestPerScreenPanels)

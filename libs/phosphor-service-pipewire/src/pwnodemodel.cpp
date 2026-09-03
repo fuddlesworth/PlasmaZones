@@ -168,7 +168,14 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
     // the prior connection had no matching rows AND was then
     // externally destroyed — the QPointer auto-null would leave both
     // bindings stale (the auto-null itself never fires NOTIFY).
-    if (d->connection.isNull() && connection == nullptr && (!d->nodes.isEmpty() || !d->connectionWires.isEmpty())) {
+    // The flush runs for ANY replacement of an externally-destroyed
+    // connection, not only a null one: handing a NEW connection to a model
+    // whose caches still hold the dead connection's PwNode* would otherwise
+    // fall through to rebuildFromConnection, whose remove phase runs
+    // beginRemoveRows over those dangling pointers — and a view that
+    // queries data() from rowsAboutToBeRemoved dereferences freed memory.
+    // beginResetModel forbids exactly those per-row queries.
+    if (d->connection.isNull() && (!d->nodes.isEmpty() || !d->connectionWires.isEmpty())) {
         const bool hadRows = !d->nodes.isEmpty();
         if (hadRows) {
             beginResetModel();
@@ -198,8 +205,13 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
         // auto-nulled. Without this, any binding wired solely through
         // connectionChanged stays pinned to the prior non-null value
         // in its dependency graph.
-        Q_EMIT connectionChanged();
-        return;
+        if (connection == nullptr) {
+            Q_EMIT connectionChanged();
+            return;
+        }
+        // A NEW connection follows the flush: fall through to the normal
+        // assignment + rebuild below, which now runs against clean caches
+        // and fires connectionChanged once the rows describe it.
     }
     if (d->connection == connection)
         return;

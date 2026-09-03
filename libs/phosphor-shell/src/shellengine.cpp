@@ -175,7 +175,12 @@ bool ShellEngine::load(const QUrl& shellUrl)
 
 bool ShellEngine::buildAndMaterialize()
 {
-    m_engine = std::make_unique<QQmlEngine>(this);
+    // No QObject parent: the unique_ptr is the SOLE owner, and every path
+    // that discards the engine (teardown, reload, destruction) resets it.
+    // Parenting to `this` as well would double-own — safe only while
+    // ~ShellEngine happens to run teardown() before ~QObject sweeps
+    // children, an ordering nothing enforces.
+    m_engine = std::make_unique<QQmlEngine>();
     m_engine->rootContext()->setContextProperty(QStringLiteral("PhosphorShell"), m_shellGlobal);
     // Bind the Environment singleton on the (possibly fresh) engine. On
     // hot-reload the previous engine's Environment was destroyed with it;
@@ -334,6 +339,15 @@ void ShellEngine::onFileChanged()
         if (!m_watcher->files().contains(filePath)) {
             m_watcher->addPath(filePath);
         }
+        // The DIRECTORY watch can drop the same way: replacing or
+        // recreating the shell.qml directory (atomic dir swaps, build
+        // steps) silently invalidates it, after which rename-style saves
+        // stop triggering reloads until restart. Re-arm it alongside the
+        // file watch.
+        const QString dirPath = QFileInfo(filePath).absolutePath();
+        if (!m_watcher->directories().contains(dirPath)) {
+            m_watcher->addPath(dirPath);
+        }
     }
 
     // buildAndMaterialize() rebuilds the QQmlEngine and re-runs the
@@ -404,6 +418,13 @@ bool ShellEngine::materializePanels(QString* failureReason)
                 break;
             }
         }
+        // ONE definition of "this panel behaves as Fill", used by the sizing
+        // branch AND the exclusive-zone branches below. The fallback case
+        // (non-Fill alignment with panelLength=-1) spans the whole edge, so
+        // it must also reserve like a Fill panel; testing alignment alone in
+        // the zone branch left the fallback spanning the edge with zone 0
+        // and windows tiling underneath it.
+        const bool effectiveFill = panel->alignment() == PanelWindow::Fill || panel->panelLength() < 0;
         if (panel->alignment() != PanelWindow::Fill && panel->panelLength() < 0) {
             qCWarning(lcShellEngine) << "PanelWindow has alignment=" << panel->alignment()
                                      << "but panelLength=-1 (Fill) — set panelLength to a non-negative"
@@ -430,7 +451,7 @@ bool ShellEngine::materializePanels(QString* failureReason)
         // shadow into the extra strip.
         const int surfaceThickness = panel->thickness() + panel->shadowSize();
 
-        if (panel->alignment() == PanelWindow::Fill || panel->panelLength() < 0) {
+        if (effectiveFill) {
             if (horizontal) {
                 anchors = primaryAnchor | PhosphorLayer::Anchor::Left | PhosphorLayer::Anchor::Right;
                 panelSize = QSize(screenSize.width(), surfaceThickness);
@@ -559,15 +580,15 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // would warn for every overlay panel that never asked for
             // anything. Warn only when a branch below would really have
             // reserved a zone.
-            const bool wouldHaveReserved = panel->exclusiveZone() >= 0
-                || (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled());
+            const bool wouldHaveReserved =
+                panel->exclusiveZone() >= 0 || (effectiveFill && panel->exclusiveZoneEnabled());
             if (wouldHaveReserved) {
                 qCWarning(lcShellEngine)
                     << "PanelWindow asks for an exclusive zone on the Overlay layer, which cannot reserve one;"
                     << "ignoring the zone request";
             }
             role = role.withExclusiveZone(-1);
-        } else if (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled()) {
+        } else if (effectiveFill && panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(panel->thickness());
         } else if (panel->exclusiveZone() >= 0) {
             role = role.withExclusiveZone(panel->exclusiveZone());
@@ -764,11 +785,18 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // current ownership graph happens to make that unreachable (the panel is
     // a QObject child of `window`), but the guard should mean what it says.
     const QPointer<PanelWindow> guardedPanel(panel);
-    const auto apply = [guardedPanel, window] {
+    // Edge and thickness are captured BY VALUE, matching the closing
+    // comment's contract: panel geometry is fixed at materialization
+    // (installDynamicAutoFit snapshots the same way). Sampling the live
+    // properties here would let a post-materialization QML write move the
+    // input band on the next resize tick while the surface size, anchors
+    // and exclusive zone stayed frozen — exactly the partially-applied
+    // state the "deliberately NOT connected" note below rules out.
+    const auto apply = [guardedPanel, window, edge = panel->edge(), thickness = panel->thickness()] {
         if (!guardedPanel) {
             return;
         }
-        const QRect visible = PanelWindow::visibleBand(guardedPanel->edge(), guardedPanel->thickness(), window->size());
+        const QRect visible = PanelWindow::visibleBand(edge, thickness, window->size());
         if (visible.isEmpty()) {
             return;
         }

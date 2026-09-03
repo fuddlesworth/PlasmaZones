@@ -11,7 +11,6 @@
 #include <QPointer>
 #include <QString>
 #include <QStringList>
-#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QQmlEngine;

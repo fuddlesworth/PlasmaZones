@@ -11,7 +11,6 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
-#include <QtQml/qqmlregistration.h>
 
 // `create()` below names both of these. Every existing consumer happened
 // to pull them in first, so the omission only surfaced once a translation

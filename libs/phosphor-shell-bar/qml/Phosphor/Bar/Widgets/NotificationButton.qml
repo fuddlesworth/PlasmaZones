@@ -12,5 +12,5 @@
 
 BarIconButton {
     iconName: "notifications"
-    label: "Notifications"
+    label: qsTr("Notifications")
 }

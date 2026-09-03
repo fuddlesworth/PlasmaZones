@@ -131,6 +131,15 @@ private Q_SLOTS:
         QTest::qWait(200);
 
         QCOMPARE(workspaces.activeId(), before);
+
+        // The file's contract: whichever branch did not apply reports a
+        // QSKIP so a run that exercised neither is visible. With no
+        // workspace source the calls above no-op inside the manager and
+        // the before/after comparison holds vacuously (empty == empty),
+        // so say so rather than reporting silent coverage.
+        if (!workspaces.isSupported()) {
+            QSKIP("no workspace source; the rejection path in setCurrentDesktopById was not exercised");
+        }
     }
 
     /// The wrapper is per-engine over a process-wide manager, so a hot

@@ -41,7 +41,7 @@ Item {
     Accessible.role: Accessible.Button
     // Fold the unread count in so assistive tech announces it, not just the
     // label. badgeCount is 0 until a shared notification service feeds it.
-    Accessible.name: root.badgeCount > 0 ? root.label + ", " + root.badgeCount + " unread" : root.label
+    Accessible.name: root.badgeCount > 0 ? qsTr("%1, %2 unread").arg(root.label).arg(root.badgeCount) : root.label
     Accessible.onPressAction: root._activate()
 
     activeFocusOnTab: enabled

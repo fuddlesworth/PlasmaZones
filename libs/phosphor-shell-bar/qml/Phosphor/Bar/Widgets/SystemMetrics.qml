@@ -22,7 +22,7 @@ Item {
     implicitHeight: row.implicitHeight
 
     Accessible.role: Accessible.StaticText
-    Accessible.name: "CPU " + usage.cpuPercent + " percent, memory " + usage.memoryPercent + " percent"
+    Accessible.name: qsTr("CPU %1 percent, memory %2 percent").arg(usage.cpuPercent).arg(usage.memoryPercent)
 
     SystemUsage {
         id: usage

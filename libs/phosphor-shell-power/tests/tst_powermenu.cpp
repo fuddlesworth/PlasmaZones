@@ -25,6 +25,7 @@
 //     availability into a closure per entry, and a fold that broke binding
 //     capture would leave the grid frozen at whatever was true on open.
 
+#include <QHash>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -68,23 +69,33 @@ public:
     {
         ++refreshCount;
     }
+    // Counted, not empty: without per-action counters a transposed
+    // label-to-action table (Lock tile wired to powerOff) would pass every
+    // test in this binary. activatingATileRunsItsOwnAction drives each tile
+    // and asserts exactly its own counter moved.
     Q_INVOKABLE void suspend()
     {
+        ++suspendCount;
     }
     Q_INVOKABLE void hibernate()
     {
+        ++hibernateCount;
     }
     Q_INVOKABLE void lock()
     {
+        ++lockCount;
     }
     Q_INVOKABLE void logout()
     {
+        ++logoutCount;
     }
     Q_INVOKABLE void reboot()
     {
+        ++rebootCount;
     }
     Q_INVOKABLE void powerOff()
     {
+        ++powerOffCount;
     }
 
     void setAll(Availability value)
@@ -97,6 +108,17 @@ public:
     }
 
     int refreshCount = 0;
+    int suspendCount = 0;
+    int hibernateCount = 0;
+    int lockCount = 0;
+    int logoutCount = 0;
+    int rebootCount = 0;
+    int powerOffCount = 0;
+
+    int totalActionCount() const
+    {
+        return suspendCount + hibernateCount + lockCount + logoutCount + rebootCount + powerOffCount;
+    }
 
 Q_SIGNALS:
     void capabilitiesChanged();
@@ -159,6 +181,10 @@ private Q_SLOTS:
     void cleanup()
     {
         m_menu.reset();
+        // The window too: leaving the previous case's exposed QQuickWindow
+        // alive across cases is order-dependence waiting to happen (the
+        // root-context case would otherwise run under a stale window).
+        m_window.reset();
         m_session.reset();
         m_engine.reset();
     }
@@ -236,6 +262,39 @@ private Q_SLOTS:
         object->setProperty("session", QVariant::fromValue(m_session.get()));
         component.completeCreate();
         QVERIFY(qobject_cast<QQuickItem*>(object.get()) != nullptr);
+    }
+
+    // The label-to-action mapping itself. Labels and visibility are pinned
+    // elsewhere; without this a transposed action table (Lock tile wired to
+    // powerOff) would pass every other case in the binary.
+    void activatingATileRunsItsOwnAction()
+    {
+        m_session->setAll(FakeSessionHost::Availability::Yes);
+        buildMenu();
+        const auto tiles = powerTiles(m_menu.get());
+        QCOMPARE(tiles.size(), 6);
+
+        const QHash<QString, int FakeSessionHost::*> counters{
+            {QStringLiteral("Suspend"), &FakeSessionHost::suspendCount},
+            {QStringLiteral("Hibernate"), &FakeSessionHost::hibernateCount},
+            {QStringLiteral("Lock"), &FakeSessionHost::lockCount},
+            {QStringLiteral("Log out"), &FakeSessionHost::logoutCount},
+            {QStringLiteral("Restart"), &FakeSessionHost::rebootCount},
+            {QStringLiteral("Shut down"), &FakeSessionHost::powerOffCount},
+        };
+
+        int expectedTotal = 0;
+        for (QQuickItem* tile : tiles) {
+            const QString label = tile->property("label").toString();
+            QVERIFY2(counters.contains(label), qPrintable(QStringLiteral("unmapped tile label '%1'").arg(label)));
+            const int before = m_session.get()->*counters.value(label);
+            // Drive the tile's own activation signal — the seam pointer,
+            // keyboard, and assistive tech all route through.
+            QVERIFY(QMetaObject::invokeMethod(tile, "activated"));
+            ++expectedTotal;
+            QCOMPARE(m_session.get()->*counters.value(label), before + 1);
+            QCOMPARE(m_session->totalActionCount(), expectedTotal);
+        }
     }
 
     void refreshesCapabilitiesOnConstruction()

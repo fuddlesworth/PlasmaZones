@@ -1438,11 +1438,11 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the ten test executables below
+# Animations-controller sources shared by the eleven test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets /
 # shader overrides / shader param writes / group writes / group write bounds /
-# suppression mirror). One list so a new controller source file cannot silently
-# miss one of the ten.
+# suppression mirror / stale params). One list so a new controller source file
+# cannot silently miss one of the eleven.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -2288,6 +2288,42 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml)
             PhosphorShellBarQmlplugin
     )
     add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
+endif()
+
+# LayerPopoutTransport, the shell's real popout transport (Phase 4.6),
+# driven headless through phosphor-layer's mock transport + screen provider.
+# Gated on the popout QML module because building PopoutHost in-test needs
+# the module and its plugin registrar (the same reason test_popout_qml_enums
+# links them); Phosphor.Theme comes along for the Motion tokens PopoutHost
+# animates with.
+if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLayer)
+    add_executable(test_layer_popout_transport
+        shell/test_layer_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/LayerPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/layerpopouttransport.cpp
+    )
+    target_include_directories(test_layer_popout_transport
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            # The reusable phosphor-layer test mocks (mocks/mocktransport.h,
+            # mocks/mockscreenprovider.h).
+            ${CMAKE_SOURCE_DIR}/libs/phosphor-layer/tests
+    )
+    target_link_libraries(test_layer_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorLayer::PhosphorLayer
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+    )
+    add_test(NAME test_layer_popout_transport COMMAND test_layer_popout_transport)
 endif()
 
 # SystemUsage's /proc arithmetic. Gated on the shell tier because it links

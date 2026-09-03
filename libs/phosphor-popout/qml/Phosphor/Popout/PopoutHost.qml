@@ -350,6 +350,9 @@ FocusScope {
             // resolved to nothing and left Accessible.name undefined. qsTr is
             // built into QML, so it always resolves, and it matches the
             // convention the other library QML follows.
+            // A plain MouseArea exposes no accessible role, so without an
+            // explicit one the name is never announced.
+            Accessible.role: Accessible.Button
             Accessible.name: qsTr("Dismiss popout")
         }
 
@@ -536,6 +539,17 @@ FocusScope {
             anchors.fill: parent
             active: root.contentItem === null && root.contentComponent !== null
             sourceComponent: root.contentComponent
+            // The onOpenChanged push runs only on the open edge, so a
+            // transport that sets open first and assigns
+            // contentComponent afterwards would build its delegate
+            // after that push already ran, leaving its keys dead.
+            // Mirror the push here for a delegate that lands while
+            // the host is already open; focusContentIfIdle() is a
+            // no-op when the delegate's subtree took focus itself.
+            onLoaded: {
+                if (root.open && root.keyboardFocus)
+                    contentFrame.focusContentIfIdle();
+            }
         }
 
         Behavior on opacity {

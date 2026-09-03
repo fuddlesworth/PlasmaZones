@@ -119,8 +119,17 @@ private Q_SLOTS:
         while (!conn.isConnected() && timer.elapsed() < 2000) {
             QTest::qWait(200);
         }
-        QVERIFY2(connectedSpy.count() <= 1,
-                 qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
+        // Count only RISING edges (argument true). A daemon that connects
+        // and then drops mid-test legitimately produces false-to-true-to-
+        // false, and failing on the falling edge would blame idempotency
+        // for an unrelated disconnect.
+        int risingEdges = 0;
+        for (int i = 0; i < connectedSpy.count(); ++i) {
+            if (connectedSpy.at(i).value(0).toBool()) {
+                ++risingEdges;
+            }
+        }
+        QVERIFY2(risingEdges <= 1, qPrintable(QStringLiteral("connectedChanged rose %1 times").arg(risingEdges)));
     }
 
     /// Destruction must join the loop thread cleanly even when a
@@ -186,6 +195,17 @@ private Q_SLOTS:
             drainUntil([&conn] {
                 return !conn.nodes().empty() || !conn.defaultSinkName().isEmpty();
             });
+            // The predicate above can exit on the default-sink metadata
+            // landing BEFORE the first node object is bound. A non-empty
+            // default name promises a matching node, so give the binding
+            // its own drain — otherwise this run bypasses the bare-daemon
+            // QSKIP below and fails the nodes assertion on a healthy but
+            // slow host.
+            if (conn.nodes().empty() && !conn.defaultSinkName().isEmpty()) {
+                drainUntil([&conn] {
+                    return !conn.nodes().empty();
+                });
+            }
         }
         // Read the atomic ONCE, after the drain. Reading it twice lets a
         // daemon that errors out mid-drain send this into the no-daemon
@@ -391,6 +411,9 @@ private Q_SLOTS:
         // Pre-connect writes must early-out cleanly (loop running but
         // no core/registry yet, so the node id lookup will fail).
         conn.writeVolumes(99999u, {0.5, 0.5});
+        // An EMPTY volume list is the boundary a QML caller with a stale
+        // model can produce; it must be as inert as the unknown id.
+        conn.writeVolumes(99999u, {});
         conn.writeMuted(99999u, true);
         QTest::qWait(50);
         // Pre-connect: still disconnected, no error surfaced.
@@ -565,8 +588,17 @@ private Q_SLOTS:
         // assertion.
         connSpy.wait(2000);
         QVERIFY(host.connection() != nullptr);
+        // The DISCONNECT half of the cycle is owed UNCONDITIONALLY: this
+        // point is only reached connected, so reconnect() must have
+        // emitted the true-to-false transition whatever the new handshake
+        // did. Gating this on isConnected() let a reconnect() that
+        // silently skipped the disconnect emission pass whenever the
+        // re-handshake missed the 2000ms budget.
+        QTRY_VERIFY(connSpy.count() >= reconnectBaseline + 1);
+        // The second (reconnect) half only lands if the daemon answered
+        // the new handshake, so that one stays gated.
         if (host.isConnected())
-            QVERIFY(connSpy.count() >= reconnectBaseline + 1);
+            QVERIFY(connSpy.count() >= reconnectBaseline + 2);
     }
 
     /// WirePlumber's default metadata should surface a non-empty
@@ -898,6 +930,67 @@ private Q_SLOTS:
         // implies any sensible view stops here — but it pins the
         // contract for direct C++ callers.
         QVERIFY(!model.data(model.index(0), PhosphorServicePipeWire::PwNodeModel::NodeRole).isValid());
+    }
+
+    /// Re-setting the SAME connection must be a pure no-op: no reset
+    /// churn, no re-subscription, no spurious notifies. Drivable
+    /// daemon-free because the wire bookkeeping is what is under test.
+    void reSetSameConnectionIsANoOp()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        model.setConnection(&conn);
+
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        QSignalSpy resetSpy(&model, &QAbstractItemModel::modelAboutToBeReset);
+        QSignalSpy firstSpy(&model, &PhosphorServicePipeWire::PwNodeModel::firstNodeChanged);
+        model.setConnection(&conn);
+        QCOMPARE(connSpy.count(), 0);
+        QCOMPARE(resetSpy.count(), 0);
+        QCOMPARE(firstSpy.count(), 0);
+        QCOMPARE(model.connection(), &conn);
+    }
+
+    /// Swapping connection A for connection B drops A's wires and leaves
+    /// no doubled rows; detaching to null afterwards notifies again.
+    void swapConnectionRewires()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        PhosphorServicePipeWire::PipeWireConnection a;
+        PhosphorServicePipeWire::PipeWireConnection b;
+        model.setConnection(&a);
+
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        model.setConnection(&b);
+        QCOMPARE(model.connection(), &b);
+        QCOMPARE(connSpy.count(), 1);
+        // Empty on a daemon-free run either way; the assertion is that the
+        // swap did not double-count anything from the old wires.
+        QCOMPARE(model.rowCount(), 0);
+
+        model.setConnection(nullptr);
+        QCOMPARE(model.connection(), nullptr);
+        QCOMPARE(connSpy.count(), 2);
+    }
+
+    /// The third recovery leg: external destruction followed by a NEW
+    /// connection. The flush must run BEFORE the rebuild so the rebuild
+    /// never walks the dead connection's cached rows (the
+    /// beginRemoveRows-over-dangling-pointers path).
+    void aNewConnectionAfterExternalDestructionRebuildsCleanly()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        auto* dead = new PhosphorServicePipeWire::PipeWireConnection();
+        model.setConnection(dead);
+        delete dead;
+        QCOMPARE(model.connection(), nullptr);
+
+        PhosphorServicePipeWire::PipeWireConnection fresh;
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        model.setConnection(&fresh);
+        QCOMPARE(model.connection(), &fresh);
+        QCOMPARE(connSpy.count(), 1);
+        QCOMPARE(model.rowCount(), 0);
     }
 
     /// Pin the pre-connect empty-defaults baseline plus the

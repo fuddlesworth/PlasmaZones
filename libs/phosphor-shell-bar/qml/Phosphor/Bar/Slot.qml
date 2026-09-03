@@ -83,6 +83,9 @@ RowLayout {
             }
 
             readonly property bool hasContent: inner.implicitWidth > 0
+            // Shared rest height for every chip, so a row of them reads
+            // as one band; also the floor for implicitHeight below.
+            readonly property int pillHeight: 30
 
             implicitWidth: chip.hasContent ? inner.implicitWidth + Tokens.spacing_m * 2 : 0
             // Every chip rests at the same pill height, so a row of them
@@ -91,7 +94,7 @@ RowLayout {
             // radius: height/2, a different corner) according to whatever
             // it happens to hold. Only a widget genuinely taller than the
             // pill grows its chip; nothing in the catalogue does today.
-            implicitHeight: Math.max(30, inner.implicitHeight)
+            implicitHeight: Math.max(chip.pillHeight, inner.implicitHeight)
             visible: chip.hasContent
             radius: height / 2
             color: Theme.surface_variant
@@ -130,6 +133,19 @@ RowLayout {
                                 cell.widget = root.registry.createWidgetFor(cell.modelData, cell);
                             else
                                 console.warn("Slot: no registry provided; cannot mount", cell.modelData);
+                            // The factory only parents the widget; nothing
+                            // sizes it. The cell derives its implicit size
+                            // from the widget's, so binding the widget's
+                            // actual size to the cell closes the loop
+                            // without a cycle (width never feeds
+                            // implicitWidth). Without this every widget
+                            // root stays 0x0: root-anchored MouseAreas get
+                            // a zero hit area and centered content draws
+                            // offset out of the cell.
+                            if (cell.widget) {
+                                cell.widget.width = Qt.binding(() => cell.width);
+                                cell.widget.height = Qt.binding(() => cell.height);
+                            }
                         }
                     }
                 }

@@ -205,22 +205,35 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // every teardown path (close, drain, hot reload, surface-creation failure)
     // and a whole delegate subtree leaks per open.
     contentItem->setParent(hostItem);
-    hostItem->setProperty("dismissOnClickOutside", request.dismissOnFocusLoss);
+    // Checked like the contentItem write above: these are declared PopoutHost
+    // properties, so a rejected write means the host renamed or re-typed one
+    // and the popout would degrade silently (never dismissing on
+    // click-outside, or grabbing keys it should not).
+    if (!hostItem->setProperty("dismissOnClickOutside", request.dismissOnFocusLoss)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                     << "— PopoutHost rejected the dismissOnClickOutside write";
+    }
     // Keyboard focus is a separate question from the dismiss policy, and the
     // host gates its whole content subtree on this one.
-    hostItem->setProperty("keyboardFocus", request.keyboardFocus);
+    if (!hostItem->setProperty("keyboardFocus", request.keyboardFocus)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the keyboardFocus write";
+    }
     // The scrim is what makes a Modal read as modal. Cooperative popouts get
     // a light wash, Detached none at all so they never darken the desktop.
+    QColor backdrop;
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Modal:
-        hostItem->setProperty("backdropColor", QColor(0, 0, 0, 160));
+        backdrop = QColor(0, 0, 0, 160);
         break;
     case PhosphorPopout::ExclusiveMode::Cooperative:
-        hostItem->setProperty("backdropColor", QColor(0, 0, 0, 60));
+        backdrop = QColor(0, 0, 0, 60);
         break;
     case PhosphorPopout::ExclusiveMode::Detached:
-        hostItem->setProperty("backdropColor", QColor(Qt::transparent));
+        backdrop = QColor(Qt::transparent);
         break;
+    }
+    if (!hostItem->setProperty("backdropColor", backdrop)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the backdropColor write";
     }
     // Give the content a way back to its host so a delegate can close itself
     // without walking the parent chain.
@@ -331,7 +344,19 @@ void LayerPopoutTransport::closeSurface(const QString& handle)
     // the `closing` flag keeps the controller from being told about a close
     // it asked for. Deleting synchronously here would instead re-enter this
     // function through PopoutHost's destruction-time `dismissed`.
-    it->hostItem->setProperty("open", false);
+    //
+    // A rejected write means the close animation will never run and
+    // `dismissed` will never fire, so the entry would sit latched at
+    // closing=true forever and every later closeSurface would no-op at the
+    // early-out above: the popout becomes permanently stuck open. Mirror
+    // the null-host branch instead and tear the entry down directly.
+    if (!it->hostItem->setProperty("open", false)) {
+        qCWarning(lcPopoutTransport) << "popout" << handle
+                                     << "— PopoutHost rejected the open=false write; tearing down without animation";
+        const Entry entry = *it;
+        m_entries.erase(it);
+        destroyEntry(handle, entry);
+    }
 }
 
 void LayerPopoutTransport::setSurfaceDismissedCallback(std::function<void(const QString&)> callback)

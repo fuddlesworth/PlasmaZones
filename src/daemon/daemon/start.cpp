@@ -318,9 +318,12 @@ void Daemon::connectScreenSignals()
 
 void Daemon::connectDesktopActivity()
 {
-    // Initialize and start virtual desktop manager
-    m_virtualDesktopManager->init();
+    // start() BEFORE init(): init()'s initial refresh takes the BLOCKING
+    // session-bus path (up to 1 s on this thread) while m_running is still
+    // false. With start() first the refresh issues asynchronously, the
+    // order Workspaces::sharedManager documents for the same reason.
     m_virtualDesktopManager->start();
+    m_virtualDesktopManager->init();
 
     // Virtual desktop changes are handled on TWO distinct paths (#648):
     //

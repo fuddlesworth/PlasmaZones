@@ -228,7 +228,7 @@ TestCase {
         // The property is typed QtObject, so any QObject assigns cleanly;
         // a mis-injected object lacking createWidgetFor must be refused by
         // the duck-type guard rather than throwing.
-        const bare = bareObject.createObject(testCase, {});
+        const bare = createTemporaryObject(bareObject, testCase, {});
         createTemporaryObject(slotComp, testCase, {
             "registry": bare,
             "groups": [["clock"]]

@@ -128,6 +128,23 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
         QCOMPARE(spy.last().at(1).toInt(), 4);
+
+        // Boundary: an entry sitting EXACTLY at the new count must not be
+        // touched (a `>=` in the clamp would pull it down and emit). DP-2
+        // now sits at 4 == count; shrink to 4 is already done, so shrink
+        // again to 3 and check the 3-valued entry stays put while 4 clamps.
+        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(uint, 3)));
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), 3);
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-2")), 3);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
+
+        // Growth: raising the count above every entry clamps nothing and
+        // emits nothing.
+        QVERIFY(QMetaObject::invokeMethod(&vdm, "onNumberOfDesktopsChanged", Q_ARG(uint, 9)));
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), 3);
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-2")), 3);
+        QCOMPARE(spy.count(), 2);
     }
 };
 

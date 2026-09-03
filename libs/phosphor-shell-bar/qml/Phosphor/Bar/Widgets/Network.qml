@@ -87,12 +87,12 @@ BarWidget {
     contentHeight: root.iconSize
 
     Accessible.role: Accessible.Indicator
-    Accessible.name: root.online ? "Network connected" : root.limited ? "Network limited" : "Network offline"
+    Accessible.name: root.online ? qsTr("Network connected") : root.limited ? qsTr("Network limited") : qsTr("Network offline")
 
     Kirigami.Icon {
         anchors.centerIn: parent
-        width: 18
-        height: 18
+        width: root.iconSize
+        height: root.iconSize
         source: root.iconName
         isMask: true
         color: root.online ? Theme.on_surface : root.limited ? Theme.warning : Theme.on_surface_variant

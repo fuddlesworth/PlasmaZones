@@ -198,7 +198,21 @@ void InAppPopoutTransport::closeSurface(const QString& handle)
     // initiated this close. This avoids duplicating PopoutHost's
     // animation duration as a hardcoded timer interval.
     it->closing = true;
-    it->hostItem->setProperty("open", false);
+    // PopoutHost's dismissEmitter timer guarantees `dismissed` after the
+    // close duration once this write lands, animation or not — so the only
+    // leg that can strand the entry is the write itself being rejected
+    // (a renamed/re-typed `open`). Tear down directly then, mirroring
+    // LayerPopoutTransport, rather than leaving the entry latched forever.
+    if (!it->hostItem->setProperty("open", false)) {
+        qWarning() << "InAppPopoutTransport: PopoutHost rejected the open=false write for" << handle
+                   << "- tearing down without animation";
+        Entry copy = it.value();
+        m_entries.erase(it);
+        if (copy.hostItem) {
+            QObject::disconnect(copy.hostItem.data(), nullptr, this, nullptr);
+            copy.hostItem->deleteLater();
+        }
+    }
 }
 
 void InAppPopoutTransport::setSurfaceDismissedCallback(std::function<void(const QString&)> callback)
@@ -223,6 +237,14 @@ void InAppPopoutTransport::shutdown()
     for (const auto& entry : victims) {
         if (entry.hostItem) {
             QObject::disconnect(entry.hostItem.data(), nullptr, this, nullptr);
+            // Synchronous delete, a deliberate exemption from the
+            // never-manual-delete rule: shutdown() runs from aboutToQuit,
+            // which Qt emits after exec()'s loop has finished, so a
+            // deleteLater posted here would never drain and the items
+            // would survive into QML-engine teardown — the SIGSEGV the
+            // destructor's comment describes. The dismissed signal is
+            // disconnected above, so the destruction-time emission
+            // reaches nobody.
             delete entry.hostItem.data();
         }
         // contentItem is a QObject child of hostItem — set explicitly in

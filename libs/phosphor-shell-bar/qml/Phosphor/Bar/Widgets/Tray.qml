@@ -91,6 +91,10 @@ BarWidget {
                     height: root.iconSize
                     radius: width / 2
                     color: Theme.surface_container_high
+                    // Dim Passive items exactly like the Image path below,
+                    // so an icon-less passive item doesn't stay at full
+                    // strength.
+                    opacity: trayDelegate.status === StatusNotifierItem.Passive ? root.passiveOpacity : 1
 
                     Text {
                         anchors.centerIn: parent

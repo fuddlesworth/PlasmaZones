@@ -79,6 +79,15 @@ Item {
         border.width: root.primary ? 0 : 1
         border.color: Theme.outline_variant
 
+        // The pointing-hand affordance the shell's other interactive
+        // controls use. PhosphorRipple owns the state layer but not the
+        // cursor; gated on enabled the same way BarIconButton gates its
+        // handler, since Item.enabled does not suppress pointer handlers.
+        HoverHandler {
+            enabled: root.enabled
+            cursorShape: Qt.PointingHandCursor
+        }
+
         PhosphorRipple {
             id: ripple
 

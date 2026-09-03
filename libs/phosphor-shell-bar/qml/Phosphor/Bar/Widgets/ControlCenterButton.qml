@@ -10,5 +10,5 @@
 
 BarIconButton {
     iconName: "configure"
-    label: "Control center"
+    label: qsTr("Control center")
 }

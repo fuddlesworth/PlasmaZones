@@ -132,6 +132,17 @@ Item {
         root._rebuild();
     }
 
+    // Same shape for a late (or swapped) delegate: _rebuild bails while
+    // `delegate` is null, so a delegate assigned after construction
+    // would otherwise render nothing, silently, forever. A swap tears
+    // existing instances down first; keeping delegates built from a
+    // previous Component while the property points at a new one would
+    // desync the two.
+    onDelegateChanged: {
+        root._teardownAll();
+        root._rebuild();
+    }
+
     Connections {
         target: root.model
 

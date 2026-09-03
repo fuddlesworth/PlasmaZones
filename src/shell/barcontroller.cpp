@@ -20,15 +20,15 @@ namespace PhosphorShellApp {
 
 namespace {
 
-// Registry::ids() is documented as registration (insertion) order. The
-// sort imposes a stable ALPHABETICAL display order on top of that, so a
-// consumer enumerating ids renders the same sequence regardless of the
-// order the built-ins happened to be registered in.
 // The registry id is stashed on the widget so the activation relay can
 // recover it from sender(), rather than keeping a parallel map that would
 // have to be pruned as widgets die.
 constexpr auto kWidgetIdProperty = "_barWidgetId";
 
+// Registry::ids() is documented as registration (insertion) order. The
+// sort imposes a stable ALPHABETICAL display order on top of that, so a
+// consumer enumerating ids renders the same sequence regardless of the
+// order the built-ins happened to be registered in.
 QStringList sortedIds(const Registry<IBarWidgetFactory>& registry)
 {
     QStringList ids = registry.ids();
@@ -92,6 +92,11 @@ BarController::BarController(QObject* parent)
                      &BarController::refreshFactoryIds);
     QObject::connect(m_registry.notifier(), &RegistryNotifier::factoryUnregistered, this,
                      &BarController::refreshFactoryIds);
+}
+
+PhosphorRegistry::Registry<PhosphorRegistry::IBarWidgetFactory>& BarController::registry()
+{
+    return m_registry;
 }
 
 void BarController::refreshFactoryIds()

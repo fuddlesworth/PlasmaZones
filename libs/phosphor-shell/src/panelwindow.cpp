@@ -3,8 +3,13 @@
 
 #include <PhosphorShell/PanelWindow.h>
 
+#include <QLoggingCategory>
 #include <QRect>
 #include <QSize>
+
+namespace {
+Q_LOGGING_CATEGORY(lcPanelWindow, "phosphorshell.panelwindow")
+} // namespace
 
 namespace PhosphorShell {
 
@@ -62,9 +67,15 @@ int PanelWindow::thickness() const
 void PanelWindow::setThickness(int thickness)
 {
     // Clamp to [1, INT_MAX]. Wayland rejects 0×N surfaces, and a negative
-    // thickness has no meaningful interpretation — silently coercing to
-    // 1 px is safer than passing nonsense to the layer-shell protocol.
+    // thickness has no meaningful interpretation — coercing to 1 px is
+    // safer than passing nonsense to the layer-shell protocol. Warn on the
+    // coercion (matching SystemUsage::setInterval) so a QML author binding
+    // thickness: 0 gets a diagnostic rather than a silent 1 px panel.
     const int clamped = qMax(1, thickness);
+    if (clamped != thickness) {
+        qCWarning(lcPanelWindow) << "thickness" << thickness << "clamped to" << clamped
+                                 << "(a panel needs at least 1 px)";
+    }
     if (m_thickness == clamped) {
         return;
     }

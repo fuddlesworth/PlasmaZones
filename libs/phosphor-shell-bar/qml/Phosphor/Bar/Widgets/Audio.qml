@@ -65,7 +65,7 @@ BarWidget {
     }
 
     Accessible.role: Accessible.Indicator
-    Accessible.name: root.muted ? "Volume muted" : "Volume " + root.volumePercent + " percent"
+    Accessible.name: root.muted ? qsTr("Volume muted") : qsTr("Volume %1 percent").arg(root.volumePercent)
 
     Row {
         id: row
@@ -109,10 +109,13 @@ BarWidget {
         // carries the full quad because it is the shared button atom and is
         // meant to work wherever a focused surface hosts it.
         Accessible.role: Accessible.Button
-        Accessible.name: root.muted ? "Unmute" : "Mute"
+        Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
         Accessible.onPressAction: root._toggleMute()
-        // The wheel is the only pointer path to the volume itself, so give
-        // assistive tech the same reach rather than leaving it mute-only.
+        // The wheel is the only pointer path to the volume itself, so the
+        // adjust actions are exposed here too. Increase/decrease belong to
+        // the slider vocabulary and not every AT bridge surfaces them on a
+        // Button role, so this widens reach where the bridge allows it
+        // rather than guaranteeing it.
         Accessible.onIncreaseAction: root._adjust(1)
         Accessible.onDecreaseAction: root._adjust(-1)
 

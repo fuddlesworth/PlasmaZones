@@ -3,7 +3,7 @@
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Test Qml Quick)
 
-# D-Bus isolation, applied at the bottom of this file via the shared helper.
+# D-Bus isolation, applied through the shared helper below.
 # test_phosphorshell_workspaces reaches the session bus through
 # VirtualDesktopManager (org.kde.KWin), so without it the test would read the
 # developer's live compositor and behave differently than on CI. It keeps both
@@ -11,15 +11,44 @@ find_package(Qt6 6.10 REQUIRED COMPONENTS Test Qml Quick)
 # exercises the no-compositor contract while running the binary directly on a
 # KWin session still performs the real integration check.
 
-# Smoke test for the security boundary in ShellLoader (path-traversal /
-# absolute-path / dotfile rejection). Adding more PhosphorShell tests
-# in this directory keeps them under one CTest target prefix.
-
 # Shared test isolation: a private D-Bus session (so a test that touches D-Bus
 # cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
 # open and hangs ctest after the test itself passed) plus a per-target XDG
 # sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
-include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+#
+# EXISTS-guarded explicit path, not a bare `include(PhosphorTestIsolation)`:
+# a bare module name resolves only through the root project's
+# CMAKE_MODULE_PATH, so a standalone configure of this library (which the
+# repo supports — each lib is meant to stay extractable via `git subtree
+# split`) would hard-fail at generate time. Same shape as the
+# PhosphorLibTesting include in the sibling libraries. Included ONCE, at the
+# top, so every add_test below can isolate right where it registers; a second
+# include-and-apply block would double-append the XDG environment.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
+    set(_phosphorshell_have_isolation TRUE)
+else()
+    set(_phosphorshell_have_isolation FALSE)
+endif()
+
+# Isolation + per-test environment through ONE seam. With the helper present
+# the environment goes through phosphor_append_test_environment — a bare
+# `set_tests_properties(... ENVIRONMENT ...)` REPLACES the whole list and
+# would silently drop the XDG sandbox the isolation call just installed. On a
+# standalone configure (helper absent) the raw SET is the only writer, so it
+# is safe there and keeps the offscreen QPA the tests rely on.
+function(phosphorshell_isolate_test name env)
+    if(_phosphorshell_have_isolation)
+        phosphor_apply_test_isolation(${name})
+        phosphor_append_test_environment(${name} "${env}")
+    else()
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "${env}")
+    endif()
+endfunction()
+
+# Smoke test for the security boundary in ShellLoader (path-traversal /
+# absolute-path / dotfile rejection). Adding more PhosphorShell tests
+# in this directory keeps them under one CTest target prefix.
 add_executable(test_phosphorshell_shellloader test_shellloader.cpp)
 target_link_libraries(test_phosphorshell_shellloader
     PRIVATE
@@ -27,11 +56,7 @@ target_link_libraries(test_phosphorshell_shellloader
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_shellloader COMMAND test_phosphorshell_shellloader)
-phosphor_apply_test_isolation(test_phosphorshell_shellloader)
-# APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
-# ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
-# sandbox `phosphor_apply_test_isolation` just installed.
-phosphor_append_test_environment(test_phosphorshell_shellloader "QT_QPA_PLATFORM=offscreen")
+phosphorshell_isolate_test(test_phosphorshell_shellloader "QT_QPA_PLATFORM=offscreen")
 set_tests_properties(test_phosphorshell_shellloader PROPERTIES
     LABELS "phosphorshell"
 )
@@ -46,10 +71,9 @@ target_link_libraries(test_phosphorshell_toplevels
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_toplevels COMMAND test_phosphorshell_toplevels)
-set_tests_properties(test_phosphorshell_toplevels
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorshell"
+phosphorshell_isolate_test(test_phosphorshell_toplevels "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_toplevels PROPERTIES
+    LABELS "phosphorshell"
 )
 
 # PanelWindow::visibleBand — the input-region arithmetic. Pure and static,
@@ -61,10 +85,25 @@ target_link_libraries(test_phosphorshell_panelwindow_inputregion
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_panelwindow_inputregion COMMAND test_phosphorshell_panelwindow_inputregion)
-set_tests_properties(test_phosphorshell_panelwindow_inputregion
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorshell"
+phosphorshell_isolate_test(test_phosphorshell_panelwindow_inputregion "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_panelwindow_inputregion PROPERTIES
+    LABELS "phosphorshell"
+)
+
+# PanelWindow property setters: the clamps (thickness floor of 1, shadow /
+# carve floor of 0) and the change-gated notifies. ShellEngine feeds
+# thickness() straight into visibleBand, so a broken clamp bypasses the
+# band math's tested degenerate-input guard.
+add_executable(test_phosphorshell_panelwindow_setters test_panelwindow_setters.cpp)
+target_link_libraries(test_phosphorshell_panelwindow_setters
+    PRIVATE
+        Qt6::Test
+        PhosphorShell::PhosphorShell
+)
+add_test(NAME test_phosphorshell_panelwindow_setters COMMAND test_phosphorshell_panelwindow_setters)
+phosphorshell_isolate_test(test_phosphorshell_panelwindow_setters "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_panelwindow_setters PROPERTIES
+    LABELS "phosphorshell"
 )
 
 # Workspaces singleton + its list model. Talks to the real session bus, so
@@ -78,11 +117,12 @@ target_link_libraries(test_phosphorshell_workspaces
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_workspaces COMMAND test_phosphorshell_workspaces)
-set_tests_properties(test_phosphorshell_workspaces
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorshell"
-        TIMEOUT 30
+phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
+# TIMEOUT set AFTER the isolation call, which only supplies its 120s default
+# when no TIMEOUT is set yet — last write wins.
+set_tests_properties(test_phosphorshell_workspaces PROPERTIES
+    LABELS "phosphorshell"
+    TIMEOUT 30
 )
 
 # PerScreenPanels: the per-screen panel instantiator. Registers its types
@@ -101,12 +141,13 @@ add_test(NAME test_phosphorshell_perscreenpanels COMMAND test_phosphorshell_pers
 # offscreen platform reports exactly one, and with one output "kept the
 # delegate's own screen binding" and "assigned the row's screen" are the same
 # pointer — so anExplicitScreenBindingIsNotOverwritten could only ever skip.
-# It runs for real with this.
-set_tests_properties(test_phosphorshell_perscreenpanels
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json"
-        LABELS "phosphorshell"
-        TIMEOUT 30
+# It runs for real with this. Load-bearing: routed through the isolation seam
+# so nothing can later wipe it with a bare ENVIRONMENT SET.
+phosphorshell_isolate_test(test_phosphorshell_perscreenpanels
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
+set_tests_properties(test_phosphorshell_perscreenpanels PROPERTIES
+    LABELS "phosphorshell"
+    TIMEOUT 30
 )
 
 # PerScreen QML helper (Phase 1.5). Loads PerScreen.qml directly from
@@ -135,32 +176,8 @@ target_compile_definitions(test_phosphorshell_perscreen
         PERSCREEN_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../qml/Phosphor/Shell"
 )
 add_test(NAME test_phosphorshell_perscreen COMMAND test_phosphorshell_perscreen)
-phosphor_apply_test_isolation(test_phosphorshell_perscreen)
-# APPEND, never a bare SET: `set_tests_properties(... PROPERTIES
-# ENVIRONMENT ...)` REPLACES the whole list and would drop the XDG
-# sandbox `phosphor_apply_test_isolation` just installed.
-phosphor_append_test_environment(test_phosphorshell_perscreen "QT_QPA_PLATFORM=offscreen")
+phosphorshell_isolate_test(test_phosphorshell_perscreen "QT_QPA_PLATFORM=offscreen")
 set_tests_properties(test_phosphorshell_perscreen PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 30
 )
-
-# EXISTS-guarded explicit path, not a bare `include(PhosphorTestIsolation)`:
-# a bare module name resolves only through the root project's
-# CMAKE_MODULE_PATH, so a standalone configure of this library (which the
-# repo supports — each lib is meant to stay extractable via `git subtree
-# split`) would hard-fail at generate time. Same shape as the
-# PhosphorLibTesting include in the sibling libraries.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
-    # Every test target in this directory runs on its own private bus and in
-    # its own XDG sandbox. Per-target rather than one list call, because the
-    # helper also sets TEST properties (ENVIRONMENT, TIMEOUT) that are keyed on
-    # a single test name.
-    phosphor_apply_test_isolation(test_phosphorshell_shellloader)
-    phosphor_apply_test_isolation(test_phosphorshell_toplevels)
-    phosphor_apply_test_isolation(test_phosphorshell_workspaces)
-    phosphor_apply_test_isolation(test_phosphorshell_panelwindow_inputregion)
-    phosphor_apply_test_isolation(test_phosphorshell_perscreenpanels)
-    phosphor_apply_test_isolation(test_phosphorshell_perscreen)
-endif()

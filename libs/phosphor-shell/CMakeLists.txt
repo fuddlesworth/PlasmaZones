@@ -157,11 +157,14 @@ target_link_libraries(PhosphorShell
     PRIVATE
         # PRIVATE, not PUBLIC: Workspaces.h only forward-declares
         # VirtualDesktopManager and holds it behind a QPointer in a private
-        # section, so no consumer of PhosphorShell needs the definition, the
-        # include dir, or the link. PUBLIC would also put the target into the
-        # exported INTERFACE_LINK_LIBRARIES without a matching find_dependency
-        # in PhosphorShellConfig.cmake.in, which fails at generate time for
-        # anyone consuming the INSTALLED package.
+        # section, so no consumer of PhosphorShell needs the definition or
+        # the include dirs. NOTE that PRIVATE does not keep the name out of
+        # the installed export entirely: for a SHARED library CMake records
+        # private deps in IMPORTED_LINK_DEPENDENT_LIBRARIES_<CONFIG>, and the
+        # generated PhosphorShellTargets.cmake refuses to load while any
+        # target named there is missing — so PhosphorShellConfig.cmake.in
+        # still carries a find_dependency(PhosphorWorkspaces) (and Qt6
+        # WaylandClient, below) for installed consumers.
         PhosphorWorkspaces::PhosphorWorkspaces
         # WaylandClient + private headers needed by popupwindow.cpp to call
         # xdg_popup.reposition directly. Qt's xdg-shell client plugin owns

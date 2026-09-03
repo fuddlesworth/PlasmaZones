@@ -10,8 +10,11 @@
 #include <QString>
 #include <QStringList>
 
+QT_BEGIN_NAMESPACE
+class QDBusArgument;
 class QDBusInterface;
 class QDBusMessage;
+QT_END_NAMESPACE
 
 namespace PhosphorWorkspaces {
 
@@ -99,7 +102,14 @@ private Q_SLOTS:
 
 private:
     void initKWinDBus();
+    /// Install the six session-bus signal subscriptions. Idempotent via
+    /// m_kwinSubscribed, so a stop()/start() cycle re-subscribes without
+    /// ever doubling the hooks.
+    void subscribeToKWin();
     void applyDesktopListReply(const QDBusMessage& reply, const QString& currentId, int rows);
+    /// Parse the a(uss) desktop array and commit the snapshot; the shared
+    /// core behind both the blocking Get reply and the async GetAll path.
+    void applyDesktopListArg(const QDBusArgument& arg, const QString& currentId, int rows);
     /// Clamp any per-screen desktop entry above the live desktop count back down
     /// to the count (KWin renumbers on removal; the effect re-reports the true
     /// value shortly after, this just keeps the map valid in the interim).
@@ -107,6 +117,9 @@ private:
 
     QDBusInterface* m_kwinVDInterface = nullptr;
     bool m_running = false;
+    /// True while the six session-bus subscriptions are installed; guards
+    /// subscribeToKWin against doubling them.
+    bool m_kwinSubscribed = false;
     bool m_useKWinDBus = false;
     int m_currentDesktop = 1;
     /// Per-screen current virtual desktop (screenId → 1-based), populated only

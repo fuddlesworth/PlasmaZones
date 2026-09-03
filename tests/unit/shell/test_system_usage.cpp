@@ -147,6 +147,15 @@ void TestSystemUsage::memoryTotalsRejectMissingAvailable()
     // A zero or absent total is equally unusable.
     const QByteArray zeroTotal = "MemTotal:  0 kB\nMemAvailable:  0 kB\n";
     QVERIFY(!SystemUsage::parseMemoryTotals(zeroTotal, &totals));
+
+    // Order dependence, pinned as a CONTRACT: the scan stops at
+    // MemAvailable, so an input carrying it BEFORE MemTotal is rejected
+    // even though both fields are present. Real /proc/meminfo always
+    // orders MemTotal first (the kernel emits it first), so accepting the
+    // reversed order would only ever legitimise synthetic input; if the
+    // kernel ever reorders, this case is the loud signal to revisit.
+    const QByteArray reversed = "MemAvailable:  250 kB\nMemTotal:  1000 kB\n";
+    QVERIFY(!SystemUsage::parseMemoryTotals(reversed, &totals));
 }
 
 void TestSystemUsage::intervalIsClampedToTheFloor()
@@ -252,6 +261,12 @@ void TestSystemUsage::repeatedSamplesDoNotReEmit()
     }
     if (usage.memoryPercent() == memoryBefore) {
         QCOMPARE(memorySpy.count(), 0);
+    }
+    // Deliberately narrowed to values that did not move, so on a host where
+    // the fresh sample changed BOTH readouts this body asserted nothing.
+    // Leave a trace when that happens rather than a fully-silent pass.
+    if (usage.cpuPercent() != cpuBefore && usage.memoryPercent() != memoryBefore) {
+        QSKIP("both readouts moved on the fresh sample; the change-guard was not exercised this run");
     }
 }
 

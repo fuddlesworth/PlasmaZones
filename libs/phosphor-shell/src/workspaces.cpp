@@ -59,9 +59,11 @@ QVariant WorkspaceListModel::data(const QModelIndex& index, int role) const
     case NameRole:
         // Names and ids are index-aligned by contract, but the manager
         // pads names to the desktop count independently of the id list, so
-        // a transient mismatch is possible mid-refresh. Fall back rather
-        // than index out of range.
-        return index.row() < m_names.size() ? m_names.at(index.row()) : QString();
+        // a transient mismatch is possible mid-refresh. Fall back to the
+        // same synthesized label the manager uses for unnamed desktops
+        // rather than rendering an empty pill (or indexing out of range).
+        return index.row() < m_names.size() ? m_names.at(index.row())
+                                            : QStringLiteral("Desktop %1").arg(index.row() + 1);
     case IsActiveRole:
         return index.row() == m_activeRow;
     default:
@@ -246,7 +248,12 @@ int Workspaces::activeIndex() const
     if (!mgr || !mgr->isAvailable() || mgr->desktopIds().isEmpty()) {
         return 0;
     }
-    return mgr->currentDesktop();
+    // Clamped to the id-list size, which is what count() reports: in the
+    // window a count shrink opens (the manager commits its clamped
+    // m_currentDesktop before the async list refresh lands), the raw
+    // position can briefly exceed the still-old id list and a consumer
+    // would read "position N of fewer-than-N".
+    return qMin(mgr->currentDesktop(), static_cast<int>(mgr->desktopIds().size()));
 }
 
 int Workspaces::count() const

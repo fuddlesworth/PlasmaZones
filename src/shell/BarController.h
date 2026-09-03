@@ -78,6 +78,12 @@ public:
     // layout drives slots from explicit ordered id lists, not this set.
     [[nodiscard]] QStringList factoryIds() const;
 
+    // The underlying widget registry: the seam a plugin loader registers
+    // dynamic widgets through. The notifier wiring in the constructor keeps
+    // factoryIds() / factoryIdsChanged coherent across such registrations,
+    // including the value-comparing de-dup for Replace re-registrations.
+    [[nodiscard]] PhosphorRegistry::Registry<PhosphorRegistry::IBarWidgetFactory>& registry();
+
 Q_SIGNALS:
     void factoryIdsChanged();
 

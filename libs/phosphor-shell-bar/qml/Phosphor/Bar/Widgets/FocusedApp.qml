@@ -33,7 +33,10 @@ BarWidget {
     contentHeight: row.implicitHeight
 
     Accessible.role: Accessible.StaticText
-    Accessible.name: root._appTitle
+    // `available` accepts appId-only toplevels (splash and loader
+    // surfaces), so fall back to the app id rather than announcing a
+    // visible widget with an empty name.
+    Accessible.name: root._appTitle.length > 0 ? root._appTitle : root._appId
 
     Row {
         id: row

@@ -22,6 +22,8 @@
 #include <QStringList>
 #include <QTest>
 
+#include <memory>
+
 using namespace PhosphorShellApp;
 
 class TestBarController : public QObject
@@ -35,6 +37,8 @@ private Q_SLOTS:
     void nullParentYieldsNull();
     void factoryRejectsNullEngine();
     void factoryRejectsNullParent();
+    void noResolvableEngineYieldsNull();
+    void registryChangesRefreshTheIdSet();
     void relaysActivationWithItsRegistryId();
     void activationWithoutAnIdIsRefused();
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
@@ -143,6 +147,46 @@ void TestBarController::factoryRejectsNullParent()
                                          QStringLiteral("Clock"));
     QQmlEngine engine;
     QCOMPARE(factory.createWidget(&engine, nullptr), nullptr);
+}
+
+void TestBarController::noResolvableEngineYieldsNull()
+{
+    // A live parent with NO QML context: the shutdown-race branch, with its
+    // own distinct message. unknownIdYieldsNull never reaches this check
+    // because the factory lookup fails first.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no QML engine resolvable")));
+
+    BarController controller;
+    QQuickItem parent;
+    QCOMPARE(controller.createWidgetFor(QStringLiteral("clock"), &parent), nullptr);
+}
+
+void TestBarController::registryChangesRefreshTheIdSet()
+{
+    BarController controller;
+    QSignalSpy idsSpy(&controller, &BarController::factoryIdsChanged);
+
+    // A dynamic registration (the plugin-loader path) lands in factoryIds
+    // with exactly one notification.
+    const bool registered = controller.registry().registerFactory(
+        std::make_shared<QmlComponentBarWidgetFactory>(QStringLiteral("zzz-dynamic"), QStringLiteral("Dynamic"),
+                                                       BarController::moduleUri(), QStringLiteral("NoSuchDelegate")));
+    QVERIFY(registered);
+    QCOMPARE(idsSpy.count(), 1);
+    QVERIFY(controller.factoryIds().contains(QStringLiteral("zzz-dynamic")));
+
+    // A rejected duplicate must not notify: the id set did not change.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("duplicate id")));
+    const bool duplicate = controller.registry().registerFactory(
+        std::make_shared<QmlComponentBarWidgetFactory>(QStringLiteral("zzz-dynamic"), QStringLiteral("Dynamic"),
+                                                       BarController::moduleUri(), QStringLiteral("NoSuchDelegate")));
+    QVERIFY(!duplicate);
+    QCOMPARE(idsSpy.count(), 1);
+
+    // Unregistration notifies once and drops the id.
+    QVERIFY(controller.registry().unregisterFactory(QStringLiteral("zzz-dynamic")));
+    QCOMPARE(idsSpy.count(), 2);
+    QVERIFY(!controller.factoryIds().contains(QStringLiteral("zzz-dynamic")));
 }
 
 void TestBarController::relaysActivationWithItsRegistryId()

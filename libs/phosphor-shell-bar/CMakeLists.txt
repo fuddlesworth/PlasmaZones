@@ -35,9 +35,10 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # Kirigami.Icon resolves freedesktop icon NAMES through QIcon::fromTheme and
 # tints them via isMask; the shell's own image provider only serves the
-# pixmaps tray items push, so it cannot resolve names. Seven files in this module import it (six widgets plus the shared
-# BarIconButton atom, which three more widgets build on); they rely
-# on it, which makes the bar the first KF6 consumer in the shell tier.
+# pixmaps tray items push, so it cannot resolve names. Seven files in this
+# module import it (six widgets plus the shared BarIconButton atom, which
+# four more widgets build on); they rely on it, which makes the bar the
+# first KF6 consumer in the shell tier.
 # Declaring it here fails loudly at configure time on a host without Kirigami
 # instead of silently producing a bar whose icons never load, and lets the
 # QML import scanner compile those files through qmlcachegen.
