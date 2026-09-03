@@ -7,6 +7,8 @@
 
 #include <QMargins>
 #include <QPointer>
+#include <QRect>
+#include <QSize>
 #include <QQuickItem>
 
 QT_BEGIN_NAMESPACE
@@ -42,6 +44,16 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// Quickshell/Noctalia shells. Which corners are carved depends
     /// on the panel's edge: Top → bottom-left + bottom-right; the
     /// shader is responsible for matching the panel's orientation.
+    ///
+    /// The carve is VISUAL ONLY. `visibleBand` — and therefore the surface's
+    /// input region — is the full rectangle, so a carved corner shows the
+    /// wallpaper or window behind it while still consuming clicks. Sharpening
+    /// the region to match would mean subtracting an ellipse quadrant per
+    /// carved corner; it is not done because the region is also what makes
+    /// the shadow strip click-through, and the two carve quadrants sit
+    /// inside the exclusive zone where no window is placed. A consumer that
+    /// carves aggressively enough for that to matter should expect clicks in
+    /// the carve to hit the panel.
     Q_PROPERTY(int cornerCarveRadius READ cornerCarveRadius WRITE setCornerCarveRadius NOTIFY cornerCarveRadiusChanged)
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
     // `panelLayer` rather than `layer` — QQuickItem already exposes a
@@ -105,6 +117,23 @@ public:
 
     explicit PanelWindow(QQuickItem* parent = nullptr);
     ~PanelWindow() override;
+
+    /// The painted band of a panel surface of `surfaceSize`, in
+    /// surface-local device-independent coordinates: the `thickness` slice
+    /// anchored to `edge`, excluding the `shadowSize` strip beyond it.
+    ///
+    /// This is what the surface's input region should be set to. Without
+    /// one the shadow strip is transparent but still accepts pointer
+    /// events, so it swallows clicks along the edge of whatever tiles
+    /// beneath the panel — and because the advertised exclusiveZone is
+    /// `thickness`, windows land exactly where the strip overlaps them.
+    ///
+    /// Static and pure so the arithmetic can be tested without a live
+    /// Wayland surface: which edge anchors where, and what happens when
+    /// thickness meets or exceeds the surface depth, is the part that can
+    /// be wrong. Returns a null QRect for a degenerate surface or a
+    /// non-positive thickness, which callers treat as "apply nothing".
+    [[nodiscard]] static QRect visibleBand(Edge edge, int thickness, QSize surfaceSize);
 
     [[nodiscard]] Edge edge() const;
     void setEdge(Edge edge);

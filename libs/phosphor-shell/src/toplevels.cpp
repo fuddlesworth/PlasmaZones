@@ -4,8 +4,14 @@
 #include <PhosphorShell/Toplevels.h>
 
 #include <QCoreApplication>
+#include <QLoggingCategory>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QThread>
+
+namespace {
+Q_LOGGING_CATEGORY(lcToplevels, "phosphorshell.toplevels")
+} // namespace
 
 namespace PhosphorShell {
 
@@ -26,6 +32,16 @@ ToplevelListModel::ToplevelListModel(ForeignToplevelManager* manager, QObject* p
     // toplevels(). Catch misuse hard rather than silently corrupt.
     Q_ASSERT_X(qApp && QThread::currentThread() == qApp->thread(), "ToplevelListModel",
                "must be constructed on the GUI thread");
+    // Release-build pair, matching sharedManager(). Off-thread construction
+    // leaves an empty, inert model rather than racing the manager's
+    // emissions and the seeding read below. Unreachable in practice — an
+    // off-thread sharedManager() already returns null and the manager check
+    // below would catch it — but the defensive-pair rule should not be
+    // applied inconsistently within one file.
+    if (!qApp || QThread::currentThread() != qApp->thread()) {
+        qCCritical(lcToplevels) << "ToplevelListModel constructed off the GUI thread; leaving it empty";
+        return;
+    }
 
     if (!m_manager) {
         return;
@@ -121,17 +137,32 @@ ForeignToplevelManager* Toplevels::sharedManager()
     // protocol bindings would also misbehave.
     Q_ASSERT_X(qApp && QThread::currentThread() == qApp->thread(), "Toplevels::sharedManager",
                "must be called from the GUI thread");
+    // Release-build pair for the assert above. Without it the contract
+    // vanishes in release and a worker-thread caller races on the unguarded
+    // function-static below — two ForeignToplevelManagers means two protocol
+    // bindings to a global the wlroots protocol only allows one of. Every
+    // caller already handles a null return.
+    if (!qApp || QThread::currentThread() != qApp->thread()) {
+        qCCritical(lcToplevels) << "sharedManager() called off the GUI thread; refusing to construct";
+        return nullptr;
+    }
 
     // Process-wide singleton. Parent to qApp so the manager is destroyed
     // exactly once, at QCoreApplication teardown — never during a hot-
     // reload's engine swap. Two managers cannot coexist because the
     // wlroots protocol's `add_listener` call is one-time per proxy and
     // double-binding produces duplicate event streams.
-    static ForeignToplevelManager* instance = nullptr;
-    if (!instance && qApp) {
+    // QPointer, not a raw pointer: the manager is parented to qApp, but
+    // this static outlives it. After ~QCoreApplication a raw pointer
+    // would be non-null and dangling, and `!instance` could never
+    // detect it — so a second QCoreApplication in the same process (any
+    // test binary, an embedder) would hand out freed memory. QPointer
+    // auto-clears, restoring the intended construct-on-first-use.
+    static QPointer<ForeignToplevelManager> instance;
+    if (instance.isNull() && qApp) {
         instance = new ForeignToplevelManager(qApp);
     }
-    return instance;
+    return instance.data();
 }
 
 Toplevels::Toplevels(QObject* parent)
@@ -145,7 +176,86 @@ Toplevels::Toplevels(QObject* parent)
     if (mgr) {
         connect(mgr, &ForeignToplevelManager::toplevelAdded, this, &Toplevels::toplevelsChanged);
         connect(mgr, &ForeignToplevelManager::toplevelRemoved, this, &Toplevels::toplevelsChanged);
+
+        // Active-toplevel tracking. Subscribe first, then seed from the
+        // toplevels the shared manager already knows about: this wrapper
+        // is per-engine and the manager is process-wide, so on a hot
+        // reload every existing window arrived long before this
+        // constructor and would otherwise never be watched.
+        connect(mgr, &ForeignToplevelManager::toplevelAdded, this, &Toplevels::watchToplevel);
+        connect(mgr, &ForeignToplevelManager::toplevelRemoved, this, &Toplevels::recomputeActive);
+        // Subscribe each, then scan ONCE. watchToplevel's own trailing
+        // scan is what the per-toplevel path needs, but running it per
+        // element while seeding would make startup O(n^2) for a result only
+        // the final scan can determine.
+        const auto existing = mgr->toplevels();
+        for (auto* tl : existing) {
+            subscribeToplevel(tl);
+        }
+        recomputeActive();
     }
+}
+
+void Toplevels::subscribeToplevel(ForeignToplevel* toplevel)
+{
+    if (!toplevel) {
+        return;
+    }
+    // `activated`, `closed` and the rest share one stateChanged signal, so
+    // this fires more often than activation strictly moves; recomputeActive
+    // is change-gated, which is what keeps that from reaching QML.
+    connect(toplevel, &ForeignToplevel::stateChanged, this, &Toplevels::recomputeActive);
+    // A window can be closed while still flagged activated — the compositor
+    // has no obligation to clear the flag on its way out — so the close
+    // must be a scan trigger in its own right.
+    connect(toplevel, &ForeignToplevel::closedChanged, this, &Toplevels::recomputeActive);
+}
+
+void Toplevels::watchToplevel(ForeignToplevel* toplevel)
+{
+    subscribeToplevel(toplevel);
+    // A newly-arrived toplevel can already be the activated one, so the
+    // scan is not optional on this path.
+    recomputeActive();
+}
+
+void Toplevels::recomputeActive()
+{
+    ForeignToplevel* found = nullptr;
+    auto* mgr = sharedManager();
+    if (mgr) {
+        const auto all = mgr->toplevels();
+        for (auto* tl : all) {
+            // Skip closed windows: during a close the compositor may leave
+            // `activated` set on a toplevel that is on its way out, and
+            // publishing it would leave a consumer showing a dead window's
+            // title until some unrelated event re-scanned.
+            if (tl && tl->isActivated() && !tl->isClosed()) {
+                found = tl;
+                break;
+            }
+        }
+    }
+    // First-wins on the (transient) case where two toplevels both report
+    // activated mid-focus-change. The protocol sends the two state events
+    // separately, so the overlap is real but resolves on the next event.
+    // Compare against the last PUBLISHED pointer, not against m_active.
+    // m_active is a QPointer and self-clears when its toplevel is destroyed
+    // without a preceding toplevelRemoved (the manager's own destructor
+    // deletes every toplevel that way). It would then read null, `found`
+    // would be null too, and the gate would suppress the notification while
+    // QML bindings still cache the old title.
+    if (m_publishedActive == found) {
+        return;
+    }
+    m_publishedActive = found;
+    m_active = found;
+    Q_EMIT activeToplevelChanged();
+}
+
+ForeignToplevel* Toplevels::activeToplevel() const
+{
+    return m_active.data();
 }
 
 Toplevels::~Toplevels() = default;

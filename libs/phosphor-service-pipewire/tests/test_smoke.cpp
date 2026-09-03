@@ -15,6 +15,33 @@
 
 #include <iterator>
 
+namespace {
+
+/// Wait, without asserting, until `predicate` holds or `budgetMs` elapses.
+///
+/// The registry populates the GUI-thread view through QUEUED lambdas while
+/// `isConnected()` is an atomic the loop thread pre-flips, so reading model
+/// or node state the instant the atomic turns true can observe an empty
+/// registry on a perfectly healthy host. Every "is this host testable?"
+/// decision has to drain first.
+///
+/// Deliberately NOT a QTRY_VERIFY: several call sites legitimately end in a
+/// QSKIP (a bare pipewired with no session manager really does have zero
+/// audio nodes), and an asserting drain turns that documented host shape
+/// into a test failure.
+template<typename Predicate>
+bool drainUntil(Predicate predicate, int budgetMs = 2000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < budgetMs) {
+        QTest::qWait(50);
+    }
+    return predicate();
+}
+
+} // namespace
+
 class TestSmoke : public QObject
 {
     Q_OBJECT
@@ -92,8 +119,17 @@ private Q_SLOTS:
         while (!conn.isConnected() && timer.elapsed() < 2000) {
             QTest::qWait(200);
         }
-        QVERIFY2(connectedSpy.count() <= 1,
-                 qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
+        // Count only RISING edges (argument true). A daemon that connects
+        // and then drops mid-test legitimately produces false-to-true-to-
+        // false, and failing on the falling edge would blame idempotency
+        // for an unrelated disconnect.
+        int risingEdges = 0;
+        for (int i = 0; i < connectedSpy.count(); ++i) {
+            if (connectedSpy.at(i).value(0).toBool()) {
+                ++risingEdges;
+            }
+        }
+        QVERIFY2(risingEdges <= 1, qPrintable(QStringLiteral("connectedChanged rose %1 times").arg(risingEdges)));
     }
 
     /// Destruction must join the loop thread cleanly even when a
@@ -148,7 +184,35 @@ private Q_SLOTS:
         // host the wait just times out cleanly.
         QTest::qWait(250);
 
+        // Drain before deciding anything. isConnected() is an atomic
+        // pre-flipped on the loop thread, while the node/default state and
+        // the connectedChanged signal all reach the GUI thread through
+        // queued lambdas. Reading them the instant the atomic flips can
+        // report an empty registry on a fully session-managed host — which
+        // this test would then misreport as a "bare-daemon host" skip,
+        // silently discarding the whole live-handshake block.
         if (conn.isConnected()) {
+            drainUntil([&conn] {
+                return !conn.nodes().empty() || !conn.defaultSinkName().isEmpty();
+            });
+            // The predicate above can exit on the default-sink metadata
+            // landing BEFORE the first node object is bound. A non-empty
+            // default name promises a matching node, so give the binding
+            // its own drain — otherwise this run bypasses the bare-daemon
+            // QSKIP below and fails the nodes assertion on a healthy but
+            // slow host.
+            if (conn.nodes().empty() && !conn.defaultSinkName().isEmpty()) {
+                drainUntil([&conn] {
+                    return !conn.nodes().empty();
+                });
+            }
+        }
+        // Read the atomic ONCE, after the drain. Reading it twice lets a
+        // daemon that errors out mid-drain send this into the no-daemon
+        // branch with nodes already counted, failing an assertion that
+        // expects none.
+        const bool daemonPresent = conn.isConnected();
+        if (daemonPresent) {
             // Daemon present — registry should have surfaced at least
             // the system's default audio sink on session-manager-managed
             // hosts (the developer workstation case). Bare-daemon hosts
@@ -159,7 +223,10 @@ private Q_SLOTS:
             // name and downgrade to a QSKIP rather than asserting the
             // registry walk is broken. Every node we did receive must
             // still carry a valid audio media class.
-            QVERIFY(connectedSpy.count() >= 1);
+            // QTRY_VERIFY: same queued-delivery race as
+            // hostAutoConnectsAndForwardsSignals. The atomic can be true
+            // with the signal still in the GUI event queue.
+            QTRY_VERIFY(connectedSpy.count() >= 1);
             const auto nodes = conn.nodes();
             if (nodes.empty() && conn.defaultSinkName().isEmpty()) {
                 QSKIP("daemon connected but no session manager / audio nodes — bare-daemon host");
@@ -344,6 +411,9 @@ private Q_SLOTS:
         // Pre-connect writes must early-out cleanly (loop running but
         // no core/registry yet, so the node id lookup will fail).
         conn.writeVolumes(99999u, {0.5, 0.5});
+        // An EMPTY volume list is the boundary a QML caller with a stale
+        // model can produce; it must be as inert as the unknown id.
+        conn.writeVolumes(99999u, {});
         conn.writeMuted(99999u, true);
         QTest::qWait(50);
         // Pre-connect: still disconnected, no error surfaced.
@@ -491,8 +561,15 @@ private Q_SLOTS:
             // forwarding path.
             QSKIP("no PipeWire daemon present");
         }
-        QVERIFY(connSpy.count() >= 1);
-        QVERIFY(availSpy.count() >= 1);
+        // QTRY_VERIFY, not QVERIFY: the poll above exits on isConnected(),
+        // which is an atomic written by the loop thread, while these
+        // signals reach the GUI thread through the event queue. If the
+        // atomic flips during the last qWait the loop can exit with the
+        // emissions still queued, and a bare QVERIFY then fails on a
+        // connection that is perfectly healthy. Reproducible under `ctest
+        // -j`, where the handshake competes with other tests.
+        QTRY_VERIFY(connSpy.count() >= 1);
+        QTRY_VERIFY(availSpy.count() >= 1);
         // Property forwarding matches the connection's truth.
         QCOMPARE(host.defaultSinkName(), host.connection()->defaultSinkName());
         // reconnect() exercises the disconnectFromDaemon → connectToDaemon
@@ -511,8 +588,17 @@ private Q_SLOTS:
         // assertion.
         connSpy.wait(2000);
         QVERIFY(host.connection() != nullptr);
+        // The DISCONNECT half of the cycle is owed UNCONDITIONALLY: this
+        // point is only reached connected, so reconnect() must have
+        // emitted the true-to-false transition whatever the new handshake
+        // did. Gating this on isConnected() let a reconnect() that
+        // silently skipped the disconnect emission pass whenever the
+        // re-handshake missed the 2000ms budget.
+        QTRY_VERIFY(connSpy.count() >= reconnectBaseline + 1);
+        // The second (reconnect) half only lands if the daemon answered
+        // the new handshake, so that one stays gated.
         if (host.isConnected())
-            QVERIFY(connSpy.count() >= reconnectBaseline + 1);
+            QVERIFY(connSpy.count() >= reconnectBaseline + 2);
     }
 
     /// WirePlumber's default metadata should surface a non-empty
@@ -537,6 +623,184 @@ private Q_SLOTS:
         // accept that (bare-daemon edge case) without failing.
         if (!conn.defaultSinkName().isEmpty())
             QVERIFY(sinkSpy.count() >= 1);
+    }
+
+    /// nodeAt() is the IMPERATIVE single-row accessor — click handlers and
+    /// one-shot lookups. `firstNode` is the bindable path for row 0; a
+    /// binding must not call nodeAt() because it tracks no dependency.
+    /// Out-of-range rows must return null rather than index the underlying
+    /// list, and an empty model is the common case.
+    void nodeAtIsBoundsChecked()
+    {
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        QCOMPARE(sinks.rowCount(), 0);
+        QCOMPARE(sinks.nodeAt(0), nullptr);
+        QCOMPARE(sinks.nodeAt(-1), nullptr);
+        QCOMPARE(sinks.nodeAt(1000), nullptr);
+    }
+
+    /// nodeAt(row) must agree with the NodeRole of the same row. They are
+    /// two reads of one list, and a consumer that mixes them (delegate
+    /// for most rows, nodeAt for the fallback) would silently disagree if
+    /// they ever diverged.
+    void nodeAtAgreesWithTheNodeRole()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        sinks.setConnection(&conn);
+        conn.connectToDaemon();
+        QTest::qWait(300);
+
+        if (!conn.isConnected())
+            QSKIP("no PipeWire daemon present");
+        // Drain before the skip decision: rowCount is fed by queued lambdas,
+        // so reading it the instant the connected atomic flips can skip on
+        // the one host that actually has coverage to give.
+        drainUntil([&sinks] {
+            return sinks.rowCount() > 0;
+        });
+        if (sinks.rowCount() == 0)
+            QSKIP("daemon connected but no sinks present; row accessor not exercised");
+
+        for (int row = 0; row < sinks.rowCount(); ++row) {
+            auto* viaRole = sinks.data(sinks.index(row, 0), PhosphorServicePipeWire::PwNodeModel::NodeRole)
+                                .value<PhosphorServicePipeWire::PwNode*>();
+            QCOMPARE(sinks.nodeAt(row), viaRole);
+        }
+        // Guard the guard: one past the end must still be null even on a
+        // populated model, or the loop above passes while the bounds
+        // check is gone.
+        QCOMPARE(sinks.nodeAt(sinks.rowCount()), nullptr);
+    }
+
+    /// firstNode is the BINDABLE row-0 accessor. On an empty model it must
+    /// read null — QML binds it unconditionally, so a garbage read here
+    /// would be handed straight to a delegate.
+    void firstNodeIsNullOnAnEmptyModel()
+    {
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        QCOMPARE(sinks.rowCount(), 0);
+        QCOMPARE(sinks.firstNode(), nullptr);
+    }
+
+    /// firstNode and nodeAt(0) are two reads of the same row and must never
+    /// disagree. They have separate implementations, and a consumer that
+    /// mixes them (binding one, calling the other from a handler) would act
+    /// on two different nodes if they drifted.
+    void firstNodeAgreesWithNodeAtZero()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        sinks.setConnection(&conn);
+        conn.connectToDaemon();
+        QTest::qWait(300);
+
+        if (!conn.isConnected()) {
+            QSKIP("no PipeWire daemon present");
+        }
+        drainUntil([&sinks] {
+            return sinks.rowCount() > 0;
+        });
+        if (sinks.rowCount() == 0) {
+            QSKIP("daemon connected but no sinks present");
+        }
+        QCOMPARE(sinks.firstNode(), sinks.nodeAt(0));
+    }
+
+    /// The signal is the whole point: a binding on firstNode only updates
+    /// when firstNodeChanged fires. Pin that a real transition emits, and
+    /// that an idempotent re-set does not — an unconditional emit would
+    /// wake every bound volume readout on unrelated model churn.
+    ///
+    /// On a host with sinks this pins BOTH halves: one emit for null → row
+    /// 0 on attach, one for row 0 → null on detach. On a host without them
+    /// only the empty-to-empty silence is exercised, and the test says so
+    /// with a skip rather than reporting coverage it did not provide.
+    void firstNodeChangedIsChangeGated()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        QSignalSpy firstSpy(&sinks, &PhosphorServicePipeWire::PwNodeModel::firstNodeChanged);
+        QVERIFY(firstSpy.isValid());
+
+        sinks.setConnection(&conn);
+        // Actually connect: without this the registry never enumerates, the
+        // model is empty on every host, and the "row 0 went away" half of
+        // this test is unreachable — which is exactly what it is for.
+        conn.connectToDaemon();
+        drainUntil([&sinks] {
+            return sinks.rowCount() > 0;
+        });
+        const int afterAttach = firstSpy.count();
+        const bool hadRows = sinks.rowCount() > 0;
+
+        if (hadRows) {
+            // A real transition: null → row 0 must have been reported once.
+            QCOMPARE(afterAttach, 1);
+        } else {
+            // Empty → empty is not a change and must stay silent.
+            QCOMPARE(afterAttach, 0);
+        }
+
+        // Detaching drops every row. With rows, that is a real non-null →
+        // null transition and exactly one more emit is owed.
+        sinks.setConnection(nullptr);
+        QTest::qWait(50);
+        QCOMPARE(sinks.firstNode(), nullptr);
+        if (hadRows) {
+            QCOMPARE(firstSpy.count(), afterAttach + 1);
+        } else {
+            QCOMPARE(firstSpy.count(), afterAttach);
+        }
+
+        if (!hadRows) {
+            QSKIP("no sinks on this host; only the empty-to-empty silence was exercised");
+        }
+    }
+
+    /// Without a daemon there is no default-sink name and no node set, so
+    /// both derived accessors must read null. This is the state every
+    /// bar widget binds against on a host with no audio stack, and a
+    /// non-null read here would be a dangling pointer, not merely a wrong
+    /// value.
+    void hostDefaultsAreNullWithoutADaemon()
+    {
+        PhosphorServicePipeWire::PipeWireHost host;
+        QTest::qWait(300);
+        if (host.isConnected())
+            QSKIP("PipeWire daemon present; no-daemon branch not exercised");
+        QCOMPARE(host.defaultSink(), nullptr);
+        QCOMPARE(host.defaultSource(), nullptr);
+    }
+
+    /// The join `defaultSink` performs: when PipeWire publishes a default
+    /// sink NAME, the host must resolve it to the matching node. This is
+    /// the whole reason the property exists — QML used to rebuild it with
+    /// a hidden delegate per row — so pin both halves: the node is found,
+    /// and it is the RIGHT node.
+    void hostResolvesDefaultNamesToNodes()
+    {
+        PhosphorServicePipeWire::PipeWireHost host;
+        QTest::qWait(500);
+
+        if (!host.isConnected())
+            QSKIP("no PipeWire daemon present");
+        if (host.defaultSinkName().isEmpty())
+            QSKIP("daemon connected but no default sink published (bare daemon, no WirePlumber)");
+
+        auto* sink = host.defaultSink();
+        QVERIFY2(sink, "a published default-sink name did not resolve to a node");
+        QCOMPARE(sink->name(), host.defaultSinkName());
+        QCOMPARE(sink->mediaClass(), QStringLiteral("Audio/Sink"));
+
+        // The source leg shares one resolve path, so a regression that
+        // crossed the two would show up as a source resolving to a sink.
+        if (!host.defaultSourceName().isEmpty()) {
+            auto* source = host.defaultSource();
+            QVERIFY2(source, "a published default-source name did not resolve to a node");
+            QCOMPARE(source->name(), host.defaultSourceName());
+            QCOMPARE(source->mediaClass(), QStringLiteral("Audio/Source"));
+        }
     }
 
     /// Models hooked to a live connection should populate based on the
@@ -585,9 +849,21 @@ private Q_SLOTS:
         // (an empty model trivially satisfies every "matches filter"
         // assertion). Streams and sources can legitimately be zero on
         // a quiet host with no input devices, so we only pin sinks.
+        // Drain (queued guiNodeAdded lambdas outrun by the connected
+        // atomic), then apply the SAME bare-daemon predicate the
+        // registry-enumeration test uses. Asserting unconditionally here
+        // would fail on a host that sibling test explicitly accepts and
+        // skips — the two must agree on what a testable host is.
+        drainUntil([&sinks] {
+            return sinks.rowCount() > 0;
+        });
+        if (sinks.rowCount() == 0 && conn.defaultSinkName().isEmpty()) {
+            QSKIP("daemon connected but no audio nodes (bare pipewired, no session manager)");
+        }
         QVERIFY2(sinks.rowCount() > 0,
-                 qPrintable(QStringLiteral("PwSinkModel observed zero sinks on a connected daemon — likely a "
-                                           "setConnection snapshot regression that ignores later registry adds")));
+                 qPrintable(QStringLiteral("PwSinkModel observed zero sinks while the daemon reports a default sink "
+                                           "— likely a setConnection snapshot regression that ignores later "
+                                           "registry adds")));
     }
 
     /// Exercise the dangling-pointer recovery path inside PwNodeModel.
@@ -654,6 +930,67 @@ private Q_SLOTS:
         // implies any sensible view stops here — but it pins the
         // contract for direct C++ callers.
         QVERIFY(!model.data(model.index(0), PhosphorServicePipeWire::PwNodeModel::NodeRole).isValid());
+    }
+
+    /// Re-setting the SAME connection must be a pure no-op: no reset
+    /// churn, no re-subscription, no spurious notifies. Drivable
+    /// daemon-free because the wire bookkeeping is what is under test.
+    void reSetSameConnectionIsANoOp()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        model.setConnection(&conn);
+
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        QSignalSpy resetSpy(&model, &QAbstractItemModel::modelAboutToBeReset);
+        QSignalSpy firstSpy(&model, &PhosphorServicePipeWire::PwNodeModel::firstNodeChanged);
+        model.setConnection(&conn);
+        QCOMPARE(connSpy.count(), 0);
+        QCOMPARE(resetSpy.count(), 0);
+        QCOMPARE(firstSpy.count(), 0);
+        QCOMPARE(model.connection(), &conn);
+    }
+
+    /// Swapping connection A for connection B drops A's wires and leaves
+    /// no doubled rows; detaching to null afterwards notifies again.
+    void swapConnectionRewires()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        PhosphorServicePipeWire::PipeWireConnection a;
+        PhosphorServicePipeWire::PipeWireConnection b;
+        model.setConnection(&a);
+
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        model.setConnection(&b);
+        QCOMPARE(model.connection(), &b);
+        QCOMPARE(connSpy.count(), 1);
+        // Empty on a daemon-free run either way; the assertion is that the
+        // swap did not double-count anything from the old wires.
+        QCOMPARE(model.rowCount(), 0);
+
+        model.setConnection(nullptr);
+        QCOMPARE(model.connection(), nullptr);
+        QCOMPARE(connSpy.count(), 2);
+    }
+
+    /// The third recovery leg: external destruction followed by a NEW
+    /// connection. The flush must run BEFORE the rebuild so the rebuild
+    /// never walks the dead connection's cached rows (the
+    /// beginRemoveRows-over-dangling-pointers path).
+    void aNewConnectionAfterExternalDestructionRebuildsCleanly()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        auto* dead = new PhosphorServicePipeWire::PipeWireConnection();
+        model.setConnection(dead);
+        delete dead;
+        QCOMPARE(model.connection(), nullptr);
+
+        PhosphorServicePipeWire::PipeWireConnection fresh;
+        QSignalSpy connSpy(&model, &PhosphorServicePipeWire::PwNodeModel::connectionChanged);
+        model.setConnection(&fresh);
+        QCOMPARE(model.connection(), &fresh);
+        QCOMPARE(connSpy.count(), 1);
+        QCOMPARE(model.rowCount(), 0);
     }
 
     /// Pin the pre-connect empty-defaults baseline plus the

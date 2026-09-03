@@ -35,6 +35,14 @@ InAppPopoutTransport::~InAppPopoutTransport()
     Q_ASSERT_X(m_entries.isEmpty(), "~InAppPopoutTransport",
                "shutdown() must run before transport destruction; "
                "stranded entries cannot be safely deleted after engine teardown");
+    // Release builds drop the assert, so say something rather than leaking in
+    // total silence. The production sibling (LayerPopoutTransport) warns and
+    // drains for the same condition; here the leak is deliberate, but it
+    // should still be reported.
+    if (!m_entries.isEmpty()) {
+        qWarning() << "InAppPopoutTransport destroyed with" << m_entries.size()
+                   << "live popout(s); shutdown() should have run first. Leaking them deliberately.";
+    }
     m_entries.clear();
 }
 
@@ -110,6 +118,12 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     }
     hostItem->setParentItem(m_host);
     hostItem->setProperty("contentItem", QVariant::fromValue(contentItem));
+    // QObject-parent the content to the host so it dies with it. Neither
+    // beginCreate (which returns an unparented object with CppOwnership) nor
+    // PopoutHost's `contentItem.parent = contentFrame` (which is
+    // QQuickItem::setParentItem, a VISUAL reparent) gives it a QObject owner.
+    // Without this line every open leaks the whole delegate subtree.
+    contentItem->setParent(hostItem);
     // Inject a back-reference so content delegates can dismiss
     // themselves. AlertPopout's Dismiss button uses this to call
     // _popoutHost.dismiss() rather than walking the parent chain.
@@ -134,6 +148,10 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // would distinguish them; a real layer-shell transport handles
     // both concepts separately.
     hostItem->setProperty("dismissOnClickOutside", request.dismissOnFocusLoss);
+    // Separate from the dismiss policy: this gates the host's whole content
+    // subtree. Every popout here shares one focus scope, so a host that claims
+    // focus without wanting it takes the keyboard from the one already open.
+    hostItem->setProperty("keyboardFocus", request.keyboardFocus);
     m_hostComponent->completeCreate();
 
     const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
@@ -180,7 +198,21 @@ void InAppPopoutTransport::closeSurface(const QString& handle)
     // initiated this close. This avoids duplicating PopoutHost's
     // animation duration as a hardcoded timer interval.
     it->closing = true;
-    it->hostItem->setProperty("open", false);
+    // PopoutHost's dismissEmitter timer guarantees `dismissed` after the
+    // close duration once this write lands, animation or not — so the only
+    // leg that can strand the entry is the write itself being rejected
+    // (a renamed/re-typed `open`). Tear down directly then, mirroring
+    // LayerPopoutTransport, rather than leaving the entry latched forever.
+    if (!it->hostItem->setProperty("open", false)) {
+        qWarning() << "InAppPopoutTransport: PopoutHost rejected the open=false write for" << handle
+                   << "- tearing down without animation";
+        Entry copy = it.value();
+        m_entries.erase(it);
+        if (copy.hostItem) {
+            QObject::disconnect(copy.hostItem.data(), nullptr, this, nullptr);
+            copy.hostItem->deleteLater();
+        }
+    }
 }
 
 void InAppPopoutTransport::setSurfaceDismissedCallback(std::function<void(const QString&)> callback)
@@ -205,11 +237,19 @@ void InAppPopoutTransport::shutdown()
     for (const auto& entry : victims) {
         if (entry.hostItem) {
             QObject::disconnect(entry.hostItem.data(), nullptr, this, nullptr);
+            // Synchronous delete, a deliberate exemption from the
+            // never-manual-delete rule: shutdown() runs from aboutToQuit,
+            // which Qt emits after exec()'s loop has finished, so a
+            // deleteLater posted here would never drain and the items
+            // would survive into QML-engine teardown — the SIGSEGV the
+            // destructor's comment describes. The dismissed signal is
+            // disconnected above, so the destruction-time emission
+            // reaches nobody.
             delete entry.hostItem.data();
         }
-        // contentItem is a QObject child of hostItem (Qt's
-        // QQmlComponent::beginCreate sets the parent), so it was
-        // deleted by the line above. The QPointer is null here.
+        // contentItem is a QObject child of hostItem — set explicitly in
+        // openSurface, NOT by beginCreate, which leaves it unparented — so it
+        // was deleted by the line above. The QPointer is null here.
     }
     // Drop the host/component references so any post-shutdown openSurface
     // is rejected by the null guard at the top of openSurface rather
@@ -235,11 +275,10 @@ void InAppPopoutTransport::onHostDismissed()
     Entry copy = it.value();
     m_entries.erase(it);
     if (copy.hostItem) {
-        // contentItem is a QObject child of hostItem (PopoutHost.qml's
-        // contentFrame.rebindContentItem reparented it under the host),
-        // so deleteLater on hostItem cascades to contentItem. Mirrors
-        // the destructor / shutdown teardown model; no second
-        // contentItem deleteLater needed.
+        // contentItem is a QObject child of hostItem — parented explicitly in
+        // openSurface. rebindContentItem only sets the VISUAL parent and would
+        // not make this cascade. deleteLater on hostItem therefore takes the
+        // content with it; no second contentItem deleteLater needed.
         copy.hostItem->deleteLater();
     }
     // Only fire the controller callback for self-dismisses. A

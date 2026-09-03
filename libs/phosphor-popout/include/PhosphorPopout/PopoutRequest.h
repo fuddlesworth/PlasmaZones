@@ -15,9 +15,11 @@
 namespace PhosphorPopout {
 
 // Namespace metaobject so QML can see the Anchor and ExclusiveMode
-// enums by name. QML_ELEMENT publishes the namespace to QML under the
-// module URI, so consumers write `Anchor.BarCenter` and
-// `ExclusiveMode.Cooperative` from QML after `import Phosphor.Popout`.
+// enums. QML_ELEMENT on a Q_NAMESPACE publishes the NAMESPACE as the
+// QML type name, so after `import Phosphor.Popout` consumers reach the
+// values through it: `PhosphorPopout.Anchor.BarCenter` and
+// `PhosphorPopout.ExclusiveMode.Cooperative`. The enums are not in
+// scope unqualified — a bare `Anchor.BarCenter` is a ReferenceError.
 Q_NAMESPACE_EXPORT(PHOSPHORPOPOUT_EXPORT)
 QML_ELEMENT
 
@@ -76,6 +78,13 @@ class PHOSPHORPOPOUT_EXPORT PopoutRequest
 {
     Q_GADGET
     QML_VALUE_TYPE(popoutRequest)
+    // STRUCTURED_VALUE is what lets QML build one from an object literal,
+    // which is how every caller actually passes a request:
+    // `Popouts.toggle({ "popoutId": "power", ... })`. Without it QML has no
+    // conversion from a JS object to this gadget and the call fails with
+    // "Passing incompatible arguments to C++ functions from JavaScript is
+    // not allowed" — a TypeError at the call site, not a compile error.
+    QML_STRUCTURED_VALUE
 
     Q_PROPERTY(QString popoutId MEMBER popoutId)
     Q_PROPERTY(QQmlComponent* content MEMBER content)
@@ -93,7 +102,15 @@ public:
     // every default-constructed PopoutRequest reuses one refcounted
     // QString rather than allocating a fresh "default" per construction.
     // Shells issuing popouts on every focus change benefit from this.
-    static inline const QString DefaultScope = QStringLiteral("default");
+    // A function-local static, not a header-scope inline QString: the
+    // inline form gains a static initializer plus exit-time destructor in
+    // every linking binary and sits in SIOF territory; the local static
+    // initializes on first use instead.
+    static const QString& defaultScope()
+    {
+        static const QString scope = QStringLiteral("default");
+        return scope;
+    }
 
     // Stable identifier for this popout. Examples are "control-center"
     // or "launcher". Used by isOpen, toggle, and closeAll. Two requests
@@ -130,7 +147,7 @@ public:
     // callers that don't care all share one scope. Common patterns
     // are "default" for one popout per process, or "screen-DP-1"
     // when the shell wants one cooperative popout per output.
-    QString scope = DefaultScope;
+    QString scope = defaultScope();
 
     // Whether the popout should request keyboard focus on open.
     // Modals typically yes. Cooperatives sometimes no. The bar's

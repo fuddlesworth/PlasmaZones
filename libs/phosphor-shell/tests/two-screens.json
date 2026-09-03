@@ -1,0 +1,38 @@
+{
+    "_comment": [
+        "SPDX-FileCopyrightText: 2026 fuddlesworth",
+        "SPDX-License-Identifier: LGPL-2.1-or-later",
+        "",
+        "Offscreen-QPA screen configuration for test_phosphorshell_perscreenpanels.",
+        "",
+        "PerScreenPanels only fills in a delegate's `screen` when the delegate left",
+        "it null, and distinguishing 'kept the delegate's binding' from 'assigned",
+        "the row's screen' needs two DIFFERENT outputs — with one screen both",
+        "outcomes are the same pointer and the assertion cannot fail. The offscreen",
+        "platform plugin accepts this file via",
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>, which gives the test a second",
+        "screen without a second physical monitor."
+    ],
+    "screens": [
+        {
+            "name": "TEST-0",
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        },
+        {
+            "name": "TEST-1",
+            "x": 1920,
+            "y": 0,
+            "width": 1280,
+            "height": 1024,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        }
+    ]
+}

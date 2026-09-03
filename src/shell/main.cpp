@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "BarController.h"
+#include "LayerPopoutTransport.h"
+
+#include <PhosphorPopout/PopoutController.h>
+
+#include <PhosphorIpc/IpcEngine.h>
+#include <PhosphorIpc/IpcRouter.h>
+
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
 #include <PhosphorServiceClipboard/QmlRegistration.h>
@@ -24,7 +32,13 @@
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLoggingCategory>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QUrl>
+
+#include <memory>
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
@@ -44,6 +58,15 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("phosphor-shell"));
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setQuitOnLastWindowClosed(false);
+
+    // Guarantee named freedesktop icons resolve (bar widgets use
+    // Kirigami.Icon → QIcon::fromTheme). On a desktop session the platform
+    // theme usually sets a theme already; setting only the FALLBACK leaves
+    // the user's choice intact and just backstops a session that exposes
+    // none, so icons never silently come up blank.
+    if (QIcon::fallbackThemeName().isEmpty()) {
+        QIcon::setFallbackThemeName(QStringLiteral("breeze"));
+    }
 
     // Register every Phosphor.Service.* QML type BEFORE the engine
     // loads shell.qml. Post Phase 2.0 the umbrella is gone; each
@@ -180,6 +203,49 @@ int main(int argc, char* argv[])
     // regardless of the URL scheme.
     qCInfo(lcShell) << "Loading shell from:" << shellUrl.toString();
 
+    // The bar's IBarWidgetFactory registry owner. Declared BEFORE the
+    // engine so C++ reverse-order destruction tears the engine down first
+    // (clearing every QML binding to the BarRegistry context property)
+    // before the controller dies. It is process-global, outliving every
+    // hot-reload engine rebuild; the engine hook below re-binds it on each
+    // fresh QQmlEngine, and createWidgetFor resolves the live engine from
+    // each widget's parent so no stale-engine reference is held.
+    PhosphorShellApp::BarController barController;
+
+    // The IPC router every IpcTarget in the shell's QML registers with.
+    // Declared before the engine for the same reverse-destruction reason as
+    // the others: targets unregister themselves on destruction and must find
+    // a live router when they do.
+    //
+    // start() binds the Unix socket; without it every target registers
+    // against a router nobody can reach and `phosphorctl call` resolves
+    // nothing. $PHOSPHOR_SOCKET mirrors phosphorctl's own resolution
+    // (--socket > $PHOSPHOR_SOCKET > $XDG_RUNTIME_DIR/phosphor.sock), which
+    // is what lets a nested test session bind a private socket instead of
+    // colliding with a shell on the host session. Non-fatal on failure: a
+    // shell without its control socket still draws bars and popouts, so warn
+    // and continue rather than refusing to start.
+    PhosphorIpc::IpcRouter ipcRouter;
+    const QString socketOverride = qEnvironmentVariable("PHOSPHOR_SOCKET");
+    if (!ipcRouter.start(socketOverride)) {
+        qCWarning(lcShell) << "IPC router failed to bind"
+                           << (socketOverride.isEmpty() ? QStringLiteral("the default socket") : socketOverride)
+                           << "— phosphorctl will not reach this shell";
+    } else {
+        qCInfo(lcShell) << "IPC socket:" << ipcRouter.socketPath();
+    }
+
+    // Popout infrastructure, declared BEFORE the engine for the same
+    // reverse-destruction reason as barController: the engine must die (and
+    // clear every QML binding to these) before they do.
+    //
+    // Transport FIRST, controller SECOND. ~PopoutController detaches its
+    // dismissed callback by calling back into the transport, so the
+    // controller has to be destroyed while the transport is still alive —
+    // which reverse-declaration order gives us for free.
+    PhosphorShellApp::LayerPopoutTransport popoutTransport(&factory, screenProvider.get());
+    PhosphorPopout::PopoutController popouts(&popoutTransport);
+
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{
             .surfaceFactory = &factory,
@@ -197,6 +263,58 @@ int main(int argc, char* argv[])
     // PhosphorServiceIconTheme::IconImageProvider::setImage.
     engine.addEngineHook([](QQmlEngine* qmlEngine) {
         PhosphorServiceIconTheme::installImageProvider(qmlEngine);
+    });
+
+    // The transport builds popout content from the live engine, so it needs
+    // the new one on every hot reload. Paired with the aboutToReload drain
+    // below: that drops the outgoing engine's surfaces while its object
+    // graph is still valid, and this adopts the replacement.
+    engine.addEngineHook([&popoutTransport](QQmlEngine* qmlEngine) {
+        popoutTransport.setEngine(qmlEngine);
+    });
+
+    // IpcTarget resolves its router from a property stashed on the engine,
+    // so this has to run for every fresh engine, not once at startup.
+    // Without it each target warns and stays inert, and `phosphorctl call`
+    // finds nothing.
+    engine.addEngineHook([&ipcRouter](QQmlEngine* qmlEngine) {
+        PhosphorIpc::IpcEngine::install(qmlEngine, &ipcRouter);
+    });
+
+    // A hot reload destroys the QQmlEngine and every delegate built from it.
+    // Drain while that is still safe to touch, rather than discovering it
+    // afterwards through dangling QPointers.
+    // Context object is `popouts`, the SHORTEST-lived of the two captures
+    // (it is declared after the transport, so it is destroyed first).
+    // Auto-disconnect has to key on whichever capture dies first, or the
+    // lambda outlives one of the references it holds.
+    QObject::connect(&engine, &PhosphorShell::ShellEngine::aboutToReload, &popouts, [&popoutTransport, &popouts] {
+        popouts.closeAll();
+        popoutTransport.drain();
+    });
+
+    // Surfaces must be gone before the QML engine and the Wayland
+    // connection unwind. Without this the transport tears down during
+    // static destruction, which is where Qt object graphs misbehave.
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &popouts, [&popoutTransport, &popouts] {
+        popouts.closeAll();
+        popoutTransport.drain();
+    });
+
+    engine.addEngineHook([&popouts](QQmlEngine* qmlEngine) {
+        // Context property rather than qmlRegisterSingletonInstance: the
+        // Phosphor.Popout URI already belongs to a qt_add_qml_module, and
+        // the BarRegistry precedent for re-binding a process-global C++
+        // object onto each fresh engine is already proven across reloads.
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("Popouts"), &popouts);
+    });
+
+    // Expose the bar widget registry to QML as the BarRegistry context
+    // property on every engine the shell builds (startup + each hot reload).
+    // Slot.qml mounts each delegate through
+    // BarRegistry.createWidgetFor(id, parent).
+    engine.addEngineHook([&barController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("BarRegistry"), &barController);
     });
 
     if (!engine.load(shellUrl)) {

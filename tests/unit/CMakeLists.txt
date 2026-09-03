@@ -1451,11 +1451,11 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the ten test executables below
+# Animations-controller sources shared by the eleven test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets /
 # shader overrides / shader param writes / group writes / group write bounds /
-# suppression mirror). One list so a new controller source file cannot silently
-# miss one of the ten.
+# suppression mirror / stale params). One list so a new controller source file
+# cannot silently miss one of the eleven.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -2237,6 +2237,120 @@ add_executable(test_scroll_tab_layout compositor-common/test_scroll_tab_layout.c
 target_include_directories(test_scroll_tab_layout PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
 add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# shell/ - Bar registry owner + QML-component widget factory (Phase 4.1)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. The target compiles the
+# four src/shell sources directly rather than linking the gated
+# phosphor-shell binary, those sources are unconditional files on disk, and
+# the only non-Qt dependency (PhosphorRegistry) is added unconditionally at
+# the top level. Gating would make these guard tests vanish from the default
+# configuration, where BUILD_PHOSPHOR_SHELL is OFF, which is precisely the
+# build that most needs them.
+#
+# The classes live in the GPL shell binary, so they are tested here rather
+# than from the LGPL bar module's own QuickTest suite (which covers the QML
+# delegates). The headers are listed so AUTOMOC generates BarController's
+# moc: the Q_OBJECT vtable and factoryIdsChanged live there, not in the .cpp.
+add_executable(test_bar_controller
+    shell/test_bar_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/BarController.h
+    ${CMAKE_SOURCE_DIR}/src/shell/barcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentBarWidgetFactory.h
+    ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponentbarwidgetfactory.cpp
+)
+target_link_libraries(test_bar_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorRegistry::PhosphorRegistry
+)
+# src-rooted includes, matching the other tests that compile src/ sources,
+# so the test survives a move of either tree.
+target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_bar_controller COMMAND test_bar_controller)
+
+# Ties BarController's registered type names to the QML the Phosphor.Bar
+# module actually ships. Gated on the bar module target, since it links that
+# module and its plugin registrar to resolve the types.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml)
+    add_executable(test_bar_widget_types
+        shell/test_bar_widget_types.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/BarController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/barcontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentBarWidgetFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponentbarwidgetfactory.cpp
+    )
+    target_include_directories(test_bar_widget_types PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_bar_widget_types
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+            # The module AND its plugin registrar: without the registrar the
+            # static module registers no types and every lookup would "fail"
+            # for the wrong reason.
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+    )
+    add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
+endif()
+
+# LayerPopoutTransport, the shell's real popout transport (Phase 4.6),
+# driven headless through phosphor-layer's mock transport + screen provider.
+# Gated on the popout QML module because building PopoutHost in-test needs
+# the module and its plugin registrar (the same reason test_popout_qml_enums
+# links them); Phosphor.Theme comes along for the Motion tokens PopoutHost
+# animates with.
+if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLayer)
+    add_executable(test_layer_popout_transport
+        shell/test_layer_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/LayerPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/layerpopouttransport.cpp
+    )
+    target_include_directories(test_layer_popout_transport
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            # The reusable phosphor-layer test mocks (mocks/mocktransport.h,
+            # mocks/mockscreenprovider.h).
+            ${CMAKE_SOURCE_DIR}/libs/phosphor-layer/tests
+    )
+    target_link_libraries(test_layer_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorLayer::PhosphorLayer
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+    )
+    add_test(NAME test_layer_popout_transport COMMAND test_layer_popout_transport)
+endif()
+
+# SystemUsage's /proc arithmetic. Gated on the shell tier because it links
+# the PhosphorShell library, which only exists when that tier is built.
+if(TARGET PhosphorShell::PhosphorShell)
+    add_executable(test_system_usage shell/test_system_usage.cpp)
+    target_link_libraries(test_system_usage
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            PhosphorShell::PhosphorShell
+    )
+    add_test(NAME test_system_usage COMMAND test_system_usage)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

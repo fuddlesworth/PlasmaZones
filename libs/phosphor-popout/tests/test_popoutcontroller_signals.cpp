@@ -171,8 +171,8 @@ void TestPopoutControllerSignals::isOpen_emptyPopoutIdMatchesAnonymous()
 
 void TestPopoutControllerSignals::defaultScope_isCanonicalLiteral()
 {
-    // PopoutRequest::DefaultScope is the canonical default. Pin the
-    // value so a future refactor that drops the static is caught.
+    // PopoutRequest::defaultScope() is the canonical default. Pin the
+    // value so a future refactor that drops the accessor is caught.
     // Earlier passes pinned constData()-equality between two default-
     // constructed requests, but that asserted QString implementation
     // detail (literal-pool interning) that can change across Qt
@@ -181,8 +181,8 @@ void TestPopoutControllerSignals::defaultScope_isCanonicalLiteral()
     PopoutRequest a;
     PopoutRequest b;
     QCOMPARE(a.scope, QStringLiteral("default"));
-    QCOMPARE(a.scope, PopoutRequest::DefaultScope);
-    QCOMPARE(b.scope, PopoutRequest::DefaultScope);
+    QCOMPARE(a.scope, PopoutRequest::defaultScope());
+    QCOMPARE(b.scope, PopoutRequest::defaultScope());
     QCOMPARE(a.scope, b.scope);
 }
 
