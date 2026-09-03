@@ -12,13 +12,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-
 #include <algorithm>
-#include <cmath>
-#include <limits>
 #include <utility>
 
 namespace PlasmaZones {

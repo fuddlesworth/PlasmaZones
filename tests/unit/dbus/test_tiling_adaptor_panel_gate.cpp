@@ -26,6 +26,8 @@
 #include <PhosphorScreens/Manager.h>
 #include "dbus/tilingadaptor/tilingadaptor.h"
 
+#include <functional>
+
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
 
@@ -41,6 +43,17 @@ bool emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
     // error, and one slot here asserts a count that is already zero before the
     // emit — so it would pass against a helper that fired nothing at all.
     return QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
+}
+
+/// One-entry tile batch in the engines' windowsTiled JSON shape, for the
+/// announce-ordering slots below: they read the wire by window id, so one
+/// window per batch is all the payload needs to carry.
+QString tileBatchJsonFor(const QString& windowId)
+{
+    return QStringLiteral(
+               "[{\"windowId\":\"%1\",\"screenId\":\"HDMI-1\",\"x\":0,\"y\":0,\"width\":600,"
+               "\"height\":800}]")
+        .arg(windowId);
 }
 
 /// Records DISPATCH ORDER and the arrival-burst brackets.
@@ -68,10 +81,19 @@ public:
     /// to suppress partial intermediates, so a dispatch outside them is
     /// exactly the visual glitch they were added to prevent.
     QStringList dispatchedOutsideBurst;
+    /// Whether this engine claims every screen. False is the mid-flip shape
+    /// where no engine owns the screen yet, so an open parks behind the
+    /// pending announce; flipping it true before the announce fires lets the
+    /// retry adopt the parked open.
+    bool claimsScreens = true;
+    /// Runs inside windowOpened, standing in for a real engine's synchronous
+    /// relayout emit (windowsTiled fires from within the call), so a test can
+    /// observe where the batch an adopted open produces lands on the wire.
+    std::function<void(const QString&)> onWindowOpened;
 
     bool isActiveOnScreen(const QString&) const override
     {
-        return true;
+        return claimsScreens;
     }
     /// Windows the adaptor OFFERED to the cross-screen session reclaim, in
     /// order. Recorded rather than acted on: the property under test is
@@ -84,6 +106,9 @@ public:
         dispatched.append(windowId);
         if (burstDepth == 0) {
             dispatchedOutsideBurst.append(windowId);
+        }
+        if (onWindowOpened) {
+            onWindowOpened(windowId);
         }
     }
     bool claimCrossScreenReopen(const QString& windowId, const QString&, int, int) override
@@ -811,15 +836,8 @@ private Q_SLOTS:
                     wire.append(QStringLiteral("batch:") + requests.first().windowId);
                 });
 
-        const auto batchFor = [](const QString& windowId) {
-            return QStringLiteral(
-                       "[{\"windowId\":\"%1\",\"screenId\":\"HDMI-1\",\"x\":0,\"y\":0,\"width\":600,"
-                       "\"height\":800}]")
-                .arg(windowId);
-        };
-
         // No announce pending: the relay is synchronous, nothing is held.
-        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("a|1")));
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("a|1")));
         QCOMPARE(wire, (QStringList{QStringLiteral("batch:a|1")}));
         QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
         wire.clear();
@@ -828,8 +846,8 @@ private Q_SLOTS:
         // silent until the announce fires, which then trails them in
         // arrival order.
         adaptor.notifyEngineScreensChanged(true);
-        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("b|2")));
-        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("c|3")));
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("b|2")));
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("c|3")));
         QVERIFY(wire.isEmpty());
         QCOMPARE(adaptor.pendingHeldTileBatchCount(), 2);
         QCoreApplication::processEvents();
@@ -839,19 +857,76 @@ private Q_SLOTS:
         wire.clear();
 
         // After the flush the relay is synchronous again.
-        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("d|4")));
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("d|4")));
         QCOMPARE(wire, (QStringList{QStringLiteral("batch:d|4")}));
         wire.clear();
 
         // clearEngine sweeps a held batch with the announce it waited on:
         // neither reaches the wire afterwards.
         adaptor.notifyEngineScreensChanged(true);
-        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("e|5")));
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("e|5")));
         QCOMPARE(adaptor.pendingHeldTileBatchCount(), 1);
         adaptor.clearEngine();
         QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
         QCoreApplication::processEvents();
         QVERIFY(wire.isEmpty());
+    }
+
+    // -------------------------------------------------------------------------
+    // The held batches flush BEFORE the parked-open retry inside the announce
+    // lambda. The retry can itself produce a batch (a real engine's
+    // windowOpened relayout emits windowsTiled synchronously), and that one
+    // must trail the held batches, which the engines resolved first: with the
+    // effect's per-screen generation a later batch for the same screen
+    // supersedes an earlier one, so the reverse order would let the older
+    // rects win. Nothing else observes the two blocks' relative order, so a
+    // swap would pass the slot above.
+    // -------------------------------------------------------------------------
+    void testHeldTileBatchesFlushBeforeTheParkedOpenRetry()
+    {
+        PhosphorProtocol::registerWireTypes();
+        RecordingEngine engine;
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        QStringList wire;
+        connect(&adaptor, &TilingAdaptor::managedScreensChanged, &adaptorParent,
+                [&wire](const QStringList&, bool, const QVariantMap&) {
+                    wire.append(QStringLiteral("announce"));
+                });
+        connect(&adaptor, &TilingAdaptor::windowsTileRequested, &adaptorParent,
+                [&wire](const PhosphorProtocol::TileRequestList& requests) {
+                    wire.append(QStringLiteral("batch:") + requests.first().windowId);
+                });
+        // The adopted open's batch, produced from inside the retry's dispatch
+        // the way an engine's relayout emits from inside windowOpened.
+        engine.onWindowOpened = [&adaptor](const QString& windowId) {
+            adaptor.relayTileRequestsJson(tileBatchJsonFor(windowId));
+        };
+
+        // Mid-flip: no engine claims the screen, so the open parks behind the
+        // pending announce, and a batch another screen's engine resolved in
+        // the same pass is held behind it too.
+        engine.claimsScreens = false;
+        adaptor.notifyEngineScreensChanged(false);
+        adaptor.windowOpened(QStringLiteral("parked|1"), QStringLiteral("HDMI-1"), 0, 0);
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 1);
+        adaptor.relayTileRequestsJson(tileBatchJsonFor(QStringLiteral("held|2")));
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 1);
+        QVERIFY(wire.isEmpty());
+
+        // The flip settles before the announce fires: the announce goes out,
+        // then the held batch, and only then the retry adopts the parked open
+        // and its batch trails both.
+        engine.claimsScreens = true;
+        QCoreApplication::processEvents();
+        QCOMPARE(wire,
+                 (QStringList{QStringLiteral("announce"), QStringLiteral("batch:held|2"),
+                              QStringLiteral("batch:parked|1")}));
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
+        QCOMPARE(engine.dispatched, QStringList{QStringLiteral("parked|1")});
     }
 };
 

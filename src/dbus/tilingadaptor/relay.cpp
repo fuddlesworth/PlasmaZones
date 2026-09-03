@@ -19,6 +19,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace PlasmaZones {

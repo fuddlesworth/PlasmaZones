@@ -100,6 +100,8 @@ public:
 
     /// Tile-request JSON from any pipeline engine (the engines' windowsTiled
     /// payload contract) — parsed and re-emitted as windowsTileRequested.
+    /// While a coalesced screens announce is queued the batch is HELD and
+    /// goes out right behind it (m_tileBatchesHeldForAnnounce documents why).
     void relayTileRequestsJson(const QString& tileRequestsJson);
     /// Float-state relay with the last-broadcast dedup gate — REQUIRED for
     /// every producer since multiple engines feed one D-Bus signal.
