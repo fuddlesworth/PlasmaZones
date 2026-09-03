@@ -423,15 +423,12 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
         resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
         // A compositor-only pack (desktop / geometry / move / strip / tab
-        // classes) compiles under the UBO branch these days (the settings
-        // preview plays it against stand-in subjects), but a daemon surface
-        // leg has none of its transition feed — no desktop endpoints, no
-        // old-content snapshot, no strip scene — so attaching it would run
-        // the shader against unbound stand-ins and render garbage rather
-        // than a transition. This is reachable through a picker-legal
-        // config — the picker is permissive on ambiguous rows (e.g. the
-        // `global` root), so a geometry-only pack assigned there cascades to
-        // every OSD/popup leg via resolveShaderWithDefault, which does no
+        // classes) compiles under the UBO branch these days, but a daemon
+        // surface leg has none of its transition feed (desktop endpoints,
+        // old-content snapshot, strip scene), so attaching it would render
+        // garbage. Reachable through a picker-legal config: the permissive
+        // picker lets such a pack land on the `global` root, which cascades
+        // to every OSD/popup leg via resolveShaderWithDefault with no
         // applicability filtering. Routine, so log at debug level only —
         // drop the shader leg and let the opacity/scale legs run.
         if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(resolvedShaderEff)) {
@@ -641,9 +638,11 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     // The user sees a correctly-rendered shader at the wrong
     // visual size and a "pop to full size" at teardown when the
     // next non-shader cycle restores scale via its own scale leg.
+    // Leg direction, shared by the pre-state writes here, the staged
+    // attach block, and the shader-value leg below.
+    const bool isShowLeg = (toOpacity > fromOpacity);
     if (hasShaderLeg) {
-        const bool isShow = (toOpacity > fromOpacity);
-        target->setOpacity(isShow ? toOpacity : fromOpacity);
+        target->setOpacity(isShowLeg ? toOpacity : fromOpacity);
         target->setScale(1.0);
     } else {
         target->setOpacity(fromOpacity);
@@ -685,7 +684,6 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
             it->second.scale = std::make_unique<PhosphorAnimation::AnimatedValue<qreal>>();
         }
         if (hasShaderLeg) {
-            const bool isShowLeg = (toOpacity > fromOpacity);
             // Stage the attach/wake results in locals: both branches below
             // call setVisible on consumer-owned decorator items
             // (hideAnchorSiblings / attachShaderToAnchor), whose
@@ -1015,9 +1013,8 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // Symmetric envelopes (morph's `sin(iTime*pi)`, glitch's
         // sin-shaped peak) are direction-invariant by construction —
         // the peak still lands mid-leg either way.
-        const bool isShowLegInner = (toOpacity > fromOpacity);
-        const qreal shaderFrom = isShowLegInner ? qreal(0.0) : qreal(1.0);
-        const qreal shaderTo = isShowLegInner ? qreal(1.0) : qreal(0.0);
+        const qreal shaderFrom = isShowLeg ? qreal(0.0) : qreal(1.0);
+        const qreal shaderTo = isShowLeg ? qreal(1.0) : qreal(0.0);
         // No setITime here — attachShaderToAnchor (called with the
         // same isShowLeg flag) already seeded iTime to shaderFrom
         // before the QQuickShaderEffect could paint a frame.

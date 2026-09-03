@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Animation shader packs now have a live preview**: opening a pack from Animations → Shaders plays it on a looping stand-in subject matched to what the pack animates. Open and close packs play on a sample window over your wallpaper, desktop switch and peek packs sweep between two stand-in desktops, tab switch packs cross between two sample windows, window move packs replay a move, and scrolling strip packs decorate a scroll settling on a stand-in strip. Open and close packs cycle through all four of their legs, including minimizing into a stand-in taskbar entry at the bottom of the preview and restoring from it, and the drag preview glides the sample window back and forth while running the same wobble spring simulation the compositor uses, so wobbly windows jiggles and settles in the preview the way it does on screen. The parameter editor drives the preview as you adjust values, and the pack runs through the same code a real transition uses. Minimize animations such as Genie now also play their full funnel on the service's own popups instead of a plain fade. To make this possible every bundled pack now compiles for both shader runtimes, and the mesh-warping move packs get a real tessellated grid there, so the preview shows their deformation rather than a flat cross-fade. This also puts the whole transition catalogue within reach of the daemon's own surfaces.
+- **Animation shader packs now have a live preview**: opening a pack from Animations → Shaders plays it on a looping stand-in subject matched to what the pack animates. Open and close packs play on a sample window over your wallpaper, desktop switch and peek packs sweep between two stand-in desktops, tab switch packs cross between two sample windows, window move packs replay a move, and scrolling strip packs decorate a scroll settling on a stand-in strip. Open and close packs cycle through all four of their legs, including minimizing into a stand-in taskbar entry at the bottom of the preview and restoring from it, and the drag preview glides the sample window back and forth while running the same wobble spring simulation the compositor uses, so a wobbly window jiggles and settles in the preview the way it does on screen. The parameter editor drives the preview as you adjust values, and the pack runs through the same code a real transition uses. Minimize animations such as Genie now also play their full funnel on the service's own popups instead of a plain fade. To make this possible every bundled pack now compiles for both shader runtimes, and the mesh-warping move packs get a real tessellated grid there, so the preview shows their deformation rather than a flat cross-fade. This also puts the whole transition catalogue within reach of the daemon's own surfaces.
 
 ### Changed
 
@@ -2137,7 +2137,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...HEAD
+[3.4.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...v3.4.9
 [3.4.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...v3.4.8
 [3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
 [3.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.4...v3.4.5

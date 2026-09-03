@@ -41,10 +41,11 @@ namespace PhosphorAnimation {
 /// fields through this extension isolates the two pipelines: zone
 /// shaders attach `ZoneUniformExtension` (`kZoneExtensionBytes` after base) and
 /// never observe these fields at all; animation shaders attach
-/// `AnimationUniformExtension` (144 bytes after base) — `iSurfaceScreenPos`
+/// `AnimationUniformExtension` (672 bytes after base) — `iSurfaceScreenPos`
 /// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,
 /// `iAnchorRectInTexture` at 704, then the transition-class tail
-/// (`iSwitchDelta` 720 through `iOldWindowOpacity` 808) — matching the
+/// (`iSwitchDelta` 720 through `iHasOldWindow` 812, `iIconRect` 816,
+/// `iMoveTrail` 832, `iMoveMesh` 1088-1343) — matching the
 /// trailing-field layout `data/animations/shared/animation_uniforms.glsl`'s
 /// UBO branch declares.
 ///

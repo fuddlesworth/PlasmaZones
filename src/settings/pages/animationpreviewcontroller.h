@@ -108,7 +108,8 @@ public:
     /// Advance the move-class simulation by one pane frame and upload its
     /// products: the 15 ms trail ring (phosphor-vortex's ghosts) and the
     /// wobble lattice, stepped through the same mesh_sim spring integrator
-    /// the compositor runs, gripped at the card's centre. @p x/y/w/h is
+    /// the compositor runs, gripped at the titlebar's centre (where a real
+    /// drag holds the window). @p x/y/w/h is
     /// the card's rect in field coordinates and @p dtMs the frame delta.
     /// Re-seeds itself when the item changes or the card teleports (the
     /// glide loop wrapping), so the wrap does not read as a violent yank.
@@ -117,8 +118,8 @@ public:
     /// Push the transition-class scalars for the current clock frame onto
     /// an already-configured item's uniform extension. Recognised keys:
     /// `switchDelta` / `stripMotion` (vector4d), `stripAxis` (vector2d),
-    /// `stripRect` / `fromRect` / `toRect` (rect), `oldWindowOpacity`
-    /// (number), `hasOldWindow` (bool). Absent keys are left as they are;
+    /// `stripRect` / `fromRect` / `toRect` / `iconRect` (rect),
+    /// `oldWindowOpacity` (number), `hasOldWindow` (bool). Absent keys are left as they are;
     /// every setter no-ops on identity, so calling this per frame is cheap.
     Q_INVOKABLE void driveTransitionState(QQuickItem* item, const QVariantMap& state) const;
 

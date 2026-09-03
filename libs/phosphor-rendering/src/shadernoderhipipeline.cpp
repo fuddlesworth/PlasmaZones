@@ -383,7 +383,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                     rhi, rpDescI, m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
                     /*enableBlend=*/false, /*numColorAttachments=*/m_useDepthBuffer ? 2 : 1);
                 if (!m_multiBufferPipelines[i]) {
-                    m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ");
+                    m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ") + QString::number(i);
                     return false;
                 }
             }
@@ -571,8 +571,8 @@ bool ShaderNodeRhi::ensurePipeline()
         // Triangles); the buffer passes above always keep the quad strip.
         m_pipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_fragmentShader, m_srb.get(),
                                                   /*enableBlend=*/true, /*numColorAttachments=*/1,
-                                                  m_gridSubdivisions > 0 ? QRhiGraphicsPipeline::Triangles
-                                                                         : QRhiGraphicsPipeline::TriangleStrip);
+                                                  gridActive() ? QRhiGraphicsPipeline::Triangles
+                                                               : QRhiGraphicsPipeline::TriangleStrip);
         if (!m_pipeline) {
             m_shaderError = QStringLiteral("Failed to create graphics pipeline");
             return false;

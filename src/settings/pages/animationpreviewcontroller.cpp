@@ -118,13 +118,30 @@ void paintFauxWindow(QPainter& p, const QRectF& r, const QString& title,
 QImage sceneGround()
 {
     QImage ground(kSceneSize, QImage::Format_RGBA8888);
+    // Fill on BOTH branches: the QImage starts uninitialized, and a
+    // wallpaper with an alpha channel (a transparent PNG is a legal
+    // wallpaper) would source-over onto indeterminate bytes.
+    ground.fill(QColor(40, 42, 46));
     const QImage wp = PhosphorShaders::ShaderRegistry::loadWallpaperImage();
     if (wp.isNull()) {
-        ground.fill(QColor(40, 42, 46));
         return ground;
     }
     QPainter p(&ground);
-    p.drawImage(ground.rect(), wp);
+    // Centre-crop at the canvas aspect rather than stretch, matching the
+    // QML pane's own ground (Image.PreserveAspectCrop) so the composed
+    // scene textures and the live card backdrop agree on a non-16:9
+    // wallpaper.
+    QRectF src(QPointF(0, 0), QSizeF(wp.size()));
+    const qreal canvasAspect = qreal(kSceneSize.width()) / qreal(kSceneSize.height());
+    const qreal wpAspect = src.height() > 0.0 ? src.width() / src.height() : canvasAspect;
+    if (wpAspect > canvasAspect) {
+        const qreal w = src.height() * canvasAspect;
+        src = QRectF(src.center().x() - w / 2.0, src.y(), w, src.height());
+    } else if (wpAspect < canvasAspect) {
+        const qreal h = src.width() / canvasAspect;
+        src = QRectF(src.x(), src.center().y() - h / 2.0, src.width(), h);
+    }
+    p.drawImage(QRectF(ground.rect()), wp, src);
     return ground;
 }
 
@@ -478,6 +495,11 @@ void AnimationPreviewController::setSceneColors(const QColor& titleBar, const QC
         return;
     }
     m_sceneColors = next;
+    // Colour changes are the only invalidation trigger: the wallpaper is a
+    // deliberate per-session snapshot (see desktopFromImage), and the
+    // captions baked below stay in the startup locale — the settings app
+    // loads translations once at startup, so a live locale switch cannot
+    // happen; if it ever can, invalidate these on LanguageChange too.
     m_desktopFromCache = QImage();
     m_desktopToCache = QImage();
     m_stripSceneCache = QImage();
@@ -598,6 +620,10 @@ void AnimationPreviewController::startAudioCapture()
                     Q_EMIT audioSpectrumChanged();
                 });
     }
+    // Options are applied at start only — a CAVA option change (bars,
+    // framerate) made while a capture runs takes effect at the next
+    // start, exactly like the decoration preview twin. Deliberate: the
+    // provider restarts the external process on option changes anyway.
     m_audio->setOptions(m_settings ? cavaOptionsFromSettings(m_settings) : PhosphorAudio::SpectrumOptions{});
     m_audio->start();
 }

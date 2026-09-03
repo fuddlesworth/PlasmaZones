@@ -78,8 +78,10 @@ class DecorationPageController : public PhosphorControl::PageController
 
     /// Live-preview data source for the shader browser's detail dialog. The
     /// pack-agnostic ShaderBrowserDetailDialog reads `bridge.previewController`
-    /// and shows a preview pane when it is non-null — the animation browser
-    /// leaves it null and shows none. Typed as QObject* because the dialog is
+    /// and shows a preview pane when it is non-null — all three shipped
+    /// browsers (zone/overlay, decoration, animation) expose one, and a
+    /// bridge that leaves it null degrades to the read-only parameter list.
+    /// Typed as QObject* because the dialog is
     /// shared with the zone/overlay browser, whose controller is an unrelated
     /// class; `previewKind` below is what tells the dialog which pane to load.
     Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
@@ -127,7 +129,7 @@ public:
     /// Installed `SurfaceShaderEffect`s flattened to a QML-friendly list.
     /// Each row, in the order effectToMap inserts them: id / name /
     /// description / author / version / category / isUserEffect /
-    /// providesBorder / providesOpacityTint / previewPath / parameters (a
+    /// providesBorder / providesOpacityTint / parameters (a
     /// QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 

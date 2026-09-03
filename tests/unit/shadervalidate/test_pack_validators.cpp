@@ -108,17 +108,30 @@ PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const 
     meta.write(QJsonDocument(metadata).toJson());
     meta.close();
 
+    // Returns bool like the multipass writeBuffer sibling: a silently
+    // dropped stage write would surface later as a misleading
+    // "buffer shader missing" validator diagnostic instead of a fixture
+    // failure.
     const auto writeStage = [&dir](const QString& file) {
         QFile f(dir + QLatin1Char('/') + file);
-        if (f.open(QIODevice::WriteOnly)) {
-            f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
         }
+        f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        f.close();
+        return f.error() == QFile::NoError;
     };
-    writeStage(QStringLiteral("zone.frag"));
+    bool stagesOk = writeStage(QStringLiteral("zone.frag"));
     for (const QJsonValue& v : metadata.value(QLatin1String("bufferShaders")).toArray()) {
         if (!v.toString().isEmpty()) {
-            writeStage(v.toString());
+            stagesOk = writeStage(v.toString()) && stagesOk;
         }
+    }
+    if (!stagesOk) {
+        PackResult failed;
+        failed.errors = -1;
+        failed.report = QStringLiteral("FIXTURE: failed to write a stage file under ") + dir;
+        return failed;
     }
 
     PackResult result;

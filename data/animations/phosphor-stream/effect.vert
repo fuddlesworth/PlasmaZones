@@ -39,8 +39,10 @@ uniform vec4 iToRect;
 layout(location = 1) out vec4 vFlow;
 
 // Deliberately local rather than including noise.glsl: the vertex stage
-// needs exactly one scalar hash, and the frag already carries the full
-// noise module for its own use.
+// needs only this one scalar hash, and the frag already carries the full
+// noise module for its own use. phosphor-siphon's vert inlines the same
+// hash for the same reason — hoist both into a shared header only if a
+// third copy ever appears.
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }

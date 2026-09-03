@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Pins the VERTEX shader of every daemon-eligible built-in animation pack
+// Pins the VERTEX shader of every built-in animation pack
 // against `ShaderCompiler::compileFromFile` (qsb / glslang for SPIR-V + GLSL
 // bake targets). Catches the "non-opaque uniforms outside a block" qsb
 // rejection class — the regression that motivated the canonical
@@ -115,10 +115,20 @@ private Q_SLOTS:
         QString preamble;
         const QString metaPath = QFileInfo(path).dir().filePath(QStringLiteral("metadata.json"));
         QFile meta(metaPath);
+        const bool isSharedVertRow = QFileInfo(path).dir().dirName() == QLatin1String("shared");
         if (meta.open(QIODevice::ReadOnly)) {
             const auto eff = PhosphorAnimationShaders::AnimationShaderEffect::fromJson(
                 QJsonDocument::fromJson(meta.readAll()).object());
             preamble = PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff);
+        } else {
+            // Only the shared-vert row legitimately has no metadata.json —
+            // the _data() walk fails loudly on a metadata-less PACK, so an
+            // unreadable file here would otherwise degrade to an empty
+            // preamble and a p_-reading vert would fail with an
+            // undeclared-identifier error that hides the real cause.
+            QVERIFY2(isSharedVertRow,
+                     qPrintable(QStringLiteral("cannot read metadata.json beside ") + path
+                                + QStringLiteral(" — the pack's p_ preamble cannot be reproduced")));
         }
         QString err;
         QString source = PhosphorRendering::ShaderCompiler::loadAndExpand(path, includePaths, &err);
@@ -126,7 +136,7 @@ private Q_SLOTS:
         source = PhosphorShaders::spliceAfterVersion(source, preamble);
         const auto result = PhosphorRendering::ShaderCompiler::compile(source.toUtf8(), QShader::VertexStage);
         QVERIFY2(
-            result.shader.isValid(),
+            result.success,
             qPrintable(QStringLiteral("Animation shader bake failed: ") + path + QStringLiteral(" — ") + result.error));
     }
 };

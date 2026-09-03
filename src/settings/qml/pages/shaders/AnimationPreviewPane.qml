@@ -97,6 +97,22 @@ Item {
             previewController.updatePreviewParams(previewLoader.item.shaderItem, packId, liveParams);
     }
 
+    // A registry revision while the preview is open (a pack installed or
+    // edited on disk) must rebuild the WHOLE subject, not just re-read
+    // _info: the shader item's configuration is one-shot in its
+    // Component.onCompleted, and a live item never rebakes an edited
+    // source on its own. Bouncing the Loader tears the item down and
+    // reconfigures from scratch — the fresh load keys the bake cache on
+    // the edited files' new mtimes, so the preview shows the new sources.
+    on_RevChanged: {
+        if (previewLoader.active) {
+            previewLoader.refreshHold = true;
+            Qt.callLater(function () {
+                previewLoader.refreshHold = false;
+            });
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing
@@ -116,9 +132,14 @@ Item {
             Loader {
                 id: previewLoader
 
+                /// One-frame teardown pulse driven by root.on_RevChanged —
+                /// folded into the `active` binding rather than written to
+                /// `active` imperatively, which would sever the binding.
+                property bool refreshHold: false
+
                 anchors.fill: parent
                 anchors.margins: 1
-                active: root.active && root._previewable
+                active: root.active && root._previewable && !refreshHold
                 visible: active
 
                 sourceComponent: Item {
@@ -195,6 +216,24 @@ Item {
                     onIconRectChanged: syncGeometry()
                     onWidthChanged: syncGeometry()
                     onHeightChanged: syncGeometry()
+
+                    /// Hand the live card's Kirigami roles to the controller
+                    /// (invalidates its composed-scene caches on change) and
+                    /// upload the recomposed stand-in textures. Called from
+                    /// the item's one-shot configure AND on a theme change,
+                    /// so a light/dark switch while the dialog is open does
+                    /// not leave the scene textures in the old theme.
+                    function pushSceneTextures() {
+                        root.previewController.setSceneColors(Kirigami.Theme.highlightColor, Kirigami.Theme.highlightedTextColor, Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.positiveTextColor);
+                        root.previewController.bindClassTextures(shaderItem, root._class);
+                    }
+                    /// Change-detection key over every role the faux windows
+                    /// paint with; a theme swap moves at least one of them.
+                    readonly property string _themeKey: "" + Kirigami.Theme.highlightColor + Kirigami.Theme.highlightedTextColor + Kirigami.Theme.backgroundColor + Kirigami.Theme.textColor + Kirigami.Theme.positiveTextColor
+                    on_ThemeKeyChanged: {
+                        if (configured)
+                            pushSceneTextures();
+                    }
 
                     // The desktop the subject sits over. The screen-pass
                     // classes paint their own composed scenes through the
@@ -314,11 +353,10 @@ Item {
                             // the SAME Kirigami roles the live card uses —
                             // colours QPalette cannot supply (the accent
                             // has no palette role at all), so QML hands
-                            // them over before the textures compose.
-                            root.previewController.setSceneColors(Kirigami.Theme.highlightColor, Kirigami.Theme.highlightedTextColor, Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.positiveTextColor);
-                            // AFTER configure: setShaderParams re-parses
-                            // texture slots, so the stand-ins go on last.
-                            root.previewController.bindClassTextures(shaderItem, root._class);
+                            // them over before the textures compose. AFTER
+                            // configure: setShaderParams re-parses texture
+                            // slots, so the stand-ins go on last.
+                            field.pushSceneTextures();
                             if (root._class === "tab" || root._class === "geometry" || root._class === "move")
                                 root.previewController.driveTransitionState(shaderItem, {
                                     "hasOldWindow": true,
@@ -535,12 +573,26 @@ Item {
                     // clock; the controller derives the trail cadence from
                     // the accumulated delta, not the tick rate.
                     Timer {
+                        // Measured wall-clock delta, like the zone pane's
+                        // clock: under load the timer fires late, and
+                        // stepping the sim by the nominal interval would
+                        // run the wobble/trail in slow motion relative to
+                        // the on-screen glide. Clamped so a long stall (a
+                        // suspended window) steps the spring stably.
+                        property double lastTickMs: 0
+
                         running: field.configured && root.animating && root._class === "move"
                         interval: 16
                         repeat: true
+                        onRunningChanged: lastTickMs = Date.now()
                         // The INNER card rect: the simulation models the
                         // window frame, not the padded canvas around it.
-                        onTriggered: root.previewController.driveMoveState(shaderItem, cardHolder.x + field.canvasPad, cardHolder.y + field.canvasPad, field.innerW, field.innerH, interval)
+                        onTriggered: {
+                            var now = Date.now();
+                            var dt = Math.min(100, Math.max(1, now - lastTickMs));
+                            lastTickMs = now;
+                            root.previewController.driveMoveState(shaderItem, cardHolder.x + field.canvasPad, cardHolder.y + field.canvasPad, field.innerW, field.innerH, dt);
+                        }
                     }
 
                     // strip: a scroll impulse decaying to rest, re-fired the

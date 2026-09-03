@@ -45,7 +45,10 @@ layout(location = 1) out vec3 vStretch;
 // overshoot; it was the baked OVERSHOOT = 1.2 constant (a slightly firmer
 // snap) before it was declared.
 float backOut(float x) {
-    float c1 = 1.70158 * p_overshoot;
+    // Clamped to the declared [1.0, 1.5] range like p_spread / p_squash
+    // below: a hand-edited large value (say 10) makes c1 ~17 and hurls
+    // vertices far off-window mid-leg.
+    float c1 = 1.70158 * clamp(p_overshoot, 1.0, 1.5);
     float c3 = c1 + 1.0;
     float xm = x - 1.0;
     return 1.0 + c3 * xm * xm * xm + c1 * xm * xm;

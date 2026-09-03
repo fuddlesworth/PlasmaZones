@@ -805,7 +805,7 @@ void ShaderEffect::setUseDepthBuffer(bool use)
 
 void ShaderEffect::setGridSubdivisions(int subdivisions)
 {
-    const int clamped = qBound(0, subdivisions, 255);
+    const int clamped = qBound(0, subdivisions, ShaderNodeRhi::kMaxGridSubdivisions);
     if (m_gridSubdivisions == clamped) {
         return;
     }

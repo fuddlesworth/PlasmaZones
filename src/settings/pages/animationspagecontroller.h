@@ -592,7 +592,7 @@ public:
     /// Each row mirrors `animations_controller_detail::effectToMap`:
     /// id / name / description / author / version / category / appliesTo
     /// (QStringList of event-class tokens, empty = universal) / isUserEffect /
-    /// previewPath / parameters (QVariantList of ParameterInfo maps).
+    /// parameters (QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 
     /// Path-aware variant of @c availableShaderEffects: the same rows, but

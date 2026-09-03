@@ -70,7 +70,11 @@ void main() {
     // reads as the window going away downward.
     vec4 I = iIconRect;
     if (I.z < 1.0 || I.w < 1.0) {
-        I = vec4(W.x + 0.5 * W.z - 24.0, W.y + W.w - 6.0, 48.0, 6.0);
+        // Capped at the window's own width so a very narrow window's
+        // sliver cannot poke past its edges. Twin site:
+        // phosphor-siphon/effect.vert (same fallback, same rationale).
+        float sw = min(48.0, W.z);
+        I = vec4(W.x + 0.5 * (W.z - sw), W.y + W.w - 6.0, sw, 6.0);
     }
 
     // Swallow progress, both legs (see header comment).

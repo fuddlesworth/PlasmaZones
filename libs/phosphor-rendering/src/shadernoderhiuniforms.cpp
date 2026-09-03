@@ -721,6 +721,9 @@ void ShaderNodeRhi::releaseRhiResources()
     m_gridIbo.reset();
     m_gridIndexCount = 0;
     m_gridUploaded = false;
+    // A latched create failure belongs to the lost device — the rebuilt one
+    // deserves a fresh attempt at the same density.
+    m_gridBuffersFailed = false;
     m_vertexShader = QShader();
     m_fragmentShader = QShader();
     m_bufferFragmentShader = QShader();
@@ -756,6 +759,14 @@ void ShaderNodeRhi::releaseRhiResources()
 // bakeBufferShaders
 // ============================================================================
 
+// CONTRACT: buffer-pass sources get include expansion but NO p_<id> preamble
+// splice (unlike the image fragment and vertex stages) — a buffer pass that
+// wants the pack's parameters must include the family's uniforms header and
+// read customParams directly. This is deliberate and enforced: all three
+// pack validators bake buffer passes the same way (see
+// packvalidator_animation.cpp's buffer-pass block, which documents why
+// splicing here without updating them would invert the gate). Changing one
+// side without the other makes the validator pass sources that fail live.
 void ShaderNodeRhi::bakeBufferShaders()
 {
     const bool multipass = !m_bufferPath.isEmpty();

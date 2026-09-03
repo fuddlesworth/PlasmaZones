@@ -9,7 +9,7 @@
 //     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
 //     supported. The UBO branch below is std140-aligned with
 //     `PhosphorShaders::BaseUniforms` for its 672-byte base, extended to
-//     816 bytes by `AnimationUniformExtension`.
+//     1344 bytes by `AnimationUniformExtension`.
 //
 //   • Compositor window-content execution (kwin-effect → KWin::GLShader,
 //     classic OpenGL). KWin's `GLShader::setUniform(loc, val)` API
@@ -56,8 +56,8 @@
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
-// anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-815, 816 total) is supplied by AnimationUniformExtension and
+// extension tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344
+// total) is supplied by AnimationUniformExtension and
 // pinned by the size static_asserts in
 // `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
@@ -277,8 +277,8 @@ uniform vec4 iLayerRectInTexture;
 // below is auto-aligned to a 16-byte boundary (rule 2: vec2 at 672),
 // bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
 // `iIsReversed` at 660 and landing the base block at 672 bytes. The
-// iSurfaceScreenPos / iAnchor* fields then extend the AnimationUniforms
-// UBO block to 816 bytes (they are supplied by AnimationUniformExtension,
+// iSurfaceScreenPos .. iMoveMesh tail then extends the AnimationUniforms
+// UBO block to 1344 bytes (it is supplied by AnimationUniformExtension,
 // not BaseUniforms, which stays pinned at 672).
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
@@ -367,16 +367,17 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              (0,0,1,1) identity. Populated by
                                  //              SurfaceAnimator per leg attach + on
                                  //              every geometry change.
-    // ── Transition-class tail (offsets 720..815) ───────────────────────
+    // ── Transition-class tail (offsets 720..1343) ──────────────────────
     // The scalars the compositor's transition passes push as default-block
     // uniforms (desktop_transition / strip_transition / old_content /
-    // the geometry family's from-to rects), mirrored into the UBO so the
-    // same pack sources compile and run under the Qt-RHI path. The kwin
-    // branch never declares these — each pass declares its own default-
+    // the geometry family's from-to rects, the minimize icon rect, the
+    // move-class history arrays), mirrored into the UBO so the same pack
+    // sources compile and run under the Qt-RHI path. The kwin branch never
+    // declares the pass scalars — each pass declares its own default-
     // block uniforms exactly as before. Zero when a host does not drive
     // them, which every shared helper treats as "not driven". C mirror:
-    // PhosphorAnimation::AnimationUniformExtension (bytes 48..143 of the
-    // extension).
+    // PhosphorAnimation::AnimationUniformExtension (bytes 48..671 of the
+    // extension; block total 1344).
     vec4 iSwitchDelta;           // offset 720 — see desktop_transition.glsl
     vec4 iStripMotion;           // offset 736 — see strip_transition.glsl
     vec4 iStripRect;             // offset 752 — see strip_transition.glsl
@@ -420,7 +421,13 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 // The move-class history arrays (iMoveTrail / iMoveMesh) are REAL block
 // members on this branch these days — see the transition tail above. A
 // host with no drag to report leaves them zero, which reads as "no motion
-// history, mesh at rest".
+// history, mesh at rest". The spring-velocity scalars, by contrast, have
+// no UBO tail slot: stand them in at their rest values so the
+// branch-parity promise at the top of this header holds for packs that
+// read them (they compile here and read "no motion").
+#define iMoveVelocity vec2(0.0)
+#define iMoveOffset vec2(0.0)
+#define iMoveVelocity2 vec2(0.0)
 
 layout(binding = 7) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or

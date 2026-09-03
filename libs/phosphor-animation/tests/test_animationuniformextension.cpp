@@ -32,6 +32,14 @@ float floatAt(const std::array<char, 672>& buf, int byteOffset)
     std::memcpy(&v, buf.data() + byteOffset, sizeof(float));
     return v;
 }
+
+/// Same, for the tail's one int field (iHasOldWindow).
+int intAt(const std::array<char, 672>& buf, int byteOffset)
+{
+    int v = 0;
+    std::memcpy(&v, buf.data() + byteOffset, sizeof(int));
+    return v;
+}
 } // namespace
 
 class TestAnimationUniformExtension : public QObject
@@ -114,6 +122,9 @@ private Q_SLOTS:
     //   iToRect           @ 112 (UBO 784)
     //   iStripAxis        @ 128 (UBO 800)
     //   iOldWindowOpacity @ 136 (UBO 808)
+    //   iHasOldWindow     @ 140 (UBO 812) — the tail's one int; a
+    //                       float/int swap or reorder there passes every
+    //                       float pin, so it gets its own check.
     void testTransitionTailOffsets()
     {
         AnimationUniformExtension ext;
@@ -124,6 +135,7 @@ private Q_SLOTS:
         ext.setIToRect(QVector4D(17.0f, 18.0f, 19.0f, 20.0f));
         ext.setIStripAxis(QVector2D(21.0f, 22.0f));
         ext.setIOldWindowOpacity(0.75f);
+        ext.setIHasOldWindow(true);
 
         std::array<char, 672> buf{};
         ext.write(buf.data(), 0);
@@ -137,6 +149,7 @@ private Q_SLOTS:
         QCOMPARE(floatAt(buf, 128), 21.0f);
         QCOMPARE(floatAt(buf, 132), 22.0f);
         QCOMPARE(floatAt(buf, 136), 0.75f);
+        QCOMPARE(intAt(buf, 140), 1);
     }
 
     // The icon rect and move arrays land at their declared offsets:
@@ -196,6 +209,15 @@ private Q_SLOTS:
 
         ext.clearDirty();
         ext.setIAnchorRectInTexture(QVector4D(0.0f, 0.0f, 0.5f, 0.5f));
+        QVERIFY(!ext.isDirty());
+
+        // The tail setters follow the same identity-write contract — pin
+        // one of the vector-list setters too, since their equality check
+        // compares whole lists rather than scalars.
+        ext.setIMoveTrail({QVector2D(1.0f, 2.0f)});
+        QVERIFY(ext.isDirty());
+        ext.clearDirty();
+        ext.setIMoveTrail({QVector2D(1.0f, 2.0f)});
         QVERIFY(!ext.isDirty());
     }
 };

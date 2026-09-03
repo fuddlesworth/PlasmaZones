@@ -641,6 +641,23 @@ install(DIRECTORY data/overlays/
     PATTERN ".*" EXCLUDE
 )
 
+# The bundled overlay packs no longer ship preview.png card screenshots
+# (the browser previews live shaders), but install(DIRECTORY) never removes
+# files dropped from the tree, and the registry still adopts a lingering
+# preview.png into a pack's previewPath on a manually-upgraded prefix.
+# Same DESTDIR-aware, own-subdirectory-bounded cleanup pattern as the
+# animation-profiles wipe above; one level deep, bundled pack dirs only.
+install(CODE "
+    set(_p_overlays_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/overlays\")
+    if(EXISTS \"\${_p_overlays_install_dir}\")
+        file(GLOB _p_stale_overlay_previews \"\${_p_overlays_install_dir}/*/preview.png\")
+        if(_p_stale_overlay_previews)
+            message(STATUS \"Removing stale overlay preview.png files from \${_p_overlays_install_dir}\")
+            file(REMOVE \${_p_stale_overlay_previews})
+        endif()
+    endif()
+")
+
 # Install bundled animation transition shader packs. The daemon's
 # AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
 # at startup; user overrides at ~/.local/share/plasmazones/animations win.

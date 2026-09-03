@@ -606,8 +606,8 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // applyEffectStaticConfig may end up calling node-side load paths whose
     // SPIR-V expects the extension to land at offset sizeof(BaseUniforms);
     // installing later would cause the first prepare() to allocate the UBO
-    // without the extension's 48 trailing bytes and the shader would read
-    // garbage at offsets 672-720 until the next allocation cycle.
+    // without the extension's 672 trailing bytes and the shader would read
+    // garbage at offsets 672-1343 until the next allocation cycle.
     //
     // Lifetime: the shared_ptr is captured by `ShaderEffect::m_uniformExtension`
     // and lives for the shaderItem's lifetime. `syncShaderGeometryNow` pulls

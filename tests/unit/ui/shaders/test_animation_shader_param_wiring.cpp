@@ -143,7 +143,7 @@ private Q_SLOTS:
                                     .arg(slot)
                                     .arg(QChar(subChar))
                                     .arg(exp.slot)
-                                    .arg(QChar(QChar(u'x' + exp.sub)))));
+                                    .arg(QLatin1Char("xyzw"[exp.sub]))));
             definedInShader.insert(id);
         }
 
