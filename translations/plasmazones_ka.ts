@@ -1125,37 +1125,37 @@
         <translation>წინა პლანზე გადმოტანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="653"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="703"/>
         <source>Cancel Zone Overlay</source>
         <translation>ზონის გადადების გაუქმება</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="712"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="762"/>
         <source>Layout Picker: Move Left</source>
         <translation>განლაგების ამომრჩევი: მარცხნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="716"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="766"/>
         <source>Layout Picker: Move Right</source>
         <translation>განლაგების ამომრჩევი: მარჯვნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="720"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="770"/>
         <source>Layout Picker: Move Up</source>
         <translation>განლაგების ამომრჩევი: მაღლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="724"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="774"/>
         <source>Layout Picker: Move Down</source>
         <translation>განლაგების ამომრჩევი: დაბლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="728"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="778"/>
         <source>Layout Picker: Confirm</source>
         <translation>განლაგების ამომრჩევი: დადასტურება</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="779"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>განლაგების ამომრჩევი: დადასტურება (ციფრული კლავიატურის Enter)</translation>
     </message>
@@ -1238,7 +1238,7 @@
         <translation>ყველა ზონის გასუფთავება</translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorGapsModel.cpp" line="284"/>
+        <location filename="../src/editor/EditorGapsModel.cpp" line="286"/>
         <source>Clear Edge Gap Override</source>
         <comment>@action</comment>
         <translation>წიბოს დაშორების გადაფარვის გასუფთავება</translation>
@@ -1819,22 +1819,22 @@
         <translation>ალგორითმის ფაილის ჩაწერა ვერ მოხერხდა. გადაამოწმეთ დისკის ადგილი და უფლებები.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="101"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>სიმრავლეების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="395"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>შენახვა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="639"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
         <source>A discard is already in progress. Try again in a moment.</source>
         <translation>გაუქმება უკვე მიმდინარეობს. სცადეთ ცოტა ხანში.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="732"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
         <source>Could not restore %n profile file. It remains pending.</source>
         <translation>
             <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
@@ -1842,7 +1842,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="734"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
         <source>Could not restore %n profile files. They remain pending.</source>
         <translation>
             <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
@@ -1855,8 +1855,8 @@
         <translation>მოცილება უკვე მიმდინარეობს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="883"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="893"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>შაბლონების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
@@ -1939,23 +1939,23 @@
         <translation>ფაილში სწორი განლაგებები ვერ მოიძებნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="124"/>
+        <location filename="../src/settings/main.cpp" line="125"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="232"/>
         <source>PlasmaZones Settings</source>
         <translation>PlasmaZones-ის პარამეტრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="129"/>
+        <location filename="../src/settings/main.cpp" line="130"/>
         <source>Open a specific settings page</source>
         <translation>პარამეტრების კონკრეტული გვერდის გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="132"/>
+        <location filename="../src/settings/main.cpp" line="133"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>გვერდზე კონკრეტული პარამეტრის ჩვენება (ღრმა ბმული)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="136"/>
+        <location filename="../src/settings/main.cpp" line="137"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>გვერდზე კონკრეტული სექციის ჩვენება (ღრმა ბმული)</translation>
     </message>
@@ -8132,8 +8132,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="941"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="164"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="239"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="246"/>
         <source>Invert wheel direction</source>
         <translation>ბორბლის მიმართულების შებრუნება</translation>
     </message>
@@ -9383,7 +9383,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="161"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="212"/>
         <source>Scroll key for the view</source>
         <translation>გადახვევის კლავიში ხედისთვის</translation>
     </message>
@@ -9580,7 +9580,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1075"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1077"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1079"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="464"/>
         <source>User shaders</source>
         <translation>მომხმარებლის შეიდერები</translation>
     </message>
@@ -9873,18 +9873,18 @@
         <translation>ეს ნიმუში აღარ არსებობს.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
         <translation>დემონმა ნიმუში უარყო. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="217"/>
         <source>Could not save the template.</source>
         <translation>ნიმუშის შენახვა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="226"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="230"/>
         <source>Could not save the template. Check that it has a name.</source>
         <translation>ნიმუშის შენახვა ვერ მოხერხდა. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
     </message>
@@ -11428,25 +11428,25 @@
         <translation>განლაგების შენახვა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="470"/>
         <source>Zone %1: %2</source>
         <comment>@info:accessibility</comment>
         <translation>ზონა %1: %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="470"/>
         <source>Zone %1</source>
         <comment>@info:accessibility</comment>
         <translation>ზონა %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="471"/>
         <source>Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.</source>
         <comment>@info:accessibility</comment>
         <translation>მონიშნული ზონა. პოზიცია: %1%, %2%, ზომა: %3% × %4%. დააწკაპუნეთ მოსანიშნის მოსახსნელად, გადაათრიეთ გადასატანად, ზომის შესაცვლელად გამოიყენეთ სახელურები.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="471"/>
         <source>Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.</source>
         <comment>@info:accessibility</comment>
         <translation>ზონა. პოზიცია: %1%, %2%, ზომა: %3% × %4%. დააწკაპუნეთ მოსანიშნად.</translation>
@@ -11961,14 +11961,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="416"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Full zone highlight</source>
         <comment>@item:inlistbox</comment>
         <translation>ზონის სრული გამოკვეთა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="416"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Compact preview</source>
         <comment>@item:inlistbox</comment>
         <translation>კომპაქტური გადახედვა</translation>
@@ -12076,13 +12076,13 @@
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="227"/>
         <source>Zone Properties</source>
         <comment>@title</comment>
         <translation>ზონის თვისებები</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="227"/>
         <source>%n Zone Selected</source>
         <comment>@title</comment>
         <translation>
@@ -12091,198 +12091,198 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="238"/>
         <source>Close panel</source>
         <comment>@tooltip</comment>
         <translation>პანელის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="236"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="240"/>
         <source>Close properties panel</source>
         <comment>@info:accessibility</comment>
         <translation>თვისებების პანელის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="260"/>
         <source>Appearance (All Selected)</source>
         <comment>@title</comment>
         <translation>გარეგნობა (ყველა მონიშნული)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="263"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="678"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="682"/>
         <source>Custom colors:</source>
         <comment>@label</comment>
         <translation>მორგებული ფერები:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="268"/>
         <source>Enable for all selected</source>
         <comment>@option:check</comment>
         <translation>ჩართვა ყველა მონიშნულისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="271"/>
         <source>Enable custom colors for all selected zones</source>
         <comment>@info:accessibility</comment>
         <translation>მორგებული ფერების ჩართვა ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="283"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="692"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="287"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="696"/>
         <source>Highlight:</source>
         <comment>@label</comment>
         <translation>გამოკვეთა:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="288"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="292"/>
         <source>Highlight color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>გამოკვეთის ფერის ამომრჩევი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="293"/>
         <source>Choose highlight color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ გამოკვეთის ფერი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="297"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="710"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="714"/>
         <source>Inactive:</source>
         <comment>@label</comment>
         <translation>არააქტიური:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="306"/>
         <source>Inactive color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>არააქტიური ფერის ამომრჩევი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="307"/>
         <source>Choose inactive color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ არააქტიური ფერი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="311"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="728"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="315"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="732"/>
         <source>Border:</source>
         <comment>@label</comment>
         <translation>საზღვარი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="315"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="319"/>
         <source>Border color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>საზღვრის ფერის ამომრჩევი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="320"/>
         <source>Choose border color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ საზღვრის ფერი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="748"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="752"/>
         <source>Active opacity:</source>
         <comment>@label</comment>
         <translation>აქტიური გაუმჭვირვალობა:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="336"/>
         <source>Active opacity for all selected zones</source>
         <comment>@label</comment>
         <translation>აქტიური გაუმჭვირვალობა ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="337"/>
         <source>Set active opacity for all selected zones (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>დააყენეთ აქტიური გაუმჭვირვალობა ყველა მონიშნული ზონისთვის (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="343"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="764"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="768"/>
         <source>Inactive opacity:</source>
         <comment>@label</comment>
         <translation>არააქტიური გაუმჭვირვალობა:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="352"/>
         <source>Inactive opacity for all selected zones</source>
         <comment>@label</comment>
         <translation>არააქტიური გაუმჭვირვალობა ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="353"/>
         <source>Set inactive opacity for all selected zones (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>დააყენეთ არააქტიური გაუმჭვირვალობა ყველა მონიშნული ზონისთვის (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="358"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="781"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="785"/>
         <source>Border width:</source>
         <comment>@label</comment>
         <translation>საზღვრის სიგანე:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="369"/>
         <source>Border width for all selected zones</source>
         <comment>@label</comment>
         <translation>საზღვრის სიგანე ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="366"/>
-        <source>Set border width for all selected zones (0-20)</source>
-        <comment>@info:tooltip</comment>
-        <translation>დააყენეთ საზღვრის სიგანე ყველა მონიშნული ზონისთვის (0-20)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="374"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="799"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="803"/>
         <source>Corner radius:</source>
         <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
         <translation>კუთხის რადიუსი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="381"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="385"/>
         <source>Corner radius for all selected zones</source>
         <oldsource>Border radius for all selected zones</oldsource>
         <comment>@label</comment>
         <translation>კუთხის რადიუსი ყველა არჩეული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="382"/>
-        <source>Set corner radius for all selected zones (0-50)</source>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="370"/>
+        <source>Set border width for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>დააყენეთ კუთხის რადიუსი ყველა მონიშნული ზონისთვის (0-50)</translation>
+        <translation>დააყენეთ საზღვრის სიგანე ყველა მონიშნული ზონისთვის (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="395"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="898"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="386"/>
+        <source>Set corner radius for all selected zones (0-%1)</source>
+        <comment>@info:tooltip</comment>
+        <translation>დააყენეთ კუთხის რადიუსი ყველა მონიშნული ზონისთვის (0-%1)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="902"/>
         <source>Actions</source>
         <comment>@title</comment>
         <translation>ქმედებები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="401"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="405"/>
         <source>Actions will apply to all selected zones.</source>
         <comment>@info</comment>
         <translation>ქმედებები გადატარდება ყველა მონიშნულ ზონაზე.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="414"/>
         <source>Delete Selected Zones</source>
         <comment>@action:button</comment>
         <translation>მონიშნული ზონების წაშლა</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="414"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="418"/>
         <source>Delete %n selected zone</source>
         <comment>@info</comment>
         <translation>
@@ -12291,284 +12291,284 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="436"/>
         <source>Name:</source>
         <comment>@label</comment>
         <translation>სახელი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="442"/>
         <source>Zone name</source>
         <comment>@label</comment>
         <translation>ზონის სახელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="530"/>
         <source>Number:</source>
         <comment>@label</comment>
         <translation>ნომერი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="531"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="535"/>
         <source>Zone number</source>
         <comment>@label</comment>
         <translation>ზონის ნომერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="566"/>
         <source>Geometry</source>
         <comment>@title</comment>
         <translation>გეომეტრია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="573"/>
         <source>Mode:</source>
         <comment>@label</comment>
         <translation>რეჟიმი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="570"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="574"/>
         <source>Fixed pixel size</source>
         <comment>@option:check</comment>
         <translation>ფიქსირებული ზომა პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="573"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="577"/>
         <source>Toggle fixed pixel geometry mode</source>
         <comment>@info:accessibility</comment>
         <translation>ფიქსირებული პიქსელური გეომეტრიის რეჟიმის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="574"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="578"/>
         <source>When enabled, zone uses absolute pixel coordinates instead of relative percentages</source>
         <comment>@info:accessibility</comment>
         <translation>ჩართვისას ზონა იყენებს აბსოლუტურ პიქსელურ კოორდინატებს პროცენტული მნიშვნელობების ნაცვლად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="589"/>
         <source>X:</source>
         <comment>@label</comment>
         <translation>X:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="590"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="594"/>
         <source>X position in pixels</source>
         <comment>@label</comment>
         <translation>X პოზიცია პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="605"/>
         <source>Y:</source>
         <comment>@label</comment>
         <translation>Y:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="606"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="610"/>
         <source>Y position in pixels</source>
         <comment>@label</comment>
         <translation>Y პოზიცია პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="621"/>
         <source>Width:</source>
         <comment>@label</comment>
         <translation>სიგანე:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="622"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="626"/>
         <source>Width in pixels</source>
         <comment>@label</comment>
         <translation>სიგანე პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="637"/>
         <source>Height:</source>
         <comment>@label</comment>
         <translation>სიმაღლე:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="638"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="642"/>
         <source>Height in pixels</source>
         <comment>@label</comment>
         <translation>სიმაღლე პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="671"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="675"/>
         <source>Appearance</source>
         <comment>@title</comment>
         <translation>გარეგნობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="679"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="683"/>
         <source>Use custom colors</source>
         <comment>@option:check</comment>
         <translation>მორგებული ფერების გამოყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="683"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="687"/>
         <source>Enable custom colors for this zone</source>
         <comment>@info:accessibility</comment>
         <translation>მორგებული ფერების ჩართვა ამ ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="697"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="701"/>
         <source>Highlight color picker</source>
         <comment>@label</comment>
         <translation>გამოკვეთის ფერის ამომრჩევი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="698"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="702"/>
         <source>Choose color for highlighted/active zones</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ ფერი გამოკვეთილი/აქტიური ზონებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="715"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="719"/>
         <source>Inactive color picker</source>
         <comment>@label</comment>
         <translation>არააქტიური ფერის ამომრჩევი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="716"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="720"/>
         <source>Choose color for non-selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ ფერი არამონიშნული ზონებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="732"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="736"/>
         <source>Border color picker</source>
         <comment>@label</comment>
         <translation>საზღვრის ფერის ამომრჩევი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="733"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="737"/>
         <source>Choose color for zone borders</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ ზონის საზღვრების ფერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="753"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="757"/>
         <source>Zone active opacity</source>
         <comment>@label</comment>
         <translation>ზონის აქტიური გაუმჭვირვალობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="754"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="758"/>
         <source>Adjust zone opacity when highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>დაარეგულირეთ ზონის გაუმჭვირვალობა გამოკვეთისას (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="769"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="773"/>
         <source>Zone inactive opacity</source>
         <comment>@label</comment>
         <translation>ზონის არააქტიური გაუმჭვირვალობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="770"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="774"/>
         <source>Adjust zone opacity when not highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>დაარეგულირეთ ზონის გაუმჭვირვალობა გამოუკვეთელ მდგომარეობაში (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="788"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="792"/>
         <source>Border width in pixels</source>
         <comment>@label</comment>
         <translation>საზღვრის სიგანე პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="789"/>
-        <source>Set zone border width in pixels (0-20)</source>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="793"/>
+        <source>Set zone border width in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>დააყენეთ ზონის საზღვრის სიგანე პიქსელებში (0-20)</translation>
+        <translation>დააყენეთ ზონის საზღვრის სიგანე პიქსელებში (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="806"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
+        <source>Set zone corner radius in pixels (0-%1)</source>
+        <comment>@info:tooltip</comment>
+        <translation>დააყენეთ ზონის კუთხის რადიუსი პიქსელებში (0-%1)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="810"/>
         <source>Corner radius in pixels</source>
         <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
         <translation>კუთხის რადიუსი პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="807"/>
-        <source>Set zone corner radius in pixels (0-50)</source>
-        <comment>@info:tooltip</comment>
-        <translation>დააყენეთ ზონის კუთხის რადიუსი პიქსელებში (0-50)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="820"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="824"/>
         <source>Overlay</source>
         <comment>@title</comment>
         <translation>გადადება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="828"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="832"/>
         <source>Style:</source>
         <comment>@label</comment>
         <translation>სტილი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Use layout default</source>
         <comment>@item:inlistbox overlay mode</comment>
         <translation>განლაგების ნაგულისხმევის გამოყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="839"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="843"/>
         <source>Zone overlay display mode</source>
         <comment>@label</comment>
         <translation>ზონის გადადების ჩვენების რეჟიმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="840"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="844"/>
         <source>Override the overlay style for this zone only</source>
         <comment>@info:accessibility</comment>
         <translation>გადადების სტილის გადაფარვა მხოლოდ ამ ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="904"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="908"/>
         <source>Delete Zone</source>
         <comment>@action:button</comment>
         <translation>ზონის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="908"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="912"/>
         <source>Delete the selected zone</source>
         <comment>@info</comment>
         <translation>მონიშნული ზონის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="984"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="988"/>
         <source>Zone Highlight Color</source>
         <comment>@title:window</comment>
         <translation>ზონის გამოკვეთის ფერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1002"/>
         <source>Zone Inactive Color</source>
         <comment>@title:window</comment>
         <translation>ზონის არააქტიური ფერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1012"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1016"/>
         <source>Zone Border Color</source>
         <comment>@title:window</comment>
         <translation>ზონის საზღვრის ფერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1029"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1033"/>
         <source>Highlight Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>გამოკვეთის ფერი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1043"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1047"/>
         <source>Inactive Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>არააქტიური ფერი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1057"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1061"/>
         <source>Border Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>საზღვრის ფერი ყველა მონიშნული ზონისთვის</translation>
@@ -12720,14 +12720,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="554"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="498"/>
         <source>by %1</source>
         <comment>@info shader author</comment>
         <translation>%1-ის მიერ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="557"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="475"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="501"/>
         <source>v%1</source>
         <comment>@info shader version</comment>
         <translation>v%1</translation>
@@ -12800,7 +12800,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="915"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="902"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="954"/>
         <source>No error details available.</source>
         <comment>@info shader preview</comment>
         <translation>შეცდომის დეტალები ხელმისაწვდომი არაა.</translation>
@@ -12832,14 +12832,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="974"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="979"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1031"/>
         <source>Save Shader Preset</source>
         <comment>@title:window</comment>
         <translation>შეიდერის შაბლონის შენახვა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="1003"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="994"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1046"/>
         <source>Load Shader Preset</source>
         <comment>@title:window</comment>
         <translation>შეიდერის შაბლონის ჩატვირთვა</translation>
@@ -14011,82 +14011,82 @@
         <translation>კლებადობით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture modifier</source>
         <translation>დააწკაპუნეთ მოდიფიკატორის ჩასაწერად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture mouse button</source>
         <translation>დააწკაპუნეთ თაგუნას ღილაკის ჩასაწერად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture</source>
         <translation>დააწკაპუნეთ ჩასაწერად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
         <source>Press modifier(s)…</source>
         <translation>დააჭირეთ მოდიფიკატორ(ებ)ს…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
         <source>Press mouse button…</source>
         <translation>დააჭირეთ თაგუნას ღილაკს…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
-        <source>Press key, modifier, or mouse…</source>
-        <translation>დააჭირეთ კლავიშს, მოდიფიკატორს ან თაგუნას…</translation>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
+        <source>Press modifier(s) or mouse button…</source>
+        <translation>დააჭირეთ მოდიფიკატორ(ებ)ს ან თაგუნას ღილაკს…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
+        <source>Press modifier key(s) or any mouse button (Escape to cancel)</source>
+        <translation>დააჭირეთ მოდიფიკატორ კლავიშ(ებ)ს ან თაგუნას ნებისმიერ ღილაკს (გასაუქმებლად Escape)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
+        <source>Click then press modifier(s) or any mouse button</source>
+        <translation>დააწკაპუნეთ, შემდეგ დააჭირეთ მოდიფიკატორ(ებ)ს ან თაგუნას ნებისმიერ ღილაკს</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
+        <source>Press modifier(s) or a mouse button. Escape to cancel.</source>
+        <translation>დააჭირეთ მოდიფიკატორ(ებ)ს ან თაგუნას ღილაკს. გასაუქმებლად Escape.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Press modifier key(s) only (Escape to cancel)</source>
         <translation>დააჭირეთ მხოლოდ მოდიფიკატორ კლავიშ(ებ)ს (გასაუქმებლად Escape)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to cancel)</source>
         <translation>დააჭირეთ ნებისმიერ თაგუნას ღილაკს: მარჯვენა, შუა, უკან, წინ ან დამატებით (გასაუქმებლად Escape)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
-        <source>Press a key, modifier only, or any mouse button (Escape to cancel)</source>
-        <translation>დააჭირეთ კლავიშს, მხოლოდ მოდიფიკატორს ან ნებისმიერ თაგუნას ღილაკს (გასაუქმებლად Escape)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Click then press modifier key(s)</source>
         <translation>დააწკაპუნეთ, შემდეგ დააჭირეთ მოდიფიკატორ კლავიშ(ებ)ს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Click then press any mouse button (Right, Middle, Back, Forward, etc.)</source>
         <translation>დააწკაპუნეთ, შემდეგ დააჭირეთ ნებისმიერ თაგუნას ღილაკს (მარჯვენა, შუა, უკან, წინ და ა.შ.)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
-        <source>Click then press key, modifier(s), or any mouse button</source>
-        <translation>დააწკაპუნეთ, შემდეგ დააჭირეთ კლავიშს, მოდიფიკატორ(ებ)ს ან ნებისმიერ თაგუნას ღილაკს</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
         <source>Press modifier(s). Escape to cancel.</source>
         <translation>დააჭირეთ მოდიფიკატორ(ებ)ს. გასაუქმებლად Escape.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
         <source>Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.</source>
         <translation>დააჭირეთ ნებისმიერ თაგუნას ღილაკს (მარჯვენა, შუა, უკან, წინ და ა.შ.). გასაუქმებლად Escape.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
-        <source>Press key, modifier(s), or mouse button. Escape to cancel.</source>
-        <translation>დააჭირეთ კლავიშს, მოდიფიკატორ(ებ)ს ან თაგუნას ღილაკს. გასაუქმებლად Escape.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="235"/>
         <source>That mouse button is not supported. Buttons up to Extra 5 can be captured.</source>
         <translation>ეს თაგუნას ღილაკი მხარდაუჭერელია. ჩაწერა შესაძლებელია Extra 5-მდე ღილაკებისთვის.</translation>
     </message>
@@ -16589,7 +16589,7 @@
         <translation>ახალი ალგორითმი</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="133"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
         <translation>ახალი ნიმუში</translation>
@@ -17688,8 +17688,8 @@
         <translation>აირჩიეთ განლაგება…</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="171"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="145"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="175"/>
         <source>That template is no longer available.</source>
         <translation>ეს ნიმუში აღარაა ხელმისაწვდომი.</translation>
     </message>
@@ -18257,7 +18257,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="613"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="604"/>
         <source>Try a different filter or search term.</source>
         <translation>სცადეთ სხვა ფილტრი ან საძიებო სიტყვა.</translation>
     </message>
@@ -18819,21 +18819,21 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="153"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="88"/>
         <source>Shader effect details</source>
         <comment>@info:tooltip generic shader card</comment>
         <translation>შეიდერის ეფექტის დეტალები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="332"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="436"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="462"/>
         <source>User</source>
         <comment>@info shader source badge</comment>
         <translation>მომხმარებელი</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="358"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="447"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="182"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="473"/>
         <source>%n parameter</source>
         <translation>
             <numerusform>%n პარამეტრი</numerusform>
@@ -18841,7 +18841,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="44"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="45"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="69"/>
         <source>Used in %n event</source>
         <comment>@info shader usage section header</comment>
@@ -18851,66 +18851,110 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
         <source>Yes</source>
         <comment>@info bool true</comment>
         <translation>დიახ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
         <source>No</source>
         <comment>@info bool false</comment>
         <translation>არა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="373"/>
         <source>Load Preset…</source>
         <comment>@action:button</comment>
         <translation>შაბლონის ჩატვირთვა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="384"/>
         <source>Save Preset…</source>
         <comment>@action:button</comment>
         <translation>შაბლონის შენახვა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="597"/>
         <source>Parameters</source>
         <comment>@title:group shader parameters section</comment>
         <translation>პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="680"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="713"/>
         <source>[%1 .. %2]</source>
         <comment>@info parameter range</comment>
         <translation>[%1 .. %2]</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="683"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="716"/>
         <source>default %1</source>
         <comment>@info parameter default value</comment>
         <translation>ნაგულისხმევი %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="270"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>სანიმუშო ფანჯარა</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <source>New Tab</source>
+        <comment>@title arriving tab in the animation preview</comment>
+        <translation>ახალი ჩანართი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>ამ პაკეტის შეიდერი ვერ დაკომპილირდა.</translation>
-    </message>
-    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/shared/ShaderPreviewPlaceholder.qml.cpp" line="52"/>
         <source>Preview unavailable</source>
         <comment>@info:placeholder shader preview</comment>
         <translation>გადახედვა ხელმისაწვდომი არაა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
+        <source>This pack&apos;s shader did not compile.</source>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>ამ პაკეტის შეიდერი ვერ დაკომპილირდა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
+        <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>სამუშაო მაგიდის გადართვის გადახედვა, იქით და უკან, დროებით სამუშაო მაგიდებზე.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
+        <source>Previewing a window move on a sample window.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>ფანჯრის გადატანის გადახედვა სანიმუშო ფანჯარაზე.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
+        <source>Previewing a window being dragged back and forth.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>ფანჯრის წინ და უკან გადათრევის გადახედვა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
+        <source>Previewing a tab switch between two sample windows.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>ჩანართის გადართვის გადახედვა ორ სანიმუშო ფანჯარას შორის.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
+        <source>Previewing a scroll settling on a stand-in strip.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>გადახვევის დამშვიდების გადახედვა დროებით ზოლზე.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
+        <source>Previewing open, minimize, restore and close on a sample window.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>გახსნის, ჩაკეცვის, აღდგენისა და დახურვის გადახედვა სანიმუშო ფანჯარაზე.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>ეს პაკეტი აუდიოზე რეაგირებს. მისი მოძრაობის სანახავად ჩართეთ აუდიოსპექტრი ზოგად პარამეტრებში.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -18925,32 +18969,26 @@
         <translation>ეს პაკეტი იმის ნიმუშს იღებს, რაც ფანჯრის უკან არის. გადახედვაში ნამდვილი ფანჯრების ნაცვლად თქვენი ფონია გამოყენებული.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>ეს პაკეტი აუდიოზე რეაგირებს. ჩართეთ აუდიოვიზუალიზატორი შეიდერების პარამეტრებში, რომ მისი მოძრაობა ნახოთ.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="944"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
         <source>Select Image</source>
         <comment>@title:window</comment>
         <translation>სურათის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="946"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="998"/>
         <source>Images (*.png *.jpg *.jpeg *.bmp *.webp)</source>
         <comment>@item:inlistbox image file filter</comment>
         <translation>სურათები (*.png *.jpg *.jpeg *.bmp *.webp)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="982"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1034"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1048"/>
         <source>Shader presets (*.json)</source>
         <comment>@item:inlistbox preset file filter</comment>
         <translation>შეიდერის შაბლონები (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1009"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1061"/>
         <source>This preset was saved for a different shader.</source>
         <comment>@info</comment>
         <translation>ეს შაბლონი სხვა შეიდერისთვის იყო შენახული.</translation>
@@ -19014,124 +19052,124 @@
         <translation>ჩანართის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="163"/>
         <source>Category</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>კატეგორია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="169"/>
         <source>Type</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>ტიპი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="174"/>
         <source>Source</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>წყარო</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="187"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="178"/>
         <source>None</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>არცერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="186"/>
         <source>Name</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>სახელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="199"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="190"/>
         <source>Category</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>კატეგორია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="196"/>
         <source>Type</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>ტიპი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="322"/>
         <source>Universal</source>
         <comment>@item shader capability (applies to every event)</comment>
         <translation>უნივერსალური</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>Built-in</source>
         <comment>@title:group built-in shaders</comment>
         <translation>ჩაშენებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>User</source>
         <comment>@title:group user-installed shaders</comment>
         <translation>მომხმარებელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="370"/>
         <source>Uncategorised</source>
         <comment>@title:group fallback for shaders without a category</comment>
         <translation>კატეგორიის გარეშე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="485"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="476"/>
         <source>Open user shader directory</source>
         <translation>მომხმარებლის შეიდერის საქაღალდის გახსნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="477"/>
         <source>Installed shader pack “%1”.</source>
         <comment>@info shader install success</comment>
         <translation>შეიდერის პაკეტი „%1“ დაინსტალირდა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="487"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="478"/>
         <source>Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.</source>
         <comment>@info shader install failure</comment>
         <translation>„%1“-ის დაინსტალირება ვერ მოხერხდა. საქაღალდე უნდა შეიცავდეს metadata.json ფაილს და არ უნდა ემთხვეოდეს არსებულ პაკეტს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="492"/>
         <source>Search shaders…</source>
         <comment>@info:placeholder shader search</comment>
         <translation>შეიდერების ძებნა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="502"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="493"/>
         <source>Search shaders</source>
         <translation>შეიდერების ძებნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="514"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="505"/>
         <source>Filter Shaders</source>
         <comment>@title:menu</comment>
         <translation>შეიდერების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="522"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="513"/>
         <source>Built-in</source>
         <comment>@option:check</comment>
         <translation>ჩაშენებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="517"/>
         <source>User-installed</source>
         <comment>@option:check</comment>
         <translation>მომხმარებლის დაინსტალირებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="612"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="603"/>
         <source>No shaders match the current filter</source>
         <translation>ამჟამინდელ ფილტრს არცერთი შეიდერი არ ემთხვევა</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="634"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="625"/>
         <source>%n shader</source>
         <translation>
             <numerusform>%n შეიდერი</numerusform>
@@ -20091,24 +20129,24 @@
         <translation>დააჭირეთ და გეჭიროთ ეს და დაატრიალეთ ბორბალი ფოკუსის სვეტიდან სვეტზე გადასატანად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="201"/>
         <source>the column focus scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
         <translation>სვეტის ფოკუსის გადახვევის კლავიში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="215"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="214"/>
         <source>Hold this and turn the wheel to move the view along the strip without changing which column has focus.</source>
         <translation>დააჭირეთ და გეჭიროთ ეს და დაატრიალეთ ბორბალი ხედის ზოლის გასწვრივ გადასაადგილებლად ისე, რომ სვეტის ფოკუსი არ შეიცვალოს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="222"/>
         <source>the view scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
         <translation>ხედის გადახვევის კლავიში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="240"/>
         <source>Scrolling down moves toward the start of the strip instead of the end, for both scroll keys.</source>
         <translation>ქვემოთ გადახვევა ზოლის დასაწყისისკენ გადაადგილებს და არა ბოლოსკენ, ორივე გადახვევის კლავიშისთვის.</translation>
     </message>
@@ -20927,7 +20965,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>The focused window is floating, so it has no column to fill</source>
-        <translation type="unfinished"></translation>
+        <translation>ფოკუსირებული ფანჯარა მოტივტივეა, ამიტომ შესავსები სვეტი არ აქვს</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
@@ -23177,6 +23215,27 @@
         <source>None</source>
         <comment>@item:inlistbox no modifier key selected</comment>
         <translation>არცერთი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="561"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
+        <source>Sample Window</source>
+        <comment>@title sample window in a shader preview</comment>
+        <translation>სანიმუშო ფანჯარა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="528"/>
+        <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
+        <translation>სხვა ფანჯარა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="579"/>
+        <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
+        <translation>წინა ჩანართი</translation>
     </message>
 </context>
 </TS>

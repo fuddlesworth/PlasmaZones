@@ -522,8 +522,11 @@ QImage AnimationPreviewController::desktopFromImage() const
     const auto cardRect = [&s](qreal x, qreal y, qreal w) {
         return QRectF(s.width() * x, s.height() * y, s.width() * w, s.width() * w * 14.0 / 22.0);
     };
-    paintFauxWindow(p, cardRect(0.08, 0.12, 0.46), PhosphorI18n::tr("Sample Window"), m_sceneColors);
-    paintFauxWindow(p, cardRect(0.58, 0.34, 0.33), PhosphorI18n::tr("Another Window"), m_sceneColors);
+    paintFauxWindow(p, cardRect(0.08, 0.12, 0.46),
+                    PhosphorI18n::tr("Sample Window", "@title sample window in a shader preview"), m_sceneColors);
+    paintFauxWindow(p, cardRect(0.58, 0.34, 0.33),
+                    PhosphorI18n::tr("Another Window", "@title second stand-in window in a shader preview"),
+                    m_sceneColors);
     m_desktopFromCache = img;
     return m_desktopFromCache;
 }
@@ -554,8 +557,8 @@ QImage AnimationPreviewController::stripSceneImage() const
     const double topY = s.height() * 0.10;
     const double h = s.height() * 0.78;
     paintFauxWindow(p, QRectF(s.width() * 0.02, topY, s.width() * 0.24, h), QString(), m_sceneColors);
-    paintFauxWindow(p, QRectF(s.width() * 0.28, topY, s.width() * 0.44, h), PhosphorI18n::tr("Sample Window"),
-                    m_sceneColors);
+    paintFauxWindow(p, QRectF(s.width() * 0.28, topY, s.width() * 0.44, h),
+                    PhosphorI18n::tr("Sample Window", "@title sample window in a shader preview"), m_sceneColors);
     paintFauxWindow(p, QRectF(s.width() * 0.74, topY, s.width() * 0.24, h), QString(), m_sceneColors);
     m_stripSceneCache = img;
     return m_stripSceneCache;
@@ -572,7 +575,8 @@ QImage AnimationPreviewController::oldWindowImage() const
     QImage img(kSceneSize, QImage::Format_RGBA8888);
     img.fill(Qt::transparent);
     QPainter p(&img);
-    paintFauxWindow(p, QRectF(QPointF(0, 0), QSizeF(img.size())), PhosphorI18n::tr("Previous Tab"), m_sceneColors,
+    paintFauxWindow(p, QRectF(QPointF(0, 0), QSizeF(img.size())),
+                    PhosphorI18n::tr("Previous Tab", "@title outgoing tab in the animation preview"), m_sceneColors,
                     /*dimmed=*/true);
     m_oldWindowCache = img;
     return m_oldWindowCache;
