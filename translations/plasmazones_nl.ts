@@ -23217,8 +23217,8 @@
         <translation>Geen</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="561"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
@@ -23226,13 +23226,13 @@
         <translation>Voorbeeldvenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="528"/>
         <source>Another Window</source>
         <comment>@title second stand-in window in a shader preview</comment>
         <translation>Ander venster</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="579"/>
         <source>Previous Tab</source>
         <comment>@title outgoing tab in the animation preview</comment>
         <translation>Vorig tabblad</translation>
