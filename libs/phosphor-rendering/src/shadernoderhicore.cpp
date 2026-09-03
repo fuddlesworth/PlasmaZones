@@ -162,6 +162,19 @@ QString ShaderNodeRhi::loadAndExpandShaderTracked(const QString& path, QStringLi
     return ShaderCompiler::loadAndExpand(path, m_shaderIncludePaths, outError, outIncludedPaths);
 }
 
+void ShaderNodeRhi::requestAnotherFrame() const
+{
+    // Same liveness locking as safeRhi(): hold m_itemMutex across the
+    // dereference so a concurrent invalidateItem() cannot free m_item
+    // between the check and QQuickItem::window(). QQuickWindow::update()
+    // itself is thread-safe and merely schedules, so no GUI-thread block
+    // happens under the mutex (the lock-ordering invariant holds).
+    std::lock_guard<std::mutex> guard(m_itemMutex);
+    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) {
+        m_item->window()->update();
+    }
+}
+
 QRhi* ShaderNodeRhi::safeRhi() const
 {
     // Hold m_itemMutex across the dereference so a concurrent invalidateItem()
@@ -645,6 +658,13 @@ void ShaderNodeRhi::prepare()
             batch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
             cb->resourceUpdate(batch);
             m_gridUploaded = true;
+        } else {
+            // Batch pool exhausted mid-record (the 64-batch limit has been
+            // hit in this codebase before). render() skips the frame while
+            // the grid is pending, and a STATIC item gets no further
+            // prepare() on its own — request one so the upload retries next
+            // frame instead of leaving the item blank indefinitely.
+            requestAnotherFrame();
         }
     }
 

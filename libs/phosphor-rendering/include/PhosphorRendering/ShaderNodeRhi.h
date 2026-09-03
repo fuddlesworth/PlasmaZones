@@ -514,6 +514,13 @@ private:
     /// for the bake-cache key — see `shaderCacheKey` in
     /// shadernoderhicore.cpp for the policy.
     QString loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError);
+    /// Schedule another frame from the render thread (QQuickWindow::update()
+    /// is documented thread-safe), with safeRhi()'s liveness locking. For
+    /// prepare()-side conditions that leave work pending — a grid upload
+    /// that got no resource-update batch — where a STATIC item (no clock,
+    /// no property churn) would otherwise never be prepared again and
+    /// render()'s pending-skip would leave it blank indefinitely.
+    void requestAnotherFrame() const;
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
