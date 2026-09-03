@@ -192,6 +192,12 @@ public:
     {
         return m_unclaimedOpens.size();
     }
+    /// Test seam: tile batches held behind the pending screens announce
+    /// (the m_tileBatchesHeldForAnnounce queue).
+    int pendingHeldTileBatchCount() const
+    {
+        return m_tileBatchesHeldForAnnounce.size();
+    }
 
     // Property accessors
     bool enabled() const;
@@ -529,6 +535,9 @@ private:
     /// Merge every pipeline engine's active screen set for the D-Bus
     /// screen-set surface (property read + change signal payload).
     QStringList combinedManagedScreens() const;
+    /// Emit the batches parked in m_tileBatchesHeldForAnnounce, in order.
+    /// Called from the coalesced announce right after it emits.
+    void flushTileBatchesHeldForAnnounce();
     /// The pipeline engine whose live set claims @p screenId, else the
     /// primary (first) engine — screen-keyed dispatch for open/focus.
     PhosphorEngine::IPlacementEngine* engineOwningScreen(const QString& screenId) const;
@@ -555,6 +564,13 @@ private:
     /// Coalescing state for notifyEngineScreensChanged (see its doc).
     bool m_screensAnnouncePending = false;
     bool m_pendingIsDesktopSwitch = false;
+    /// Tile batches relayed while the coalesced screens announce was still
+    /// queued, emitted in arrival order right behind it. The effect answers
+    /// a desktop-switch announce by voiding every in-flight staggered apply,
+    /// so a batch that reached it first lost every entry past the one it
+    /// applied synchronously (relayTileRequestsJson documents the shape).
+    /// Swept by clearEngine with the announce it was waiting on.
+    QList<PhosphorProtocol::TileRequestList> m_tileBatchesHeldForAnnounce;
     /// Last enabled value broadcast (unset until the first emission).
     std::optional<bool> m_lastEnabledBroadcast;
     /// Last tab-strip payload per screen, the scrollTabStrips replay cache.

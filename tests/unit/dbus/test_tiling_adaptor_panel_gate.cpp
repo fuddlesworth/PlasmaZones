@@ -777,6 +777,82 @@ private Q_SLOTS:
         // the visual-position gate above.
         QVERIFY(requests.at(5).tabFrom.isEmpty());
     }
+
+    // -------------------------------------------------------------------------
+    // Ordering contract between the coalesced screens announce and the tile
+    // batch relay. The effect answers a desktop-switch announce by voiding
+    // every in-flight staggered apply, so a batch that reaches it BEFORE the
+    // announce it was resolved after loses every entry past the first
+    // (three columns, focus the middle one from another desktop: the
+    // neighbour moved, the focused column stayed at its old rect). A batch
+    // relayed while the announce is queued must therefore be held and go
+    // out right behind it, in arrival order; with no announce pending the
+    // relay stays synchronous; clearEngine sweeps the held batches with the
+    // announce they were waiting on.
+    // -------------------------------------------------------------------------
+    void testTileBatchHeldBehindPendingScreensAnnounce()
+    {
+        PhosphorProtocol::registerWireTypes();
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+
+        // One recorder for BOTH signals: a pair of spies can count but not
+        // order, and order is the whole property.
+        QStringList wire;
+        connect(&adaptor, &TilingAdaptor::managedScreensChanged, &adaptorParent,
+                [&wire](const QStringList&, bool, const QVariantMap&) {
+                    wire.append(QStringLiteral("announce"));
+                });
+        connect(&adaptor, &TilingAdaptor::windowsTileRequested, &adaptorParent,
+                [&wire](const PhosphorProtocol::TileRequestList& requests) {
+                    wire.append(QStringLiteral("batch:") + requests.first().windowId);
+                });
+
+        const auto batchFor = [](const QString& windowId) {
+            return QStringLiteral(
+                       "[{\"windowId\":\"%1\",\"screenId\":\"HDMI-1\",\"x\":0,\"y\":0,\"width\":600,"
+                       "\"height\":800}]")
+                .arg(windowId);
+        };
+
+        // No announce pending: the relay is synchronous, nothing is held.
+        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("a|1")));
+        QCOMPARE(wire, (QStringList{QStringLiteral("batch:a|1")}));
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
+        wire.clear();
+
+        // Announce queued, then two batches: both hold, and the wire stays
+        // silent until the announce fires, which then trails them in
+        // arrival order.
+        adaptor.notifyEngineScreensChanged(true);
+        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("b|2")));
+        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("c|3")));
+        QVERIFY(wire.isEmpty());
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 2);
+        QCoreApplication::processEvents();
+        QCOMPARE(wire,
+                 (QStringList{QStringLiteral("announce"), QStringLiteral("batch:b|2"), QStringLiteral("batch:c|3")}));
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
+        wire.clear();
+
+        // After the flush the relay is synchronous again.
+        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("d|4")));
+        QCOMPARE(wire, (QStringList{QStringLiteral("batch:d|4")}));
+        wire.clear();
+
+        // clearEngine sweeps a held batch with the announce it waited on:
+        // neither reaches the wire afterwards.
+        adaptor.notifyEngineScreensChanged(true);
+        adaptor.relayTileRequestsJson(batchFor(QStringLiteral("e|5")));
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 1);
+        adaptor.clearEngine();
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 0);
+        QCoreApplication::processEvents();
+        QVERIFY(wire.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestTilingAdaptorPanelGate)
