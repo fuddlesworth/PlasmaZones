@@ -106,29 +106,95 @@ public:
         m_maximizeEdgeAtMs.remove(w);
     }
 
+    /// The fully-maximized state the maximize lambda last recorded for @p w.
+    ///
+    /// Exposed for the authorship-stamp gate in
+    /// `TilingHandler::applyMaximizeSuppressed`, which must stamp exactly when
+    /// the write it is about to make will reach noteMaximizeEdge. That lambda
+    /// decides by comparing the incoming `horizontal && vertical` against THIS
+    /// value, so the gate reads it too and the correspondence holds by
+    /// construction rather than by argument — including where this value has
+    /// been pre-written to swallow an echo (noteMaximizeDemotedForSnap), which
+    /// makes the gate decline in the same breath.
+    bool lastFullyMaximized(KWin::EffectWindow* w) const
+    {
+        return m_lastFullyMaximized.value(w, false);
+    }
+
+    /// Stamp @p w as having a maximize write the EFFECT ITSELF authored, so
+    /// the edge that write produces is not mistaken for the user's own.
+    ///
+    /// Called from `TilingHandler::applyMaximizeSuppressed`, which every
+    /// maximize write the effect makes routes through, BEFORE the
+    /// `KWin::Window::maximize()` call — on X11 that call re-enters
+    /// windowMaximizedStateChanged synchronously, so the stamp has to be in
+    /// place by the time the handler runs. The one `KWin::Window::maximize()`
+    /// left outside it is `KWinCompositorBridge::setMaximized`, an
+    /// `ICompositorBridge` override with no caller; a future caller would have
+    /// to route through the helper or stamp for itself.
+    ///
+    /// The suppression counter cannot carry this, and not only for the usual
+    /// platform reason. noteMaximizeEdge is armed ABOVE the suppression skip in
+    /// that lambda, so the counter never reaches it on either platform — and
+    /// even a test moved under the skip would answer only on X11, since on
+    /// Wayland the committed echo arrives a client round trip later with the
+    /// counter back at 0, the same asymmetry `interceptMaximizeRequest`'s
+    /// already-agrees arm exists to absorb. A stamp outlives the bracket, so it
+    /// answers wherever the echo lands.
+    ///
+    /// Consumed by noteMaximizeEdge, so a stamp with no edge to take it back
+    /// off is not merely untidy: inside the deadline it swallows the user's
+    /// next genuine maximize, which is the failure the marker exists to fix.
+    /// The write site is therefore gated on `lastFullyMaximized` — the same
+    /// value the consumer's edge filter compares against — so it stamps if and
+    /// only if the write it is about to make will reach that consumer. The
+    /// deadline is the backstop under that gate, not the primary defence.
+    void noteEffectAuthoredMaximizeWrite(KWin::EffectWindow* w);
+
     /// Arm the "this window just took a genuine maximize or restore edge"
     /// marker, from the windowMaximizedStateChanged hook.
     ///
-    /// Armed for EVERY genuine full-maximize flip the user caused — the
-    /// maximize button, the titlebar double-click, a shortcut — and armed
-    /// BEFORE the scroll interception, the suppression skip and the pending
-    /// morph split, so it records the USER'S event rather than which of the
-    /// several code paths ends up delivering the resulting geometry. The
-    /// interactive drag-restore is the one exclusion, made at the call site:
-    /// pulling a maximized window off the titlebar is a drag, and the drag
-    /// owns the visuals.
+    /// Armed for every genuine full-maximize flip THE USER caused — the
+    /// maximize button, the titlebar double-click, a shortcut — on whichever
+    /// of the several code paths ends up delivering the resulting geometry.
+    /// It is armed before the scroll interception and the pending-morph split,
+    /// so a maximize the scrolling engine answers is recorded the same as one
+    /// KWin answers itself.
+    ///
+    /// Two exclusions, and both are about authorship rather than timing:
+    ///
+    ///  • A write the EFFECT authored, identified by the stamp
+    ///    noteEffectAuthoredMaximizeWrite left at the write chokepoint. Every
+    ///    such write already has an owner for its leg — the batch that made it,
+    ///    which routes the geometry onto `window.movement.maximize` from its
+    ///    own per-iteration flag — so arming here would only leave a marker
+    ///    nothing needs, to be claimed by the next unrelated placement.
+    ///  • The interactive drag-restore, excluded at the call site: KWin
+    ///    unmaximizes a window when the user pulls its titlebar, and that
+    ///    gesture's visuals belong to the held move pack.
     void noteMaximizeEdge(KWin::EffectWindow* w);
 
-    /// Whether @p w took a maximize edge within the freshness window,
-    /// CONSUMING the marker either way.
+    /// Whether @p w took a genuine maximize OR restore edge of its own within
+    /// the freshness window, CONSUMING the marker either way.
+    ///
+    /// Both directions, and deliberately: `beginMaximizeShaderMorph` routes a
+    /// restore onto `ProfilePaths::WindowMaximize` too, so the placement that
+    /// answers an unmaximize belongs on the same leg as the one that answers a
+    /// maximize.
     ///
     /// The tile batch asks this so the placement that lands as the direct
-    /// consequence of a maximize rides `window.movement.maximize` — the pack
-    /// the user assigned to that event — instead of the snap leg, on every
+    /// consequence of that edge rides `window.movement.maximize` — the pack
+    /// the user assigned to the event — instead of the snap leg, on every
     /// screen rather than only on a scrolling one whose own maximize-to-edges
-    /// verb happened to author the bit. Consuming is what bounds it to that
-    /// one placement: a later, unrelated retile of the same window finds the
-    /// marker gone and stays on snapIn.
+    /// verb happened to author the bit.
+    ///
+    /// Consuming is what bounds the marker to ONE placement, and the batch
+    /// consumes once per window per batch whether or not it ends up using the
+    /// answer — an entry left armed by a batch that skipped its commit would
+    /// otherwise be claimed by the next, unrelated placement. What the deadline
+    /// bounds is the other direction: an edge that no batch ever answers must
+    /// not sit waiting for one. Inside that window an unrelated placement can
+    /// still claim the marker, which costs one mis-chosen leg and nothing else.
     bool takeRecentMaximizeEdge(KWin::EffectWindow* w);
 
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
@@ -548,6 +614,28 @@ private:
     // (lifecycle_wiring.cpp) both to stay bounded and so a reused address
     // cannot inherit a stale stamp.
     QHash<KWin::EffectWindow*, qint64> m_maximizeEdgeAtMs;
+    // Monotonic stamp of a maximize write the EFFECT authored, per window,
+    // written at the applyMaximizeSuppressed chokepoint and consumed by the
+    // edge it produces. Same raw-pointer keying and the same windowDeleted
+    // sweep as the marker it guards.
+    //
+    // ONE in-flight write per window, not a count: a second insert overwrites
+    // rather than adds. Within a batch that is exhaustive — the monocle arm
+    // writes once per iteration, and unmaximizeMonocleWindow and
+    // releaseMaximizedToEdges are mutually exclusive with it — but that
+    // reasoning is per-batch, and on Wayland a write and its echo are a client
+    // round trip apart. Two batches inside one round trip could therefore leave
+    // two writes outstanding against a single slot, and if KWin then delivered
+    // both edges rather than coalescing them, the second would find no stamp
+    // and arm the marker for a write the effect made. Unverified, because it
+    // needs KWin's echo behaviour for a Full-then-Restore pair inside one round
+    // trip, and bounded to one mis-chosen animation leg if it happens. A future
+    // deliberate double-write must clear or count rather than rely on this.
+    //
+    // Do not "fix" it by clearing the stamp whenever the gate declines: the
+    // demote path depends on both sides declining together, and a clear-on-
+    // decline would break that symmetry to chase a case that may not exist.
+    QHash<KWin::EffectWindow*, qint64> m_effectAuthoredMaximizeAtMs;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 

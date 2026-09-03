@@ -1892,6 +1892,41 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
             }
 
+            // MAXIMIZE-EDGE MARKER, consumed here: once per window per batch,
+            // above the monocle/else split and above every arm that can decline
+            // to commit, because consumption is what bounds the marker to a
+            // single placement.
+            //
+            // The two arms below used to take it themselves, and both leaked.
+            // The monocle arm had it as the last operand of an `||` whose left
+            // side is true exactly when that arm just wrote the bit, so `||`
+            // short-circuited and the marker went unconsumed; the else arm's
+            // take sits inside `if (!skipMoveResize)`, which a Wayland client
+            // re-tiled to the zone it already holds takes as its steady state.
+            // Either way the entry survived to be claimed by the next,
+            // unrelated placement of the same window, which then animated a
+            // maximize morph from a stale departure rect. Hoisting is the fix
+            // for both, and for the monocle arm's null-KWin::Window fallback
+            // that never took it at all.
+            //
+            // Safe above the writes below because no write routed through
+            // applyMaximizeSuppressed can re-arm it: that helper stamps its own
+            // authorship and noteMaximizeEdge declines on the stamp. Every
+            // maximize write this iteration makes goes through it.
+            //
+            // What the hoist COSTS, stated because it is a real trade and not
+            // a free fix: a batch that reaches here and then declines to commit
+            // now destroys the marker, so "no-op batch, then the real answering
+            // batch a moment later" loses the maximize leg where it used to
+            // survive. That is the better half. A no-op batch answers nothing,
+            // so the entry it used to leave behind was claimed by whatever
+            // placement came next — commonly a scroll or focus retile with no
+            // relation to the press — which then morphed from a departure rect
+            // belonging to an older episode. A missed leg plays the wrong pack
+            // once; a stale claim animates the wrong motion from the wrong
+            // place, and does it on a placement the user did not ask for.
+            const bool userMaximizeEdge = m_effect->m_shaderManager.takeRecentMaximizeEdge(snap.window);
+
             if (snap.isMonocle) {
                 if (KWin::Window* kw = snap.window->window()) {
                     // REQUESTED, not committed, for the reason the column arm
@@ -1901,13 +1936,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // for a bit the effect never set, and later hands back a
                     // maximize it never owned.
                     const bool wasAlreadyMaximized = (kw->requestedMaximizeMode() == KWin::MaximizeFull);
-                    // RAII rather than a bare ++/--, the last hand-rolled copy
-                    // of this bracket in the file. The counter's own contract
-                    // note spells out why it matters: leak one increment and
-                    // isSuppressingMaximizeChanged() stays true for the
-                    // session, so the interception never fires again. Nothing
-                    // returns between the two today, which is exactly what
-                    // makes an added early return a silent, permanent break.
+                    // SUPPRESSION HELD ACROSS THE WHOLE ARM, not merely across
+                    // the maximize write inside applyMaximizeSuppressed below.
+                    // The bracket this replaces was a hand-rolled ++/-- with a
+                    // qScopeGuard declared here, so it spanned the membership
+                    // insert, the departure-rect read and the terminal geometry
+                    // apply as well; narrowing it to the write alone would let
+                    // anything that apply emits reach the maximize lambda
+                    // unsuppressed, and — now that the lambda arms a
+                    // maximize-edge marker — arm one with no authorship stamp
+                    // behind it. The counter is a counter, so the helper's own
+                    // bracket nests inside this one harmlessly.
                     ++m_suppressMaximizeChanged;
                     const auto maxSuppressGuard = qScopeGuard([this] {
                         --m_suppressMaximizeChanged;
@@ -1924,9 +1963,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // bit is not yet held, so a later batch can pay it, and
                     // unmaximizeMonocleWindow is itself guarded and cannot hand
                     // back a bit it never took.
+                    //
+                    // Through applyMaximizeSuppressed rather than a hand-rolled
+                    // ++/-- around a bare maximize(), which is what this arm
+                    // used to hold. That helper owns the suppression bracket
+                    // (leak one increment and isSuppressingMaximizeChanged()
+                    // stays true for the session, so the interception never
+                    // fires again) AND the authorship stamp that keeps the
+                    // maximize-edge marker from arming on the effect's own
+                    // write. A second copy of the bracket would have to grow
+                    // the stamp too, and silently mis-animate if it did not.
                     bool monocleBitWritten = false;
                     if (!kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
-                        kw->maximize(KWin::MaximizeFull);
+                        applyMaximizeSuppressed(kw, KWin::MaximizeFull);
                         monocleBitWritten = !wasAlreadyMaximized;
                     }
                     if (!wasAlreadyMaximized) {
@@ -1948,11 +1997,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // this arm authored: on a monocle screen the press reaches
                     // KWin directly (nothing intercepts it here), so
                     // monocleBitWritten is false for it and the placement that
-                    // follows would otherwise land as a plain snapIn. Consumed
-                    // once, ahead of the origin arm below, which wants the same
-                    // pre-maximize departure rect in both cases.
-                    const bool monocleMaximizeLeg =
-                        monocleBitWritten || m_effect->m_shaderManager.takeRecentMaximizeEdge(snap.window);
+                    // follows would otherwise land as a plain snapIn. The
+                    // marker was consumed above the split, so the `||` here is
+                    // a plain test of two locals with nothing to short-circuit
+                    // past.
+                    const bool monocleMaximizeLeg = monocleBitWritten || userMaximizeEdge;
                     QRectF monocleOrigin;
                     if (monocleMaximizeLeg) {
                         const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
@@ -2676,11 +2725,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // window.movement resolves instead of the pack the user
                     // assigned to window.movement.maximize.
                     //
-                    // Read into a local rather than left as the last operand of
-                    // the OR: `||` short-circuits, so on a batch-authored
-                    // maximize the marker would go unconsumed and could still
-                    // be sitting there for the next, unrelated placement.
-                    const bool userMaximizeEdge = m_effect->m_shaderManager.takeRecentMaximizeEdge(snap.window);
+                    // userMaximizeEdge is the marker, consumed once per window
+                    // per batch above the monocle/else split rather than here:
+                    // this line sits inside the redundant-apply skip, so taking
+                    // it here left the entry armed on every batch a Wayland
+                    // client answered by holding the zone it already had.
                     const bool maximizeLegThisBatch = (maximizeBitWrittenThisBatch && isScrollingScreen(snap.screenId))
                         || monocleBitReleased || userMaximizeEdge;
                     if (!originOverride.isValid() && maximizeLegThisBatch) {

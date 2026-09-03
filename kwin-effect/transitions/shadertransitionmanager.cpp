@@ -9,39 +9,28 @@ namespace PlasmaZones {
 
 namespace {
 
-// How long a maximize edge stays claimable by the tile batch. Matched to
-// kPendingMaximizeMorphDeadlineMs (window_connections.cpp), which bounds the
-// sibling wait for the same event's geometry to land: the batch that answers a
-// maximize is the daemon round trip behind that same commit, so anything
-// arriving later is a different placement wearing the same window.
-constexpr qint64 kMaximizeEdgeFreshnessMs = 1000;
-
-} // namespace
-
-void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
-{
-    if (!w) {
-        return;
-    }
-    m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
-}
-
-bool ShaderTransitionManager::takeRecentMaximizeEdge(KWin::EffectWindow* w)
+// Consume a timestamped one-shot entry from @p hash, answering whether it was
+// there AND still inside kMaximizeEventDeadlineMs.
+//
+// Erased on the stale hit too, and that is the point of sharing the helper
+// between the two maximize one-shots: an entry that outlived its deadline is
+// never going to become fresh again, and leaving it behind would let a LATER
+// consumer read a stamp that was never armed for it.
+bool takeFreshStamp(QHash<KWin::EffectWindow*, qint64>& hash, KWin::EffectWindow* w)
 {
     if (!w) {
         return false;
     }
-    const auto it = m_maximizeEdgeAtMs.find(w);
-    if (it == m_maximizeEdgeAtMs.end()) {
+    const auto it = hash.find(w);
+    if (it == hash.end()) {
         return false;
     }
     const qint64 armedAtMs = *it;
-    // Erased on the stale arm too: a marker that outlived its window is not
-    // going to become fresh again, and leaving it would let the NEXT edge's
-    // consumer read a stamp it never armed.
-    m_maximizeEdgeAtMs.erase(it);
-    return ShaderInternal::shaderClockNowMs() - armedAtMs <= kMaximizeEdgeFreshnessMs;
+    hash.erase(it);
+    return ShaderInternal::shaderClockNowMs() - armedAtMs <= ShaderInternal::kMaximizeEventDeadlineMs;
 }
+
+} // namespace
 
 ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
     : m_effect(effect)
@@ -72,6 +61,33 @@ ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
 }
 
 ShaderTransitionManager::~ShaderTransitionManager() = default;
+
+void ShaderTransitionManager::noteEffectAuthoredMaximizeWrite(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    m_effectAuthoredMaximizeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+}
+
+void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    // The effect's own write, not the user's. Consumed here rather than merely
+    // tested, so one stamp answers for exactly one edge: a bracketed write that
+    // toggles the bit twice must not have its second edge swallowed as well.
+    if (takeFreshStamp(m_effectAuthoredMaximizeAtMs, w)) {
+        return;
+    }
+    m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+}
+
+bool ShaderTransitionManager::takeRecentMaximizeEdge(KWin::EffectWindow* w)
+{
+    return takeFreshStamp(m_maximizeEdgeAtMs, w);
+}
 
 void ShaderTransitionManager::rebuildAnimationRuleSet()
 {

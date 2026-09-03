@@ -778,6 +778,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // rationale: a stale stamp at a reused address would hand a new
         // window's first placement the maximize leg.
         m_shaderManager.m_maximizeEdgeAtMs.remove(w);
+        // Fourth of the same family, and swept for the same two reasons: the
+        // authorship stamp that keeps the marker above from arming on the
+        // effect's own maximize writes.
+        m_shaderManager.m_effectAuthoredMaximizeAtMs.remove(w);
         // Drop the queued-expiry guard for this raw pointer. KWin reuses
         // EffectWindow heap addresses freely, so a stale entry surviving
         // past windowDeleted would cause the next window allocated at the

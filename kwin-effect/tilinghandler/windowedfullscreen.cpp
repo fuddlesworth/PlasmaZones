@@ -147,6 +147,71 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     const auto suppressGuard = qScopeGuard([this] {
         --m_suppressMaximizeChanged;
     });
+    // AUTHORSHIP STAMP, and the reason it is not just the counter above.
+    //
+    // The counter is held only across the call, which answers on X11 where
+    // maximize() re-enters windowMaximizedStateChanged synchronously — but on
+    // Wayland the committed echo arrives a client round trip later with the
+    // counter back at 0, the same asymmetry interceptMaximizeRequest's
+    // already-agrees arm exists to absorb. And the marker is armed ABOVE that
+    // skip in any case, so the counter never reaches it on either platform.
+    // Either way it would arm for the effect's own writes and hand the next
+    // unrelated placement a maximize leg it never earned. A stamp outlives the
+    // bracket, so the edge this write produces is recognised as the effect's
+    // wherever the echo lands.
+    //
+    // WRITTEN ONLY WHEN THE WRITE CAN PRODUCE THE EDGE ITS CONSUMER READS, and
+    // this test has to mirror that consumer exactly rather than merely ask
+    // whether the mode changed.
+    //
+    // noteMaximizeEdge sits BELOW the maximized lambda's full-maximize edge
+    // filter, so it is reached only when `horizontal && vertical` actually
+    // flips. A write that changes the mode without flipping that bit —
+    // cancelAxisOnlyMaximize restoring a quick-tiled window from
+    // MaximizeVertical, or the batch clearing a stray half-maximize before
+    // tiling — emits an axis-only edge that returns before the consumer. A
+    // stamp left by one of those has nothing to take it back off, and the next
+    // genuine USER maximize inside the deadline would consume it and be
+    // swallowed: no marker armed, snapIn played, which is the exact failure
+    // this whole mechanism exists to fix. Comparing the fully-maximized bit on
+    // both sides admits every write that flips it — Restore→Full, partial→Full,
+    // Full→Restore, Full→partial — and refuses the two that cannot reach the
+    // consumer, partial→Restore and Restore→partial. No caller writes a partial
+    // mode today; the rows are enumerated because what makes this correct is
+    // the correspondence with the consumer, not the current caller set.
+    //
+    // The gesture flags for the same reason: the consumer's call site skips
+    // arming under an interactive move or resize, so a write issued during one
+    // would strand its stamp too. Exact on X11, where the echo is synchronous
+    // and both tests read the same instant. On Wayland a round trip separates
+    // them, so a gesture that starts or ends inside it is the residual gap —
+    // every caller already refuses to write mid-gesture, which leaves only a
+    // stamp stranded by a drag begun in that window, bounded by the deadline.
+    //
+    // Read from the consumer's OWN state, `lastFullyMaximized`, and not from
+    // this window's requested or committed mode. The sibling maximize
+    // DECISIONS in this file all read requested, and rightly — they are
+    // deciding what the window should hold. This is not a decision about the
+    // window; it is a prediction of what one signal handler will do, and the
+    // only way to make a prediction exact is to evaluate the handler's own
+    // test. Reading requested instead leaves a gap wherever requested and
+    // committed disagree (a user's maximize in flight when the batch clears a
+    // stray half-maximize, an effect reload mid-transition), and each side of
+    // that gap is a defect: a stamp with no edge swallows the user's next
+    // genuine maximize, an edge with no stamp arms a marker the effect caused.
+    //
+    // It also subsumes the pre-written echo. noteMaximizeDemotedForSnap forces
+    // this value false so the demote's echo reads as a no-edge; the gate now
+    // reads the same false and declines to stamp, so that write needs no
+    // special-case cleanup on the other side.
+    //
+    // Before the call, not after: on X11 the handler has already run by the
+    // time maximize() returns.
+    if (KWin::EffectWindow* ew = kw->effectWindow(); ew && !ew->isUserMove() && !ew->isUserResize()) {
+        if ((mode == KWin::MaximizeFull) != m_effect->m_shaderManager.lastFullyMaximized(ew)) {
+            m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew);
+        }
+    }
     kw->maximize(mode);
 }
 
@@ -218,6 +283,13 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     const auto geomGuard = qScopeGuard([this, prevInApply] {
         m_effect->m_daemonGate.inGeometryApply = prevInApply;
     });
+    // No authorship stamp is owed here, and none is written: the pre-write
+    // above forced lastFullyMaximized false, and applyMaximizeSuppressed's gate
+    // reads that same value, so a Restore write against it registers as no edge
+    // and declines. The echo it produces likewise takes the pre-written
+    // no-edge branch and never reaches noteMaximizeEdge. Both sides decline
+    // together, which is the property the gate is written to have — and the
+    // reason this path needs no cleanup of its own on the other side.
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
 }
 
@@ -957,7 +1029,17 @@ void TilingHandler::restoreAllMonocleMaximized()
             m_monocleMaximizedWindows.insert(wid);
             continue;
         }
-        kw->maximize(KWin::MaximizeRestore);
+        // Through the helper, not a bare maximize(), even though the loop-wide
+        // bracket above already holds the counter. The counter does not cover
+        // this on EITHER platform, which is easy to misread: noteMaximizeEdge
+        // is armed near the top of the maximized lambda, above the suppression
+        // skip, so a bare write here armed the user maximize-edge marker for a
+        // restore the effect authored — synchronously on X11, and a round trip
+        // later on Wayland. The next placement of that window would then claim
+        // a maximize leg it never earned. The authorship stamp the helper
+        // writes is what the marker actually consults; the helper's own counter
+        // bracket nests inside this one harmlessly.
+        applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         // Same tracker re-seed as unmaximizeMonocleWindow, and more
         // load-bearing here: the daemon-loss caller has no apply path left to
         // heal a stale entry.

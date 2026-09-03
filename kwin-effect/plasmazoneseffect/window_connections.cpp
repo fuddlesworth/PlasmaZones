@@ -31,7 +31,12 @@ namespace {
 // is considered stale (state flipped but the commit never came, e.g. an
 // occluded client under the lock screen) — the morph is skipped so a much
 // later unrelated resize cannot fire a bogus maximize animation.
-constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
+//
+// Aliases the shared bound rather than restating the number: the maximize-edge
+// marker the tile batch consumes and the authorship stamp that guards it bound
+// the same span (a maximize edge to the commit that answers it), and a copy per
+// TU is a copy that can drift.
+constexpr qint64 kPendingMaximizeMorphDeadlineMs = ShaderInternal::kMaximizeEventDeadlineMs;
 
 // Maximize-morph landing discriminator: has the frame SIZE actually moved
 // away from the departure rect? A maximize/restore always changes the frame
@@ -862,17 +867,32 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
                 // MAXIMIZE-EDGE MARKER, armed here and nowhere else: this is
                 // the one point every route to a maximize passes through,
-                // ahead of all three skips below. Whether the request ends up
-                // answered by the scrolling engine's maximize-to-edges verb,
-                // by this handler's own bracketed monocle write, or by KWin
-                // itself on an autotile or unmanaged screen, the user pressed
-                // maximize and the geometry that follows must ride
-                // window.movement.maximize. Without it the tile batch could
-                // only recognise a maximize it had authored ITSELF on a
-                // scrolling screen, so every other maximize reached
-                // applyWindowGeometry as a plain snapIn and played whatever
-                // the movement PARENT resolves — the user's maximize pack
-                // never ran.
+                // ahead of the interception and pending-morph skips below.
+                // Whether the request ends up answered by the scrolling
+                // engine's maximize-to-edges verb or by KWin itself on an
+                // autotile or unmanaged screen, the user pressed maximize and
+                // the geometry that follows must ride window.movement.maximize.
+                // Without it the tile batch could only recognise a maximize it
+                // had authored ITSELF on a scrolling screen, so every other
+                // maximize reached applyWindowGeometry as a plain snapIn and
+                // played whatever the movement PARENT resolves — the user's
+                // maximize pack never ran.
+                //
+                // What it must NOT record is an edge the EFFECT authored. Every
+                // such write already has an owner for its leg — the batch that
+                // made it, routing the geometry onto WindowMaximize from its
+                // own per-iteration flag — so arming for one would leave a
+                // marker nothing needs, and the next unrelated placement of
+                // that window would claim it and morph from a stale rect. The
+                // suppression counter cannot be the test: it is held across the
+                // write, so it answers on X11 where maximize() re-enters this
+                // lambda synchronously, but on Wayland the committed echo
+                // arrives a round trip later with the counter back at 0. So
+                // authorship is carried by a stamp instead, left at the
+                // applyMaximizeSuppressed chokepoint and consumed inside
+                // noteMaximizeEdge, which answers on both platforms. That is
+                // also why this sits ABOVE the suppression skip below rather
+                // than under it — the skip would only cover X11.
                 //
                 // The interactive drag is the deliberate exclusion, and the
                 // same one the shader skip below makes: KWin unmaximizes a
