@@ -35,6 +35,11 @@ class EditorGapsModel : public QObject
     Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
     Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
+    // Shared gap ceiling, so the per-layout spin boxes offer exactly the range
+    // the global gap sliders do. Both sides resolve to Defaults::MaxGap.
+    Q_PROPERTY(int zonePaddingMax READ zonePaddingMax CONSTANT)
+    Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
+
     // Per-side outer gap overrides
     Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
@@ -67,6 +72,17 @@ public:
     int globalOuterGapBottom() const;
     int globalOuterGapLeft() const;
     int globalOuterGapRight() const;
+    static int zonePaddingMax();
+    static int outerGapMax();
+
+    /// Bound one per-layout override value. -1 and below mean "use the global
+    /// setting" and are preserved as the -1 sentinel; a real override is
+    /// clamped to [0, max] so the editor cannot author a gap the settings UI
+    /// and the daemon's own resolver would refuse. Loading a layout file does
+    /// NOT go through this, so opening and saving never silently rewrites a
+    /// value a user already stored. Undo/redo DOES replay through it, so an
+    /// out-of-range value restored by an undo comes back bounded.
+    static int clampOverride(int value, int maxValue);
 
     // Property setters (create undo commands)
     void setZonePadding(int padding);

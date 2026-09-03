@@ -443,12 +443,17 @@ Item {
         property int customBorderWidth: {
             var _ = _borderWidthTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.borderWidth !== undefined ? _zone.borderWidth : 2;
+            // Clamped the way the daemon clamps it on the way to the overlay
+            // shader, so a legacy layout carrying a width above the current
+            // ceiling previews as it will actually be drawn.
+            var _w = _zone && _zone.borderWidth !== undefined ? _zone.borderWidth : 2;
+            return Math.min(_w, editorController ? editorController.zoneBorderWidthMax : 10);
         }
         property int customBorderRadius: {
             var _ = _borderRadiusTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
+            var _r = _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
+            return Math.min(_r, editorController ? editorController.zoneBorderRadiusMax : 50);
         }
 
         anchors.fill: parent

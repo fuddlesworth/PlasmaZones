@@ -647,11 +647,13 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     // The smallest preset is the narrowest width the user has NAMED, which
     // beats the engine floor when a list exists: a Preset intent follows the
     // vocabulary if the list is later edited, where a Proportion at the floor
-    // would be stranded at a value nothing else uses. The list is deduplicated
-    // at the boundary but NOT sorted: every producer (the settings schema's
-    // canonicalProportionList, refreshConfigFromSettings' parsePresets, the
-    // template override list) preserves the order the user typed, so the
-    // minimum has to be searched for rather than read off the front.
+    // would be stranded at a value nothing else uses. The list is NOT sorted:
+    // the settings schema's canonicalProportionList deduplicates but keeps the
+    // order the user typed, and neither parsePresets nor the per-screen override
+    // PARSER sorts or deduplicates. A template list arrives already sorted,
+    // having been normalised upstream in phosphor-zones before it rides that
+    // same override transport. So the minimum has to be searched for rather
+    // than read off the front.
     const QList<qreal>& presets = params.presetColumnWidths;
     const ColumnWidth target = presets.isEmpty()
         ? ColumnWidth::makeProportion(MinColumnWidthFraction)

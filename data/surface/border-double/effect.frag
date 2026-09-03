@@ -20,10 +20,29 @@ vec4 pSurface(vec2 uv) {
     vec2 p = surfacePixel(uv);
     const float aa = 0.7;
 
+    // Bound the whole stack to half the frame, the way standardBorderBand does
+    // for the single-line packs and frameSdf does for the radius. This pack
+    // builds its own bands rather than calling that helper, so without this a
+    // stack wider than the frame's half extent leaves every interior fragment
+    // past the smoothstep and paints the surface as solid border with the
+    // content multiplied away. Scaled first, then scaled back proportionally,
+    // so the outer/gap/inner ratio the user chose is preserved.
+    // 0.9 of the half extent, not the whole of it: clamping flush would leave
+    // the entire interior on the band side of the smoothstep, so the content
+    // would still be wiped. Same fraction the glass pack uses for its edge.
+    vec2 halfSize = 0.5 * uSurfaceFrameSize;
+    float limit = max(0.9 * min(halfSize.x, halfSize.y), 0.1);
     float wOuter = p_outerWidth * uSurfaceScale;
     float wGap = p_gapWidth * uSurfaceScale;
     float wInner = p_innerWidth * uSurfaceScale;
     float total = wOuter + wGap + wInner;
+    if (total > limit && total > 0.0) {
+        float k = limit / total;
+        wOuter *= k;
+        wGap *= k;
+        wInner *= k;
+        total = limit;
+    }
     // OUTER radius = content radius + the full stack, so both lines and the
     // gap sit inside it and the content corner ends at p_cornerRadius.
     float radius = p_cornerRadius * uSurfaceScale + total;

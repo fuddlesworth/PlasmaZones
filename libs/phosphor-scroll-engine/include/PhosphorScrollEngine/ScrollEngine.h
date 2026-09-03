@@ -1400,8 +1400,8 @@ private:
     QHash<QString, QString> m_announcedStripEpoch;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
-    QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn m_centerFocusedColumn = CenterFocusedColumn::Never;
     /// Cached tri-state intent from the global config. NEVER the resolved
     /// axis: under Auto two screens with no per-screen key resolve

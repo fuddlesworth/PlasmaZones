@@ -15,6 +15,13 @@ namespace PhosphorEngine {
 namespace GeometryDefaults {
 inline constexpr int InnerGap = 8;
 inline constexpr int OuterGap = 8;
+/// Ceiling every engine clamps a resolved gap to, whatever layer supplied it
+/// (settings, per-screen override, or context rule). Lives here rather than in
+/// the app tree because the scroll and tile engines are LGPL libraries that
+/// cannot include the GPL `core/types/constants.h`; `PlasmaZones::Defaults::MaxGap`
+/// and `PhosphorTiles::AutotileDefaults::MaxGap` are pinned to it by
+/// static_asserts in src/daemon/daemon.cpp.
+inline constexpr int MaxGap = 200;
 } // namespace GeometryDefaults
 
 class PHOSPHORENGINE_EXPORT IGeometrySettings

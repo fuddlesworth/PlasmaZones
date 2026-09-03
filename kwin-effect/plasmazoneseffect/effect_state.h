@@ -48,10 +48,16 @@ struct FocusFadeState
 /// PlasmaZonesEffect::m_windowAppearanceDefault.
 struct WindowAppearanceDefault
 {
-    bool showBorder = false;
+    // Seeded from the shared decoration defaults rather than hand-written, so
+    // the values rendered before the async settings load lands are the ones the
+    // daemon would persist. ShowBorder is false, so this changes nothing in the
+    // normal path; it matters when a settings reply never arrives for the width
+    // and radius keys (an older daemon), where the loaders below deliberately
+    // keep the seed rather than clobbering it with an empty reply.
+    bool showBorder = PhosphorCompositor::DecorationDefaults::ShowBorder;
     QString borderScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
-    int borderWidth = 0;
-    int borderRadius = 0;
+    int borderWidth = PhosphorCompositor::DecorationDefaults::BorderWidth;
+    int borderRadius = PhosphorCompositor::DecorationDefaults::BorderRadius;
     QString activeColor;
     QString inactiveColor;
     bool hideTitleBar = false;

@@ -144,6 +144,18 @@ static_assert(ConfigDefaults::scrollingStripAxisHorizontal()
 // hold could never resolve.
 static_assert(ConfigDefaults::scrollingPresetIndexMax() == SchemaValidators::kMaxPresetEntries - 1,
               "scrollingPresetIndexMax drifted from the preset-list length cap in settingsschema_p.h");
+// The config layer's proportion FLOOR is hand-mirrored from the engine's own
+// (ScrollTypes.h), which the config headers cannot include: the KWin effect
+// includes those headers but does not link PhosphorScrollEngine. This
+// translation unit does see both, so the pair is pinned here. The engine keeps
+// the height floor as its own constant deliberately, so it gets its own
+// assertion — note the CONFIG side currently delegates height to width, so a
+// height-only retune of the engine needs a config-side split first.
+static_assert(ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+                  == PhosphorScrollEngine::MinColumnWidthFraction,
+              "Config and engine disagree on the minimum column-width fraction");
+static_assert(ConfigDefaults::scrollingWindowHeightProportionMin() == PhosphorScrollEngine::MinWindowHeightFraction,
+              "Config and engine disagree on the minimum window-height fraction");
 
 // ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
