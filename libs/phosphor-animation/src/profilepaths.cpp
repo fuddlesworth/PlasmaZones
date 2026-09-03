@@ -279,8 +279,14 @@ bool eventPathResolvesPerWindow(const QString& path)
     // check the claim rather than trust it:
     //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
     //                          (open/close/focus) and daemon_apply (minimize)
-    //   window.movement.maximize / .move
+    //   window.movement.move — tryBeginShaderForEvent from window_connections
+    //   window.movement.maximize
     //                        — tryBeginShaderForEvent from window_connections
+    //                          (beginMaximizeShaderMorph, the KWin-native path)
+    //                          AND applyWindowGeometry from the tile batch
+    //                          (slotWindowsTileRequested) for the column
+    //                          maximize-to-edges and monocle legs the engines
+    //                          author themselves
     //   window.movement.snapIn / .snapOut / .layoutSwitch
     //                        — applyWindowGeometry's resolve in drag_snap, and
     //                          every other applyWindowGeometry caller that takes
@@ -321,8 +327,11 @@ QString eventClassForPath(const QString& path)
     }
     // Geometry legs carry an old rect and a new rect (snap/layoutSwitch/
     // maximize) — the rest of the window.movement sub-tree, including its
-    // cascade parent. Maximize IS a geometry change with a before/after
-    // rect, so morph can drive it even though it isn't a built-in default.
+    // cascade parent. The four geometry leaves (snapIn, snapOut,
+    // layoutSwitch, maximize) all carry the window-morph built-in default
+    // (defaultShaderEffectIdForPath); maximize joined the set once the
+    // engines started routing their own column and monocle maximizes through
+    // it. The move leaf above is the sub-tree's one exception.
     if (path == WindowMovement || path.startsWith(movementPrefix)) {
         return EventClassGeometry;
     }
@@ -386,16 +395,21 @@ QString eventClassForPath(const QString& path)
 
 QString defaultShaderEffectIdForPath(const QString& path)
 {
-    // Window snap events default to the geometry-morph shader so a window
-    // animates via shader cross-fade when it snaps/tiles/reflows. This is
-    // the same geometry leg set `eventClassForPath` classes as
-    // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
-    // morph is selectable there, but it isn't a built-in default) — keep the
-    // two lists in sync if a new geometry leg is added. `window.movement.move`
-    // is EXCLUDED: the interactive drag is a held transition a crossfade pack
+    // Window geometry events default to the geometry-morph shader so a window
+    // animates via shader cross-fade when it snaps/tiles/reflows/maximizes.
+    // This is the same geometry leg set `eventClassForPath` classes as
+    // EventClassGeometry — keep the two lists in sync if a new geometry leg
+    // is added. Maximize is in the set because the engines route their own
+    // maximizes through it (a scroll column maximized to the edges, a monocle
+    // tile): before it carried a default those legs rode snapIn, and moving
+    // them here without a default would have un-animated every fresh config.
+    // The cost is that a built-in default counts as pack ownership for the
+    // stock-effect suppression (syncStockEffectSuppression), so KWin's own
+    // maximize effect is unloaded by default. `window.movement.move` is
+    // EXCLUDED: the interactive drag is a held transition a crossfade pack
     // cannot drive (see eventClassForPath), so it carries no built-in default
     // and its move-class packs (wobble) stay opt-in.
-    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch) {
+    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch || path == WindowMaximize) {
         return QStringLiteral("window-morph");
     }
     // Overlay surface show/hide (OSD + popups) default to the fade-and-scale

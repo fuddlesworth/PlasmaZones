@@ -172,10 +172,12 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
     // A pack owns an event only when it would actually RUN: animations
     // enabled, a pack resolved for the event's path, installed, AND applying
     // to the event's contract class. Resolution goes through
-    // resolveShaderWithDefault, so a built-in per-event default would count
-    // as ownership too — though none of the three current event paths
-    // carries one (defaultShaderEffectIdForPath covers only the snap /
-    // layout-switch geometry legs and the daemon overlay surfaces).
+    // resolveShaderWithDefault, so a built-in per-event default counts as
+    // ownership too. WindowMaximize carries one (window-morph, like the other
+    // geometry legs, because the engines route their own column and monocle
+    // maximizes through it), so on a fresh config stock maximize IS unloaded
+    // and only a per-event "None" brings it back. Peek and minimize carry no
+    // default and stay opt-in.
     // For the peek this mirrors the whole peek path's runnability gates, not
     // just the showingDesktopChanged handler's: the handler itself only
     // checks the animations toggle and a non-empty id, while the
@@ -232,28 +234,18 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
     }
     if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMaximize)) {
-        // KNOWN DIVERGENCE on scrolling screens, recorded rather than fixed.
-        //
-        // This unload is whole-session, but the maximize INTERCEPTION is
-        // per-window: a maximize on a scroll-managed tile is claimed by the
-        // strip's maximize-to-edges verb, which skips the WindowMaximize morph
-        // on purpose (window_connections.cpp, the interceptMaximizeRequest
-        // arm) because the column's own batch transition already carries the
-        // resize and installing a second one would supersede it.
-        //
-        // So on a scrolling screen a maximize plays the strip transition,
-        // not the assigned pack, while stock maximize is gone session-wide.
-        // The pack still plays everywhere else — tiling, snapping, floating
-        // windows, and every non-scrolling screen — which is why the unload
-        // is still the right trade.
-        //
-        // Narrowing it would need this predicate to know, per window, whether
-        // the scrolling engine will claim that window's maximize. It cannot:
-        // the answer depends on the window's screen, desktop and activity at
-        // the moment of the request, and the suppression is decided once at
-        // sync time for the whole session. Restoring stock here would be
-        // worse than the divergence, since stock maximize would then fight
-        // the strip batch on exactly the windows this arm exists to protect.
+        // Whole-session unload, and the assigned pack now plays for every
+        // maximize source. A maximize on a scroll-managed tile is claimed by
+        // the strip's maximize-to-edges verb, and a monocle tile's maximize
+        // is written by the tile batch; the batch that authored the resize
+        // routes the leg onto WindowMaximize itself (slotWindowsTileRequested,
+        // maximizeLegThisBatch) and is its single owner. The
+        // windowMaximizedStateChanged handler (window_connections.cpp) skips
+        // the column echo outright, and the monocle echo either skips (X11,
+        // under the suppression counter) or is absorbed by the same-effect
+        // short-circuit onto the batch's live leg (Wayland). Unmanaged windows
+        // take the native path (beginMaximizeShaderMorph). Same pack, one
+        // owner per leg, on every screen.
         wanted << QStringLiteral("maximize");
     }
 
