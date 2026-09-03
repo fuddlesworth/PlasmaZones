@@ -708,6 +708,10 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/layerpopouttransport.cpp
         shell/QmlComponentBarWidgetFactory.h
         shell/qmlcomponentbarwidgetfactory.cpp
+        shell/ControlCenterController.h
+        shell/controlcentercontroller.cpp
+        shell/QmlComponentTileFactory.h
+        shell/qmlcomponenttilefactory.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -721,6 +725,12 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellBarQmlplugin
             PhosphorShellPower::PhosphorShellPowerQml
             PhosphorShellPowerQmlplugin
+            # Phosphor.ControlCenter + its registrar, so shell.qml's
+            # control-center popout resolves the surface and its tiles.
+            # The tiles import Phosphor.Service.* modules, which the
+            # registerQmlTypes() block in shell/main.cpp already publishes.
+            PhosphorShellControlCenter::PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.

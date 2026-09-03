@@ -10,10 +10,12 @@
 // — every bar and the power menu silently fail to create.
 
 import Phosphor.Bar
+import Phosphor.ControlCenter
 import Phosphor.Ipc
 import Phosphor.Popout
 import Phosphor.Power
 import Phosphor.Shell
+import Phosphor.Theme
 import QtQuick
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
@@ -69,12 +71,116 @@ Item {
     // a screen-centred Modal popout over a dimmed scrim, which is what
     // PhosphorPopout.ExclusiveMode.Modal means to the controller. It closes
     // every cooperative popout and suppresses new ones while it is up.
+    //
+    // `session` is NOT bound here. LayerPopoutTransport builds this
+    // component against the ENGINE'S ROOT CONTEXT, where `sessionCoordinator`
+    // — an id belonging to this file's scope — does not resolve, so the
+    // binding threw "ReferenceError: sessionCoordinator is not defined" on
+    // every open and the menu ran with an undefined session. It is handed
+    // in through the request's `props` instead (see togglePowerMenu), which
+    // the transport applies with setInitialProperties inside its
+    // beginCreate/completeCreate window. That path also warns on a name the
+    // delegate does not declare, where a stray binding fails silently.
+    //
+    // The same constraint is why this file must never gain
+    // `pragma ComponentBehavior: Bound` (see the header): both inline
+    // Components here are instantiated from C++ against a foreign context.
     Component {
         id: powerMenuComponent
 
-        PowerMenu {
-            session: sessionCoordinator.session
+        PowerMenu {}
+    }
+
+    // The control center, per docs/phosphor-shell-design/mockups/control-center.svg.
+    //
+    // ControlCenter renders into whatever it is parented to and owns no
+    // surface, so the presentation is chosen HERE. It is a Cooperative
+    // popout rather than the power menu's Modal one: a quick-settings
+    // panel should close when you click away or open something else, not
+    // dim the screen and suppress every other popout.
+    //
+    // The eventual connected-corner form grows this out of the bar through
+    // a BarCanvas socket, which is a change of anchor and transport in this
+    // file rather than a change to the surface.
+    // ControlCenter is a transparent Item that paints only its tiles, so
+    // the PANEL behind them is the host's to draw. It is deliberately not
+    // in the library: the connected-corner form paints the body as part of
+    // the bar's own Shape, where a separate panel rectangle would be wrong.
+    Component {
+        id: controlCenterComponent
+
+        Rectangle {
+            id: panel
+
+            // PopoutHost's contract: the content root MUST carry implicit
+            // sizes. contentFrame measures the delegate by them, and a root
+            // without them collapses the popout to 0x0 and renders empty.
+            implicitWidth: centre.implicitWidth
+            implicitHeight: centre.implicitHeight
+
+            radius: Tokens.radius_xl
+            color: Theme.surface_container
+
+            // Drops in from just above its resting place. PopoutHost fades
+            // and scales its content but never translates it, so without
+            // this the panel simply appears. Driven off Component.onCompleted
+            // rather than an `open` binding because the content is built on
+            // open and destroyed on close, so its whole life IS the open
+            // state.
+            y: -Tokens.spacing_l
+            opacity: 0
+
+            Component.onCompleted: {
+                y = 0;
+                opacity = 1;
+            }
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: Motion.duration_medium_2
+                    easing: Motion.emphasized
+                }
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Motion.duration_medium_2
+                    easing: Motion.standard
+                }
+            }
+
+            ControlCenter {
+                id: centre
+
+                anchors.fill: parent
+                // The registry context property src/shell/main.cpp installs
+                // on every engine. tileIds comes from the registry too, so
+                // the catalog is declared in one place (the controller)
+                // instead of being restated here.
+                provider: ControlCenterRegistry
+                tileIds: ControlCenterRegistry.tileIds
+                columns: 2
+            }
         }
+    }
+
+    function toggleControlCenter(): void {
+        Popouts.toggle({
+            "popoutId": "control-center",
+            "content": controlCenterComponent,
+            // BarCenter, which LayerPopoutTransport treats as "centre on
+            // the screen" — the only placement it implements. BarRight
+            // would be the right request (this hangs off a trailing bar
+            // button) but the transport rejects positional anchors with a
+            // warning and centres anyway, so asking for it would only add
+            // a log line. Bar-anchored placement arrives with the
+            // connected-corner socket, which positions the body by
+            // construction rather than by asking the transport.
+            "anchor": PhosphorPopout.Anchor.BarCenter,
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            "keyboardFocus": true,
+            "dismissOnFocusLoss": true
+        });
     }
 
     function togglePowerMenu(): void {
@@ -88,6 +194,12 @@ Item {
         Popouts.toggle({
             "popoutId": "power",
             "content": powerMenuComponent,
+            // The session the menu acts on, passed as a prop rather than
+            // bound in the Component: ids from this file do not resolve in
+            // the root context the transport builds the delegate against.
+            "props": {
+                "session": sessionCoordinator.session
+            },
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Modal,
             "keyboardFocus": true,
@@ -105,6 +217,10 @@ Item {
         function onWidgetActivated(id: string): void {
             if (id === "power")
                 root.togglePowerMenu();
+            else if (id === "controlcenter")
+                // The bar widget's registered id (barcontroller.cpp), which
+                // is NOT the popout id below: the popout is "control-center".
+                root.toggleControlCenter();
         }
     }
 
@@ -126,6 +242,23 @@ Item {
 
         function toggle(): void {
             root.togglePowerMenu();
+        }
+    }
+
+    // The control center's wire surface, per the mockup's
+    // `phosphorctl call control-center.open`. Same show/toggle split and
+    // the same reason: bind a compositor key to toggle, and call show from
+    // a script that wants the panel up regardless of what is already open.
+    IpcTarget {
+        target: "control-center"
+
+        function show(): void {
+            if (!Popouts.isOpen("control-center"))
+                root.toggleControlCenter();
+        }
+
+        function toggle(): void {
+            root.toggleControlCenter();
         }
     }
 }

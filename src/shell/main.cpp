@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "BarController.h"
+#include "ControlCenterController.h"
 #include "LayerPopoutTransport.h"
+
+#include <PhosphorServiceIdle/IdleService.h>
 
 #include <PhosphorPopout/PopoutController.h>
 
@@ -212,6 +215,22 @@ int main(int argc, char* argv[])
     // each widget's parent so no stale-engine reference is held.
     PhosphorShellApp::BarController barController;
 
+    // The shell's ONE idle ladder, and the control center's tile registry
+    // that borrows it.
+    //
+    // Declared before the engine for the same reverse-destruction reason as
+    // barController. The service is constructed here rather than inside
+    // IdleTile because a tile-owned IdleService would arm a second,
+    // independent ladder: an inhibition taken through the tile would not
+    // hold open the ladder anything else observes, and the tile's own
+    // "keep awake" state would be invisible to the rest of the shell.
+    // ControlCenterController hands it to IdleTile as an initial property.
+    //
+    // Service order matters: idleService must outlive the controller that
+    // hands out pointers to it, which reverse-declaration order gives.
+    PhosphorServiceIdle::IdleService idleService;
+    PhosphorShellApp::ControlCenterController controlCenterController(&idleService);
+
     // The IPC router every IpcTarget in the shell's QML registers with.
     // Declared before the engine for the same reverse-destruction reason as
     // the others: targets unregister themselves on destruction and must find
@@ -315,6 +334,14 @@ int main(int argc, char* argv[])
     // BarRegistry.createWidgetFor(id, parent).
     engine.addEngineHook([&barController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("BarRegistry"), &barController);
+    });
+
+    // The control center's tile registry, bound the same way and for the
+    // same reason: ControlCenter mounts each tile through
+    // ControlCenterRegistry.createTile(id, parent) on every engine the
+    // shell builds, startup and each hot reload alike.
+    engine.addEngineHook([&controlCenterController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controlCenterController);
     });
 
     if (!engine.load(shellUrl)) {
