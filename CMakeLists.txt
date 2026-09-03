@@ -753,6 +753,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-bar-canvas-demo)
     add_subdirectory(examples/phosphor-osd-demo)
     add_subdirectory(examples/phosphor-toast-demo)
+    add_subdirectory(examples/phosphor-control-center-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell

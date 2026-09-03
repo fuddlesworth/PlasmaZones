@@ -56,6 +56,9 @@ Item {
     // Whether this tile has a detail view worth expanding to. Drives the
     // chevron affordance; the host decides what expanding means.
     property bool hasDetail: false
+    // Layout hint read by ControlCenter. A toggle occupies one cell; the
+    // continuous SliderTile overrides this to take the full row.
+    readonly property bool spansRow: false
 
     // The primary action: the user asked to flip this control.
     signal toggled

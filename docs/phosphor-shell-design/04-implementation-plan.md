@@ -1013,13 +1013,33 @@ Visible win: bar feels alive and distinct.
 | Rich text (`markdown2html` port)                                                           | S       |
 | Per-app rules editor                                                                       | S       |
 
-### 4.4: Control center (M3)
+### 4.4: Control center (M3) *(surface + first five tiles shipped)*
 
-| Deliverable                                                                                | Effort  |
-|--------------------------------------------------------------------------------------------|---------|
-| `qml/Phosphor/ControlCenter/ControlCenter.qml` + `Tile.qml` + `DetailPanel.qml`           | M       |
-| Tile catalog: Network / Bluetooth / Audio / Brightness / NightMode / DarkMode / Airplane / Idle / PowerProfile / Wallpaper (each ~1-2 days, depend on Phase 2 services) | L |
-| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | M |
+Lives in `libs/phosphor-shell-control-center/` (module `Phosphor.ControlCenter`),
+depending on theme + widgets + Kirigami.
+
+| Deliverable                                                                                | Status | Notes |
+|--------------------------------------------------------------------------------------------|--------|-------|
+| `qml/Phosphor/ControlCenter/ControlCenter.qml` + `Tile.qml` + `SliderTile.qml` + `DetailPanel.qml` | ✓ shipped | `SliderTile` was not in the original list; Audio and Brightness are ranges, not toggles, and the toggle chrome could not carry them. Tiles declare `spansRow` and the host turns it into a column span. |
+| Tile catalog, first five: Network / Bluetooth / Idle / Audio / Brightness                   | ✓ shipped | Each binds a Phase 2 service. None latches locally: the tile asks, and its state follows the service's echo. |
+| `examples/phosphor-control-center-demo/`                                                     | ✓ shipped | The grid driven by real NetworkManager / BlueZ / PipeWire / logind state, tiles supplied by a `Registry<IControlCenterTileFactory>`. |
+| Remaining catalog: DarkMode / Airplane / PowerProfile / Wallpaper / **NightMode**            | deferred | Each needs a decision first, not just code. See below. |
+| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | deferred | The Dashboard is an open question in `03-component-map.md`; building cards "reusable in Dashboard" pre-empts that call. |
+
+**`IControlCenterTileFactory` was not written here.** It shipped in Phase
+1.3 as a documented header waiting for this surface, so 4.4 consumes the
+seam rather than defining it.
+
+**Why the last five are deferred, individually:**
+- **NightMode** has no backing service at all. Nothing in `libs/phosphor-service-*`
+  does gamma or colour temperature, and on a standalone compositor that is
+  compositor-side work in `phosphor-compositor`. It was grouped with the
+  ready tiles by mistake; it is the least ready of the ten.
+- **DarkMode** and **PowerProfile** need an owner for the setting. Neither
+  is a hardware toggle, and both are state something else may also write.
+- **Airplane** needs an rfkill wrapper, which no shipped service provides.
+- **Wallpaper** overlaps 4.7's picker; building a tile first risks two
+  owners for one surface.
 
 ### 4.5: Lockscreen (M5)
 

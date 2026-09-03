@@ -68,7 +68,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(_phosphor_control_center_qml_files
     qml/Phosphor/ControlCenter/ControlCenter.qml
     qml/Phosphor/ControlCenter/Tile.qml
+    qml/Phosphor/ControlCenter/SliderTile.qml
     qml/Phosphor/ControlCenter/DetailPanel.qml
+    # The built-in tile catalog. These import Phosphor.Service.* modules
+    # that are registered by the host process at load, exactly as the bar's
+    # service-bound widgets do, so the library still links no service.
+    qml/Phosphor/ControlCenter/Tiles/NetworkTile.qml
+    qml/Phosphor/ControlCenter/Tiles/BluetoothTile.qml
+    qml/Phosphor/ControlCenter/Tiles/AudioTile.qml
+    qml/Phosphor/ControlCenter/Tiles/BrightnessTile.qml
+    qml/Phosphor/ControlCenter/Tiles/IdleTile.qml
 )
 
 # Pin each QML file's resource alias to its basename so import resolution

@@ -19,11 +19,17 @@ them. The surface knows how a control tile *behaves*; it does not know
 what any particular tile controls.
 
 Tiles are supplied through a `provider` backed by a
-`Registry<IControlCenterTileFactory>`, so this library links no
-`phosphor-service-*` at all. A tile that needs NetworkManager is the
-shell's to register, not this library's to know about. Per the factory
-contract a null return means "unavailable in this environment" (no
-service, no hardware) and is not an error.
+`Registry<IControlCenterTileFactory>`. Per the factory contract a null
+return means "unavailable in this environment" (no service, no hardware)
+and is not an error.
+
+The built-in tiles ship here, and they import `Phosphor.Service.*`
+modules, but the library still **links** no service: those modules are
+registered by the host process before it loads any QML (each service
+exposes a hand-rolled `registerQmlTypes()`; see `src/shell/main.cpp`), so
+they resolve at runtime. That is the same arrangement the bar's
+service-bound widgets use. A host that registers only some services gets
+working tiles for those and inert ones for the rest.
 
 ## Presentation is the host's choice
 
@@ -43,9 +49,24 @@ in the shell rather than a rewrite here.
 
 | Component       | Role                                                                                          |
 |-----------------|-----------------------------------------------------------------------------------------------|
-| `ControlCenter` | Tile grid + detail routing. Materialises tiles from a provider, owns their teardown, and arbitrates the one-detail-view-at-a-time rule. |
-| `Tile`          | Shared tile chrome: icon, label, live readout, filled/outlined active treatment, ripple, and an optional detail chevron. |
+| `ControlCenter` | Tile grid + detail routing. Materialises tiles from a provider, owns their teardown, applies each tile's layout hint, and arbitrates the one-detail-view-at-a-time rule. |
+| `Tile`          | Chrome for a **toggle**: icon, label, live readout, filled/outlined active treatment, ripple, and an optional detail chevron. Occupies one cell. |
+| `SliderTile`    | Chrome for a **range** (volume, brightness): the same surface with a `PhosphorSlider` and a tappable icon for mute. Spans the full grid width. |
 | `DetailPanel`   | The drill-in view: titled surface with a back affordance that slides over the grid. Content comes from the tile. |
+
+### Built-in tiles
+
+| Tile | Binds to | Shape |
+|---|---|---|
+| `NetworkTile`    | `NetworkHost.wirelessEnabled` (the radio, never NM's global switch) | toggle |
+| `BluetoothTile`  | the first `BluetoothAdapter.powered`                                | toggle |
+| `IdleTile`       | an injected `IdleService`, holding one inhibition cookie            | toggle |
+| `AudioTile`      | the default `PwNode` sink's volume and mute                         | slider |
+| `BrightnessTile` | the first Display-kind `BrightnessDevice`                           | slider |
+
+Layout is the host's job: a tile declares `spansRow` and `ControlCenter`
+turns that into a column span, so a tile never has to know how many
+columns the grid has.
 
 ## Tiles do not self-latch
 

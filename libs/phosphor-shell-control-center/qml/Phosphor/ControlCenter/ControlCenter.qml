@@ -122,6 +122,12 @@ Item {
             const item = root.provider.createTile(id, grid);
             if (item) {
                 built[id] = item;
+                // Layout is the host's job, not the tile's: a tile would
+                // otherwise have to know the column count to span a row.
+                // It declares the intent via `spansRow` and this applies it.
+                item.Layout.fillWidth = true;
+                if (item.spansRow)
+                    item.Layout.columnSpan = root.columns;
                 // The tile chrome carries no id of its own; bind the
                 // detail request here so Tile.qml stays a pure view.
                 if (item.detailRequested !== undefined)
@@ -150,7 +156,13 @@ Item {
     GridLayout {
         id: grid
 
-        anchors.fill: parent
+        // Anchored to the top three edges rather than filling: a host that
+        // gives the surface more height than the tiles need would otherwise
+        // have GridLayout spread the rows down the whole surface, leaving
+        // the grid floating in its own gaps.
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.margins: Tokens.spacing_l
         columns: root.columns
         columnSpacing: Tokens.spacing_m
