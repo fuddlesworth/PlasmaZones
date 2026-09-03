@@ -5,18 +5,40 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
-#include <QDBusReply>
-#include <QDBusArgument>
 #include <QDBusMessage>
-#include <QDBusVariant>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusReply>
+#include <QDBusVariant>
 
+#include <algorithm>
+#include <array>
+#include <limits>
 #include <utility>
 
 namespace PhosphorWorkspaces {
+
+namespace {
+
+/// Placeholder label for a desktop KWin gave no name to.
+///
+/// Deliberately untranslated. `PhosphorI18n::tr()` — the project's only
+/// sanctioned translation entry point for C++ — lives in `src/phosphor_i18n.h`,
+/// inside the GPL-3.0 application tree. This library is LGPL-2.1 precisely so
+/// third-party tools can link it without inheriting GPL, so reaching into that
+/// header would defeat the licence split the project maintains on purpose.
+/// The shell tier that renders these labels has no translation wiring either,
+/// so the string localises when that story lands, together with the rest of
+/// the shell's text. Same reasoning as the bar's widget display names.
+QString fallbackDesktopName(int oneBasedPosition)
+{
+    return QStringLiteral("Desktop %1").arg(oneBasedPosition);
+}
+
+} // namespace
 
 VirtualDesktopManager::VirtualDesktopManager(QObject* parent)
     : QObject(parent)
@@ -36,51 +58,105 @@ bool VirtualDesktopManager::init()
 
 void VirtualDesktopManager::initKWinDBus()
 {
+    // Re-entry guard: a second init() would otherwise construct a second
+    // QDBusInterface (leaking the first as a child for the object's
+    // lifetime) and double every session-bus subscription, so each KWin
+    // signal would be handled twice while stop() removed only one hook
+    // per pair.
+    if (m_kwinVDInterface) {
+        return;
+    }
     m_kwinVDInterface =
         new QDBusInterface(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                            QStringLiteral("org.kde.KWin.VirtualDesktopManager"), QDBusConnection::sessionBus(), this);
 
     if (m_kwinVDInterface->isValid()) {
         m_useKWinDBus = true;
+        // The `rows` / `current` property reads in refreshFromKWin are
+        // synchronous in both running and non-running modes, and
+        // QDBusInterface defaults to a 25-second timeout. A
+        // wedged-but-registered KWin would stall whichever thread refreshes
+        // for that long, which for the shell is the GUI thread. One second
+        // is far beyond any healthy round trip and bounds the damage.
+        //
+        // This does NOT bound everything: QDBusInterface's constructor above
+        // already performed a blocking Introspect call at the 25-second
+        // default before isValid() could be consulted, and setTimeout cannot
+        // reach backwards to it. Capping that too would mean probing with a
+        // bounded message before constructing the interface, or building it
+        // asynchronously — worth doing if a wedged KWin ever shows up in
+        // practice, but not something this line achieves.
+        m_kwinVDInterface->setTimeout(1000);
 
         refreshFromKWin();
-
-        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("currentChanged"), this,
-                                              SLOT(onKWinCurrentChanged(QString)));
-
-        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("countChanged"), this,
-                                              SLOT(onNumberOfDesktopsChanged(int)));
-
-        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
-
-        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
-
-        // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
-        // the desktop count, so it fires neither countChanged nor created/removed
-        // — without this the cached row count goes stale and cross-desktop
-        // directional navigation computes neighbours against the wrong grid shape.
-        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
-                                              QStringLiteral("rowsChanged"), this, SLOT(onKWinDesktopRowsChanged()));
+        subscribeToKWin();
     } else {
         delete m_kwinVDInterface;
         m_kwinVDInterface = nullptr;
     }
 }
 
-void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, const QString& currentId)
+void VirtualDesktopManager::subscribeToKWin()
 {
-    m_desktopNames.clear();
-    m_desktopIds.clear();
+    // Guarded so a stop()/start() cycle re-subscribes exactly once; a
+    // doubled subscription would handle every KWin signal twice while
+    // stop() removed only one hook per pair.
+    if (m_kwinSubscribed || !m_kwinVDInterface) {
+        return;
+    }
+    m_kwinSubscribed = true;
 
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("currentChanged"), this, SLOT(onKWinCurrentChanged(QString)));
+
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("countChanged"), this, SLOT(onNumberOfDesktopsChanged(uint)));
+
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
+
+    // Renames and position moves. KWin leaves `count` untouched for
+    // these, so without this subscription a stale desktop name would
+    // survive until an unrelated create/remove forced a refresh.
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("desktopDataChanged"), this, SLOT(onKWinDesktopDataChanged()));
+
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
+
+    // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
+    // the desktop count, so it fires neither countChanged nor created/removed
+    // — without this the cached row count goes stale and cross-desktop
+    // directional navigation computes neighbours against the wrong grid shape.
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                          QStringLiteral("rowsChanged"), this, SLOT(onKWinDesktopRowsChanged()));
+}
+
+void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, const QString& currentId, int rows)
+{
+    // Validate the Get(desktops) reply envelope, then hand the payload to
+    // the shared core. Parse into LOCALS and commit only on success (see
+    // applyDesktopListArg): a failed reply must leave the previous snapshot
+    // untouched rather than emptying ids beside a stale count.
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return;
+    }
+    const QDBusVariant dbusVariant = reply.arguments().at(0).value<QDBusVariant>();
+    const QVariant innerVariant = dbusVariant.variant();
+    if (innerVariant.userType() != qMetaTypeId<QDBusArgument>()) {
+        return;
+    }
+    applyDesktopListArg(*static_cast<const QDBusArgument*>(innerVariant.constData()), currentId, rows);
+}
+
+void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const QString& currentId, int rows)
+{
     struct DesktopInfo
     {
         int position;
@@ -89,52 +165,116 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, con
     };
     QList<DesktopInfo> desktops;
 
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QVariant outerVariant = reply.arguments().at(0);
-        QDBusVariant dbusVariant = outerVariant.value<QDBusVariant>();
-        QVariant innerVariant = dbusVariant.variant();
+    // Parse into LOCALS and commit only on success. The members must not be
+    // cleared up front: a failed reply (KWin restarting, a congested bus, an
+    // async call that errored) would then leave ids empty while the count
+    // kept its previous value, and the "ids and names are index-aligned"
+    // contract this class publishes would be broken with no way back until
+    // some unrelated signal forced another refresh. Every id-keyed operation
+    // fails silently in that state: the pager empties, and both
+    // setCurrentDesktopById and setCurrentDesktop drop every switch because
+    // they validate against the empty id list.
+    //
+    // `position` is read as int even though the WIRE type is a(uss).
+    // KWin's introspection XML advertises a(iss), but `busctl get-property`
+    // shows the marshalled value is actually a(uss). Reading it into an int
+    // is bit-compatible for the non-negative positions KWin emits, and
+    // QDBusDemarshaller's union read yields the right value — verified
+    // against the live interface rather than inferred. Flagged here because
+    // the XML and the wire disagree, which is exactly the kind of thing a
+    // future reader would "fix" in the wrong direction.
+    arg.beginArray();
+    while (!arg.atEnd()) {
+        DesktopInfo info;
+        arg.beginStructure();
+        arg >> info.position >> info.id >> info.name;
+        arg.endStructure();
+        desktops.append(info);
+    }
+    arg.endArray();
 
-        if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
-            const QDBusArgument& arg = *static_cast<const QDBusArgument*>(innerVariant.constData());
-
-            arg.beginArray();
-            while (!arg.atEnd()) {
-                DesktopInfo info;
-                arg.beginStructure();
-                arg >> info.position >> info.id >> info.name;
-                arg.endStructure();
-                desktops.append(info);
-            }
-            arg.endArray();
-
-            std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
-                return a.position < b.position;
-            });
-
-            for (const auto& desktop : desktops) {
-                m_desktopIds.append(desktop.id);
-                QString name = desktop.name;
-                if (name.isEmpty()) {
-                    name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
-                }
-                m_desktopNames.append(name);
-            }
+    // An empty array is a well-formed reply, but KWin always has at least one
+    // desktop, so it means the demarshal produced nothing usable. Treat it
+    // like a failed reply rather than publishing an empty compositor.
+    if (desktops.isEmpty()) {
+        return;
+    }
+    // D-Bus replies are a system boundary, and a signature mismatch makes
+    // QDBusArgument extraction yield DEFAULTS silently — the isEmpty guard
+    // catches a fully-empty result but not a partially-garbage one whose
+    // ids all demarshalled to empty strings. An empty id can never be a
+    // real KWin desktop UUID, so reject the whole snapshot.
+    for (const auto& desktop : desktops) {
+        if (desktop.id.isEmpty()) {
+            return;
         }
     }
 
-    if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
-        m_desktopCount = m_desktopIds.size();
+    std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
+        return a.position < b.position;
+    });
+
+    QStringList newIds;
+    QStringList newNames;
+    newIds.reserve(desktops.size());
+    newNames.reserve(desktops.size());
+    for (const auto& desktop : desktops) {
+        newIds.append(desktop.id);
+        newNames.append(desktop.name.isEmpty() ? fallbackDesktopName(desktop.position + 1) : desktop.name);
     }
 
-    if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
-        int idx = m_desktopIds.indexOf(currentId);
+    // The count IS the list length. Reading it from the separate `count`
+    // property would reintroduce the possibility of the two disagreeing, and
+    // the pad loop that used to follow could never run anyway: names and ids
+    // are built together above and are the same length by construction.
+    const int newCount = newIds.size();
+
+    int newCurrent = m_currentDesktop;
+    if (!currentId.isEmpty()) {
+        const int idx = newIds.indexOf(currentId);
         if (idx >= 0) {
-            m_currentDesktop = idx + 1;
+            newCurrent = idx + 1;
         }
     }
+    // Clamp here, not only in onNumberOfDesktopsChanged. Removing a desktop
+    // BEFORE the current one renumbers it downward without KWin sending
+    // currentChanged (the id did not move), and that handler early-returns
+    // when the count already matches — so this is the only place the
+    // out-of-range case is guaranteed to be caught. Publishing a position
+    // greater than the count would make activeIndex read past the end.
+    newCurrent = qBound(1, newCurrent, qMax(1, newCount));
 
-    while (m_desktopNames.size() < m_desktopCount) {
-        m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
+    const bool listChanged = (newIds != m_desktopIds || newNames != m_desktopNames);
+    const bool currentChanged = (newCurrent != m_currentDesktop);
+    const bool countChanged = (newCount != m_desktopCount);
+
+    m_desktopIds = newIds;
+    m_desktopNames = newNames;
+    m_desktopCount = newCount;
+    m_desktopRows = rows;
+    m_currentDesktop = newCurrent;
+
+    // Change-gated: a refresh runs on create, remove, and every rename, and
+    // most of those leave this data untouched. An unconditional emit would
+    // reset a pager's model on unrelated events.
+    if (listChanged) {
+        Q_EMIT desktopsChanged();
+    }
+    // A desktop added or removed BEFORE the current one renumbers the current
+    // position while its id stays put, so KWin sends no currentChanged and
+    // this is the only place the move is observable. Consumers key placement
+    // state on the 1-based number and re-read only on this signal.
+    if (currentChanged) {
+        Q_EMIT currentDesktopChanged(m_currentDesktop);
+    }
+    // The count notification belongs HERE, where the value is committed.
+    // The create/remove handlers used to emit it themselves, which worked
+    // only while refreshFromKWin also read `count` synchronously. Now that
+    // the whole snapshot lands with the async reply, emitting from those
+    // handlers would carry the OLD count and clamp against it.
+    if (countChanged) {
+        clampScreenDesktopsToCount();
+        Q_EMIT desktopCountChanged(m_desktopCount);
     }
 }
 
@@ -144,63 +284,99 @@ void VirtualDesktopManager::refreshFromKWin()
         return;
     }
 
-    QVariant countVar = m_kwinVDInterface->property("count");
-    if (countVar.isValid()) {
-        m_desktopCount = countVar.toInt();
-    }
-
-    // Grid row count — drives the shape cross-desktop directional navigation
-    // walks. Clamp to >= 1 so a missing / zero property can't divide the grid
-    // arithmetic by zero.
-    QVariant rowsVar = m_kwinVDInterface->property("rows");
-    if (rowsVar.isValid()) {
-        // Read-only cache for the on-demand desktopRows() pull used by
-        // cross-desktop directional navigation; no NOTIFY signal — nothing
-        // subscribes to row-shape changes, the value is re-read per navigation.
-        m_desktopRows = qMax(1, rowsVar.toInt());
-    }
-
-    QVariant currentVar = m_kwinVDInterface->property("current");
-    QString currentId;
-    if (currentVar.isValid()) {
-        currentId = currentVar.toString();
-    }
-
-    QDBusMessage getDesktopsMsg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
-                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    getDesktopsMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager") << QStringLiteral("desktops");
-
-    if (!m_running) {
-        QDBusMessage reply = QDBusConnection::sessionBus().call(getDesktopsMsg, QDBus::Block, 1000);
-        applyDesktopListReply(reply, currentId);
-        return;
-    }
-
+    // Bump BEFORE branching, not only on the async path. stop() clears
+    // m_running while leaving every D-Bus subscription live, so a later
+    // signal can re-enter here on the blocking path while an earlier async
+    // watcher is still outstanding; without bumping, that watcher's
+    // generation still matches and it would apply its older snapshot on top
+    // of the newer blocking result.
     ++m_refreshGeneration;
     const uint thisGeneration = m_refreshGeneration;
 
-    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(getDesktopsMsg);
+    if (!m_running) {
+        // The blocking path (init/tests only) reads the scalar properties
+        // into LOCALS and hands them to applyDesktopListReply, which commits
+        // them together with the desktop list or commits nothing at all —
+        // committing here would leave a fresh `count` beside stale `ids` on
+        // a dropped reply. Rows clamps to >= 1 so a missing or zero property
+        // cannot divide the grid arithmetic by zero.
+        const QVariant rowsVar = m_kwinVDInterface->property("rows");
+        const int pendingRows = rowsVar.isValid() ? qMax(1, rowsVar.toInt()) : m_desktopRows;
+
+        const QVariant currentVar = m_kwinVDInterface->property("current");
+        QString currentId;
+        if (currentVar.isValid()) {
+            currentId = currentVar.toString();
+        }
+
+        QDBusMessage getDesktopsMsg =
+            QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                           QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+        getDesktopsMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager") << QStringLiteral("desktops");
+
+        QDBusMessage reply = QDBusConnection::sessionBus().call(getDesktopsMsg, QDBus::Block, 1000);
+        applyDesktopListReply(reply, currentId, pendingRows);
+        return;
+    }
+
+    // Running path: ONE async GetAll for rows + current + desktops. The
+    // former shape read `rows` and `current` through QDBusInterface's
+    // blocking property() on the GUI thread before issuing the async list
+    // call, so every KWin signal (create/remove/rename/rowsChanged/
+    // countChanged) could stall the shell up to ~2 s against a wedged
+    // compositor. GetAll keeps the whole snapshot in a single asynchronous
+    // round trip, threaded through the same generation guard.
+    QDBusMessage getAllMsg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("GetAll"));
+    getAllMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager");
+
+    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(getAllMsg);
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
-                if (thisGeneration != m_refreshGeneration) {
-                    w->deleteLater();
-                    return;
-                }
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, thisGeneration](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (thisGeneration != m_refreshGeneration) {
+            return;
+        }
 
-                QDBusPendingReply<QDBusVariant> reply = *w;
-                applyDesktopListReply(reply.reply(), currentId);
+        QDBusPendingReply<QVariantMap> reply = *w;
+        if (reply.isError()) {
+            return;
+        }
+        const QVariantMap props = reply.value();
 
-                w->deleteLater();
-            });
+        const QVariant rowsVar = props.value(QStringLiteral("rows"));
+        const int pendingRows = rowsVar.isValid() ? qMax(1, rowsVar.toInt()) : m_desktopRows;
+        const QString currentId = props.value(QStringLiteral("current")).toString();
+
+        // In a GetAll a{sv} map the complex-typed `desktops` value arrives
+        // as a QDBusArgument inside the QVariant; the scalar members above
+        // demarshal to plain types.
+        const QVariant desktopsVar = props.value(QStringLiteral("desktops"));
+        if (desktopsVar.userType() != qMetaTypeId<QDBusArgument>()) {
+            return;
+        }
+        applyDesktopListArg(*static_cast<const QDBusArgument*>(desktopsVar.constData()), currentId, pendingRows);
+    });
 }
 
 void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 {
-    int idx = m_desktopIds.indexOf(desktopId);
-    int newDesktop = (idx >= 0) ? idx + 1 : 1;
+    const int idx = m_desktopIds.indexOf(desktopId);
+    if (idx < 0) {
+        // An id this snapshot has not seen yet: currentChanged can race
+        // ahead of the async desktop-list refresh (a switch to a
+        // just-created desktop lands here before the desktopCreated
+        // refresh commits). Publishing a fallback of 1 would hand every
+        // consumer a wrong position until the refresh corrected it —
+        // daemon placement keys on this number. Re-read instead and let
+        // applyDesktopListArg commit and announce the right value; its
+        // reply reads `current` too, so nothing is lost.
+        refreshFromKWin();
+        return;
+    }
+    const int newDesktop = idx + 1;
 
     if (m_currentDesktop == newDesktop) {
         return;
@@ -212,15 +388,19 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 
 void VirtualDesktopManager::onKWinDesktopCreated()
 {
+    // No emit here: refreshFromKWin is asynchronous once started, so the
+    // count is still the old one at this point. applyDesktopListReply
+    // notifies when it actually commits the new snapshot.
     refreshFromKWin();
-    Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 void VirtualDesktopManager::onKWinDesktopRemoved()
 {
+    // Neither the clamp nor the emit belongs here: refreshFromKWin is
+    // asynchronous once started, so both would run against the OLD count
+    // and the clamp would be a no-op. applyDesktopListReply does both when
+    // it commits the new snapshot.
     refreshFromKWin();
-    clampScreenDesktopsToCount();
-    Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 void VirtualDesktopManager::onKWinDesktopRowsChanged()
@@ -239,6 +419,11 @@ void VirtualDesktopManager::start()
     m_running = true;
 
     if (m_useKWinDBus) {
+        // Re-install the session-bus subscriptions dropped by a prior
+        // stop(). subscribeToKWin is guarded, so on first start (where
+        // init() already subscribed) this is a no-op rather than a
+        // doubling.
+        subscribeToKWin();
         refreshFromKWin();
     }
 }
@@ -246,6 +431,35 @@ void VirtualDesktopManager::start()
 void VirtualDesktopManager::stop()
 {
     m_running = false;
+    // Drop the session-bus subscriptions too. Clearing the flag alone left a
+    // "stopped" manager still servicing currentChanged / countChanged /
+    // desktopCreated / desktopRemoved / desktopDataChanged, and each of
+    // those re-enters refreshFromKWin and issues blocking D-Bus calls — so
+    // stop() did not stop anything, it only changed which code path the
+    // work took. It matters most during destruction: ~VirtualDesktopManager
+    // calls stop(), and a signal dispatched between there and ~QObject would
+    // re-enter a half-destroyed object.
+    //
+    // Each (signal, slot) pair must be named EXPLICITLY. QDBusConnection
+    // registers hooks keyed on signal name plus path, and its disconnect()
+    // returns false for a null slot or an empty signal name — a wildcard
+    // "drop everything for this interface" call compiles, runs, and removes
+    // nothing at all. Mirrors the six connect() calls in initKWinDBus.
+    // Not constexpr: SLOT() expands to a qFlagLocation() call.
+    const std::array<std::pair<const char*, const char*>, 6> subscriptions{{
+        {"currentChanged", SLOT(onKWinCurrentChanged(QString))},
+        {"countChanged", SLOT(onNumberOfDesktopsChanged(uint))},
+        {"desktopCreated", SLOT(onKWinDesktopCreated())},
+        {"desktopDataChanged", SLOT(onKWinDesktopDataChanged())},
+        {"desktopRemoved", SLOT(onKWinDesktopRemoved())},
+        {"rowsChanged", SLOT(onKWinDesktopRowsChanged())},
+    }};
+    for (const auto& [signalName, slotSpec] : subscriptions) {
+        QDBusConnection::sessionBus().disconnect(
+            QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+            QStringLiteral("org.kde.KWin.VirtualDesktopManager"), QLatin1String(signalName), this, slotSpec);
+    }
+    m_kwinSubscribed = false;
 }
 
 int VirtualDesktopManager::currentDesktop() const
@@ -347,21 +561,61 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
     }
 }
 
-void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
+void VirtualDesktopManager::setCurrentDesktopById(const QString& desktopId)
 {
-    if (m_desktopCount == count) {
+    if (desktopId.isEmpty() || !m_useKWinDBus || !m_kwinVDInterface) {
+        return;
+    }
+    // Only ids we actually know about. Writing an unknown UUID would
+    // either be rejected by KWin or, worse, switch to a desktop this
+    // manager has no record of, leaving m_currentDesktop wrong until the
+    // next refresh.
+    if (!m_desktopIds.contains(desktopId)) {
+        return;
+    }
+    m_kwinVDInterface->setProperty("current", desktopId);
+}
+
+void VirtualDesktopManager::onKWinDesktopDataChanged()
+{
+    // No count change to report; refreshFromKWin re-reads the list and
+    // applyDesktopListReply emits desktopsChanged if anything moved.
+    refreshFromKWin();
+}
+
+void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
+{
+    // The parameter must stay `uint`: KWin's numberOfDesktopsChanged carries
+    // `u` on the wire, and QDBusConnection::connect matches on the signature,
+    // so an `int` slot here returns true at connect time and then never fires.
+    // `uint` is therefore a wire type only — narrow once at this boundary and
+    // let everything below stay int, matching m_currentDesktop, the 1-based
+    // desktop math, and desktopCountChanged(int).
+    // Boundary validation: KWin never emits 0, but this is a session-bus
+    // signal any peer can send, and committing 0 would publish an invalid
+    // 1-based currentDesktopChanged(0) below until a refresh corrected it.
+    // The upper bound keeps the narrowing cast below well-defined.
+    if (count < 1 || count > static_cast<uint>(std::numeric_limits<int>::max())) {
+        return;
+    }
+    const int newCount = static_cast<int>(count);
+    if (m_desktopCount == newCount) {
         return;
     }
 
-    m_desktopCount = count;
+    m_desktopCount = newCount;
 
     if (m_useKWinDBus) {
+        // Asynchronous once started: nothing has been re-read by the time
+        // the clamp below runs, and the full snapshot (ids, names, rows,
+        // current) commits later in applyDesktopListArg, which re-clamps
+        // and re-emits change-gated against the values written here.
         refreshFromKWin();
     }
 
-    // Clamp against the (possibly refreshed) live count, not the signal arg:
-    // refreshFromKWin() may have re-read m_desktopCount from KWin's property,
-    // and the current desktop must stay within whatever count is now authoritative.
+    // Clamp against the live member, not the signal arg, so this handler
+    // stays self-consistent with desktopCount() at every point: between
+    // here and the async commit the member IS the authoritative count.
     if (m_currentDesktop > m_desktopCount) {
         m_currentDesktop = m_desktopCount;
         Q_EMIT currentDesktopChanged(m_currentDesktop);
@@ -369,7 +623,12 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 
     clampScreenDesktopsToCount();
 
-    Q_EMIT desktopCountChanged(count);
+    // Report the live member, not the signal argument, for the same reason
+    // the clamp above reads it: the member is what desktopCount() answers,
+    // so emitting anything else would let a consumer's cached count
+    // disagree with a follow-up read. Matches the emit in
+    // applyDesktopListArg, which already sends m_desktopCount.
+    Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 int VirtualDesktopManager::desktopCount() const
@@ -391,9 +650,24 @@ QStringList VirtualDesktopManager::desktopNames() const
     QStringList names;
     int count = desktopCount();
     for (int i = 1; i <= count; ++i) {
-        names.append(QStringLiteral("Desktop %1").arg(i));
+        names.append(fallbackDesktopName(i));
     }
     return names;
+}
+
+bool VirtualDesktopManager::isAvailable() const
+{
+    return m_useKWinDBus;
+}
+
+QStringList VirtualDesktopManager::desktopIds() const
+{
+    // No synthesised fallback, unlike desktopNames(): a made-up name is a
+    // harmless placeholder, but a made-up id would be a key that matches
+    // nothing in KWin, and setCurrentDesktopById would silently drop every
+    // switch made against it. An empty list says "no stable ids here",
+    // which a caller can act on.
+    return m_desktopIds;
 }
 
 } // namespace PhosphorWorkspaces

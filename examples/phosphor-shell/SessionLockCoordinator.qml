@@ -47,6 +47,22 @@ QtObject {
             }
             coordinator.lock.lock();
         }
+
+        // Log out has no destination of its own. SessionHost::logout() does
+        // no D-Bus at all — it only emits logoutRequested, on the theory
+        // that a compositor owns the graceful end-of-session path (close
+        // clients, save state). This shell is a layer-shell client on
+        // someone else's compositor and has no such path to ask for, so
+        // without a listener the menu's Log out entry would do nothing at
+        // all.
+        //
+        // Session.Terminate through logind is the honest mechanism
+        // available, and the same fallback the phosphor-service-session CLI
+        // example uses. It ends the session without app-state saving, which
+        // is why the menu treats it as a destructive action.
+        function onLogoutRequested(): void {
+            coordinator.session.terminateSession();
+        }
     }
 
     property Connections lockConnections: Connections {

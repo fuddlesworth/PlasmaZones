@@ -28,8 +28,8 @@ namespace PhosphorServicePipeWire {
 /// Registered as a QML singleton (see qmlregistration.cpp; the class
 /// deliberately omits QML_ELEMENT / QML_SINGLETON macros and is wired
 /// imperatively, matching every sibling phosphor-service-* lib) so QML
-/// reads `PipeWireHost.connection.defaultSinkName` rather than
-/// maintaining its own `PipeWireConnection` instance.
+/// reads `PipeWireHost.defaultSinkName` rather than maintaining its own
+/// `PipeWireConnection` instance.
 ///
 /// Facade coverage: every observable signal of `PipeWireConnection`
 /// is forwarded one-for-one — `connectedChanged`,
@@ -41,6 +41,13 @@ namespace PhosphorServicePipeWire {
 /// `writeMuted`) live only on the connection, so writers still go
 /// through `host.connection.*` — which the `connection` property exposes
 /// (alongside its other use: handing the connection to a `PwNodeModel`).
+///
+/// `defaultSink` / `defaultSource` are the one exception to the
+/// pure-forwarding rule: they are DERIVED, joining the connection's
+/// default-name strings against its node set. The join lives here rather
+/// than in each consumer because its correctness depends on ordering
+/// details of the registry (a node's `name` arrives after its
+/// `nodeAdded`) that QML has no good way to observe.
 ///
 /// The host is constructed lazily on first QML use (via
 /// `qmlRegisterSingletonType`'s factory) and auto-connects to the
@@ -65,6 +72,19 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireHost : public QObject
     Q_PROPERTY(bool daemonAvailable READ isDaemonAvailable NOTIFY daemonAvailableChanged)
     Q_PROPERTY(QString defaultSinkName READ defaultSinkName NOTIFY defaultSinkNameChanged)
     Q_PROPERTY(QString defaultSourceName READ defaultSourceName NOTIFY defaultSourceNameChanged)
+    /// The `Audio/Sink` node named by `defaultSinkName`, or null while no
+    /// default is published or the named node is not (yet) in the registry.
+    /// Resolving the name against the node set is the one piece of state
+    /// every consumer of the default sink needs and none can derive
+    /// cheaply: the name arrives from the metadata module while the node
+    /// arrives from the registry, in either order, and a node's `name`
+    /// itself lands in an info batch AFTER its `nodeAdded`. Doing this in
+    /// QML means a hidden delegate per row re-implementing the join, which
+    /// is both duplicated per widget and easy to get wrong.
+    Q_PROPERTY(PhosphorServicePipeWire::PwNode* defaultSink READ defaultSink NOTIFY defaultSinkChanged)
+    /// The `Audio/Source` node named by `defaultSourceName`. Same
+    /// resolution semantics as `defaultSink`.
+    Q_PROPERTY(PhosphorServicePipeWire::PwNode* defaultSource READ defaultSource NOTIFY defaultSourceChanged)
 
 public:
     explicit PipeWireHost(QObject* parent = nullptr);
@@ -80,6 +100,8 @@ public:
     [[nodiscard]] bool isDaemonAvailable() const;
     [[nodiscard]] QString defaultSinkName() const;
     [[nodiscard]] QString defaultSourceName() const;
+    [[nodiscard]] PwNode* defaultSink() const;
+    [[nodiscard]] PwNode* defaultSource() const;
 
 public Q_SLOTS:
     /// Trigger a re-connect on the underlying connection. Useful after
@@ -103,6 +125,8 @@ Q_SIGNALS:
     void daemonAvailableChanged();
     void defaultSinkNameChanged();
     void defaultSourceNameChanged();
+    void defaultSinkChanged();
+    void defaultSourceChanged();
     /// Forwarded from `PipeWireConnection::error`. Fired from the GUI
     /// thread when PipeWire reports a core-level error (daemon restart,
     /// version mismatch, pre-handshake failure). The host re-emits
@@ -123,6 +147,15 @@ Q_SIGNALS:
     void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:
+    /// Re-join `defaultSinkName` / `defaultSourceName` against the current
+    /// node set and emit only on an actual change of identity. Called on
+    /// every input that can move the answer: either name, any node arriving
+    /// or leaving, and any ENDPOINT node's info batch. Stream nodes are
+    /// deliberately not subscribed — the node set carries one entry per
+    /// application audio stream as well as the machine's few endpoints, and
+    /// a stream can never be a default.
+    void resolveDefaults();
+
     class Private;
     std::unique_ptr<Private> d;
 };
