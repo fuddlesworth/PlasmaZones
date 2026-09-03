@@ -27,7 +27,9 @@
 // windows). Everything stacked above the strip — OSDs, notifications,
 // floating windows, panels, daemon overlays — is excluded from the capture
 // and composited sharp on top after the pass, so a pack cannot smear a
-// surface that is not scrolling. stripMask() below is still useful for
+// surface that is not scrolling. The software cursor is kept out the same
+// way: the compositor's cursor is hidden for the pass and the pass blits it
+// itself as its last draw. stripMask() below is still useful for
 // confining distortion to the strip's work area (keeping the wallpaper
 // margins steady, feathering the blur at the strip's edges).
 //
