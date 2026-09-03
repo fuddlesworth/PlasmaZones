@@ -14,15 +14,15 @@
  *
  * This header owns the JSON keys and numeric defaults that the tiling
  * algorithm primitives need to be self-contained.  It intentionally has
- * NO dependency on Phosphor config or core layers, so it can move
- * cleanly into the future libs/phosphor-tiles library without dragging
- * cross-layer headers along.
+ * NO dependency on the Phosphor config or core layers, so it stays buildable
+ * without dragging cross-layer headers along.
  *
- * Non-algorithm consumers (`src/dbus/autotileadaptor`, `src/core/geometryutils`,
- * etc.) that genuinely need these symbols include this header directly. There
- * is no transitive re-export from `core/constants.h` — that backward-source
- * compatibility chain was removed so unrelated layers no longer resolve the
- * PhosphorTiles include path.
+ * Non-algorithm consumers reach these symbols by including this header, either
+ * directly (`src/dbus/autotileadaptor/config.cpp`) or through one in-tree base
+ * of the same class (`src/config/configdefaults_appearance.h`, which is how
+ * ConfigDefaults sees them). There is no transitive re-export from
+ * `core/constants.h` — that backward-source compatibility chain was removed so
+ * unrelated layers no longer resolve the PhosphorTiles include path.
  */
 namespace PhosphorTiles {
 
@@ -59,6 +59,12 @@ constexpr int DefaultInnerGap = 8;
 constexpr int DefaultOuterGap = 8;
 constexpr int MinGap = 0;
 constexpr int MaxGap = 200;
+/// Smallest rect the tiling primitives will emit on either axis.
+/// DUPLICATED, not shared: `PhosphorGeometry::GeometryDefaults::MinRectSizePx`
+/// backs the daemon's enforceMinSizes and `MIN_ZONE_SIZE` in
+/// libs/phosphor-tiles/src/pluau/pluau.luau backs the Luau-side guard. All
+/// three must move together — phosphor-tiles does not link phosphor-geometry,
+/// and the Luau copy is a literal by design (locale-safe float parsing).
 constexpr int MinRectSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
 /// Minimum pixel movement of a window edge during an interactive resize before
@@ -68,12 +74,22 @@ constexpr int GapEdgeThresholdPx = 5;
 /// without perturbing gap snapping.
 constexpr int ResizeEdgeMoveThresholdPx = 5;
 constexpr int MinMaxWindows = 1;
+/// Bounds the CONFIG-sourced window cap (the settings spin box, the per-screen
+/// override, and AutotileConfig::fromJson). It is NOT a system-wide ceiling: a
+/// scripted algorithm's own `defaultMaxWindows` metadata is bounded by the
+/// MinMetadataWindows / MaxMetadataWindows pair below instead, so a script may
+/// declare, and resolve to, a cap above this one.
 constexpr int MaxMaxWindows = 12;
 // Sentinel returned by PerScreenConfigResolver::effectiveMaxWindows() when the
 // user has selected AutotileOverflowBehavior::Unlimited. INT_MAX/2 — not
 // INT_MAX — so any caller that does `effectiveMaxWindows(...) + 1` (e.g.
 // growth-headroom calculations) can't overflow.
 constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
+/// Ceiling on zones in one LAYOUT. Distinct from, and larger than, the overlay
+/// shader's `PhosphorRendering::MaxZones` (64), which bounds a UBO array rather
+/// than the layout; the zone shader item clamps to that one independently and
+/// warns once when a layout overruns it. Reachable only in Unlimited overflow
+/// mode, since MaxMaxWindows is far smaller.
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
 // Bounds for the opaque per-algorithm script-state bag (TilingState::scriptState).

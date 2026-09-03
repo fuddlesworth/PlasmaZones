@@ -323,7 +323,7 @@ void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveL
     QVERIFY(!blob.isEmpty());
 
     // Rewrite the one column's width to the legacy index form (index 2 of
-    // the default 1/3, 1/2, 2/3 vocabulary).
+    // the default 1/3, 1/2, 2/3, 3/4, 1 vocabulary, so still 2/3).
     const QString key = blob.keys().first();
     QJsonObject strip = blob.value(key).toObject();
     QJsonArray columns = strip.value(QLatin1String("columns")).toArray();

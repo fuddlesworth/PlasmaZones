@@ -21,6 +21,8 @@ static_assert(PhosphorEngine::GeometryDefaults::InnerGap == PlasmaZones::Default
               "Library and daemon InnerGap defaults out of sync");
 static_assert(PhosphorEngine::GeometryDefaults::OuterGap == PlasmaZones::Defaults::OuterGap,
               "Library and daemon OuterGap defaults out of sync");
+static_assert(PhosphorEngine::GeometryDefaults::MaxGap == PlasmaZones::Defaults::MaxGap,
+              "Library and daemon gap ceilings out of sync — both engines clamp resolved gaps to this");
 
 namespace PlasmaZones {
 
@@ -41,19 +43,27 @@ ScreenGeometries resolveScreenGeometries(PhosphorScreens::ScreenManager* mgr, co
     return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
 }
 
+// Bound any resolved gap to the shared [0, MaxGap] range, whatever layer it
+// came from. Matches the anonymous-namespace clampGap in the autotile arm's
+// PerScreenConfigResolver.cpp, so one context gap-override rule cannot mean
+// two different things in the two modes.
+int clampGap(int v)
+{
+    return qBound(0, v, PhosphorEngine::GeometryDefaults::MaxGap);
+}
+
 // Resolve outer gaps from a PerScreenKeys-shaped override map (the
 // context-rule gap override) via the shared atomic-layer resolution in
-// PhosphorEngine::GapResolution. Snapping consumes raw map values (identity
-// normalize); missing sides in a partial per-side map fall back to the map's
-// own uniform OuterGap or, failing that, the global setting.
+// PhosphorEngine::GapResolution. Every consumed value, map-sourced or the
+// missing-side base, goes through the shared clamp; missing sides in a partial
+// per-side map fall back to the map's own uniform OuterGap or, failing that,
+// the global setting.
 std::optional<::PhosphorLayout::EdgeGaps> resolveOuterGapsFromMap(const QVariantMap& map,
                                                                   PhosphorEngine::IGeometrySettings* settings)
 {
     namespace GD = PhosphorEngine::GeometryDefaults;
     const int base = settings ? settings->outerGap() : GD::OuterGap;
-    return PhosphorEngine::GapResolution::outerGapsFromOverrideMap(map, base, [](int v) {
-        return v;
-    });
+    return PhosphorEngine::GapResolution::outerGapsFromOverrideMap(map, base, clampGap);
 }
 
 } // anonymous namespace
@@ -123,31 +133,43 @@ QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
 int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, const QVariantMap& ruleGapOverride)
 {
     namespace PSK = PhosphorEngine::PerScreenKeys;
-    // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
-    // Same shared helper the autotile resolver uses; snapping consumes the raw
-    // value (identity normalize).
-    if (auto v = PhosphorEngine::GapResolution::gapFromOverrideMap(ruleGapOverride, PSK::InnerGap, [](int g) {
-            return g;
-        })) {
-        return *v;
-    }
-    // Tier 2 — per-layout override.
-    if (layout && layout->hasZonePaddingOverride()) {
-        return layout->zonePadding();
-    }
-    // Tier 3 — global default (settings->innerGap() reads the Gaps config group).
-    if (settings) {
-        return settings->innerGap();
-    }
-    // Tier 4 — compile default.
-    return PhosphorEngine::GeometryDefaults::InnerGap;
+    // Every tier is clamped on the way out, not just the rule one. A context
+    // rule, a hand-edited layout file and a hand-edited config can each carry
+    // a gap the settings UI would never offer, and the autotile arm has always
+    // bounded its own equivalents (the clampGap in PerScreenConfigResolver.cpp),
+    // so the
+    // snapping arm bounds the same quantity to the same range.
+    const auto resolve = [&]() -> int {
+        // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
+        if (auto v = PhosphorEngine::GapResolution::gapFromOverrideMap(ruleGapOverride, PSK::InnerGap, clampGap)) {
+            return *v;
+        }
+        // Tier 2 — per-layout override.
+        if (layout && layout->hasZonePaddingOverride()) {
+            return layout->zonePadding();
+        }
+        // Tier 3 — global default (settings->innerGap() reads the Gaps config group).
+        if (settings) {
+            return settings->innerGap();
+        }
+        // Tier 4 — compile default.
+        return PhosphorEngine::GeometryDefaults::InnerGap;
+    };
+    return clampGap(resolve());
 }
 
 ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
                                                  const QVariantMap& ruleGapOverride)
 {
     namespace GD = PhosphorEngine::GeometryDefaults;
+    // Bound every side on the way out, for the same reason getEffectiveInnerGap
+    // does: a rule, a hand-edited layout file or a hand-edited config can each
+    // carry a side the settings UI would never offer.
+    const auto clampSides = [](::PhosphorLayout::EdgeGaps g) {
+        return ::PhosphorLayout::EdgeGaps{clampGap(g.top), clampGap(g.bottom), clampGap(g.left), clampGap(g.right)};
+    };
     // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
+    // Already clamped side by side inside resolveOuterGapsFromMap.
     if (auto ruleGaps = resolveOuterGapsFromMap(ruleGapOverride, settings)) {
         return *ruleGaps;
     }
@@ -174,19 +196,19 @@ int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, con
             if (gaps.right < 0)
                 gaps.right = fallback;
         }
-        return gaps;
+        return clampSides(gaps);
     }
     if (layout && layout->hasOuterGapOverride()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(layout->outerGap());
+        return ::PhosphorLayout::EdgeGaps::uniform(clampGap(layout->outerGap()));
     }
     if (settings) {
         if (settings->usePerSideOuterGap()) {
-            return {settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
-                    settings->outerGapRight()};
+            return clampSides({settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
+                               settings->outerGapRight()});
         }
-        return ::PhosphorLayout::EdgeGaps::uniform(settings->outerGap());
+        return ::PhosphorLayout::EdgeGaps::uniform(clampGap(settings->outerGap()));
     }
-    return ::PhosphorLayout::EdgeGaps::uniform(GD::OuterGap);
+    return ::PhosphorLayout::EdgeGaps::uniform(clampGap(GD::OuterGap));
 }
 
 QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Zone* zone, QScreen* screen,

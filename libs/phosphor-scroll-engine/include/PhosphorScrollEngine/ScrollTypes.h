@@ -710,12 +710,14 @@ inline int proportionalPx(qreal proportion, int workExtent, int gap)
 /// TYPED order under niri.
 ///
 /// Both the pick and the WRAP are by extent, not by position, and that is
-/// what makes the SIZE-order claim above true. The preset lists are
-/// deduplicated at the boundary but never sorted (minimizeActiveColumnWidth's
-/// comment spells out why), so a list typed as e.g. 1/2, 1/3, 2/3 has its
-/// narrowest entry in the middle. Wrapping to position 0 there would hand a
-/// forward press the MIDDLE entry and leave the narrowest reachable only
-/// backwards.
+/// what makes the SIZE-order claim above true. Order is NOT guaranteed: the
+/// settings schema's canonicalProportionList deduplicates what a user types
+/// but preserves their order, refreshConfigFromSettings' parser and the
+/// per-screen override path neither sort nor deduplicate, and only the
+/// template channel arrives sorted (phosphor-zones normalizePresetList). So a
+/// list typed as e.g. 1/2, 1/3, 2/3 keeps its narrowest entry in the middle.
+/// Wrapping to position 0 there would hand a forward press the MIDDLE entry
+/// and leave the narrowest reachable only backwards.
 ///
 /// @p resolve maps a vocabulary index to the pixel extent that entry would
 /// render at. Returns -1 for an empty vocabulary.
@@ -951,7 +953,7 @@ struct ScrollLayoutParams
     StripAxis axis = StripAxis::horizontal();
     /// Preset proportion lists (the niri 1/3, 1/2, 2/3 plus 3/4 and full). Never empty —
     /// resolvers snap a Preset fraction anchor to the nearest entry.
-    /// KEEP IN SYNC with THREE other copies, not one:
+    /// KEEP IN SYNC with FOUR other copies, not one:
     ///   1. ScrollEngine::m_presetColumnWidths / m_presetWindowHeights, the
     ///      member seeds these mirror (ScrollEngine.h);
     ///   2. ScrollEngine::refreshConfigFromSettings' fallback list
@@ -959,10 +961,18 @@ struct ScrollLayoutParams
     ///   3. ConfigDefaults' "0.333,0.5,0.667,0.75,1" strings
     ///      (configdefaults_scrolling.h) — the one a CONFIGURED user actually
     ///      gets, and the only one expressed in decimal rather than as
-    ///      thirds, so it is already very slightly different by construction.
-    /// The ops-suite literal-260 preset assertion pins THIS copy alone, so a
-    /// change to any of the other three leaves the test green while the
-    /// running engine shifts.
+    ///      thirds, so it is already very slightly different by construction;
+    ///   4. EditorController::createNewScrollingTemplate's seed for a brand-new
+    ///      template (src/editor/controller/scrollingtemplate.cpp). A template's
+    ///      list REPLACES this one wholesale on the screens it covers, so a
+    ///      stale seed there narrows the cycle rather than diverging quietly.
+    /// The ops-suite assertion that pins THIS copy is the 800 one in
+    /// reconcileLoneTileRecordsHeightIntent (test_scrollstrip_ops.cpp): a
+    /// forward press from 720px only reaches the full-height entry if this list
+    /// carries it. The neighbouring literal-260 assertion is the wrap-to-
+    /// shortest answer and stays green under any vocabulary that starts at 1/3,
+    /// so it pins nothing here. A change to any of the other four copies still
+    /// leaves the suite green while the running engine shifts.
     QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;

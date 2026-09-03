@@ -11,6 +11,8 @@
 #include <QSet>
 #include <QTest>
 
+#include <algorithm>
+
 using namespace PhosphorRules;
 
 namespace {
@@ -705,27 +707,97 @@ private Q_SLOTS:
         }
     }
 
+    void testAnimationTimingDuration_optionalAndLegacyValuesLoad()
+    {
+        // durationMs is OPTIONAL and 0 is the disengaged sentinel the editor
+        // seeds into every freshly created action. A validator that rejected it
+        // would drop the action on load — and with it any rule it was alone in —
+        // silently deleting working user rules on upgrade. Pin that, plus the
+        // fact that a value above the range the editor now offers still loads.
+        const auto timing = [](const QJsonValue& duration) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::OverrideAnimationTiming));
+            o.insert(QStringLiteral("event"), QStringLiteral("window.appearance.open"));
+            if (!duration.isUndefined()) {
+                o.insert(QStringLiteral("durationMs"), duration);
+            }
+            return o;
+        };
+        // Genuinely ABSENT: a default-constructed QJsonValue is Null, not
+        // Undefined, so spell the undefined one out or this case silently
+        // becomes "durationMs: null" and the absent path goes untested.
+        QVERIFY(RuleAction::fromJson(timing(QJsonValue(QJsonValue::Undefined))).has_value());
+        QVERIFY(RuleAction::fromJson(timing(QJsonValue())).has_value()); // explicit null, ignored
+        QVERIFY(RuleAction::fromJson(timing(0)).has_value()); // the disengaged sentinel
+        QVERIFY(RuleAction::fromJson(timing(150)).has_value()); // ordinary override
+        // Authored before the offered range narrowed to the honoured envelope.
+        // Must still load; the consumer clamps it.
+        QVERIFY(RuleAction::fromJson(timing(5000)).has_value());
+        // Unambiguously wrong, and unreachable through the editor.
+        QVERIFY(!RuleAction::fromJson(timing(-1)).has_value());
+
+        // The published range is the one the effect honours, so the editor
+        // cannot offer a duration that would be silently clamped away. The
+        // floor stays 0 because that is the sentinel.
+        const auto descriptor = ActionRegistry::instance().descriptor(QString(ActionType::OverrideAnimationTiming));
+        QVERIFY(descriptor.has_value());
+        const auto duration =
+            std::find_if(descriptor->params.cbegin(), descriptor->params.cend(), [](const ParamSchema& p) {
+                return p.key == QLatin1String("durationMs");
+            });
+        QVERIFY(duration != descriptor->params.cend());
+        QVERIFY(duration->min.has_value() && duration->max.has_value());
+        QCOMPARE(*duration->min, 0.0);
+        QCOMPARE(*duration->max, MaxAnimationDurationMs);
+    }
+
     void testOverlayDimensionActions_range()
     {
-        // Overlay border width (0-10) and radius (0-50) carry a number; reject
-        // out-of-range and non-numeric, accept in-range.
-        struct DimCase
-        {
-            QLatin1StringView type;
-            double over;
-        };
-        for (const DimCase& c :
-             {DimCase{ActionType::SetOverlayBorderWidth, 11.0}, DimCase{ActionType::SetOverlayBorderRadius, 51.0}}) {
+        // The overlay border width and radius each carry a number. The ceiling
+        // is read from the published descriptor rather than written as a
+        // literal, so retuning either bound cannot leave this test asserting a
+        // range the validator no longer enforces.
+        for (const QLatin1StringView type : {ActionType::SetOverlayBorderWidth, ActionType::SetOverlayBorderRadius}) {
+            const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+            QVERIFY2(descriptor.has_value(), type.data());
+            QVERIFY2(!descriptor->params.isEmpty(), type.data());
+            const std::optional<double> declaredMax = descriptor->params.first().max;
+            QVERIFY2(declaredMax.has_value(), type.data());
+            const double max = *declaredMax;
+
             QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(c.type));
-            o.insert(QStringLiteral("value"), c.over); // above max rejected
-            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), max + 1.0); // above max rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), -1.0); // negative rejected
-            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), QStringLiteral("2")); // non-numeric rejected
-            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
-            o.insert(QStringLiteral("value"), 4); // in range accepted
-            QVERIFY2(RuleAction::fromJson(o).has_value(), c.type.data());
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), max); // the ceiling itself accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 4); // an ordinary interior value accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+        // Reading the bound from the descriptor pins the validator to the
+        // schema but not to any particular number, so keep one structural
+        // check that the two overlay dimensions have not been collapsed onto
+        // a single shared ceiling by a copy-paste.
+        {
+            const auto width = ActionRegistry::instance().descriptor(QString(ActionType::SetOverlayBorderWidth));
+            const auto radius = ActionRegistry::instance().descriptor(QString(ActionType::SetOverlayBorderRadius));
+            QVERIFY(width.has_value() && radius.has_value());
+            QVERIFY(!width->params.isEmpty() && !radius->params.isEmpty());
+            const std::optional<double> widthMax = width->params.first().max;
+            const std::optional<double> radiusMax = radius->params.first().max;
+            QVERIFY(widthMax.has_value() && radiusMax.has_value());
+            QVERIFY(*widthMax < *radiusMax);
+            // Literals on purpose, alongside the descriptor read above. The
+            // overlay bounds are hand-mirrored from PhosphorZones::ZoneDefaults,
+            // which this library cannot include, so a descriptor-only assertion
+            // would follow a drift instead of catching it. The daemon pins the
+            // other side (src/daemon/daemon.cpp).
+            QCOMPARE(*widthMax, 10.0);
+            QCOMPARE(*radiusMax, 50.0);
         }
         // SetOverlayShowZoneNumbers requires a JSON bool.
         {

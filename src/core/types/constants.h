@@ -61,10 +61,6 @@ inline constexpr const char* PGpuClearedVarsProperty = "_p_gpuClearedVars";
  * structural constants for built-in layouts.
  */
 namespace Defaults {
-// Fallback screen dimensions when no QScreen is available
-inline constexpr int FallbackScreenWidth = 1920;
-inline constexpr int FallbackScreenHeight = 1080;
-
 // PhosphorZones::Zone-presentation defaults + layout-factory ratios live in
 // `PhosphorZones::ZoneDefaults` (libs/phosphor-zones).  All in-tree
 // callers reference them qualified directly — no using-alias here.
@@ -73,7 +69,12 @@ inline constexpr int FallbackScreenHeight = 1080;
 // surface — daemon overlay / settings / geometry constants.
 constexpr int InnerGap = 8;
 constexpr int OuterGap = 8; // Gap at screen edges (separate from the inner gap between zones)
-constexpr int MaxGap = 200; // Maximum for inner gap and outer gap settings
+// Maximum for inner gap and outer gap settings. Hand-mirrored from
+// PhosphorEngine::GeometryDefaults::MaxGap, which the LGPL engines clamp
+// against and which cannot be reached from here without dragging an interface
+// header into this widely-included file. The pair is pinned by a static_assert
+// in src/core/utils/geometryutils.cpp, next to the InnerGap / OuterGap ones.
+constexpr int MaxGap = 200;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
 
@@ -181,7 +182,6 @@ inline QString clampName(const QString& name, int maxLength = MaxLayoutNameLengt
 namespace EditorConstants {
 // PhosphorZones::Zone size constraints (relative coordinates 0.0-1.0)
 constexpr qreal MinZoneSize = 0.05; // 5% minimum zone size
-constexpr qreal MaxZoneSize = 1.0; // 100% maximum zone size
 
 // Fixed geometry constraints (absolute pixel coordinates)
 constexpr int MinFixedZoneSize = 50; // Minimum fixed zone dimension in pixels
@@ -238,15 +238,6 @@ inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
 }
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
-
-/**
- * @brief Synthetic zone ID prefix used by the zone selector overlay
- *
- * PhosphorZones::Zone IDs starting with this prefix are transient selector entries,
- * not real zone UUIDs. They must be excluded from persistence and
- * occupancy checks.
- */
-inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
 
 /**
  * @brief Sentinel value used as targetZoneId when restoring pre-tiling geometry

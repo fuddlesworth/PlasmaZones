@@ -12,6 +12,7 @@
 
 #include <PhosphorEngine/GapResolution.h>
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/IGeometrySettings.h> // GeometryDefaults::MaxGap
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
@@ -33,14 +34,24 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     int left = 0;
     int right = 0;
     int settingsUniformOuter = 0;
+    // Every gap this engine applies is bounded to the shared [0, MaxGap] range,
+    // whichever layer supplied it. The injected IScrollSettings is an interface,
+    // not necessarily the schema-clamped daemon Settings, and a context rule can
+    // carry any number the rule validator accepted, so the clamp lives here
+    // rather than being assumed upstream. Matches the snapping arm's clampGap
+    // and the autotile resolver's, so one gap-override rule cannot mean two
+    // different things in two modes.
+    const auto clampGap = [](int v) {
+        return qBound(0, v, PhosphorEngine::GeometryDefaults::MaxGap);
+    };
     if (auto* gaps = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
-        innerGap = qMax(0, gaps->scrollingInnerGap());
-        settingsUniformOuter = gaps->scrollingOuterGap();
+        innerGap = clampGap(gaps->scrollingInnerGap());
+        settingsUniformOuter = clampGap(gaps->scrollingOuterGap());
         if (gaps->scrollingUsePerSideOuterGap()) {
-            top = gaps->scrollingOuterGapTop();
-            bottom = gaps->scrollingOuterGapBottom();
-            left = gaps->scrollingOuterGapLeft();
-            right = gaps->scrollingOuterGapRight();
+            top = clampGap(gaps->scrollingOuterGapTop());
+            bottom = clampGap(gaps->scrollingOuterGapBottom());
+            left = clampGap(gaps->scrollingOuterGapLeft());
+            right = clampGap(gaps->scrollingOuterGapRight());
         } else {
             top = bottom = left = right = settingsUniformOuter;
         }
@@ -53,16 +64,15 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
         // snap-side GeometryUtils and the autotile PerScreenConfigResolver):
         // an override map that carries outer-gap info wins WHOLESALE, and
         // missing sides of a partial per-side map fall back to the map's own
-        // uniform OuterGap, then to the settings uniform. Scrolling consumes
-        // raw values (identity normalize) like the snapping side; the
-        // rect-inversion belt below is the only clamp.
-        const auto identity = [](int v) {
-            return v;
-        };
-        if (const auto inner = GR::gapFromOverrideMap(overrides, PSK::InnerGap, identity)) {
-            innerGap = qMax(0, *inner);
+        // uniform OuterGap, then to the settings uniform. Every consumed value
+        // goes through the same clampGap the settings reads above use, matching
+        // the snapping and autotile arms, so a rule cannot push a gap past the
+        // shared ceiling. The rect-inversion belt below still backstops a
+        // work area too small for even a clamped gap.
+        if (const auto inner = GR::gapFromOverrideMap(overrides, PSK::InnerGap, clampGap)) {
+            innerGap = *inner;
         }
-        if (const auto outer = GR::outerGapsFromOverrideMap(overrides, settingsUniformOuter, identity)) {
+        if (const auto outer = GR::outerGapsFromOverrideMap(overrides, settingsUniformOuter, clampGap)) {
             top = outer->top;
             bottom = outer->bottom;
             left = outer->left;

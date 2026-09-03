@@ -12,10 +12,12 @@ namespace PhosphorCompositor {
  * @brief Single source of truth for window-decoration appearance defaults.
  *
  * Consumed by BOTH sides of the D-Bus boundary: the daemon's ConfigDefaults
- * (persisted setting defaults) and the compositor plugin's BorderState
- * (pre-settings-load rendering state). Sharing the symbols makes drift
- * between the two structurally impossible — the effect renders with the
- * same values the daemon would persist until the async settings load lands.
+ * (persisted setting defaults) and the effect's `WindowAppearanceDefault`
+ * (effect_state.h), which seeds the pre-settings-load rendering state. Sharing
+ * the symbols keeps the two from drifting — the effect renders with the same
+ * values the daemon would persist until the async settings load lands, which
+ * is what the width/radius loaders' "keep the seed on an empty reply" guards
+ * depend on.
  *
  * These are WINDOW decoration constants (tiled/snapped window borders and
  * title bars), not the zone-overlay border constants in ZoneDefaults.

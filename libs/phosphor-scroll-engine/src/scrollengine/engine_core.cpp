@@ -1192,7 +1192,9 @@ void ScrollEngine::refreshConfigFromSettings()
         }
         return out.isEmpty() ? fallback : out;
     };
-    // KEEP IN SYNC with ScrollLayoutParams' member defaults (ScrollTypes.h).
+    // KEEP IN SYNC with the other copies of this vocabulary. ScrollTypes.h,
+    // on ScrollLayoutParams::presetColumnWidths, carries the full map of where
+    // they all live.
     const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), MinColumnWidthFraction, defaults);
     m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), MinWindowHeightFraction, defaults);
@@ -1386,7 +1388,19 @@ void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 void ScrollEngine::retile(const QString& screenId)
 {
     if (screenId.isEmpty()) {
-        for (const QString& sid : std::as_const(m_scrollingScreens)) {
+        // Snapshot before the loop: applyLayout emits windowsTiled SYNCHRONOUSLY,
+        // and a slot that re-entered the engine to call setActiveScreens would
+        // reassign m_scrollingScreens under a live iterator. setActiveScreens
+        // takes the same precaution twice for the same reason. The sibling loop
+        // in refreshConfigFromSettings needs none because it only queues.
+        const QStringList screensSnapshot(m_scrollingScreens.cbegin(), m_scrollingScreens.cend());
+        for (const QString& sid : screensSnapshot) {
+            // A re-entrant call may also have removed a screen since the
+            // snapshot, so re-check membership rather than applying to one this
+            // engine no longer manages.
+            if (!m_scrollingScreens.contains(sid)) {
+                continue;
+            }
             // Drop any queued retile for this screen: we are performing that
             // apply right now, and the queued callback would otherwise run a
             // second full pass for it when it drains.

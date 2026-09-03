@@ -127,20 +127,70 @@ inline bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key
 }
 
 // Upper validation bounds (display units). The effect/daemon clamp to their
-// own ConfigDefaults ranges on consumption; these only reject grossly
-// malformed hand-edited payloads. Kept generous so values a user could pick
-// through the global UI are never dropped on load.
-// Border width/radius upper bounds live in RuleAction.h (MaxBorderWidth /
+// own ConfigDefaults ranges on consumption; these reject malformed
+// hand-edited payloads at load. Each is normally also published as the
+// parameter's schema `max`, which is the rule editor's spin-box ceiling, so
+// keep the two equal unless a documented legacy-load exception applies. There
+// are two: kMaxGap below, deliberately looser so rules authored under an older,
+// wider range still load instead of being dropped, and the optional animation
+// duration, which is unbounded above at load while publishing the ceiling the
+// consumer honours.
+// Border width/radius upper bounds live in ActionParams.h (MaxBorderWidth /
 // MaxBorderRadius) so the KWin-effect consumer re-validation shares them.
+//
+// The gap LOAD bound stays deliberately looser than the range the editor
+// offers (PhosphorRules::MaxGap, 200, which every placement arm also clamps
+// to). Rules authored before that range narrowed could carry up to 500, and a
+// rejected action is DROPPED — taking its whole rule with it when it was the
+// only one (rule.cpp) — so tightening the validator would silently delete
+// working user rules on first launch. Loading them instead lets the engines'
+// own clamps bound the value on consumption, and the editor still refuses to
+// author a new one above MaxGap because that is what the descriptors publish.
 inline constexpr double kMaxGap = 500.0;
-// Zone-overlay border dimensions have their own bounds mirroring the global
-// `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50), which
-// differ from the per-window `MaxBorderWidth` / `MaxBorderRadius` pair.
+// Zone-overlay border dimensions mirror the global `Snapping.Zones.Border`
+// config ranges (width 0-10, radius 0-50), i.e. PhosphorZones::ZoneDefaults'
+// BorderWidthMax / BorderRadiusMax, which phosphor-rules cannot include
+// because it does not link phosphor-zones. The WIDTH bound is narrower than
+// the per-window `MaxBorderWidth` (10 against 20); the radius bound coincides
+// with `MaxBorderRadius` at 50 but stays its own symbol so retuning the
+// window decoration cannot silently move the overlay.
 inline constexpr double kMaxOverlayBorderWidth = 10.0;
 inline constexpr double kMaxOverlayBorderRadius = 50.0;
-// Autotile parameter bounds (display units), mirroring the AutotileDefaults
-// clamps the engine applies on consumption. These only reject grossly malformed
-// hand-edited payloads.
+// The per-event animation duration bounds live in ActionParams.h
+// (MinAnimationDurationMs / MaxAnimationDurationMs) rather than here, because
+// the effect's consumer re-validation pins them with a static_assert and this
+// header is private and not installed.
+inline constexpr double kMaxAnimationDurationMs = MaxAnimationDurationMs;
+
+/// Validates the OPTIONAL `durationMs` on an animation-timing override.
+/// Absent is fine, and so is 0: that is the disengaged sentinel the consumer
+/// reads as "no duration override" (shader_resolve only engages on > 0), and
+/// it is what the rule editor seeds a fresh action with. Anything else must be
+/// non-negative. Deliberately NOT bounded to the honoured [50, 2000] envelope.
+/// The descriptor publishes that envelope's CEILING so the editor cannot author
+/// above it, but a stored value from before it was published must still LOAD,
+/// because a rejected action is dropped along with any rule it was alone in.
+inline bool hasValidOptionalDurationMs(const QJsonObject& params, QLatin1StringView key)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isDouble()) {
+        // Absent, or a shape this action never writes. Deliberately NOT a
+        // rejection: nothing validated this key before, a rejected action is
+        // dropped along with any rule it was alone in, and the consumer already
+        // disengages on anything that does not read as a positive number.
+        return true;
+    }
+    return v.toDouble() >= 0.0;
+}
+// Autotile parameter bounds (display units). These hand-mirror
+// PhosphorTiles::AutotileDefaults' MaxMaxWindows, MaxMasterCount and the
+// Min/MaxSplitRatio pair, which phosphor-rules cannot include because it does
+// not link phosphor-tiles — and, unlike the border and gap ceilings, nothing
+// pins them, because neither library sees both sides. They agree today; a
+// retune of the engine clamps has to be repeated here by hand. Being the
+// editor's published range as well as the load validator's bound, a value
+// looser than the engine's would let the rule editor author a number the
+// engine then silently clamps on consumption.
 inline constexpr double kMaxTiledWindows = 12.0;
 inline constexpr double kMaxMasterCount = 5.0;
 // Split-ratio bounds. The percent-editor display range is the exact primary pair

@@ -268,15 +268,20 @@ public:
     {
         return v == scrollingColumnDisplayNormal() || v == scrollingColumnDisplayTabbed();
     }
-    /// Preset proportion lists, comma-joined decimals (the niri defaults).
-    /// KEEP IN SYNC with the other THREE copies of the {1/3, 1/2, 2/3, 3/4, 1}
-    /// intent — ScrollLayoutParams' member seeds document the full four-copy
+    /// Preset proportion lists, comma-joined decimals (niri's 1/3, 1/2 and
+    /// 2/3, continued to 3/4 and the full work area).
+    /// KEEP IN SYNC with the other FOUR copies of the {1/3, 1/2, 2/3, 3/4, 1}
+    /// intent — ScrollLayoutParams' member seeds document the full five-copy
     /// map (ScrollTypes.h, presetColumnWidths). Spelled separately because
     /// the LGPL engine cannot include this GPL header.
     static QString scrollingPresetColumnWidths()
     {
         return QStringLiteral("0.333,0.5,0.667,0.75,1");
     }
+    /// The height twin of the widths list above, and deliberately its own
+    /// setting rather than a mirror: the two share a value today, but a user
+    /// can edit either alone, and the engine reads them through separate
+    /// accessors. Same five-copy KEEP IN SYNC map applies.
     static QString scrollingPresetWindowHeights()
     {
         return QStringLiteral("0.333,0.5,0.667,0.75,1");
@@ -308,6 +313,14 @@ public:
     // keys (Style, GapsBetweenTabs, CornerRadius, the three colours and the
     // five font keys) never enter the engine — the daemon reads them straight
     // onto the overlay.
+    //
+    // KEEP IN SYNC beyond the usual pair. The style closed set and the
+    // GapsBetweenTabs, CornerRadius and FontWeight ranges are hand-mirrored in
+    // TWO more places the effect owns, neither of which can include this
+    // header: kwin-effect/plasmazoneseffect/daemon_settings_scrolltabs.cpp
+    // (which spells the numbers as literals in its own guards and says so) and
+    // kwin-effect/tilinghandler/scrolltabs.cpp. Retuning any of them means
+    // four edits, not two.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Master switch. Off, the indicator hides and stays hidden until
@@ -438,7 +451,9 @@ public:
     /// The thickness @p style wants. Unknown styles answer with the shipped
     /// default rather than asserting: this is a re-seed hint, not a validator.
     /// Spelled as a test for CHIPS so that arm stays true — the fallback must
-    /// be the shipped style's thickness, and Bar is what ships.
+    /// be the shipped style's thickness, and Bar is what ships. That last part
+    /// is load-bearing rather than incidental, so it is pinned by a
+    /// static_assert alongside the other tab-indicator ones below.
     static constexpr int scrollingTabIndicatorWidthForStyle(int style)
     {
         return style == scrollingTabIndicatorStyleChips() ? scrollingTabIndicatorWidthForChips()
@@ -672,7 +687,7 @@ public:
     }
     static constexpr int scrollingDropIndicatorBorderWidthMax()
     {
-        return 10;
+        return ConfigDefaultsAppearance::borderWidthMax();
     }
     static constexpr int scrollingDropIndicatorBorderRadius()
     {
@@ -684,8 +699,14 @@ public:
     }
     static constexpr int scrollingDropIndicatorBorderRadiusMax()
     {
-        return 50;
+        return ConfigDefaultsAppearance::borderRadiusMax();
     }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // End of Scrolling.DropIndicator. Everything below is back in the plain
+    // Scrolling group, and is NOT paint-only — the wheel-focus pair drives the
+    // effect's axis-chord grab, and the default window-height family feeds the
+    // engine's height resolution.
+    // ═══════════════════════════════════════════════════════════════════════════
 
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
     /// genuinely released back to the compositor for any later registrant
@@ -882,6 +903,13 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
                   && ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
                       <= ConfigDefaultsScrolling::scrollingTabIndicatorFontWeightMax(),
               "ConfigDefaults::scrollingTabIndicatorFontWeight() outside the declared [min, max] range");
+// scrollingTabIndicatorWidthForStyle() answers an unknown style with the BAR
+// thickness, which is only the right fallback while Bar is the shipped style.
+// Its comment states that as a premise, so pin it: shipping Chips instead
+// would otherwise leave the fallback silently answering for the wrong style.
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorStyle()
+                  == ConfigDefaultsScrolling::scrollingTabIndicatorStyleBar(),
+              "scrollingTabIndicatorWidthForStyle()'s unknown-style fallback assumes Bar is the shipped style");
 // The drop indicator's three ranged defaults, same guard as the tab
 // indicator's above. The colour pair is unranged (empty means follow the
 // scheme) and Enabled is a bool, so neither has anything to check.

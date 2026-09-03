@@ -58,11 +58,27 @@ int EditorGapsModel::globalOuterGap() const
     return m_cachedGlobalOuterGap;
 }
 
+int EditorGapsModel::zonePaddingMax()
+{
+    return ConfigDefaults::innerGapMax();
+}
+
+int EditorGapsModel::outerGapMax()
+{
+    return ConfigDefaults::outerGapMax();
+}
+
+int EditorGapsModel::clampOverride(int value, int maxValue)
+{
+    if (value < 0) {
+        return -1;
+    }
+    return qMin(value, maxValue);
+}
+
 void EditorGapsModel::setZonePadding(int padding)
 {
-    if (padding < -1) {
-        padding = -1;
-    }
+    padding = clampOverride(padding, zonePaddingMax());
     if (m_zonePadding != padding) {
         auto* cmd = new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::ZonePadding,
                                                  m_zonePadding, padding);
@@ -72,9 +88,7 @@ void EditorGapsModel::setZonePadding(int padding)
 
 void EditorGapsModel::setZonePaddingDirect(int padding)
 {
-    if (padding < -1) {
-        padding = -1;
-    }
+    padding = clampOverride(padding, zonePaddingMax());
     if (m_zonePadding != padding) {
         m_zonePadding = padding;
         m_controller->markUnsaved();
@@ -84,9 +98,7 @@ void EditorGapsModel::setZonePaddingDirect(int padding)
 
 void EditorGapsModel::setOuterGap(int gap)
 {
-    if (gap < -1) {
-        gap = -1;
-    }
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGap != gap) {
         auto* cmd =
             new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, gap);
@@ -96,9 +108,7 @@ void EditorGapsModel::setOuterGap(int gap)
 
 void EditorGapsModel::setOuterGapDirect(int gap)
 {
-    if (gap < -1) {
-        gap = -1;
-    }
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGap != gap) {
         m_outerGap = gap;
         m_controller->markUnsaved();
@@ -177,8 +187,7 @@ void EditorGapsModel::setUsePerSideOuterGapDirect(bool enabled)
 
 void EditorGapsModel::setOuterGapTop(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapTop != gap) {
         auto* cmd = new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::OuterGapTop,
                                                  m_outerGapTop, gap);
@@ -188,8 +197,7 @@ void EditorGapsModel::setOuterGapTop(int gap)
 
 void EditorGapsModel::setOuterGapTopDirect(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapTop != gap) {
         m_outerGapTop = gap;
         m_controller->markUnsaved();
@@ -199,8 +207,7 @@ void EditorGapsModel::setOuterGapTopDirect(int gap)
 
 void EditorGapsModel::setOuterGapBottom(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapBottom != gap) {
         auto* cmd = new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::OuterGapBottom,
                                                  m_outerGapBottom, gap);
@@ -210,8 +217,7 @@ void EditorGapsModel::setOuterGapBottom(int gap)
 
 void EditorGapsModel::setOuterGapBottomDirect(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapBottom != gap) {
         m_outerGapBottom = gap;
         m_controller->markUnsaved();
@@ -221,8 +227,7 @@ void EditorGapsModel::setOuterGapBottomDirect(int gap)
 
 void EditorGapsModel::setOuterGapLeft(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapLeft != gap) {
         auto* cmd = new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::OuterGapLeft,
                                                  m_outerGapLeft, gap);
@@ -232,8 +237,7 @@ void EditorGapsModel::setOuterGapLeft(int gap)
 
 void EditorGapsModel::setOuterGapLeftDirect(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapLeft != gap) {
         m_outerGapLeft = gap;
         m_controller->markUnsaved();
@@ -243,8 +247,7 @@ void EditorGapsModel::setOuterGapLeftDirect(int gap)
 
 void EditorGapsModel::setOuterGapRight(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapRight != gap) {
         auto* cmd = new UpdateGapOverrideCommand(m_controller, UpdateGapOverrideCommand::GapType::OuterGapRight,
                                                  m_outerGapRight, gap);
@@ -254,8 +257,7 @@ void EditorGapsModel::setOuterGapRight(int gap)
 
 void EditorGapsModel::setOuterGapRightDirect(int gap)
 {
-    if (gap < -1)
-        gap = -1;
+    gap = clampOverride(gap, outerGapMax());
     if (m_outerGapRight != gap) {
         m_outerGapRight = gap;
         m_controller->markUnsaved();
