@@ -773,6 +773,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // bogus morph on the new window's first resize).
         m_shaderManager.m_preMaximizeFrame.remove(w);
         m_shaderManager.m_pendingMaximizeMorph.remove(w);
+        // Third sibling of the pair above — the maximize-edge marker the tile
+        // batch consumes. Same bounded-across-long-sessions and address-reuse
+        // rationale: a stale stamp at a reused address would hand a new
+        // window's first placement the maximize leg.
+        m_shaderManager.m_maximizeEdgeAtMs.remove(w);
         // Drop the queued-expiry guard for this raw pointer. KWin reuses
         // EffectWindow heap addresses freely, so a stale entry surviving
         // past windowDeleted would cause the next window allocated at the

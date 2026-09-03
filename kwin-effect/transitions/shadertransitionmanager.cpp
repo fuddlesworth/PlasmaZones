@@ -3,7 +3,45 @@
 
 #include "shadertransitionmanager.h"
 
+#include "plasmazoneseffect/shader_internal.h"
+
 namespace PlasmaZones {
+
+namespace {
+
+// How long a maximize edge stays claimable by the tile batch. Matched to
+// kPendingMaximizeMorphDeadlineMs (window_connections.cpp), which bounds the
+// sibling wait for the same event's geometry to land: the batch that answers a
+// maximize is the daemon round trip behind that same commit, so anything
+// arriving later is a different placement wearing the same window.
+constexpr qint64 kMaximizeEdgeFreshnessMs = 1000;
+
+} // namespace
+
+void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+}
+
+bool ShaderTransitionManager::takeRecentMaximizeEdge(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    const auto it = m_maximizeEdgeAtMs.find(w);
+    if (it == m_maximizeEdgeAtMs.end()) {
+        return false;
+    }
+    const qint64 armedAtMs = *it;
+    // Erased on the stale arm too: a marker that outlived its window is not
+    // going to become fresh again, and leaving it would let the NEXT edge's
+    // consumer read a stamp it never armed.
+    m_maximizeEdgeAtMs.erase(it);
+    return ShaderInternal::shaderClockNowMs() - armedAtMs <= kMaximizeEdgeFreshnessMs;
+}
 
 ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
     : m_effect(effect)

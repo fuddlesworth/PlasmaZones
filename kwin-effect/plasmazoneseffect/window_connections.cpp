@@ -860,6 +860,28 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return;
                 }
                 m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
+                // MAXIMIZE-EDGE MARKER, armed here and nowhere else: this is
+                // the one point every route to a maximize passes through,
+                // ahead of all three skips below. Whether the request ends up
+                // answered by the scrolling engine's maximize-to-edges verb,
+                // by this handler's own bracketed monocle write, or by KWin
+                // itself on an autotile or unmanaged screen, the user pressed
+                // maximize and the geometry that follows must ride
+                // window.movement.maximize. Without it the tile batch could
+                // only recognise a maximize it had authored ITSELF on a
+                // scrolling screen, so every other maximize reached
+                // applyWindowGeometry as a plain snapIn and played whatever
+                // the movement PARENT resolves — the user's maximize pack
+                // never ran.
+                //
+                // The interactive drag is the deliberate exclusion, and the
+                // same one the shader skip below makes: KWin unmaximizes a
+                // window when the user pulls its titlebar, and that gesture's
+                // visuals belong to the held move pack, not to a maximize
+                // morph replayed under the pointer.
+                if (!window->isUserMove() && !window->isUserResize()) {
+                    m_shaderManager.noteMaximizeEdge(window);
+                }
                 // IsMaximized is a matchable rule field with the same
                 // cache-key staleness as IsMinimized (see the minimizedChanged
                 // metadata lambda below) — invalidate on the genuine

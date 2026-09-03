@@ -99,7 +99,37 @@ public:
     {
         m_lastFullyMaximized.insert(w, false);
         m_pendingMaximizeMorph.remove(w);
+        // A demote is a SNAP placement, so it must not inherit a maximize leg
+        // from an edge the user took a moment earlier: the window is being
+        // dropped into a zone, and the marker below would hand the zone-rect
+        // commit window.movement.maximize.
+        m_maximizeEdgeAtMs.remove(w);
     }
+
+    /// Arm the "this window just took a genuine maximize or restore edge"
+    /// marker, from the windowMaximizedStateChanged hook.
+    ///
+    /// Armed for EVERY genuine full-maximize flip the user caused — the
+    /// maximize button, the titlebar double-click, a shortcut — and armed
+    /// BEFORE the scroll interception, the suppression skip and the pending
+    /// morph split, so it records the USER'S event rather than which of the
+    /// several code paths ends up delivering the resulting geometry. The
+    /// interactive drag-restore is the one exclusion, made at the call site:
+    /// pulling a maximized window off the titlebar is a drag, and the drag
+    /// owns the visuals.
+    void noteMaximizeEdge(KWin::EffectWindow* w);
+
+    /// Whether @p w took a maximize edge within the freshness window,
+    /// CONSUMING the marker either way.
+    ///
+    /// The tile batch asks this so the placement that lands as the direct
+    /// consequence of a maximize rides `window.movement.maximize` — the pack
+    /// the user assigned to that event — instead of the snap leg, on every
+    /// screen rather than only on a scrolling one whose own maximize-to-edges
+    /// verb happened to author the bit. Consuming is what bounds it to that
+    /// one placement: a later, unrelated retile of the same window finds the
+    /// marker gone and stays on snapIn.
+    bool takeRecentMaximizeEdge(KWin::EffectWindow* w);
 
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
     /// — the rules from `rules.json` that carry any effect-consumed
@@ -512,6 +542,12 @@ private:
         qint64 armedAtMs = 0;
     };
     QHash<KWin::EffectWindow*, PendingMaximizeMorph> m_pendingMaximizeMorph;
+    // Monotonic stamp of the last genuine maximize/restore edge, per window.
+    // See noteMaximizeEdge / takeRecentMaximizeEdge above for the contract.
+    // Raw-pointer-keyed like its siblings, so it is erased on windowDeleted
+    // (lifecycle_wiring.cpp) both to stay bounded and so a reused address
+    // cannot inherit a stale stamp.
+    QHash<KWin::EffectWindow*, qint64> m_maximizeEdgeAtMs;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 
