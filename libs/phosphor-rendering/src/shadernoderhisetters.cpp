@@ -324,6 +324,25 @@ bool ShaderNodeRhi::removeExtraBinding(int binding)
 // Audio / User Texture / Wallpaper Setters
 // ============================================================================
 
+void ShaderNodeRhi::setGridSubdivisions(int subdivisions)
+{
+    const int clamped = qBound(0, subdivisions, 255);
+    if (clamped == m_gridSubdivisions) {
+        return;
+    }
+    m_gridSubdivisions = clamped;
+    // The mesh and the pipeline topology both depend on this: drop the grid
+    // buffers so prepare() rebuilds them at the new density, and the image
+    // pipeline so it is recreated with the matching topology (TriangleStrip
+    // for the quad, Triangles for a grid). SRB is untouched — bindings do
+    // not change with geometry.
+    m_gridVbo.reset();
+    m_gridIbo.reset();
+    m_gridIndexCount = 0;
+    m_gridUploaded = false;
+    m_pipeline.reset();
+}
+
 void ShaderNodeRhi::setAudioSpectrum(const QVector<float>& spectrum)
 {
     if (m_audioSpectrum == spectrum) {

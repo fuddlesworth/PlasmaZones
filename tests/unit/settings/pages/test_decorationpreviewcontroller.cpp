@@ -588,8 +588,13 @@ private Q_SLOTS:
         // calls through it, so it does not carry the token today — listed
         // anyway, because a card that starts calling one directly belongs to
         // the same route-agnostic exemption rather than to this guard.
+        // AnimationPreviewPane belongs to the ANIMATION route: its
+        // previewController is an AnimationPreviewController, so holding this
+        // controller to its calls would demand the wrong route's API — the
+        // exact mistake the note above describes for the dialog.
         const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
-                                   settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml")};
+                                   settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"),
+                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
         while (sweep.hasNext()) {
             const QString path = sweep.next();

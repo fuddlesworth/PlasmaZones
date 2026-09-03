@@ -628,16 +628,18 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                         << "\n";
                     ++errors;
                 } else {
-                    // NO p_<id> preamble splice here: the runtime splices only
-                    // the FRAGMENT stage (loadFragmentShader and
-                    // warmShaderBakeCacheForPaths both do; loadVertexShader
-                    // does not). Splicing it here would let a daemon-path vert
-                    // that reads p_<id> pass this gate and then fail at runtime
-                    // with an undeclared identifier. Vertex-driven packs read
-                    // their params inside `#ifdef PLASMAZONES_KWIN`, which this
-                    // Vulkan-dialect bake does not take.
+                    // The p_<id> preamble IS spliced here, mirroring the
+                    // runtime: ShaderNodeRhi's vertex compile and the warm
+                    // bake both splice m_paramPreamble into the vertex
+                    // stage (added alongside the vertex-parameter work, for
+                    // parity with the kwin path's one-preamble-both-stages
+                    // splice), so vertex-driven packs can read p_<id> on
+                    // both branches. Baking without it would reject sources
+                    // the runtime accepts.
+                    const QString splicedVert =
+                        PhosphorShaders::spliceAfterVersion(expandedVert, AnimationShaderRegistry::paramPreamble(eff));
                     const ShaderCompiler::Result vertResult =
-                        ShaderCompiler::compile(expandedVert.toUtf8(), QShader::VertexStage);
+                        ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
                     errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
                 }
             }

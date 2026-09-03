@@ -33,6 +33,7 @@ class ShaderProfileTree;
 namespace PlasmaZones {
 
 class AnimationPresetLibrary;
+class AnimationPreviewController;
 class ISettings;
 
 /// Q_PROPERTY surface for the "Animations" settings page.
@@ -87,6 +88,13 @@ class AnimationsPageController : public PhosphorControl::PageController
     /// The motion-set store, bound by AnimationsMotionSetsPage as its `bridge`.
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
+    /// Live-preview data source for the shader browser's detail dialog —
+    /// an AnimationPreviewController, typed QObject* for the shared dialog.
+    /// See DecorationPageController's twin for the bridge contract.
+    Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
+    /// Selects the animation preview pane in the shared detail dialog.
+    Q_PROPERTY(QString previewKind READ previewKind CONSTANT)
+
     /// Animation event paths whose stock KWin effect the compositor
     /// suppresses session-wide because a tree-assigned pack owns the event
     /// (the settings-side mirror of the effect's syncStockEffectSuppression
@@ -122,22 +130,13 @@ public:
     // edited spring always settles rather than oscillating forever. A
     // hand-edited config outside this band still parses — the engine clamp,
     // not the slider, is the validity boundary.
-    qreal springOmegaMin() const
-    {
-        return 1.0;
-    }
-    qreal springOmegaMax() const
-    {
-        return 40.0;
-    }
-    qreal springZetaMin() const
-    {
-        return 0.1;
-    }
-    qreal springZetaMax() const
-    {
-        return 4.0;
-    }
+    qreal springOmegaMin() const;
+    qreal springOmegaMax() const;
+    qreal springZetaMin() const;
+    qreal springZetaMax() const;
+
+    QObject* previewController() const;
+    QString previewKind() const;
 
     /// Built-in event paths, grouped by section. Each entry:
     /// ```
@@ -1093,6 +1092,7 @@ private:
     // automatically. No manual delete; no QPointer needed.
     AnimationPresetLibrary* m_presets = nullptr;
     ShaderSetStore* m_motionSets = nullptr;
+    AnimationPreviewController* m_preview = nullptr;
 
     /// Pre-edit file contents keyed by absolute path. `std::nullopt`
     /// means "the file did not exist before this session." Mutated only

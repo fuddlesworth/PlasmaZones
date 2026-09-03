@@ -31,10 +31,15 @@
 // confining distortion to the strip's work area (keeping the wallpaper
 // margins steady, feathering the blur at the strip's edges).
 //
-// Strip transitions only ever run in the kwin-effect, and compositor-only
-// packs are excluded from the daemon's SPIR-V bake entirely, so the sampler
-// is declared unguarded: KWin's GLShader binds it by uniform location +
-// glActiveTexture, so no layout(binding) qualifier is needed.
+// Strip transitions only ever ATTACH in the kwin-effect (the daemon has no
+// strip scene to capture), but the pack sources compile on both uniform
+// ABIs so the settings preview can play them against a stand-in scene and
+// the SPIR-V bake tests cover them. On the kwin branch the sampler is
+// declared unguarded — KWin's GLShader binds it by uniform location +
+// glActiveTexture, so no layout(binding) qualifier is needed. On the UBO
+// branch it aliases user-texture slot 1 (uStrip = uTexture1, fed via
+// ShaderEffect::setUserTexture) and the iStrip* scalars come from the
+// AnimationUniforms block's transition tail.
 //
 // WHAT IS ACTUALLY BOUND ON THIS PASS. StripTransitionManager caches and
 // pushes exactly: uStrip, iTime, iResolution, iFrame, iStripMotion,
@@ -77,7 +82,11 @@
 #ifndef PLASMAZONES_STRIP_TRANSITION_GLSL
 #define PLASMAZONES_STRIP_TRANSITION_GLSL
 
+#ifdef PLASMAZONES_KWIN
 uniform sampler2D uStrip;
+#else
+#define uStrip uTexture1
+#endif
 
 // vec4 iStripMotion — the spring's live displacement and speed, pushed every
 // frame by the kwin-effect:
@@ -105,14 +114,18 @@ uniform sampler2D uStrip;
 //       along the travel axis per second.
 // All four converge to 0 at settle — the identity contract above keys off
 // exactly this.
+#ifdef PLASMAZONES_KWIN
 uniform vec4 iStripMotion;
+#endif
 
 // vec4 iStripRect — the strip's work area (the output minus panels/docks) in
 // OUTPUT-LOCAL DEVICE px: (x, y, width, height), y-down from the output's
 // top-left, same orientation as the uv pTransition receives. Zero-sized when
 // the work area could not be resolved, in which case stripMask() below
 // returns 1.0 everywhere (mask nothing rather than everything).
+#ifdef PLASMAZONES_KWIN
 uniform vec4 iStripRect;
+#endif
 
 // vec2 iStripAxis — a unit vector along the strip's own travel axis for THIS
 // output: (1,0) horizontal, (0,1) vertical. Pushed every frame beside
@@ -127,7 +140,9 @@ uniform vec4 iStripRect;
 // Multiply displacements by this (or use stripAxisOffset below) instead of
 // writing vec2(amount, 0.0). Note .z/.w of iStripMotion are normalized by the
 // output's extent ALONG THIS AXIS, so they stay comparable across both.
+#ifdef PLASMAZONES_KWIN
 uniform vec2 iStripAxis;
+#endif
 
 // A displacement of `amount` uv units along the strip's travel axis. This is
 // the axis-correct replacement for vec2(amount, 0.0).
@@ -154,9 +169,15 @@ vec2 stripAxisPerp() {
 
 // The captured scene FBO is KWin Y-up (origin bottom-left), while the
 // full-screen quad hands us a top-down uv, so flip Y on the sample — same
-// convention as getFromColor/getToColor on the desktop pass.
+// convention as getFromColor/getToColor on the desktop pass. A Qt-RHI
+// uploaded scene is top-origin (Y-down), so the UBO branch samples the uv
+// directly.
 vec4 getStripColor(vec2 uv) {
+#ifdef PLASMAZONES_KWIN
     return texture(uStrip, vec2(uv.x, 1.0 - uv.y));
+#else
+    return texture(uStrip, uv);
+#endif
 }
 
 // 1.0 inside the strip work area, 0.0 outside, with a soft edge of

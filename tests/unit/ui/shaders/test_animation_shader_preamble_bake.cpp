@@ -67,14 +67,12 @@ private Q_SLOTS:
             const QString packDir = animationsDir + QLatin1Char('/') + sub;
             if (QFileInfo::exists(packDir + QStringLiteral("/effect.frag"))
                 && QFileInfo::exists(packDir + QStringLiteral("/metadata.json"))) {
-                // Compositor-only packs (desktop / geometry / move classes)
-                // are authored against the kwin classic-GL dialect with no
-                // daemon branch — the strict SPIR-V target rejects their
-                // default-block uniforms by design. Their compile coverage
-                // is test_animation_shader_kwin_bake.
-                if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(loadEffect(packDir))) {
-                    continue;
-                }
+                // Compositor-only packs bake here too: the shared
+                // transition includes carry UBO branches, so every pack's
+                // effect.frag assembles and compiles under the strict
+                // SPIR-V target. Attach to a daemon surface is still
+                // refused elsewhere; kwin-dialect coverage remains
+                // test_animation_shader_kwin_bake.
                 QTest::newRow(qPrintable(sub)) << packDir;
                 any = true;
             }

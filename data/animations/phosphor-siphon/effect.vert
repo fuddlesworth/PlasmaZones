@@ -15,6 +15,12 @@
 // zero at e = 0 and e = 1, so the resting window carries no residue and
 // every stream lands inside the icon by the leg's end.
 //
+// Dual-branch: the deformation runs on BOTH uniform ABIs. The kwin path
+// declares iIconRect as a default-block uniform; the UBO branch reads it
+// from the AnimationUniforms transition tail, where a preview host stands
+// in a bottom-of-field target. The math between the two is shared
+// verbatim (same structure as genie).
+//
 // Direction handling: the host flips iTime on the reverse
 // (going-to-minimized) leg, so `1 - iTime` is the siphon progress on BOTH
 // legs — 0 → 1 while minimizing, 1 → 0 while restoring. No iIsReversed
@@ -38,8 +44,10 @@ layout(location = 0) out vec2 vTexCoord;
 uniform mat4 modelViewProjectionMatrix;
 // Task-manager icon rect (logical screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares it.
-// (0, 0, 0, 0) means the window sits in no task manager.
+// (0, 0, 0, 0) means the window sits in no task manager. The UBO branch
+// reads the block member of the same name instead.
 uniform vec4 iIconRect;
+#endif
 // Per-vertex siphon state handed to the fragment: .xy = card uv, .z =
 // arrival ease (0 = at rest in the window, 1 = inside the icon), .w =
 // lane seed.
@@ -48,13 +56,16 @@ layout(location = 1) out vec4 vSiphon;
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
-#endif
 
 void main() {
 #ifdef PLASMAZONES_KWIN
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as flow).
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
+    vec2 cuv = texCoord;
+#endif
 
     // Window frame rect in global logical px — the same space iIconRect
     // is pushed in.
@@ -111,13 +122,11 @@ void main() {
 
     vTexCoord = cuv;
     vSiphon = vec4(cuv, e, lh);
+#ifdef PLASMAZONES_KWIN
     gl_Position = modelViewProjectionMatrix * vec4(position + delta, 0.0, 1.0);
 #else
-    // Daemon RHI bake target: the siphon is compositor-only (no window
-    // grid or icon target exists on an overlay surface). Pass the quad
-    // through so the shader bakes; the fragment stage degrades to a plain
-    // fade there. Mirrors flow's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
+    // Qt-RHI path: logical-px delta converts to clip units at
+    // 2 / iResolution — see flow's #else arm for the full contract.
+    gl_Position = qt_Matrix * vec4(position + delta * 2.0 / max(iResolution, vec2(1.0)), 0.0, 1.0);
 #endif
 }

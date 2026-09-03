@@ -8,6 +8,7 @@
 #include "phosphor_i18n.h"
 #include "settings/utils/animationfileutils.h"
 #include "settings/stores/animationpresetlibrary.h"
+#include "animationpreviewcontroller.h"
 #include "animations_controller_detail.h"
 #include "settings/services/motionsetdomain.h"
 #include "settings/stores/shadersetstore.h"
@@ -111,6 +112,9 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     m_motionSets = new ShaderSetStore(motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn,
                                                             snapshotRollbackFn, mutationGuardFn),
                                       this);
+    // Live-preview data source for the shader browser's detail dialog. Both
+    // borrows are the controller's own, so the lifetimes already agree.
+    m_preview = new AnimationPreviewController(shaderRegistry, settings, this);
 
     m_lastHadPendingChanges = hasPendingChanges();
     m_lastStockSuppressedEvents = stockSuppressedEvents();
@@ -195,6 +199,40 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 }
 
 AnimationsPageController::~AnimationsPageController() = default;
+
+// Slider bounds for the spring editor: a deliberately narrower, usable
+// subset of the engine clamp range (Spring clamps omega to [0.1, 200] and
+// zeta to [0, 10]) — see the header's declaration block for the perceptual
+// rationale. The engine clamp, not the slider, is the validity boundary.
+qreal AnimationsPageController::springOmegaMin() const
+{
+    return 1.0;
+}
+
+qreal AnimationsPageController::springOmegaMax() const
+{
+    return 40.0;
+}
+
+qreal AnimationsPageController::springZetaMin() const
+{
+    return 0.1;
+}
+
+qreal AnimationsPageController::springZetaMax() const
+{
+    return 4.0;
+}
+
+QObject* AnimationsPageController::previewController() const
+{
+    return m_preview;
+}
+
+QString AnimationsPageController::previewKind() const
+{
+    return QStringLiteral("animation");
+}
 
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
 {

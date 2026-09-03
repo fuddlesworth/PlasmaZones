@@ -14,10 +14,11 @@ namespace PhosphorRendering {
 static std::unique_ptr<QRhiGraphicsPipeline>
 createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
                              const QShader& fragmentShader, QRhiShaderResourceBindings* srb, bool enableBlend = true,
-                             int numColorAttachments = 1)
+                             int numColorAttachments = 1,
+                             QRhiGraphicsPipeline::Topology topology = QRhiGraphicsPipeline::TriangleStrip)
 {
     std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
-    pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+    pipeline->setTopology(topology);
     pipeline->setShaderStages({{QRhiShaderStage::Vertex, vertexShader}, {QRhiShaderStage::Fragment, fragmentShader}});
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({{4 * sizeof(float)}});
@@ -566,7 +567,12 @@ bool ShaderNodeRhi::ensurePipeline()
     }
 
     if (!m_pipeline) {
-        m_pipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_fragmentShader, m_srb.get());
+        // The image pass draws the grid mesh when tessellated (indexed
+        // Triangles); the buffer passes above always keep the quad strip.
+        m_pipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_fragmentShader, m_srb.get(),
+                                                  /*enableBlend=*/true, /*numColorAttachments=*/1,
+                                                  m_gridSubdivisions > 0 ? QRhiGraphicsPipeline::Triangles
+                                                                         : QRhiGraphicsPipeline::TriangleStrip);
         if (!m_pipeline) {
             m_shaderError = QStringLiteral("Failed to create graphics pipeline");
             return false;

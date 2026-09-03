@@ -578,8 +578,9 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     // ── Audio spectrum ───────────────────────────────────────────────
     node->setAudioSpectrum(m_audioSpectrum);
 
-    // ── Depth buffer and wallpaper ───────────────────────────────────
+    // ── Depth buffer, grid mesh and wallpaper ────────────────────────
     node->setUseDepthBuffer(m_useDepthBuffer);
+    node->setGridSubdivisions(m_gridSubdivisions);
     node->setUseWallpaper(m_useWallpaper);
     {
         QMutexLocker lock(&m_wallpaperTextureMutex);

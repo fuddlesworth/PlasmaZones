@@ -714,6 +714,13 @@ void ShaderNodeRhi::releaseRhiResources()
     m_depthSampler.reset();
     m_ubo.reset();
     m_vbo.reset();
+    // Grid mesh follows the quad VBO's lifecycle; m_gridSubdivisions itself
+    // survives (it is configuration, not a resource) so the post-release
+    // rebuild recreates the mesh at the same density.
+    m_gridVbo.reset();
+    m_gridIbo.reset();
+    m_gridIndexCount = 0;
+    m_gridUploaded = false;
     m_vertexShader = QShader();
     m_fragmentShader = QShader();
     m_bufferFragmentShader = QShader();

@@ -9,7 +9,7 @@
 //     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
 //     supported. The UBO branch below is std140-aligned with
 //     `PhosphorShaders::BaseUniforms` for its 672-byte base, extended to
-//     720 bytes by `AnimationUniformExtension`.
+//     816 bytes by `AnimationUniformExtension`.
 //
 //   • Compositor window-content execution (kwin-effect → KWin::GLShader,
 //     classic OpenGL). KWin's `GLShader::setUniform(loc, val)` API
@@ -57,7 +57,7 @@
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
 // anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and
+// bytes 672-815, 816 total) is supplied by AnimationUniformExtension and
 // pinned by the size static_asserts in
 // `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
@@ -278,7 +278,7 @@ uniform vec4 iLayerRectInTexture;
 // bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
 // `iIsReversed` at 660 and landing the base block at 672 bytes. The
 // iSurfaceScreenPos / iAnchor* fields then extend the AnimationUniforms
-// UBO block to 720 bytes (they are supplied by AnimationUniformExtension,
+// UBO block to 816 bytes (they are supplied by AnimationUniformExtension,
 // not BaseUniforms, which stays pinned at 672).
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
@@ -353,8 +353,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              the captured texture's [0,1] space.
                                  //              iAnchorPosInFbo ends at 704 which is
                                  //              already 16-aligned, so std140 inserts
-                                 //              no pad. Total struct size 720 bytes,
-                                 //              zero trailing pad. The daemon captures
+                                 //              no pad. The daemon captures
                                  //              the shader anchor into uTexture0; when
                                  //              the anchor is larger than the visible
                                  //              card (a PopupFrame capture item that
@@ -368,7 +367,60 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              (0,0,1,1) identity. Populated by
                                  //              SurfaceAnimator per leg attach + on
                                  //              every geometry change.
+    // ── Transition-class tail (offsets 720..815) ───────────────────────
+    // The scalars the compositor's transition passes push as default-block
+    // uniforms (desktop_transition / strip_transition / old_content /
+    // the geometry family's from-to rects), mirrored into the UBO so the
+    // same pack sources compile and run under the Qt-RHI path. The kwin
+    // branch never declares these — each pass declares its own default-
+    // block uniforms exactly as before. Zero when a host does not drive
+    // them, which every shared helper treats as "not driven". C mirror:
+    // PhosphorAnimation::AnimationUniformExtension (bytes 48..143 of the
+    // extension).
+    vec4 iSwitchDelta;           // offset 720 — see desktop_transition.glsl
+    vec4 iStripMotion;           // offset 736 — see strip_transition.glsl
+    vec4 iStripRect;             // offset 752 — see strip_transition.glsl
+    vec4 iFromRect;              // offset 768 — geometry-morph old rect
+                                 //              (logical px, x/y/w/h)
+    vec4 iToRect;                // offset 784 — geometry-morph new rect
+    vec2 iStripAxis;             // offset 800 — see strip_transition.glsl
+    float iOldWindowOpacity;     // offset 808 — see old_content.glsl
+    int iHasOldWindow;           // offset 812 — 1 when a host bound an old-
+                                 //              content snapshot into
+                                 //              uOldWindow (uTexture3); the
+                                 //              kwin branch declares its
+                                 //              default-block twin below.
+    vec4 iIconRect;              // offset 816 — minimize target (x/y/w/h in
+                                 //              iSurfaceScreenPos space);
+                                 //              all-zero = no icon target.
+                                 //              The kwin path pushes its
+                                 //              default-block twin only to
+                                 //              packs declaring it.
+    vec2 iMoveTrail[16];         // offset 832 (256 bytes; std140 pads each
+                                 //              vec2 element to 16). Same
+                                 //              contract as the kwin twin
+                                 //              below: offsets of past
+                                 //              origins vs the current one,
+                                 //              newest first, ~15 ms apart.
+    vec2 iMoveMesh[16];          // offset 1088 (256 bytes) — wobble lattice
+                                 //              deflections, node (i,j) =
+                                 //              [i + 4*j], row 0 top. Total
+                                 //              block size 1344 bytes.
 };
+
+// UBO-branch stand-ins for the kwin-only per-window uniforms, so a pack
+// that reads them directly (phosphor-transfer's ember opacity clamp,
+// phosphor-vortex's layer-rect pick) compiles unchanged here. Their values
+// are the kwin path's own "nothing special" defaults: no SetOpacity rule
+// (opacity 1), no composited surface-layer stack (so the layer rect is
+// never read, and the identity keeps any arithmetic on it finite).
+#define iWindowOpacity 1.0
+#define iHasSurfaceLayer 0
+#define iLayerRectInTexture vec4(0.0, 0.0, 1.0, 1.0)
+// The move-class history arrays (iMoveTrail / iMoveMesh) are REAL block
+// members on this branch these days — see the transition tail above. A
+// host with no drag to report leaves them zero, which reads as "no motion
+// history, mesh at rest".
 
 layout(binding = 7) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or

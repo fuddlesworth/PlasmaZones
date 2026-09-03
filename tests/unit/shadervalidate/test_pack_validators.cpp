@@ -692,9 +692,9 @@ private Q_SLOTS:
     /// A compositor-only pack's VERTEX stage is compiled too. It is the stage
     /// the geometry packs do their per-vertex work in and the one the daemon
     /// never touches, so it is both the likeliest to break and the least
-    /// covered. Unlike the daemon vertex bake, the p_<id> preamble is spliced
-    /// here, matching the compositor: a vertex-driven pack reading its params
-    /// must compile, not fail on an undeclared identifier.
+    /// covered. The p_<id> preamble is spliced here, matching the compositor
+    /// (and, these days, the daemon vertex bake too): a vertex-driven pack
+    /// reading its params must compile, not fail on an undeclared identifier.
     void compositorOnlyVertexStageIsCompiledWithParams()
     {
         if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {

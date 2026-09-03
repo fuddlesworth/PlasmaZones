@@ -422,10 +422,13 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     QStringList animIncludePaths;
     if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
         resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
-        // A compositor-only pack (desktop / geometry / move / strip classes)
-        // is authored against the kwin classic-GL dialect with no daemon
-        // branch: attaching it would fail the strict SPIR-V bake at first
-        // paint and stall the leg. This is reachable through a picker-legal
+        // A compositor-only pack (desktop / geometry / move / strip / tab
+        // classes) compiles under the UBO branch these days (the settings
+        // preview plays it against stand-in subjects), but a daemon surface
+        // leg has none of its transition feed — no desktop endpoints, no
+        // old-content snapshot, no strip scene — so attaching it would run
+        // the shader against unbound stand-ins and render garbage rather
+        // than a transition. This is reachable through a picker-legal
         // config — the picker is permissive on ambiguous rows (e.g. the
         // `global` root), so a geometry-only pack assigned there cascades to
         // every OSD/popup leg via resolveShaderWithDefault, which does no

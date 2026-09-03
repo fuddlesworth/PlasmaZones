@@ -5,24 +5,20 @@
 //
 // The vertex stage (effect.vert) does the minimize-to-icon deformation
 // and hands each fragment its card uv and swallow progress through
-// vGenie. This stage samples the window at that card uv, feathers the
+// vGenie — on both uniform ABIs, since the deformation went dual-branch.
+// This stage samples the window at that card uv, feathers the
 // card's edges (and crops the decoration halo band, where the grid sits
 // on a padded canvas and cuv runs past [0, 1]), and fades the content
 // out over the last stretch of the swallow so the icon-sized remnant
 // never pops on the teardown frame. Restoring runs the progress the
 // other way, so the same ramp fades the window in out of the icon.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = card uv, .z = swallow progress (0 = window at rest, 1 = fully
 // inside the icon). Interpolated from effect.vert across the grid.
 // iIconRect is consumed in the vertex stage.
 layout(location = 1) in vec3 vGenie;
-#endif
-
-#include <anchor_remap.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vGenie.xy;
     float p = clamp(vGenie.z, 0.0, 1.0);
 
@@ -45,11 +41,4 @@ vec4 pTransition(vec2 uv, float t) {
     // surfaceColor is premultiplied (KWin FBO storage); scaling the whole
     // vec4 is the correct fade.
     return surfaceColor(cuv) * (mask * alpha);
-#else
-    // Daemon path: the genie deformation is compositor-only. Degrade to a
-    // plain fade so an assignment to an overlay show/hide leg still
-    // animates. The host flips iTime on hide legs, so one expression
-    // covers both directions.
-    return surfaceColor(anchorRemap(uv)) * clamp(iTime, 0.0, 1.0);
-#endif
 }

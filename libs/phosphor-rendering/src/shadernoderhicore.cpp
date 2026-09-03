@@ -478,6 +478,73 @@ void ShaderNodeRhi::prepare()
         m_initialized = true;
     }
 
+    // Image-pass grid mesh (setGridSubdivisions). Built here rather than in
+    // the init block because the density can change over the node's life (a
+    // metadata hot-reload, a pack switch on a reused item); the setter drops
+    // the buffers and the pipeline, and this block rebuilds both lazily.
+    // Immutable buffers, uploaded once below alongside the quad VBO.
+    if (m_gridSubdivisions > 0 && !m_gridVbo) {
+        const int n = m_gridSubdivisions;
+        const int verts = (n + 1) * (n + 1);
+        m_gridIndexCount = n * n * 6;
+        m_gridVbo.reset(
+            rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, quint32(verts) * 4 * sizeof(float)));
+        m_gridIbo.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer,
+                                       quint32(m_gridIndexCount) * sizeof(quint16)));
+        if (!m_gridVbo->create() || !m_gridIbo->create()) {
+            // Degrade to the quad rather than failing the node: the pack
+            // still renders, only without per-vertex deformation density.
+            qCWarning(lcShaderNode) << "Failed to create grid mesh buffers — falling back to the quad";
+            m_gridVbo.reset();
+            m_gridIbo.reset();
+            m_gridIndexCount = 0;
+            m_gridSubdivisions = 0;
+            m_pipeline.reset();
+        } else {
+            m_gridUploaded = false;
+        }
+    }
+    if (m_gridSubdivisions > 0 && m_gridVbo && !m_gridUploaded) {
+        const int n = m_gridSubdivisions;
+        // Same layout and corner values as RhiConstants::QuadVertices:
+        // clip-space position, then a texCoord that runs 0..1 with v = 0 at
+        // clip y = -1, so a 1-cell grid is bit-identical to the quad.
+        QVector<float> vertexData;
+        vertexData.reserve((n + 1) * (n + 1) * 4);
+        for (int row = 0; row <= n; ++row) {
+            const float t = float(row) / float(n);
+            for (int col = 0; col <= n; ++col) {
+                const float s = float(col) / float(n);
+                vertexData.append(-1.0f + 2.0f * s);
+                vertexData.append(-1.0f + 2.0f * t);
+                vertexData.append(s);
+                vertexData.append(t);
+            }
+        }
+        QVector<quint16> indexData;
+        indexData.reserve(m_gridIndexCount);
+        for (int row = 0; row < n; ++row) {
+            for (int col = 0; col < n; ++col) {
+                const quint16 tl = quint16(row * (n + 1) + col);
+                const quint16 tr = quint16(tl + 1);
+                const quint16 bl = quint16(tl + n + 1);
+                const quint16 br = quint16(bl + 1);
+                indexData.append(tl);
+                indexData.append(tr);
+                indexData.append(bl);
+                indexData.append(tr);
+                indexData.append(br);
+                indexData.append(bl);
+            }
+        }
+        if (QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch()) {
+            batch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
+            batch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
+            cb->resourceUpdate(batch);
+            m_gridUploaded = true;
+        }
+    }
+
     if (m_shaderDirty) {
         m_shaderDirty = false;
         m_shaderReady = false;
@@ -517,7 +584,15 @@ void ShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            auto vertResult = ShaderCompiler::compile(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
+            // Splice the p_<id> preamble into the VERTEX stage too. The kwin
+            // path splices one preamble for both stages, and geometry packs
+            // (phosphor-stream) read p_ params in their verts, so leaving
+            // the vertex un-spliced made the same source compile on one
+            // runtime and fail on the other. Spliced at compile rather than
+            // load so a preamble set after the vertex source still applies;
+            // the cache key already carries m_paramPreamble. Empty = no-op.
+            const QString splicedVert = PhosphorShaders::spliceAfterVersion(m_vertexShaderSource, m_paramPreamble);
+            auto vertResult = ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertResult.shader;
             if (!m_vertexShader.isValid()) {
                 m_shaderError = QStringLiteral("Vertex shader: ")
@@ -845,9 +920,17 @@ void ShaderNodeRhi::render(const RenderState* state)
     QRhiShaderResourceBindings* imageSrb =
         (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
     cb->setShaderResources(imageSrb);
-    QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
-    cb->setVertexInput(0, 1, &vbufBinding);
-    cb->draw(4);
+    if (m_gridSubdivisions > 0 && m_gridVbo && m_gridIbo && m_gridUploaded) {
+        // Tessellated image pass for vertex-displacing packs; the pipeline
+        // was created with Triangles topology for exactly this branch.
+        QRhiCommandBuffer::VertexInput gridBinding(m_gridVbo.get(), 0);
+        cb->setVertexInput(0, 1, &gridBinding, m_gridIbo.get(), 0, QRhiCommandBuffer::IndexUInt16);
+        cb->drawIndexed(m_gridIndexCount);
+    } else {
+        QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
+        cb->setVertexInput(0, 1, &vbufBinding);
+        cb->draw(4);
+    }
 }
 
 void ShaderNodeRhi::releaseResources()
@@ -905,8 +988,12 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     // path applies (T1.1), so the SPIR-V this warm entry caches is byte-for-byte
     // what the live load would produce for the same key. Empty = no-op.
     fragSource = PhosphorShaders::spliceAfterVersion(fragSource, paramPreamble);
+    // Vertex stage gets the same splice the live compile applies (see the
+    // in-node compile site) so the warm-baked SPIR-V stays byte-for-byte
+    // what the live load produces for the same key.
+    const QString splicedVertSource = PhosphorShaders::spliceAfterVersion(vertSource, paramPreamble);
 
-    auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
+    auto vertResult = ShaderCompiler::compile(splicedVertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {
         result.errorMessage =
             vertResult.error.isEmpty() ? QStringLiteral("Vertex shader bake failed") : vertResult.error;

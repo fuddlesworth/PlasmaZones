@@ -1445,6 +1445,10 @@ add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_con
 # miss one of the ten.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpreviewcontroller.cpp
+    # The preview controller's move simulation drives the kwin-effect's
+    # wobble spring integrator (see animationpreviewcontroller.h).
+    ${CMAKE_SOURCE_DIR}/kwin-effect/plasmazoneseffect/mesh_sim.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_overrides.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_groupwrites.cpp
@@ -1474,6 +1478,7 @@ target_link_libraries(test_animations_page_controller
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1491,6 +1496,7 @@ target_link_libraries(test_animations_suppression_mirror
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1514,6 +1520,7 @@ target_link_libraries(test_animations_qml_contracts
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1534,6 +1541,7 @@ target_link_libraries(test_animations_profile_store_sync
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1554,6 +1562,7 @@ target_link_libraries(test_animations_group_writes
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1569,6 +1578,7 @@ target_link_libraries(test_animations_group_write_bounds
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1585,6 +1595,7 @@ target_link_libraries(test_animations_motion_sets
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1603,6 +1614,7 @@ target_link_libraries(test_animations_presets
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1619,6 +1631,7 @@ target_link_libraries(test_animations_shader_overrides
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1640,6 +1653,7 @@ target_link_libraries(test_animations_shader_param_writes
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1660,6 +1674,7 @@ target_link_libraries(test_animations_stale_params
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )

@@ -20,12 +20,13 @@ import "../../js/FontUtils.js" as FontUtils
  * Drives both the animation-shaders browser and the snapping-overlay-shaders
  * browser via a `bridge`.
  *
- * When the bridge also exposes a `previewController` (zone/overlay browser
- * only — see SnappingShadersPageController), the right pane is a LIVE
- * ZoneShaderItem preview and the left column an editable
- * ParameterEditor whose changes are transient (never persisted). The
- * animation browser has no previewController, so it shows no preview pane —
- * just a read-only parameter list.
+ * When the bridge also exposes a `previewController`, the right pane is a
+ * LIVE preview (selected by the bridge's `previewKind`: a ZoneShaderItem
+ * render for zone/overlay, the composed chain for decorations, a driven
+ * transition for animations) and the left column an editable
+ * ParameterEditor whose changes are transient (never persisted). A bridge
+ * with no previewController shows no preview pane — just a read-only
+ * parameter list.
  *
  * Required:
  *   - `effect`: var — set by the host before calling `open()`.
@@ -60,7 +61,7 @@ Kirigami.Dialog {
     // handles spaces and unicode while preserving path separators, but leaves
     // `#` and `?` untouched, so those two are escaped explicitly or they would
     // be parsed as fragment/query delimiters.
-    // Twin site: ShaderBrowserCard.qml preview Image source.
+    // Twin site: AnimationPreviewPane.qml wallpaper Image source.
     function _encodeFilePath(path) {
         return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
     }
@@ -84,6 +85,7 @@ Kirigami.Dialog {
     // decoration controller would be a hard "not a function" at open time.
     readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
     readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
+    readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -117,6 +119,11 @@ Kirigami.Dialog {
     // the zone renderer's. Written ONLY by _teardownPanes / _armPanes — see
     // the shared-lifecycle contract below.
     property bool _decorationArmed: false
+    // The animation pane's arm flag, lifecycle-twin of _decorationArmed:
+    // written ONLY by _teardownPanes / _armPanes. The animation pane covers
+    // itself until its shader compiles, so it arms on the decoration
+    // schedule (a tick after teardown), not the zone one.
+    property bool _animationArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -216,10 +223,12 @@ Kirigami.Dialog {
     function _teardownPanes() {
         _rendererActive = false; // zone
         _decorationArmed = false; // decoration
+        _animationArmed = false; // animation
     }
     function _armPanes() {
         Qt.callLater(function () {
             root._decorationArmed = root.visible && root._decorationPreview;
+            root._animationArmed = root.visible && root._animationPreview;
         });
         // The zone arm normally waits for onOpened. A reset while ALREADY
         // open (a mid-session caller, or a fast pack switch on a dialog whose
@@ -696,9 +705,8 @@ Kirigami.Dialog {
 
             // ── RIGHT: pinned preview (fills the column) ────────────────
             // Hidden (and so excluded from the row, letting the params fill
-            // width) for the animation browser, which has no previewController.
-            // The zone/overlay and decoration browsers each get their own pane
-            // below, selected by _previewKind.
+            // width) for a bridge with no previewController. Each browser
+            // gets its own pane below, selected by _previewKind.
             Item {
                 visible: root._livePreview
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 24
@@ -749,6 +757,26 @@ Kirigami.Dialog {
                         // deliberately NOT here — focus loss must freeze, not
                         // tear down, the same split the zone pane gets from its
                         // clock's `running` gate.
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live animation preview: the stand-in card played through
+                // the pack as a real transition leg plays it. Same Loader
+                // shape and armed-flag lifecycle as the decoration pane
+                // above; the pane covers itself until its shader compiles,
+                // so it builds during the enter transition too.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._animationPreview && root._animationArmed
+                    visible: active
+
+                    sourceComponent: AnimationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
                         active: root.visible
                         animating: root._appActive
                     }

@@ -12,6 +12,12 @@
 // far edge lags — the stagger is what draws the lamp funnel, exactly the
 // same insight flow uses for its pour.
 //
+// Dual-branch: the deformation runs on BOTH uniform ABIs. The kwin path
+// declares iIconRect as a default-block uniform (pushed per frame by
+// paint_shader_window.cpp); the UBO branch reads it from the
+// AnimationUniforms transition tail, where a preview host stands in a
+// bottom-of-field target. The math between the two is shared verbatim.
+//
 // Direction handling: the host flips iTime on the reverse
 // (going-to-minimized) leg, so `1 - iTime` is the swallow progress on
 // BOTH legs — it runs 0 → 1 while minimizing and 1 → 0 while restoring.
@@ -36,12 +42,13 @@ layout(location = 0) out vec2 vTexCoord;
 uniform mat4 modelViewProjectionMatrix;
 // Task-manager icon rect (logical screen px, x/y/w/h), pushed by the
 // kwin-effect paint pipeline for any shader that declares it.
-// (0, 0, 0, 0) means the window sits in no task manager.
+// (0, 0, 0, 0) means the window sits in no task manager. The UBO branch
+// reads the block member of the same name instead.
 uniform vec4 iIconRect;
+#endif
 // Per-vertex genie state handed to the fragment: .xy = card uv, .z =
 // swallow progress (0 = window at rest, 1 = fully inside the icon).
 layout(location = 1) out vec3 vGenie;
-#endif
 
 void main() {
 #ifdef PLASMAZONES_KWIN
@@ -49,6 +56,10 @@ void main() {
     // KWin's window-quad convention — re-apply the canonical flip, same
     // as flow and the shared kwin vertex stage.
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
+    vec2 cuv = texCoord;
+#endif
 
     // Window frame rect in global logical px — the same space iIconRect
     // is pushed in.
@@ -86,17 +97,18 @@ void main() {
     // funnel; at p = 1 every vertex sits inside the icon rect.
     vec2 natural = W.xy + cuv * W.zw;
     vec2 target = I.xy + cuv * I.zw;
-    vec2 displaced = position + (target - natural) * pv;
+    vec2 delta = (target - natural) * pv;
 
     vTexCoord = cuv;
     vGenie = vec3(cuv, p);
-    gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
+#ifdef PLASMAZONES_KWIN
+    gl_Position = modelViewProjectionMatrix * vec4(position + delta, 0.0, 1.0);
 #else
-    // Daemon RHI bake target: the genie deformation is compositor-only
-    // (no window grid or icon target exists on an overlay surface). Pass
-    // the quad through so the shader bakes; the fragment stage degrades
-    // to a plain fade there. Mirrors flow's daemon branch.
-    vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
+    // Qt-RHI path: `position` is clip-space over the shader item (extent
+    // iResolution logical px), so the logical-px delta converts at
+    // 2 / iResolution — see flow's #else arm for the full contract. The
+    // item runs the pack's geometryGrid mesh, so the funnel warps here
+    // exactly as the kwin window-quad grid does.
+    gl_Position = qt_Matrix * vec4(position + delta * 2.0 / max(iResolution, vec2(1.0)), 0.0, 1.0);
 #endif
 }

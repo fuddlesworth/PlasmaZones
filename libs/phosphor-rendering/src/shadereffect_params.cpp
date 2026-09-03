@@ -803,4 +803,15 @@ void ShaderEffect::setUseDepthBuffer(bool use)
     update();
 }
 
+void ShaderEffect::setGridSubdivisions(int subdivisions)
+{
+    const int clamped = qBound(0, subdivisions, 255);
+    if (m_gridSubdivisions == clamped) {
+        return;
+    }
+    m_gridSubdivisions = clamped;
+    Q_EMIT gridSubdivisionsChanged();
+    update();
+}
+
 } // namespace PhosphorRendering

@@ -273,6 +273,23 @@ public:
     /// @return true if a binding existed at that slot and was removed.
     bool removeExtraBinding(int binding);
 
+    // ── Geometry ───────────────────────────────────────────────────────
+    /**
+     * @brief Tessellate the IMAGE pass into an n×n cell grid (0 = the
+     * default two-triangle fullscreen quad).
+     *
+     * Vertex-displacing animation packs (the `geometryGrid` metadata key)
+     * deform per vertex, which a 4-vertex quad can only shear linearly —
+     * the kwin path emits a window-quad grid for them, and this is the
+     * Qt-RHI analogue. Positions stay clip-space, texCoords 0..1, so the
+     * same vertex sources run unchanged; only the mesh density changes.
+     * Buffer passes keep the plain quad: they are image-space passes and
+     * never displace. Clamped to [0, 255] (index-buffer width); the pack
+     * metadata clamp (kMaxGeometryGridSubdivisions = 128) is tighter.
+     * Same threading contract as every setter here: updatePaintNode() only.
+     */
+    void setGridSubdivisions(int subdivisions);
+
     // ── Textures ───────────────────────────────────────────────────────
     void setAudioSpectrum(const QVector<float>& spectrum);
     void setUserTexture(int slot, const QImage& image);
@@ -527,6 +544,12 @@ private:
 
     // ── RHI Core Resources ─────────────────────────────────────────────
     std::unique_ptr<QRhiBuffer> m_vbo;
+    /// Image-pass grid mesh (setGridSubdivisions > 0). Null in quad mode.
+    std::unique_ptr<QRhiBuffer> m_gridVbo;
+    std::unique_ptr<QRhiBuffer> m_gridIbo;
+    int m_gridSubdivisions = 0;
+    int m_gridIndexCount = 0;
+    bool m_gridUploaded = false;
     std::unique_ptr<QRhiBuffer> m_ubo;
     std::unique_ptr<QRhiShaderResourceBindings> m_srb;
     std::unique_ptr<QRhiGraphicsPipeline> m_pipeline;

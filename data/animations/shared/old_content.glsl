@@ -13,15 +13,23 @@
 // verbatim in the cross-fade frags (flow / fold / phosphor-stream /
 // ripple-snap / stretch); hoisted here so it has one source of truth.
 //
-// Old-content cross-fades are compositor-only: the packs that include this
-// module are excluded from the daemon's SPIR-V bake entirely, so the sampler
-// is declared unguarded. Include AFTER the
+// Old-content cross-fades only ever ATTACH in the kwin-effect (the daemon
+// takes no window snapshots), but the pack sources compile on both uniform
+// ABIs so the settings preview can play them against a stand-in snapshot
+// and the SPIR-V bake tests cover them. On the UBO branch the sampler
+// aliases user-texture slot 3 (fed per frame via
+// ShaderEffect::setUserTexture) and iOldWindowOpacity comes from the
+// AnimationUniforms block's transition tail. Include AFTER the
 // animation uniform block so iHasOldWindow / iAnchorRectInTexture / iWindowOpacity
 // and surfaceColor() are in scope.
 #ifndef PLASMAZONES_OLD_CONTENT_GLSL
 #define PLASMAZONES_OLD_CONTENT_GLSL
 
+#ifdef PLASMAZONES_KWIN
 uniform sampler2D uOldWindow;
+#else
+#define uOldWindow uTexture3
+#endif
 
 // The OLD side's own resolved opacity, distinct from iWindowOpacity on
 // purpose: on the tab class the snapshot holds a DIFFERENT window (the
@@ -30,7 +38,9 @@ uniform sampler2D uOldWindow;
 // every self-cross-fade includer the C++ pushes the same value into both
 // uniforms, so their behaviour is bit-identical to when oldColor read
 // iWindowOpacity directly.
+#ifdef PLASMAZONES_KWIN
 uniform float iOldWindowOpacity;
+#endif
 
 vec4 oldColor(vec2 uv) {
     // No captured old frame (snapshot-less lifecycle transitions, e.g.
@@ -47,7 +57,13 @@ vec4 oldColor(vec2 uv) {
         return surfaceColor(uv);
     }
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
+#ifdef PLASMAZONES_KWIN
+    // KWin's snapshot FBO is bottom-origin (Y-up) — flip, like surfaceColor.
     return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iOldWindowOpacity;
+#else
+    // A Qt-RHI uploaded snapshot is top-origin (Y-down) — no flip.
+    return texture(uOldWindow, t) * iOldWindowOpacity;
+#endif
 }
 
 // The old→new blend, `a` running 0 (all old) to 1 (all new) — the sibling of

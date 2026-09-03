@@ -288,10 +288,11 @@ void Daemon::setupShaderWarmBakes()
                 return;
             }
             // Compositor-only packs (desktop / geometry / move / strip / tab
-            // classes, no appearance) are authored against the kwin classic-GL dialect
-            // with no daemon branch — their source does not compile on the
-            // strict SPIR-V qsb target, and the daemon never runs them, so
-            // warming them would only log a bake failure per pack per scan.
+            // classes, no appearance) compile under the UBO branch these
+            // days, but the daemon never attaches them (their transition
+            // feed exists only in the compositor and the settings preview),
+            // so warming them would spend bake time on shaders no daemon
+            // surface will ever run.
             if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(info)) {
                 return;
             }
