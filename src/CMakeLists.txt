@@ -193,6 +193,7 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor/autotileadaptor.h
     dbus/tilingadaptor/tilingadaptor.cpp
+    dbus/tilingadaptor/relay.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
