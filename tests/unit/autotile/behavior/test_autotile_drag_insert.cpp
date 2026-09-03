@@ -219,6 +219,92 @@ private Q_SLOTS:
                  "cancel retile emitted no neighbour geometry — the assertion below would be vacuous");
         QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
                  "mid-drag cancel emitted tile geometry for the window still being dragged");
+        // Any retile deferred past the cancel (the queued coalesced channel)
+        // must not re-emit A's rect after the scope-bound filter clears.
+        QCoreApplication::processEvents();
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "a deferred retile emitted the dragged window's geometry after the cancel returned");
+
+        // The filter is scope-bound to the cancel: a LATER retile on the same
+        // engine must emit A's geometry again. Deleting the qScopeGuard clear
+        // would otherwise skip this window on every future retile forever,
+        // with the suite green.
+        tiledSpy.clear();
+        state->setCalculatedZones(
+            {QRect(0, 0, 700, 1000), QRect(700, 0, 500, 1000), QRect(1200, 0, 400, 1000), QRect(1600, 0, 300, 1000)});
+        openWindows(engine, screen, {QStringLiteral("D")});
+        engine.retile(screen);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "the cancel filter outlived the cancel — geometry emission for the window never resumed");
+    }
+
+    // Cross-screen twin: a mid-drag cancel of a cross-screen adoption retiles
+    // BOTH screens (target, then the prior screen the window is restored to),
+    // and the non-screen-scoped filter must suppress the dragged window's
+    // geometry in each while neighbours still reflow.
+    void testCrossScreen_midDragCancelSkipsDraggedGeometryOnBothScreens()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString s1 = QLatin1String(Screen1);
+        const QString s2 = QLatin1String(Screen2);
+        engine.setAutotileScreens({s1, s2});
+        openWindows(engine, s1, {QStringLiteral("A"), QStringLiteral("B")});
+        openWindows(engine, s2, {QStringLiteral("X"), QStringLiteral("Y")});
+
+        PhosphorTiles::TilingState* state1 = engine.tilingStateForScreen(s1);
+        PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(s2);
+        QVERIFY(state1);
+        QVERIFY(state2);
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), s2));
+
+        // Zones sized for the POST-CANCEL counts (cancel restores A to s1, so
+        // s1 tiles A+B and s2 tiles X+Y again). Set after begin — begin's own
+        // retiles bail harmlessly on the missing geometry, and applyTiling
+        // refuses a zone vector that outnumbers the tiled list, so begin-time
+        // counts must not constrain these.
+        state1->setCalculatedZones({QRect(0, 0, 900, 1000), QRect(900, 0, 900, 1000)});
+        state2->setCalculatedZones({QRect(0, 0, 600, 1000), QRect(600, 0, 600, 1000)});
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.cancelDragInsertPreview(/*dragStillActive=*/true);
+
+        QVERIFY(tiledSpy.count() >= 1);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("X")),
+                 "target-screen cancel retile emitted no neighbour geometry — the negative below would be vacuous");
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("B")),
+                 "prior-screen cancel retile emitted no neighbour geometry — the negative below would be vacuous");
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "cross-screen mid-drag cancel emitted tile geometry for the window still being dragged");
+    }
+
+    // Eviction twin: the mid-drag cancel's unfloat-the-victim retile must
+    // still skip the dragged window while re-tiling the restored neighbour.
+    void testEviction_midDragCancelSkipsDraggedGeometry()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 3;
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 700, 1000), QRect(700, 0, 600, 1000), QRect(1300, 0, 600, 1000)});
+
+        // Fresh adoption over the cap evicts C (last tiled neighbour).
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
+        QVERIFY(!engine.tilingStateForScreen(screen)->tiledWindows().contains(QStringLiteral("C")));
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.cancelDragInsertPreview(/*dragStillActive=*/true);
+
+        QVERIFY(tiledSpy.count() >= 1);
+        // The victim is back in the tiled list and gets geometry again.
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("C")),
+                 "cancel retile emitted no geometry for the restored eviction victim");
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("newcomer")),
+                 "eviction-arm mid-drag cancel emitted tile geometry for the window still being dragged");
     }
 
     // Control: the drop-time cancel (default argument) keeps the snap-back —
@@ -241,7 +327,81 @@ private Q_SLOTS:
         engine.cancelDragInsertPreview();
 
         QVERIFY(tiledSpy.count() >= 1);
+        // Neighbour guard first, mirroring the mid-drag twin: an emission
+        // with no geometry entries at all would satisfy neither assertion
+        // meaningfully, and the helper answers false for a payload whose
+        // shape changed, which the positive alone would misread as regression.
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("B")),
+                 "drop-time cancel retile emitted no neighbour geometry — payload shape changed?");
         QVERIFY(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")));
+    }
+
+    // =========================================================================
+    // Interactive-drag mark (setInteractiveDragWindow)
+    // =========================================================================
+
+    // While the daemon-set mark names a window, NO retile may emit its
+    // geometry — this is what protects the window in the user's hand from
+    // retiles the preview/cancel filters never see (a deferred geometry
+    // retry, a neighbour opening or closing, discussion #1028).
+    void testInteractiveDragMark_suppressesGeometryUntilCleared()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 900, 1000), QRect(900, 0, 500, 1000), QRect(1400, 0, 500, 1000)});
+
+        engine.setInteractiveDragWindow(QStringLiteral("A"));
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.retile(screen);
+        QVERIFY(tiledSpy.count() >= 1);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("B")),
+                 "marked retile emitted no neighbour geometry — the negative below would be vacuous");
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "a retile emitted geometry for the window under a compositor interactive move");
+
+        // Clearing the mark restores normal emission (the drop finalizes
+        // through its own paths; here we just prove the mark is not sticky).
+        engine.setInteractiveDragWindow(QString());
+        tiledSpy.clear();
+        engine.retile(screen);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")), "the interactive-drag mark outlived its clear");
+    }
+
+    // The stale-preview identity gate: a cancel(dragStillActive=true) whose
+    // preview names a DIFFERENT window than the interactive-drag mark is
+    // residue from a prior drag — nobody holds that window, so its snap-back
+    // geometry must be emitted, not suppressed.
+    void testInteractiveDragMark_stalePreviewCancelStillSnapsBack()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 900, 1000), QRect(900, 0, 500, 1000), QRect(1400, 0, 500, 1000)});
+
+        // A's preview is left over from a prior drag; the NEW drag holds C.
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        engine.updateDragInsertPreview(2);
+        engine.setInteractiveDragWindow(QStringLiteral("C"));
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.cancelDragInsertPreview(/*dragStillActive=*/true);
+
+        QVERIFY(tiledSpy.count() >= 1);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "stale preview's snap-back was suppressed — the window stays parked at the previewed rect");
+        // The genuinely-held window stays protected throughout.
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("C")),
+                 "cancel retile emitted geometry for the window the NEW drag is holding");
+        engine.setInteractiveDragWindow(QString());
     }
 
     // =========================================================================

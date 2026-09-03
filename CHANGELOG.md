@@ -2128,7 +2128,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...HEAD
+[3.4.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...v3.4.9
 [3.4.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...v3.4.8
 [3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
 [3.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.4...v3.4.5

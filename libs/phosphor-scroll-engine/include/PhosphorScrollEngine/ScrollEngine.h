@@ -615,6 +615,10 @@ public:
     }
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
     void commitDragInsertPreview() override;
+    /// @p dragStillActive carries the base-interface contract and is
+    /// deliberately unused here (see the definition): the DETACH-ONCE model
+    /// plus the interactive-drag mark already keep the dragged window's rect
+    /// from being emitted mid-drag.
     void cancelDragInsertPreview(bool dragStillActive = false) override;
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
