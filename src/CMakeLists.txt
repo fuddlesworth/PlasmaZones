@@ -695,11 +695,44 @@ configure_file(
 # is absent.
 
 if(BUILD_PHOSPHOR_SHELL)
-    add_executable(phosphor-shell shell/main.cpp)
+    add_executable(phosphor-shell
+        shell/main.cpp
+        # The bar's IBarWidgetFactory registry owner + the generic
+        # QML-component factory. First production owner of a UI-seam
+        # registry; the Phosphor.Bar QML module stays registry-agnostic
+        # (Phase 4.1).
+        shell/BarController.h
+        shell/barcontroller.cpp
+        shell/LayerPopoutTransport.h
+        shell/layerpopouttransport.cpp
+        shell/QmlComponentBarWidgetFactory.h
+        shell/qmlcomponentbarwidgetfactory.cpp
+    )
 
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
+            # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
+            # for BarController, and the Phosphor.Bar QML module + its plugin
+            # registrar so the bar delegates resolve at runtime.
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellPower::PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
+            # The router has to be installed on each engine (see main.cpp)
+            # or every IpcTarget logs a warning and stays inert.
+            PhosphorIpc::PhosphorIpc
+            PhosphorIpc::PhosphorIpcQml
+            PhosphorIpcQmlplugin
+            # Popout policy + the QML host it drives. Static QML modules ship
+            # both a library and a plugin registrar; the registrar is what
+            # publishes the module to a QQmlEngine, so without it the
+            # transport's PopoutHost.qml load would fail at runtime.
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceUPower::PhosphorServiceUPower

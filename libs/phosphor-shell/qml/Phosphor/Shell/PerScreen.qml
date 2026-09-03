@@ -31,10 +31,19 @@
 //     binding is evaluated during construction in the right order.
 //   - The delegate is destroyed when its screen leaves the model.
 //
-// Lifetime: delegates are parented to the PerScreen item. Destroying
-// the PerScreen tears down all delegates. Consumers MUST NOT call
-// `destroy()` on delegates themselves; the PerScreen's reset diff would
-// then dereference a dangling pointer.
+// Lifetime: delegates are created with a NULL QObject parent (they must
+// be — a Wayland Window under a non-Window parent is never committed) and
+// are kept alive solely by the JS references in `_instances`. Destroying
+// the PerScreen tears them down explicitly via _teardownAll. Consumers
+// MUST NOT call `destroy()` on delegates themselves; the PerScreen's
+// reset diff would then dereference a dangling pointer.
+//
+// That null parent is why this type CANNOT host PhosphorShell's
+// PanelWindow: ShellEngine discovers panels with findChildren, so a
+// null-parented panel is never found, never materialized, and silently
+// renders nothing. PerScreen owns per-monitor WINDOWS (wallpaper, OSD);
+// PerScreenPanels owns per-monitor PANELS, and parents them for exactly
+// this reason.
 
 import QtQml
 import QtQuick
@@ -63,8 +72,8 @@ Item {
 
     // Non-visual: size to zero and hide so a PerScreen placed inside a
     // visual parent (test windows, demo layouts) doesn't influence
-    // layout. Delegates are top-level objects parented to PerScreen,
-    // not visual children.
+    // layout. Delegates are top-level objects with NO QObject parent
+    // (see the lifetime note in the header), not visual children.
     visible: false
     width: 0
     height: 0
@@ -119,6 +128,17 @@ Item {
     // process the deferred delete and there's no re-entrancy from
     // the engine destructor.
     onModelChanged: {
+        root._teardownAll();
+        root._rebuild();
+    }
+
+    // Same shape for a late (or swapped) delegate: _rebuild bails while
+    // `delegate` is null, so a delegate assigned after construction
+    // would otherwise render nothing, silently, forever. A swap tears
+    // existing instances down first; keeping delegates built from a
+    // previous Component while the property points at a new one would
+    // desync the two.
+    onDelegateChanged: {
         root._teardownAll();
         root._rebuild();
     }
