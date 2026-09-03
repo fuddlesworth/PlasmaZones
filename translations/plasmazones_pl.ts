@@ -1125,37 +1125,37 @@
         <translation>Przenieś na wierzch</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="653"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="703"/>
         <source>Cancel Zone Overlay</source>
         <translation>Anuluj nakładkę stref</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="712"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="762"/>
         <source>Layout Picker: Move Left</source>
         <translation>Wybór układu: przesuń w lewo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="716"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="766"/>
         <source>Layout Picker: Move Right</source>
         <translation>Wybór układu: przesuń w prawo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="720"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="770"/>
         <source>Layout Picker: Move Up</source>
         <translation>Wybór układu: przesuń w górę</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="724"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="774"/>
         <source>Layout Picker: Move Down</source>
         <translation>Wybór układu: przesuń w dół</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="728"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="778"/>
         <source>Layout Picker: Confirm</source>
         <translation>Wybór układu: potwierdź</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="779"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>Wybór układu: potwierdź (Enter na klawiaturze numerycznej)</translation>
     </message>
@@ -1238,7 +1238,7 @@
         <translation>Wyczyść wszystkie strefy</translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorGapsModel.cpp" line="284"/>
+        <location filename="../src/editor/EditorGapsModel.cpp" line="286"/>
         <source>Clear Edge Gap Override</source>
         <comment>@action</comment>
         <translation>Wyczyść zastąpienie odstępu krawędziowego</translation>
@@ -1819,22 +1819,22 @@
         <translation>Nie udało się zapisać pliku algorytmu. Sprawdź miejsce na dysku i uprawnienia.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="101"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>Nie można modyfikować zestawów w trakcie odrzucania.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="395"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Nie można zapisać w trakcie odrzucania.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="639"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
         <source>A discard is already in progress. Try again in a moment.</source>
         <translation>Odrzucanie już trwa. Spróbuj ponownie za chwilę.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="732"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
         <source>Could not restore %n profile file. It remains pending.</source>
         <translation>
             <numerusform>Nie udało się przywrócić %n pliku profilu. Pozostaje w oczekiwaniu.</numerusform>
@@ -1843,7 +1843,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="734"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
         <source>Could not restore %n profile files. They remain pending.</source>
         <translation>
             <numerusform>Nie udało się przywrócić %n pliku profilu. Pozostaje w oczekiwaniu.</numerusform>
@@ -1857,8 +1857,8 @@
         <translation>Odrzucanie już trwa.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="883"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="893"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Nie można modyfikować nastaw w trakcie odrzucania.</translation>
     </message>
@@ -1945,23 +1945,23 @@
         <translation>Nie znaleziono prawidłowych układów w pliku</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="124"/>
+        <location filename="../src/settings/main.cpp" line="125"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="232"/>
         <source>PlasmaZones Settings</source>
         <translation>Ustawienia PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="129"/>
+        <location filename="../src/settings/main.cpp" line="130"/>
         <source>Open a specific settings page</source>
         <translation>Otwórz określoną stronę ustawień</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="132"/>
+        <location filename="../src/settings/main.cpp" line="133"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>Pokaż określone ustawienie na stronie (odnośnik bezpośredni)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="136"/>
+        <location filename="../src/settings/main.cpp" line="137"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>Pokaż określoną sekcję na stronie (odnośnik bezpośredni)</translation>
     </message>
@@ -8141,8 +8141,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="941"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="164"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="239"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="246"/>
         <source>Invert wheel direction</source>
         <translation>Odwróć kierunek kółka</translation>
     </message>
@@ -9392,7 +9392,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="161"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="212"/>
         <source>Scroll key for the view</source>
         <translation>Klawisz przewijania dla widoku</translation>
     </message>
@@ -9589,7 +9589,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1075"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1077"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1079"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="464"/>
         <source>User shaders</source>
         <translation>Shadery użytkownika</translation>
     </message>
@@ -9882,18 +9882,18 @@
         <translation>Ten szablon już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
         <translation>Usługa odrzuciła szablon. Sprawdź, czy ma nazwę.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="217"/>
         <source>Could not save the template.</source>
         <translation>Nie udało się zapisać szablonu.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="226"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="230"/>
         <source>Could not save the template. Check that it has a name.</source>
         <translation>Nie udało się zapisać szablonu. Sprawdź, czy ma nazwę.</translation>
     </message>
@@ -11440,25 +11440,25 @@
         <translation>Nie udało się zapisać układu: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="470"/>
         <source>Zone %1: %2</source>
         <comment>@info:accessibility</comment>
         <translation>Strefa %1: %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="470"/>
         <source>Zone %1</source>
         <comment>@info:accessibility</comment>
         <translation>Strefa %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="471"/>
         <source>Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.</source>
         <comment>@info:accessibility</comment>
         <translation>Wybrana strefa. Pozycja: %1%, %2%, Rozmiar: %3% × %4%. Kliknij, aby odznaczyć, przeciągnij, aby przenieść, użyj uchwytów, aby zmienić rozmiar.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorZone.qml.cpp" line="471"/>
         <source>Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.</source>
         <comment>@info:accessibility</comment>
         <translation>Strefa. Pozycja: %1%, %2%, Rozmiar: %3% × %4%. Kliknij, aby wybrać.</translation>
@@ -11973,14 +11973,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="416"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Full zone highlight</source>
         <comment>@item:inlistbox</comment>
         <translation>Pełne podświetlenie strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="416"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Compact preview</source>
         <comment>@item:inlistbox</comment>
         <translation>Zwarty podgląd</translation>
@@ -12088,13 +12088,13 @@
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="227"/>
         <source>Zone Properties</source>
         <comment>@title</comment>
         <translation>Właściwości strefy</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="227"/>
         <source>%n Zone Selected</source>
         <comment>@title</comment>
         <translation>
@@ -12104,198 +12104,198 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="238"/>
         <source>Close panel</source>
         <comment>@tooltip</comment>
         <translation>Zamknij panel</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="236"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="240"/>
         <source>Close properties panel</source>
         <comment>@info:accessibility</comment>
         <translation>Zamknij panel właściwości</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="260"/>
         <source>Appearance (All Selected)</source>
         <comment>@title</comment>
         <translation>Wygląd (wszystkie zaznaczone)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="263"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="678"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="682"/>
         <source>Custom colors:</source>
         <comment>@label</comment>
         <translation>Własne barwy:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="268"/>
         <source>Enable for all selected</source>
         <comment>@option:check</comment>
         <translation>Włącz dla wszystkich zaznaczonych</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="271"/>
         <source>Enable custom colors for all selected zones</source>
         <comment>@info:accessibility</comment>
         <translation>Włącz własne barwy dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="283"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="692"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="287"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="696"/>
         <source>Highlight:</source>
         <comment>@label</comment>
         <translation>Podświetlenie:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="288"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="292"/>
         <source>Highlight color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>Wybór barwy podświetlenia dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="293"/>
         <source>Choose highlight color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę podświetlenia dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="297"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="710"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="714"/>
         <source>Inactive:</source>
         <comment>@label</comment>
         <translation>Nieaktywna:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="306"/>
         <source>Inactive color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>Wybór barwy nieaktywnej dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="307"/>
         <source>Choose inactive color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę nieaktywną dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="311"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="728"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="315"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="732"/>
         <source>Border:</source>
         <comment>@label</comment>
         <translation>Obramowanie:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="315"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="319"/>
         <source>Border color picker for all selected zones</source>
         <comment>@label</comment>
         <translation>Wybór barwy obramowania dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="320"/>
         <source>Choose border color for all selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę obramowania dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="748"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="752"/>
         <source>Active opacity:</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość aktywnej:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="336"/>
         <source>Active opacity for all selected zones</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość aktywnej dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="337"/>
         <source>Set active opacity for all selected zones (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Ustaw nieprzezroczystość aktywnej dla wszystkich zaznaczonych stref (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="343"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="764"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="768"/>
         <source>Inactive opacity:</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość nieaktywnej:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="352"/>
         <source>Inactive opacity for all selected zones</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość nieaktywnej dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="353"/>
         <source>Set inactive opacity for all selected zones (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Ustaw nieprzezroczystość nieaktywnej dla wszystkich zaznaczonych stref (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="358"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="781"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="785"/>
         <source>Border width:</source>
         <comment>@label</comment>
         <translation>Szerokość obramowania:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="369"/>
         <source>Border width for all selected zones</source>
         <comment>@label</comment>
         <translation>Szerokość obramowania dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="366"/>
-        <source>Set border width for all selected zones (0-20)</source>
-        <comment>@info:tooltip</comment>
-        <translation>Ustaw szerokość obramowania dla wszystkich zaznaczonych stref (0-20)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="374"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="799"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="803"/>
         <source>Corner radius:</source>
         <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
         <translation>Promień narożnika:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="381"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="385"/>
         <source>Corner radius for all selected zones</source>
         <oldsource>Border radius for all selected zones</oldsource>
         <comment>@label</comment>
         <translation>Promień narożnika dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="382"/>
-        <source>Set corner radius for all selected zones (0-50)</source>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="370"/>
+        <source>Set border width for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Ustaw promień narożnika dla wszystkich zaznaczonych stref (0-50)</translation>
+        <translation>Ustaw szerokość obramowania dla wszystkich zaznaczonych stref (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="395"/>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="898"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="386"/>
+        <source>Set corner radius for all selected zones (0-%1)</source>
+        <comment>@info:tooltip</comment>
+        <translation>Ustaw promień narożnika dla wszystkich zaznaczonych stref (0-%1)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="902"/>
         <source>Actions</source>
         <comment>@title</comment>
         <translation>Działania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="401"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="405"/>
         <source>Actions will apply to all selected zones.</source>
         <comment>@info</comment>
         <translation>Działania zostaną zastosowane do wszystkich zaznaczonych stref.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="414"/>
         <source>Delete Selected Zones</source>
         <comment>@action:button</comment>
         <translation>Usuń zaznaczone strefy</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="414"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="418"/>
         <source>Delete %n selected zone</source>
         <comment>@info</comment>
         <translation>
@@ -12305,284 +12305,284 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="436"/>
         <source>Name:</source>
         <comment>@label</comment>
         <translation>Nazwa:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="442"/>
         <source>Zone name</source>
         <comment>@label</comment>
         <translation>Nazwa strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="530"/>
         <source>Number:</source>
         <comment>@label</comment>
         <translation>Numer:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="531"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="535"/>
         <source>Zone number</source>
         <comment>@label</comment>
         <translation>Numer strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="562"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="566"/>
         <source>Geometry</source>
         <comment>@title</comment>
         <translation>Geometria</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="573"/>
         <source>Mode:</source>
         <comment>@label</comment>
         <translation>Tryb:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="570"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="574"/>
         <source>Fixed pixel size</source>
         <comment>@option:check</comment>
         <translation>Stały rozmiar w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="573"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="577"/>
         <source>Toggle fixed pixel geometry mode</source>
         <comment>@info:accessibility</comment>
         <translation>Przełącz tryb stałej geometrii pikselowej</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="574"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="578"/>
         <source>When enabled, zone uses absolute pixel coordinates instead of relative percentages</source>
         <comment>@info:accessibility</comment>
         <translation>Gdy włączone, strefa używa bezwzględnych współrzędnych pikselowych zamiast względnych procentów</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="589"/>
         <source>X:</source>
         <comment>@label</comment>
         <translation>X:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="590"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="594"/>
         <source>X position in pixels</source>
         <comment>@label</comment>
         <translation>Pozycja X w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="605"/>
         <source>Y:</source>
         <comment>@label</comment>
         <translation>Y:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="606"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="610"/>
         <source>Y position in pixels</source>
         <comment>@label</comment>
         <translation>Pozycja Y w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="621"/>
         <source>Width:</source>
         <comment>@label</comment>
         <translation>Szerokość:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="622"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="626"/>
         <source>Width in pixels</source>
         <comment>@label</comment>
         <translation>Szerokość w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="637"/>
         <source>Height:</source>
         <comment>@label</comment>
         <translation>Wysokość:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="638"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="642"/>
         <source>Height in pixels</source>
         <comment>@label</comment>
         <translation>Wysokość w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="671"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="675"/>
         <source>Appearance</source>
         <comment>@title</comment>
         <translation>Wygląd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="679"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="683"/>
         <source>Use custom colors</source>
         <comment>@option:check</comment>
         <translation>Użyj własnych barw</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="683"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="687"/>
         <source>Enable custom colors for this zone</source>
         <comment>@info:accessibility</comment>
         <translation>Włącz własne barwy dla tej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="697"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="701"/>
         <source>Highlight color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy podświetlenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="698"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="702"/>
         <source>Choose color for highlighted/active zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę dla podświetlonych/aktywnych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="715"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="719"/>
         <source>Inactive color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy nieaktywnej</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="716"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="720"/>
         <source>Choose color for non-selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę dla niezaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="732"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="736"/>
         <source>Border color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy obramowania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="733"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="737"/>
         <source>Choose color for zone borders</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę obramowań stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="753"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="757"/>
         <source>Zone active opacity</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość aktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="754"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="758"/>
         <source>Adjust zone opacity when highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Dostosuj nieprzezroczystość strefy, gdy jest podświetlona (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="769"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="773"/>
         <source>Zone inactive opacity</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość nieaktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="770"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="774"/>
         <source>Adjust zone opacity when not highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Dostosuj nieprzezroczystość strefy, gdy nie jest podświetlona (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="788"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="792"/>
         <source>Border width in pixels</source>
         <comment>@label</comment>
         <translation>Szerokość obramowania w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="789"/>
-        <source>Set zone border width in pixels (0-20)</source>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="793"/>
+        <source>Set zone border width in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Ustaw szerokość obramowania strefy w pikselach (0-20)</translation>
+        <translation>Ustaw szerokość obramowania strefy w pikselach (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="806"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
+        <source>Set zone corner radius in pixels (0-%1)</source>
+        <comment>@info:tooltip</comment>
+        <translation>Ustaw promień narożnika strefy w pikselach (0-%1)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="810"/>
         <source>Corner radius in pixels</source>
         <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
         <translation>Promień narożnika w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="807"/>
-        <source>Set zone corner radius in pixels (0-50)</source>
-        <comment>@info:tooltip</comment>
-        <translation>Ustaw promień narożnika strefy w pikselach (0-50)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="820"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="824"/>
         <source>Overlay</source>
         <comment>@title</comment>
         <translation>Nakładka</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="828"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="832"/>
         <source>Style:</source>
         <comment>@label</comment>
         <translation>Styl:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="830"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="834"/>
         <source>Use layout default</source>
         <comment>@item:inlistbox overlay mode</comment>
         <translation>Użyj domyślnych ustawień układu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="839"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="843"/>
         <source>Zone overlay display mode</source>
         <comment>@label</comment>
         <translation>Tryb wyświetlania nakładki strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="840"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="844"/>
         <source>Override the overlay style for this zone only</source>
         <comment>@info:accessibility</comment>
         <translation>Zastąp styl nakładki tylko dla tej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="904"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="908"/>
         <source>Delete Zone</source>
         <comment>@action:button</comment>
         <translation>Usuń strefę</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="908"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="912"/>
         <source>Delete the selected zone</source>
         <comment>@info</comment>
         <translation>Usuń zaznaczoną strefę</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="984"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="988"/>
         <source>Zone Highlight Color</source>
         <comment>@title:window</comment>
         <translation>Barwa podświetlenia strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1002"/>
         <source>Zone Inactive Color</source>
         <comment>@title:window</comment>
         <translation>Barwa nieaktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1012"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1016"/>
         <source>Zone Border Color</source>
         <comment>@title:window</comment>
         <translation>Barwa obramowania strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1029"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1033"/>
         <source>Highlight Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa podświetlenia dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1043"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1047"/>
         <source>Inactive Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa nieaktywna dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1057"/>
+        <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="1061"/>
         <source>Border Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa obramowania dla wszystkich zaznaczonych stref</translation>
@@ -12734,14 +12734,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="554"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="498"/>
         <source>by %1</source>
         <comment>@info shader author</comment>
         <translation>autor: %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="557"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="475"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="501"/>
         <source>v%1</source>
         <comment>@info shader version</comment>
         <translation>w%1</translation>
@@ -12814,7 +12814,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="915"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="902"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="954"/>
         <source>No error details available.</source>
         <comment>@info shader preview</comment>
         <translation>Brak dostępnych szczegółów błędu.</translation>
@@ -12846,14 +12846,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="974"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="979"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1031"/>
         <source>Save Shader Preset</source>
         <comment>@title:window</comment>
         <translation>Zapisz nastawę shadera</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="1003"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="994"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1046"/>
         <source>Load Shader Preset</source>
         <comment>@title:window</comment>
         <translation>Wczytaj nastawę shadera</translation>
@@ -14026,82 +14026,82 @@
         <translation>Malejąco</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture modifier</source>
         <translation>Kliknij, aby przechwycić modyfikator</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture mouse button</source>
         <translation>Kliknij, aby przechwycić przycisk myszy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="27"/>
         <source>Click to capture</source>
         <translation>Kliknij, aby przechwycić</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
         <source>Press modifier(s)…</source>
         <translation>Naciśnij modyfikator(y)…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
         <source>Press mouse button…</source>
         <translation>Naciśnij przycisk myszy…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="26"/>
-        <source>Press key, modifier, or mouse…</source>
-        <translation>Naciśnij klawisz, modyfikator lub przycisk myszy…</translation>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="28"/>
+        <source>Press modifier(s) or mouse button…</source>
+        <translation>Naciśnij modyfikator(y) lub przycisk myszy…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
+        <source>Press modifier key(s) or any mouse button (Escape to cancel)</source>
+        <translation>Naciśnij klawisz(e) modyfikatora lub dowolny przycisk myszy (Escape, aby anulować)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
+        <source>Click then press modifier(s) or any mouse button</source>
+        <translation>Kliknij, a następnie naciśnij modyfikator(y) lub dowolny przycisk myszy</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
+        <source>Press modifier(s) or a mouse button. Escape to cancel.</source>
+        <translation>Naciśnij modyfikator(y) lub przycisk myszy. Escape, aby anulować.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Press modifier key(s) only (Escape to cancel)</source>
         <translation>Naciśnij tylko klawisz(e) modyfikatora (Escape, aby anulować)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to cancel)</source>
         <translation>Naciśnij dowolny przycisk myszy: prawy, środkowy, wstecz, dalej lub dodatkowy (Escape, aby anulować)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
-        <source>Press a key, modifier only, or any mouse button (Escape to cancel)</source>
-        <translation>Naciśnij klawisz, sam modyfikator lub dowolny przycisk myszy (Escape, aby anulować)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Click then press modifier key(s)</source>
         <translation>Kliknij, a następnie naciśnij klawisz(e) modyfikatora</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="93"/>
         <source>Click then press any mouse button (Right, Middle, Back, Forward, etc.)</source>
         <translation>Kliknij, a następnie naciśnij dowolny przycisk myszy (prawy, środkowy, wstecz, dalej itd.)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="158"/>
-        <source>Click then press key, modifier(s), or any mouse button</source>
-        <translation>Kliknij, a następnie naciśnij klawisz, modyfikator(y) lub dowolny przycisk myszy</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
         <source>Press modifier(s). Escape to cancel.</source>
         <translation>Naciśnij modyfikator(y). Escape, aby anulować.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="223"/>
         <source>Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.</source>
         <translation>Naciśnij dowolny przycisk myszy (prawy, środkowy, wstecz, dalej itd.). Escape, aby anulować.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="295"/>
-        <source>Press key, modifier(s), or mouse button. Escape to cancel.</source>
-        <translation>Naciśnij klawisz, modyfikator(y) lub przycisk myszy. Escape, aby anulować.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/settings/qml/components/InputCapture.qml.cpp" line="235"/>
         <source>That mouse button is not supported. Buttons up to Extra 5 can be captured.</source>
         <translation>Ten przycisk myszy nie jest obsługiwany. Można przechwycić przyciski do Extra 5.</translation>
     </message>
@@ -16616,7 +16616,7 @@
         <translation>Nowy algorytm</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="133"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="137"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
         <translation>Nowy szablon</translation>
@@ -17720,8 +17720,8 @@
         <translation>Wybierz układ…</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="171"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="145"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="175"/>
         <source>That template is no longer available.</source>
         <translation>Ten szablon nie jest już dostępny.</translation>
     </message>
@@ -18295,7 +18295,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="613"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="604"/>
         <source>Try a different filter or search term.</source>
         <translation>Spróbuj innego filtra lub wyszukiwanej frazy.</translation>
     </message>
@@ -18860,21 +18860,21 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="153"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="88"/>
         <source>Shader effect details</source>
         <comment>@info:tooltip generic shader card</comment>
         <translation>Szczegóły efektu shadera</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="332"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="436"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="462"/>
         <source>User</source>
         <comment>@info shader source badge</comment>
         <translation>Użytkownik</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="358"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="447"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="182"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="473"/>
         <source>%n parameter</source>
         <translation>
             <numerusform>%n parametr</numerusform>
@@ -18883,7 +18883,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="44"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="45"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="69"/>
         <source>Used in %n event</source>
         <comment>@info shader usage section header</comment>
@@ -18894,50 +18894,49 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
         <source>Yes</source>
         <comment>@info bool true</comment>
         <translation>Tak</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="327"/>
         <source>No</source>
         <comment>@info bool false</comment>
         <translation>Nie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="373"/>
         <source>Load Preset…</source>
         <comment>@action:button</comment>
         <translation>Wczytaj nastawę…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="384"/>
         <source>Save Preset…</source>
         <comment>@action:button</comment>
         <translation>Zapisz nastawę…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="597"/>
         <source>Parameters</source>
         <comment>@title:group shader parameters section</comment>
         <translation>Parametry</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="680"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="713"/>
         <source>[%1 .. %2]</source>
         <comment>@info parameter range</comment>
         <translation>[%1 .. %2]</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="683"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="716"/>
         <source>default %1</source>
         <comment>@info parameter default value</comment>
         <translation>domyślnie %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserCard.qml.cpp" line="270"/>
         <source>Sample Window</source>
         <comment>@title sample window in the decoration preview</comment>
         <translation>Przykładowe okno</translation>
@@ -18949,11 +18948,72 @@
         <translation>Shader tej paczki nie dał się skompilować.</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <source>New Tab</source>
+        <comment>@title arriving tab in the animation preview</comment>
+        <translation>Nowa karta</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <source>Sample Window</source>
+        <comment>@title sample window in the animation preview</comment>
+        <translation>Przykładowe okno</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/shared/ShaderPreviewPlaceholder.qml.cpp" line="52"/>
         <source>Preview unavailable</source>
         <comment>@info:placeholder shader preview</comment>
         <translation>Podgląd niedostępny</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <source>This pack&apos;s shader did not compile.</source>
+        <comment>@info:placeholder animation preview</comment>
+        <translation>Shader tej paczki nie skompilował się.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
+        <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd przełączenia pulpitu tam i z powrotem na zastępczych pulpitach.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
+        <source>Previewing a window move on a sample window.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd przesunięcia okna na przykładowym oknie.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
+        <source>Previewing a window being dragged back and forth.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd okna przeciąganego tam i z powrotem.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
+        <source>Previewing a tab switch between two sample windows.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd przełączenia karty między dwoma przykładowymi oknami.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
+        <source>Previewing a scroll settling on a stand-in strip.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd przewijania zatrzymującego się na zastępczym pasie.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
+        <source>Previewing open, minimize, restore and close on a sample window.</source>
+        <comment>@info animation preview caption</comment>
+        <translation>Podgląd otwarcia, zminimalizowania, przywrócenia i zamknięcia na przykładowym oknie.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
+        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
+        <comment>@info animation preview limitation</comment>
+        <translation>Ta paczka reaguje na dźwięk. Włącz wizualizację dźwięku w ustawieniach shaderów, aby zobaczyć ją w ruchu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -18974,26 +19034,26 @@
         <translation>Ta paczka reaguje na dźwięk. Włącz wizualizację dźwięku w ustawieniach shaderów, aby zobaczyć ją w ruchu.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="944"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
         <source>Select Image</source>
         <comment>@title:window</comment>
         <translation>Wybierz obraz</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="946"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="998"/>
         <source>Images (*.png *.jpg *.jpeg *.bmp *.webp)</source>
         <comment>@item:inlistbox image file filter</comment>
         <translation>Obrazy (*.png *.jpg *.jpeg *.bmp *.webp)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="982"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1034"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1048"/>
         <source>Shader presets (*.json)</source>
         <comment>@item:inlistbox preset file filter</comment>
         <translation>Nastawy shaderów (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1009"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="1061"/>
         <source>This preset was saved for a different shader.</source>
         <comment>@info</comment>
         <translation>Ta nastawa została zapisana dla innego shadera.</translation>
@@ -19057,124 +19117,124 @@
         <translation>Przełączenie karty</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="163"/>
         <source>Category</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>Kategoria</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="169"/>
         <source>Type</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>Typ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="174"/>
         <source>Source</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>Źródło</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="187"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="178"/>
         <source>None</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>Brak</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="186"/>
         <source>Name</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>Nazwa</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="199"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="190"/>
         <source>Category</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>Kategoria</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="196"/>
         <source>Type</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>Typ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="322"/>
         <source>Universal</source>
         <comment>@item shader capability (applies to every event)</comment>
         <translation>Uniwersalny</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>Built-in</source>
         <comment>@title:group built-in shaders</comment>
         <translation>Wbudowane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>User</source>
         <comment>@title:group user-installed shaders</comment>
         <translation>Użytkownik</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="370"/>
         <source>Uncategorised</source>
         <comment>@title:group fallback for shaders without a category</comment>
         <translation>Bez kategorii</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="485"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="476"/>
         <source>Open user shader directory</source>
         <translation>Otwórz katalog shaderów użytkownika</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="477"/>
         <source>Installed shader pack “%1”.</source>
         <comment>@info shader install success</comment>
         <translation>Zainstalowano paczkę shaderów „%1”.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="487"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="478"/>
         <source>Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.</source>
         <comment>@info shader install failure</comment>
         <translation>Nie udało się zainstalować „%1”. Folder musi zawierać plik metadata.json i nie może kolidować z istniejącą paczką.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="492"/>
         <source>Search shaders…</source>
         <comment>@info:placeholder shader search</comment>
         <translation>Szukaj shaderów…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="502"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="493"/>
         <source>Search shaders</source>
         <translation>Szukaj shaderów</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="514"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="505"/>
         <source>Filter Shaders</source>
         <comment>@title:menu</comment>
         <translation>Filtruj shadery</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="522"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="513"/>
         <source>Built-in</source>
         <comment>@option:check</comment>
         <translation>Wbudowane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="526"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="517"/>
         <source>User-installed</source>
         <comment>@option:check</comment>
         <translation>Zainstalowane przez użytkownika</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="612"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="603"/>
         <source>No shaders match the current filter</source>
         <translation>Żaden shader nie pasuje do bieżącego filtra</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="634"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="625"/>
         <source>%n shader</source>
         <translation>
             <numerusform>%n shader</numerusform>
@@ -20139,24 +20199,24 @@
         <translation>Przytrzymaj to i obracaj kółkiem, aby przenosić uaktywnienie z kolumny na kolumnę.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="201"/>
         <source>the column focus scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
         <translation>klawisz przewijania dla uaktywniania kolumny</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="215"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="214"/>
         <source>Hold this and turn the wheel to move the view along the strip without changing which column has focus.</source>
         <translation>Przytrzymaj to i obracaj kółkiem, aby przesuwać widok wzdłuż pasa bez zmiany uaktywnionej kolumny.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="222"/>
         <source>the view scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
         <translation>klawisz przewijania dla widoku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="240"/>
         <source>Scrolling down moves toward the start of the strip instead of the end, for both scroll keys.</source>
         <translation>Przewijanie w dół przesuwa ku początkowi pasa zamiast ku końcowi, dla obu klawiszy przewijania.</translation>
     </message>
@@ -20977,7 +21037,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>The focused window is floating, so it has no column to fill</source>
-        <translation type="unfinished"></translation>
+        <translation>Uaktywnione okno jest pływające, więc nie ma kolumny do wypełnienia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
@@ -23231,6 +23291,22 @@
         <source>None</source>
         <comment>@item:inlistbox no modifier key selected</comment>
         <translation>Brak</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <source>Sample Window</source>
+        <translation>Przykładowe okno</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
+        <source>Another Window</source>
+        <translation>Inne okno</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
+        <source>Previous Tab</source>
+        <translation>Poprzednia karta</translation>
     </message>
 </context>
 </TS>
