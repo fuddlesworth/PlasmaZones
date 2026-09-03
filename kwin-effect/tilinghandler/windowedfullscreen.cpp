@@ -37,10 +37,10 @@ namespace PlasmaZones {
 // Monocle helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
+bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
 {
     if (!m_monocleMaximizedWindows.contains(windowId)) {
-        return;
+        return false;
     }
     // EXACT resolve: a stale monocle entry whose window is gone must restore
     // nothing — the fuzzy appId fallback would un-maximize an unrelated
@@ -48,12 +48,12 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w) {
         m_monocleMaximizedWindows.remove(windowId);
-        return;
+        return false;
     }
     KWin::Window* kw = w->window();
     if (!kw) {
         m_monocleMaximizedWindows.remove(windowId);
-        return;
+        return false;
     }
     // KWin's maximize() has NO fullscreen conditional: called on a
     // still-fullscreen window it takes both "no longer maximized" branches
@@ -81,9 +81,14 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // Holding the entry means the next call on a non-fullscreen window does
     // the real restore.
     if (kw->isRequestedFullScreen()) {
-        return;
+        return false;
     }
     m_monocleMaximizedWindows.remove(windowId);
+    // The write below is a no-op on a window KWin already reports restored
+    // (maximize() emits nothing), so no windowMaximizedStateAboutToChange
+    // refreshes the captured departure rect and the caller must not anchor a
+    // maximize leg on it. Same test releaseMaximizedToEdges makes.
+    const bool wroteRestore = kw->requestedMaximizeMode() != KWin::MaximizeRestore;
     // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY, and the
     // restore rect can sit in a different virtual-screen region of the same
     // monitor. Without the geometry-apply gate that edge takes the
@@ -104,6 +109,7 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // authoritative on this path: no daemon rotation is in flight, so the
     // restore rect's position is the answer.
     m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
+    return wroteRestore;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

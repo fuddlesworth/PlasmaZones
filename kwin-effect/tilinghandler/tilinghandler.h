@@ -1225,7 +1225,16 @@ private:
     /// never report — see scrollTrackedScreenFor.
     void reportScrollClipLoss(const QString& windowId, const QString& reason) const;
 
-    void unmaximizeMonocleWindow(const QString& windowId);
+    /// Hands KWin's maximize bit back for a window PlasmaZones itself
+    /// maximized for monocle. Returns true only when THIS call wrote the
+    /// restore, so windowMaximizedStateAboutToChange has just refreshed the
+    /// captured departure rect; false on every skip (not a member, window
+    /// gone, still fullscreen) and on a member that KWin already reports as
+    /// restored, where maximize() emits nothing and the capture is stale.
+    /// The tile batch reads it to route the geometry leg onto
+    /// window.movement.maximize; most other callers discard it, which is why
+    /// there is no [[nodiscard]]. Mirrors releaseMaximizedToEdges.
+    bool unmaximizeMonocleWindow(const QString& windowId);
 
     /**
      * @brief Shared float-state cleanup for a window being floated

@@ -247,10 +247,13 @@ private Q_SLOTS:
     // of a default too, which is the load-bearing half.
     void testDefaultShaderEffectIdForPath()
     {
-        // Snap events default to window-morph; others to none.
+        // Geometry events default to window-morph; others to none. Maximize is
+        // in the set because the engines' own maximizes (scroll column
+        // maximize-to-edges, monocle) ride it instead of snapIn.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowMaximize), QStringLiteral("window-morph"));
         // The interactive-drag leaf carries NO default: a crossfade pack
         // cannot drive the held drag transition, and the move-class packs
         // (wobble) are opt-in.

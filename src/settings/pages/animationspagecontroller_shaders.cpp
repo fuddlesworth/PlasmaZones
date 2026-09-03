@@ -179,7 +179,7 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
     // resolveShaderWithDefault (not bare resolve) so the built-in per-event
-    // default — window-morph for window snap events — shows as the current
+    // default — window-morph for the window geometry events — shows as the current
     // value for an unset event. A user override (incl. an explicit "None")
     // still wins; the default is computed, never persisted.
     ShaderProfile resolved = resolveShaderWithDefault(tree, path);
