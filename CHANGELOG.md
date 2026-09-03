@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Maximizing a tiled window now plays the Maximized animation**: maximizing a scrolling column to the screen edges, restoring it, and the monocle tiling algorithm growing a window to fill the screen used to play the Snapped Into Zone animation. They now play whatever is set for Maximized under Settings → Animations → Window Motion, the same event a maximize on an unmanaged window already used. Maximized also gains the same built-in window morph default as the other window motion events, so a fresh setup keeps animating these moves. Because PlasmaZones now owns that animation by default, KDE's own Maximize desktop effect is turned off while PlasmaZones runs. Set Maximized to None to have KDE's effect back.
+
 ### Fixed
 
 - **Letting go of the insert key mid-drag no longer resizes the window in your hand**: with drag set to float the window, tapping the insert key while dragging and then releasing it without dropping made the window jump to its old tile size while you were still holding it. Cancelling the insert preview now leaves the dragged window alone until you drop it. ([#1028](https://github.com/fuddlesworth/PlasmaZones/discussions/1028))

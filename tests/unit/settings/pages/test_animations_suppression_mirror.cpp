@@ -86,8 +86,11 @@ private Q_SLOTS:
         s.setAnimationsEnabled(true);
         AnimationsPageController c(nullptr, &s);
 
-        // No tree assignment: nothing suppressed, no conflict-free events.
-        QVERIFY(c.stockSuppressedEvents().isEmpty());
+        // No tree assignment: maximize is still owned, through its built-in
+        // window-morph default (the compositor resolves the same way, so KDE's
+        // maximize effect is unloaded on a fresh config). Minimize has no
+        // default and is not owned.
+        QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMaximize});
 
         QSignalSpy spy(&c, &AnimationsPageController::stockSuppressedEventsChanged);
 
@@ -107,10 +110,24 @@ private Q_SLOTS:
         // notify more than once and the exact count is NOT part of the contract.
         // What matters is that the chip bindings are notified at all.
         QVERIFY2(spy.count() >= 1, "tree change must notify the chip bindings");
-        // Minimize is owned; maximize (unassigned) is not.
+        // Minimize is owned by the assignment; maximize is owned UNASSIGNED,
+        // through its built-in window-morph default (the engines route their
+        // own column/monocle maximizes through it, so the default is what
+        // keeps a fresh config animated). Resolution goes through
+        // resolveShaderWithDefault, the same call the compositor makes.
+        QCOMPARE(c.stockSuppressedEvents(),
+                 (QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize,
+                              PhosphorAnimation::ProfilePaths::WindowMaximize}));
+
+        // A per-event "None" (an explicit empty override) beats the built-in
+        // default and drops maximize from the owned set.
+        PhosphorAnimationShaders::ShaderProfile none;
+        none.effectId = QString();
+        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMaximize, none);
+        s.setShaderProfileTree(tree);
         QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});
 
-        // Assigning the maximize path too lists both events.
+        // Assigning a real pack to the maximize path lists both events again.
         tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMaximize, profile);
         s.setShaderProfileTree(tree);
         QCOMPARE(c.stockSuppressedEvents(),
@@ -158,6 +175,13 @@ private Q_SLOTS:
 
         // Known, class-compatible pack: owned.
         PhosphorAnimationShaders::ShaderProfileTree tree;
+        // This registry does not hold the bundled window-morph, so maximize's
+        // built-in default would take the unknown-id warm-up grace and read as
+        // owned throughout. Pin it to an explicit "None" so the assertions
+        // below isolate the registry contract gate on the minimize path.
+        PhosphorAnimationShaders::ShaderProfile none;
+        none.effectId = QString();
+        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMaximize, none);
         PhosphorAnimationShaders::ShaderProfile profile;
         profile.effectId = QStringLiteral("universal-pack");
         tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);

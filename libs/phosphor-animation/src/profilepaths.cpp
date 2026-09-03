@@ -386,16 +386,21 @@ QString eventClassForPath(const QString& path)
 
 QString defaultShaderEffectIdForPath(const QString& path)
 {
-    // Window snap events default to the geometry-morph shader so a window
-    // animates via shader cross-fade when it snaps/tiles/reflows. This is
-    // the same geometry leg set `eventClassForPath` classes as
-    // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
-    // morph is selectable there, but it isn't a built-in default) — keep the
-    // two lists in sync if a new geometry leg is added. `window.movement.move`
-    // is EXCLUDED: the interactive drag is a held transition a crossfade pack
+    // Window geometry events default to the geometry-morph shader so a window
+    // animates via shader cross-fade when it snaps/tiles/reflows/maximizes.
+    // This is the same geometry leg set `eventClassForPath` classes as
+    // EventClassGeometry — keep the two lists in sync if a new geometry leg
+    // is added. Maximize is in the set because the engines route their own
+    // maximizes through it (a scroll column maximized to the edges, a monocle
+    // tile): before it carried a default those legs rode snapIn, and moving
+    // them here without a default would have un-animated every fresh config.
+    // The cost is that a built-in default counts as pack ownership for the
+    // stock-effect suppression (syncStockEffectSuppression), so KWin's own
+    // maximize effect is unloaded by default. `window.movement.move` is
+    // EXCLUDED: the interactive drag is a held transition a crossfade pack
     // cannot drive (see eventClassForPath), so it carries no built-in default
     // and its move-class packs (wobble) stay opt-in.
-    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch) {
+    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch || path == WindowMaximize) {
         return QStringLiteral("window-morph");
     }
     // Overlay surface show/hide (OSD + popups) default to the fade-and-scale
