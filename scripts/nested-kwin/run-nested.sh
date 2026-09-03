@@ -19,6 +19,14 @@
 # session (X11 test clients; see the flag site below for how to point a
 # client at the nested display).
 #
+# Set PZ_NESTED_VISIBLE to any value to run the nested compositor as a
+# WINDOW on the host desktop instead of headless --virtual: same isolated
+# session, but you can watch it and interact with pointer/keyboard.
+# Requires a live host WAYLAND_DISPLAY. Defaults to 1600x900 when no
+# width/height are given (the headless default of the host's mode size
+# makes an unwieldy window). Everything else — bus, homes, env.sh,
+# screenshots — behaves identically in both modes.
+#
 # State (isolated XDG home and env.sh) lives in $PZ_NESTED_DIR (default
 # $XDG_RUNTIME_DIR/pz-nested, private to the user). The daemon's log is
 # the only log file (daemon.sh writes it); the compositor's output stays
@@ -114,12 +122,11 @@ HOME_N="$NEST/home"
 
 # Refuse to wipe a LIVE session's state out from under it. Existence of the
 # socket inode is not liveness (a crashed compositor leaves it behind), so
-# probe for a process holding it and quietly unlink a stale one — otherwise
-# a crash would lock the harness out until a manual rm. Without fuser the
-# probe cannot answer, so the guard fails CLOSED (refuses) rather than
-# unlinking what might be a live session's socket. PZ_NESTED_FORCE=1 skips
-# the check either way and unlinks; note that a compositor still holding
-# the old socket keeps running orphaned and must be killed by hand.
+# probe /proc/net/unix for a bound listener on the path and quietly unlink
+# a stale one — otherwise a crash would lock the harness out until a manual
+# rm. PZ_NESTED_FORCE=1 skips the check and unlinks; note that a compositor
+# still holding the old socket keeps running orphaned and must be killed by
+# hand.
 # Socket name, so two worktrees can each run a nested session at once (kwin
 # takes a lockfile named after it, and a second session on the same name dies
 # with "could not add wayland socket"). Pair a distinct PZ_NESTED_SOCKET with
@@ -144,13 +151,15 @@ if [ -e "$SOCK" ] && [ ! -S "$SOCK" ]; then
     exit 1
 fi
 if [ -S "$SOCK" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
-    if ! command -v fuser >/dev/null 2>&1; then
-        echo "$SOCK exists and fuser is unavailable to tell live from stale;" >&2
-        echo "install psmisc, remove the socket by hand, or re-run with PZ_NESTED_FORCE=1" >&2
-        exit 1
-    fi
-    if fuser -s "$SOCK" 2>/dev/null; then
-        echo "a nested session is live (a process holds $SOCK);" >&2
+    # Liveness probe via /proc/net/unix, which lists every bound unix
+    # socket by the path given at bind time. fuser is the wrong tool here
+    # and was observed false-negating on a live compositor: a bound
+    # listening socket shows up in the holder's fd table as
+    # socket:[inode], not as the filesystem path, so a path-keyed fuser
+    # finds nothing and the guard waves a second run through to wipe the
+    # live session's state.
+    if awk -v p="$SOCK" '$NF == p { found = 1 } END { exit !found }' /proc/net/unix; then
+        echo "a nested session is live (a process has $SOCK bound);" >&2
         echo "kill it first, or re-run with PZ_NESTED_FORCE=1" >&2
         exit 1
     fi
@@ -164,7 +173,12 @@ rm -f "$SOCK"
 # previous env.sh names a bus whose socket is still there, a session is live
 # in THIS tree.
 if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
-    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
+    # The exclusion class MUST stop at ',' too: dbus-run-session addresses
+    # look like unix:path=/tmp/dbus-XXX,guid=..., and letting the capture
+    # run through the comma yields a path with ',guid=...' glued on, whose
+    # -S test always fails — the guard then never fires and a second run
+    # wipes a LIVE session's state (observed exactly that way).
+    OLDBUS=$(sed -n 's/^export DBUS_SESSION_BUS_ADDRESS=.*unix:path=\([^;,'"'"'"]*\).*/\1/p' "$NEST/env.sh" 2>/dev/null | head -n1)
     if [ -n "$OLDBUS" ] && [ -S "$OLDBUS" ]; then
         echo "a nested session is live in $NEST (its bus socket $OLDBUS still exists);" >&2
         echo "point PZ_NESTED_DIR somewhere else, kill that session, or re-run with PZ_NESTED_FORCE=1" >&2
@@ -320,6 +334,25 @@ EXTRA_FLAGS=""
 # silently test the wrong compositor).
 [ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
+# Backend selection: headless virtual outputs by default; a visible nested
+# window when PZ_NESTED_VISIBLE is set. The visible backend needs the host
+# compositor, so fail early with the reason instead of letting kwin die
+# with a bare backend error.
+BACKEND_FLAGS="--virtual --output-count $OUTPUTS"
+if [ -n "${PZ_NESTED_VISIBLE:-}" ]; then
+    if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        echo "PZ_NESTED_VISIBLE needs a live host Wayland session (WAYLAND_DISPLAY is unset)" >&2
+        exit 1
+    fi
+    BACKEND_FLAGS="--output-count $OUTPUTS"
+    # A visible window with no requested size inherits the host output's
+    # full mode, which is unwieldy; pick a sane default when the caller
+    # gave none.
+    if [ -z "$WIDTH" ]; then
+        EXTRA_FLAGS="$EXTRA_FLAGS --width 1600 --height 900"
+    fi
+fi
+
 exec dbus-run-session -- sh -c "
   # set -e inside the child: the outer set -eu does NOT cross an sh -c, so
   # without this a failed env.sh write (full disk, read-only or unwritable
@@ -347,5 +380,7 @@ exec dbus-run-session -- sh -c "
   mv '$NEST/env.sh.tmp' '$NEST/env.sh'
   # \$EXTRA_FLAGS stays unquoted on purpose: it is a flag LIST and needs word
   # splitting. Everything else is quoted.
-  exec kwin_wayland --virtual --output-count '$OUTPUTS'$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
+  # \$BACKEND_FLAGS is a flag list like \$EXTRA_FLAGS and needs the same
+  # word splitting.
+  exec kwin_wayland $BACKEND_FLAGS$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
 "

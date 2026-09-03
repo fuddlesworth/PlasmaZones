@@ -216,7 +216,24 @@ int main(int argc, char* argv[])
     // Declared before the engine for the same reverse-destruction reason as
     // the others: targets unregister themselves on destruction and must find
     // a live router when they do.
+    //
+    // start() binds the Unix socket; without it every target registers
+    // against a router nobody can reach and `phosphorctl call` resolves
+    // nothing. $PHOSPHOR_SOCKET mirrors phosphorctl's own resolution
+    // (--socket > $PHOSPHOR_SOCKET > $XDG_RUNTIME_DIR/phosphor.sock), which
+    // is what lets a nested test session bind a private socket instead of
+    // colliding with a shell on the host session. Non-fatal on failure: a
+    // shell without its control socket still draws bars and popouts, so warn
+    // and continue rather than refusing to start.
     PhosphorIpc::IpcRouter ipcRouter;
+    const QString socketOverride = qEnvironmentVariable("PHOSPHOR_SOCKET");
+    if (!ipcRouter.start(socketOverride)) {
+        qCWarning(lcShell) << "IPC router failed to bind"
+                           << (socketOverride.isEmpty() ? QStringLiteral("the default socket") : socketOverride)
+                           << "— phosphorctl will not reach this shell";
+    } else {
+        qCInfo(lcShell) << "IPC socket:" << ipcRouter.socketPath();
+    }
 
     // Popout infrastructure, declared BEFORE the engine for the same
     // reverse-destruction reason as barController: the engine must die (and
