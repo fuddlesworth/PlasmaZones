@@ -269,17 +269,17 @@ public:
         return v == scrollingColumnDisplayNormal() || v == scrollingColumnDisplayTabbed();
     }
     /// Preset proportion lists, comma-joined decimals (the niri defaults).
-    /// KEEP IN SYNC with the other THREE copies of the {1/3, 1/2, 2/3}
+    /// KEEP IN SYNC with the other THREE copies of the {1/3, 1/2, 2/3, 3/4, 1}
     /// intent — ScrollLayoutParams' member seeds document the full four-copy
     /// map (ScrollTypes.h, presetColumnWidths). Spelled separately because
     /// the LGPL engine cannot include this GPL header.
     static QString scrollingPresetColumnWidths()
     {
-        return QStringLiteral("0.333,0.5,0.667");
+        return QStringLiteral("0.333,0.5,0.667,0.75,1");
     }
     static QString scrollingPresetWindowHeights()
     {
-        return QStringLiteral("0.333,0.5,0.667");
+        return QStringLiteral("0.333,0.5,0.667,0.75,1");
     }
     /// DEFAULT scrolling template id (braced uuid string), consulted when a
     /// Scrolling context's cascade entry names no template. Empty = none:

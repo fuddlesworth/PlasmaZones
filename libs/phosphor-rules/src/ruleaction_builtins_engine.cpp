@@ -688,7 +688,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::OverlayBorderWidth),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, MaxBorderWidth);
+                return hasNumberInRange(p, ActionParam::Value, kMaxOverlayBorderWidth);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -696,7 +696,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = MaxBorderWidth,
+                     .max = kMaxOverlayBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 7,

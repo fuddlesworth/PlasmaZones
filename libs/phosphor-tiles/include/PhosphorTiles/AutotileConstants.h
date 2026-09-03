@@ -58,7 +58,7 @@ constexpr int MaxMasterCount = 5;
 constexpr int DefaultInnerGap = 8;
 constexpr int DefaultOuterGap = 8;
 constexpr int MinGap = 0;
-constexpr int MaxGap = 50;
+constexpr int MaxGap = 200;
 constexpr int MinRectSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
 /// Minimum pixel movement of a window edge during an interactive resize before

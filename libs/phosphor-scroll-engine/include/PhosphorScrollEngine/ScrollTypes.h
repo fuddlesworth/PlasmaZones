@@ -949,22 +949,22 @@ struct ScrollLayoutParams
     /// Defaulted to Horizontal so every existing construction, the test
     /// fixtures included, keeps the historical layout with no edit.
     StripAxis axis = StripAxis::horizontal();
-    /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
+    /// Preset proportion lists (the niri 1/3, 1/2, 2/3 plus 3/4 and full). Never empty —
     /// resolvers snap a Preset fraction anchor to the nearest entry.
     /// KEEP IN SYNC with THREE other copies, not one:
     ///   1. ScrollEngine::m_presetColumnWidths / m_presetWindowHeights, the
     ///      member seeds these mirror (ScrollEngine.h);
     ///   2. ScrollEngine::refreshConfigFromSettings' fallback list
     ///      (engine_core.cpp), the empty-config fallback;
-    ///   3. ConfigDefaults' "0.333,0.5,0.667" strings
+    ///   3. ConfigDefaults' "0.333,0.5,0.667,0.75,1" strings
     ///      (configdefaults_scrolling.h) — the one a CONFIGURED user actually
     ///      gets, and the only one expressed in decimal rather than as
     ///      thirds, so it is already very slightly different by construction.
     /// The ops-suite literal-260 preset assertion pins THIS copy alone, so a
     /// change to any of the other three leaves the test green while the
     /// running engine shifts.
-    QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
     /// Whether the strip's layout math honours client minimum sizes (the

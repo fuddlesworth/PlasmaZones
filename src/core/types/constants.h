@@ -73,7 +73,7 @@ inline constexpr int FallbackScreenHeight = 1080;
 // surface — daemon overlay / settings / geometry constants.
 constexpr int InnerGap = 8;
 constexpr int OuterGap = 8; // Gap at screen edges (separate from the inner gap between zones)
-constexpr int MaxGap = 50; // Maximum for inner gap and outer gap settings
+constexpr int MaxGap = 200; // Maximum for inner gap and outer gap settings
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
 

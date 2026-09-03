@@ -522,7 +522,7 @@ private Q_SLOTS:
     {
         QJsonObject w;
         w.insert(QStringLiteral("type"), QString(ActionType::SetBorderWidth));
-        w.insert(QStringLiteral("value"), 15); // > max 10
+        w.insert(QStringLiteral("value"), MaxBorderWidth + 1); // above the shared ceiling
         QVERIFY(!RuleAction::fromJson(w).has_value());
         w.insert(QStringLiteral("value"), -1);
         QVERIFY(!RuleAction::fromJson(w).has_value());
@@ -531,14 +531,14 @@ private Q_SLOTS:
         // number validator (e.g. isDouble() || isBool()) fails the suite.
         w.insert(QStringLiteral("value"), true);
         QVERIFY(!RuleAction::fromJson(w).has_value());
-        w.insert(QStringLiteral("value"), 4);
+        w.insert(QStringLiteral("value"), MaxBorderWidth);
         QVERIFY(RuleAction::fromJson(w).has_value());
 
         QJsonObject r;
         r.insert(QStringLiteral("type"), QString(ActionType::SetBorderRadius));
-        r.insert(QStringLiteral("value"), 25); // > max 20
+        r.insert(QStringLiteral("value"), MaxBorderRadius + 1); // above the shared ceiling
         QVERIFY(!RuleAction::fromJson(r).has_value());
-        r.insert(QStringLiteral("value"), 20);
+        r.insert(QStringLiteral("value"), MaxBorderRadius);
         QVERIFY(RuleAction::fromJson(r).has_value());
     }
 

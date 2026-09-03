@@ -27,11 +27,11 @@ inline constexpr bool ShowBorder = false;
 
 inline constexpr int BorderWidth = 2;
 inline constexpr int BorderWidthMin = 0;
-inline constexpr int BorderWidthMax = 10;
+inline constexpr int BorderWidthMax = 20;
 
 inline constexpr int BorderRadius = 8;
 inline constexpr int BorderRadiusMin = 0;
-inline constexpr int BorderRadiusMax = 20;
+inline constexpr int BorderRadiusMax = 50;
 
 // How long uSurfaceFocused ramps between 0 and 1 when a window gains or
 // loses focus (ms) — the cross-fade every decoration pack that mixes by

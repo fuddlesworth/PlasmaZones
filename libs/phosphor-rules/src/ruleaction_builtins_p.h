@@ -134,8 +134,9 @@ inline bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key
 // MaxBorderRadius) so the KWin-effect consumer re-validation shares them.
 inline constexpr double kMaxGap = 500.0;
 // Zone-overlay border dimensions have their own bounds mirroring the global
-// `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50) — the overlay
-// radius goes wider than the per-window `MaxBorderRadius` (20).
+// `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50), which
+// differ from the per-window `MaxBorderWidth` / `MaxBorderRadius` pair.
+inline constexpr double kMaxOverlayBorderWidth = 10.0;
 inline constexpr double kMaxOverlayBorderRadius = 50.0;
 // Autotile parameter bounds (display units), mirroring the AutotileDefaults
 // clamps the engine applies on consumption. These only reject grossly malformed

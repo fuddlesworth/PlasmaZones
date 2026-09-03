@@ -1193,7 +1193,7 @@ void ScrollEngine::refreshConfigFromSettings()
         return out.isEmpty() ? fallback : out;
     };
     // KEEP IN SYNC with ScrollLayoutParams' member defaults (ScrollTypes.h).
-    const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), MinColumnWidthFraction, defaults);
     m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), MinWindowHeightFraction, defaults);
 

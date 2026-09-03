@@ -140,16 +140,17 @@ inline constexpr int MaxZoneNameLength = 128;
 inline constexpr int MaxFontFamilyLength = 128;
 
 /// Upper bounds for the per-window border appearance overrides
-/// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
-/// the per-window pair, ruleaction_builtins_engine.cpp for the overlay
-/// WIDTH — the overlay RADIUS deliberately uses its own wider
+/// (`SetBorderWidth` / `SetBorderRadius`), in logical px, mirroring the
+/// PhosphorCompositor::DecorationDefaults BorderWidthMax / BorderRadiusMax
+/// slider ceilings. Shared so the load-time descriptor validators
+/// (ruleaction_builtins_appearance.cpp; the zone-overlay pair deliberately
+/// uses its own narrower `kMaxOverlayBorderWidth` / wider
 /// `kMaxOverlayBorderRadius`, see ruleaction_builtins_p.h) and the KWin-effect
 /// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
 /// programmatically-built or hand-edited payload out of this range is
 /// rejected at both boundaries rather than drawn.
-inline constexpr double MaxBorderWidth = 10.0;
-inline constexpr double MaxBorderRadius = 20.0;
+inline constexpr double MaxBorderWidth = 20.0;
+inline constexpr double MaxBorderRadius = 50.0;
 
 /// Bounds for a scrolling-engine work-area FRACTION, width or height. The pair
 /// is named for the column-width action it was introduced with, but it now
