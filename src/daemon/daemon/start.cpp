@@ -318,12 +318,23 @@ void Daemon::connectScreenSignals()
 
 void Daemon::connectDesktopActivity()
 {
-    // start() BEFORE init(): init()'s initial refresh takes the BLOCKING
-    // session-bus path (up to 1 s on this thread) while m_running is still
-    // false. With start() first the refresh issues asynchronously, the
-    // order Workspaces::sharedManager documents for the same reason.
-    m_virtualDesktopManager->start();
+    // init() BEFORE start(), DELIBERATELY the opposite of the order
+    // Workspaces::sharedManager uses. init()'s first refresh takes the
+    // BLOCKING session-bus path only while m_running is still false, and the
+    // daemon needs the current desktop to be known SYNCHRONOUSLY by the time
+    // this function returns: the compositor announces its whole window set
+    // (windowsOpenedBatch) as soon as the bridge comes up, and every engine
+    // keys the context it adopts those windows into on
+    // currentDesktopForScreen(). With start() first the refresh is issued
+    // asynchronously, the batch wins the race, and the daemon adopts the
+    // session onto desktop 1 — then the effect's per-output report flips the
+    // context to the real desktop and the user is looking at an empty strip
+    // ("No windows on the strip yet") until something forces a re-announce.
+    // The shell orders these the other way because a 1 s stall there is on the
+    // GUI thread; here it is on the daemon's start path, before any window has
+    // been placed, and correctness outranks it.
     m_virtualDesktopManager->init();
+    m_virtualDesktopManager->start();
 
     // Virtual desktop changes are handled on TWO distinct paths (#648):
     //
