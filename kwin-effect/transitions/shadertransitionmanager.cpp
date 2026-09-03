@@ -78,6 +78,14 @@ void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
     // The effect's own write, not the user's. Consumed here rather than merely
     // tested, so one stamp answers for exactly one edge: a bracketed write that
     // toggles the bit twice must not have its second edge swallowed as well.
+    //
+    // Any marker a PRIOR genuine user edge armed is deliberately LEFT standing,
+    // which is the opposite of what noteMaximizeDemotedForSnap does, and the
+    // two are not inconsistent. A demote re-purposes the placement it precedes:
+    // that placement is a snap into a zone, so a maximize the user took a
+    // moment earlier must not claim it. An ordinary authored write re-purposes
+    // nothing — a user edge no batch has answered yet is still owed its leg,
+    // and the batch that answers it is still the right one to spend it.
     if (takeFreshStamp(m_effectAuthoredMaximizeAtMs, w)) {
         return;
     }

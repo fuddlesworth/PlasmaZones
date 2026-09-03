@@ -1057,7 +1057,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // sequences collapse into at most one D-Bus push.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
-                if (!safeW) {
+                // isDeleted() alongside the null test, matching every sibling
+                // lambda in this file. A window held alive under
+                // WindowClosedGrabRole still emits this, and every body below
+                // is meaningless for a corpse — the centring one actively
+                // wrong, since it would move() a closed window. The two that
+                // reach shared state already declined on their own
+                // (flushPendingFrameGeometry skips a deleted window,
+                // slotWindowClosed has already dropped the suppression entry),
+                // so this adds no new suppression; it stops the work earlier
+                // and puts the guard where its siblings keep theirs.
+                if (!safeW || safeW->isDeleted()) {
                     return;
                 }
                 // Body -1 — retarget a strip animation onto the rect the

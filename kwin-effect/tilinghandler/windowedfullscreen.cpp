@@ -136,6 +136,34 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     if (!kw) {
         return;
     }
+    // NOTHING TO ASK FOR, so nothing is done — not the write, and therefore
+    // not the stamp either.
+    //
+    // This is what keeps the authorship stamp honest, and it has to gate the
+    // WRITE rather than only the stamp. The stamp's gate predicts the maximize
+    // lambda by reading lastFullyMaximized, which tracks the COMMITTED state;
+    // KWin decides whether maximize() does anything by looking at the REQUESTED
+    // one. On Wayland those disagree for a client round trip, and inside that
+    // window a caller that does not gate on requested — the ballooning clear
+    // before an autotile, cancelAxisOnlyMaximize and the toggle reply's
+    // write-back, all gated on the COMMITTED mode, plus unmaximizeMonocleWindow,
+    // which calls with no mode gate at all — can ask for a mode the window has
+    // ALREADY been asked to hold. The stamp gate then reads a committed state
+    // that still disagrees, stamps, and the call emits nothing, leaving a stamp
+    // with no edge to consume it. The user's next genuine maximize inside the
+    // deadline would take that stamp instead and play snapIn: exactly the bug
+    // the marker exists to fix, reintroduced in the one window where the user's
+    // own maximize lives.
+    //
+    // Gating only the stamp would trade that for its mirror image, because it
+    // would rest on KWin emitting nothing here — and if it ever did emit, the
+    // edge would arrive unstamped and arm a false marker. Declining the whole
+    // call needs no such assumption: no call, no edge, no stamp, on either
+    // platform and under either KWin semantic. What it skips is at most a
+    // re-assert of a mode already requested.
+    if (kw->requestedMaximizeMode() == mode) {
+        return;
+    }
     // Counter for the same reason applyFullScreenSuppressed uses one: the
     // batch consumer and the interception arm nest their own brackets, and a
     // plain set/clear would hand an outer scope back an un-suppressed window.
