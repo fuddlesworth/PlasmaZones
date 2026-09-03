@@ -19,6 +19,14 @@
 # session (X11 test clients; see the flag site below for how to point a
 # client at the nested display).
 #
+# Set PZ_NESTED_VISIBLE to any value to run the nested compositor as a
+# WINDOW on the host desktop instead of headless --virtual: same isolated
+# session, but you can watch it and interact with pointer/keyboard.
+# Requires a live host WAYLAND_DISPLAY. Defaults to 1600x900 when no
+# width/height are given (the headless default of the host's mode size
+# makes an unwieldy window). Everything else — bus, homes, env.sh,
+# screenshots — behaves identically in both modes.
+#
 # State (isolated XDG home and env.sh) lives in $PZ_NESTED_DIR (default
 # $XDG_RUNTIME_DIR/pz-nested, private to the user). The daemon's log is
 # the only log file (daemon.sh writes it); the compositor's output stays
@@ -320,6 +328,25 @@ EXTRA_FLAGS=""
 # silently test the wrong compositor).
 [ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
+# Backend selection: headless virtual outputs by default; a visible nested
+# window when PZ_NESTED_VISIBLE is set. The visible backend needs the host
+# compositor, so fail early with the reason instead of letting kwin die
+# with a bare backend error.
+BACKEND_FLAGS="--virtual --output-count $OUTPUTS"
+if [ -n "${PZ_NESTED_VISIBLE:-}" ]; then
+    if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        echo "PZ_NESTED_VISIBLE needs a live host Wayland session (WAYLAND_DISPLAY is unset)" >&2
+        exit 1
+    fi
+    BACKEND_FLAGS="--output-count $OUTPUTS"
+    # A visible window with no requested size inherits the host output's
+    # full mode, which is unwieldy; pick a sane default when the caller
+    # gave none.
+    if [ -z "$WIDTH" ]; then
+        EXTRA_FLAGS="$EXTRA_FLAGS --width 1600 --height 900"
+    fi
+fi
+
 exec dbus-run-session -- sh -c "
   # set -e inside the child: the outer set -eu does NOT cross an sh -c, so
   # without this a failed env.sh write (full disk, read-only or unwritable
@@ -347,5 +374,7 @@ exec dbus-run-session -- sh -c "
   mv '$NEST/env.sh.tmp' '$NEST/env.sh'
   # \$EXTRA_FLAGS stays unquoted on purpose: it is a flag LIST and needs word
   # splitting. Everything else is quoted.
-  exec kwin_wayland --virtual --output-count '$OUTPUTS'$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
+  # \$BACKEND_FLAGS is a flag list like \$EXTRA_FLAGS and needs the same
+  # word splitting.
+  exec kwin_wayland $BACKEND_FLAGS$EXTRA_FLAGS --socket '$PZ_NESTED_SOCKET' --no-lockscreen --no-global-shortcuts --no-kactivities
 "
