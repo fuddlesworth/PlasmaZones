@@ -906,7 +906,7 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 - [x] Accent cycle retints every atom live (confirmed on a live session)
 - [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
 
-**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular). The resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
+**Known limitation (closed):** `PhosphorRipple`'s expanding circle was not rounded-clipped, because `Item.clip` is a rectangular scissor, so on a pill the sweep squared off the rounded ends mid-animation. 3.2 shipped painters (`ConnectedShape` / `ConnectedCorner`), not the shared clip primitive this was waiting on, so the fix went the other way: the ripple is now a radial gradient painted inside a rounded-rect `Shape` whose outline is the host's own rounded rect, making the corners exact by construction with no mask and no offscreen render target. Chosen over `MultiEffect`/`OpacityMask` because a layer effect costs an FBO per control and does not render under the headless path CI uses (see the 3.3 / 3.4 notes). Pinned by `tests/tst_ripple_clip.qml`, a pixel regression verified non-vacuous against a squared-off outline.
 
 **Effort:** M (~2 weeks)
 

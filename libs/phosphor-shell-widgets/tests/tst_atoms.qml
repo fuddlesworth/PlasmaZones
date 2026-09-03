@@ -131,6 +131,26 @@ TestCase {
         compare(r.interactive, true, "interactive by default");
         compare(r.down, false, "not pressed at rest");
         compare(r.hovered, false, "not hovered at rest");
+        compare(r.radius, 0, "square by default");
+        compare(r.rippling, false, "no sweep at rest");
+    }
+
+    function test_ripple_sweep_lifecycle() {
+        const r = createTemporaryObject(rippleComp, testCase, {
+            "width": 120,
+            "height": 40,
+            "radius": 20
+        });
+        verify(r, "PhosphorRipple instantiates");
+        r.start(10, 20);
+        compare(r.rippling, true, "start() begins the sweep");
+        // The sweep clears on its own; a second press restarts it from
+        // the new point rather than stacking on the in-flight one.
+        r.start(110, 20);
+        compare(r.rippling, true, "a second press restarts the sweep");
+        tryVerify(function () {
+            return !r.rippling;
+        }, 3000, "the sweep finishes");
     }
 
     function test_shadow_level_clamps() {
