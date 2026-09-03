@@ -3,6 +3,9 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -169,6 +172,76 @@ private Q_SLOTS:
 
         QVERIFY(!engine.hasDragInsertPreview());
         QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), originalOrder);
+    }
+
+    /// Helper for the two cancel-geometry tests below: true when any
+    /// windowsTiled emission recorded by @p spy carries a GEOMETRY entry
+    /// (an "x" key — float-only sync entries have none) for @p windowId.
+    static bool spyHasGeometryEntryFor(const QSignalSpy& spy, const QString& windowId)
+    {
+        for (const QList<QVariant>& emission : spy) {
+            const QJsonArray arr = QJsonDocument::fromJson(emission.first().toString().toUtf8()).array();
+            for (const QJsonValue& v : arr) {
+                const QJsonObject obj = v.toObject();
+                if (obj.value(QLatin1String("windowId")).toString() == windowId && obj.contains(QLatin1String("x"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // A mid-drag cancel (insert trigger released while the pointer still
+    // holds the window) must not emit tile geometry for the dragged window —
+    // doing so resized the window in the user's hand the moment they let go
+    // of the trigger (discussion #1028 follow-up: float-drag + tap ALT).
+    void testSameScreen_midDragCancelSkipsDraggedGeometry()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        // Force zones — unit tests have no real screen geometry, and
+        // applyTiling reuses the last calculated zones when recalc bails.
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 900, 1000), QRect(900, 0, 500, 1000), QRect(1400, 0, 500, 1000)});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        engine.updateDragInsertPreview(2);
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.cancelDragInsertPreview(/*dragStillActive=*/true);
+
+        QVERIFY(tiledSpy.count() >= 1);
+        QVERIFY2(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("B")),
+                 "cancel retile emitted no neighbour geometry — the assertion below would be vacuous");
+        QVERIFY2(!spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")),
+                 "mid-drag cancel emitted tile geometry for the window still being dragged");
+    }
+
+    // Control: the drop-time cancel (default argument) keeps the snap-back —
+    // the dragged window's tile geometry IS applied.
+    void testSameScreen_dropTimeCancelAppliesDraggedGeometry()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 900, 1000), QRect(900, 0, 500, 1000), QRect(1400, 0, 500, 1000)});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        engine.updateDragInsertPreview(2);
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.cancelDragInsertPreview();
+
+        QVERIFY(tiledSpy.count() >= 1);
+        QVERIFY(spyHasGeometryEntryFor(tiledSpy, QStringLiteral("A")));
     }
 
     // =========================================================================

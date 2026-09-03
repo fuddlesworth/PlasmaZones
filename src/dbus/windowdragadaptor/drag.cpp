@@ -630,7 +630,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 && (previewEngine != insertEngine
                     || !PhosphorScreens::ScreenIdentity::screensMatch(previewEngine->dragInsertPreviewScreenId(),
                                                                       insertScreenId))) {
-                previewEngine->cancelDragInsertPreview();
+                previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
                 // The departed screen's indicator goes with the preview it
                 // described. pushScrollDropIndicator would clear it anyway on
                 // the first tick that resolves a rect for the new screen, but
@@ -800,7 +800,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // re-attaches the drag window, changing the strip's shape).
             const QString cancelledScreenId = previewEngine->dragInsertPreviewScreenId();
             const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
-            previewEngine->cancelDragInsertPreview();
+            previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
             clearScrollDropIndicator();
             stopDragScrollTimer();
             if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {

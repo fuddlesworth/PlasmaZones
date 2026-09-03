@@ -288,13 +288,28 @@ void AutotileEngine::commitDragInsertPreview()
     }
 }
 
-void AutotileEngine::cancelDragInsertPreview()
+void AutotileEngine::cancelDragInsertPreview(bool dragStillActive)
 {
     if (!m_dragInsertPreview) {
         return;
     }
     const DragInsertPreview p = *m_dragInsertPreview;
     m_dragInsertPreview.reset();
+
+    // Mid-drag cancel (insert trigger released, or the screen/desktop changed
+    // under a live drag): the user is still holding the window, so the retiles
+    // below must keep skipping its geometry exactly as the preview filter did.
+    // Without this, resetting the preview first meant the cancel's own retile
+    // applied the tile rect to the window in the user's hand — a float-mode
+    // drag visibly grew to tile size the moment the trigger was released
+    // (discussion #1028 follow-up). The drop-time cancel passes false and
+    // keeps the snap-back behaviour.
+    if (dragStillActive) {
+        m_dragCancelFilterWindowId = p.windowId;
+    }
+    const auto clearCancelFilter = qScopeGuard([this] {
+        m_dragCancelFilterWindowId.clear();
+    });
 
     PhosphorTiles::TilingState* targetState = tilingStateForScreen(p.targetScreenId);
 

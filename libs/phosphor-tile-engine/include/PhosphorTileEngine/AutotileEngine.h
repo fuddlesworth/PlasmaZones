@@ -1218,7 +1218,7 @@ public:
     /**
      * @brief Cancel the active drag-insert preview, restoring the original order.
      */
-    void cancelDragInsertPreview() override;
+    void cancelDragInsertPreview(bool dragStillActive = false) override;
 
     /**
      * @brief Compute the insert index for a cursor position on an autotile screen.
@@ -1952,6 +1952,12 @@ private:
     // AutotileEngine::DragInsertPreview spelling valid for existing call sites.
     using DragInsertPreview = ::PhosphorTileEngine::DragInsertPreview;
     std::optional<DragInsertPreview> m_dragInsertPreview;
+
+    /// Set only for the duration of cancelDragInsertPreview(dragStillActive =
+    /// true)'s retiles: the window whose interactive move is still running and
+    /// must keep being skipped by applyTiling's geometry emission even though
+    /// m_dragInsertPreview has already been reset. Empty otherwise.
+    QString m_dragCancelFilterWindowId;
 
     /**
      * @brief Process all pending retiles (fires via QueuedConnection)

@@ -296,13 +296,17 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     // evaluated after its per-screen cancels have run, so do not
     // "harmonise" it to stop-first.
     stopDragScrollTimer();
+    // A preview can only belong to the live drag's window, so a still-active
+    // drag session means the cancel retile must keep suppressing that
+    // window's geometry (see IPlacementEngine::cancelDragInsertPreview).
+    const bool dragStillActive = isDragSessionActive();
     // At most one engine holds a preview, but sweep both — a stale second
     // preview would otherwise be unreachable by every cleanup path.
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->cancelDragInsertPreview();
+        m_autotileEngine->cancelDragInsertPreview(dragStillActive);
     }
     if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
-        m_scrollEngine->cancelDragInsertPreview();
+        m_scrollEngine->cancelDragInsertPreview(dragStillActive);
     }
     clearScrollDropIndicator();
 }
@@ -331,11 +335,15 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
         return PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId)
             || PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewPriorScreenId(), screenId);
     };
+    // Same reasoning as cancelDragInsertIfActive: this runs from desktop
+    // switches and output removals that can land mid-drag, and the cancel
+    // retile must not resize the window still in the user's hand.
+    const bool dragStillActive = isDragSessionActive();
     if (affected(m_autotileEngine)) {
-        m_autotileEngine->cancelDragInsertPreview();
+        m_autotileEngine->cancelDragInsertPreview(dragStillActive);
     }
     if (affected(m_scrollEngine)) {
-        m_scrollEngine->cancelDragInsertPreview();
+        m_scrollEngine->cancelDragInsertPreview(dragStillActive);
     }
     // Clear the indicator on the departing output regardless of whether any
     // engine cancel ran above. The engine may have self-cancelled its own

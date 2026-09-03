@@ -615,7 +615,7 @@ public:
     }
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
     void commitDragInsertPreview() override;
-    void cancelDragInsertPreview() override;
+    void cancelDragInsertPreview(bool dragStillActive = false) override;
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
     /// `secondary` (a MODEL-column tile index — minimized tiles count).

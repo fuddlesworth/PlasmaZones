@@ -464,7 +464,13 @@ void ScrollEngine::commitDragInsertPreview()
     }
 }
 
-void ScrollEngine::cancelDragInsertPreview()
+// dragStillActive is accepted for interface parity and deliberately unused:
+// the scroll preview DETACHES the window from the strip for the whole hold,
+// so the cancel's re-insert is the only thing that can put it back, and the
+// strip relayout placing it is the intended niri-style behaviour even while
+// the pointer still holds it (the drag then re-begins a preview on whichever
+// screen the cursor is on).
+void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
 {
     if (!m_dragInsertPreview) {
         return;

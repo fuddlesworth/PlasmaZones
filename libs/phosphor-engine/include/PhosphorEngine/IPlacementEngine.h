@@ -582,8 +582,17 @@ public:
     virtual void commitDragInsertPreview()
     {
     }
-    virtual void cancelDragInsertPreview()
+    /// @p dragStillActive: the previewed window is still under an interactive
+    /// move when the cancel runs (mid-drag trigger release, or a screen /
+    /// desktop change during the drag). An engine that keeps the window
+    /// MANAGED while its preview is live (autotile) must then keep
+    /// suppressing geometry emission for it during the cancel's own retile —
+    /// applying the tile rect would resize the window in the user's hand
+    /// (discussion #1028: float-drag + tap the insert trigger = window grows).
+    /// The drop-time cancel passes false so the window snaps back as before.
+    virtual void cancelDragInsertPreview(bool dragStillActive = false)
     {
+        Q_UNUSED(dragStillActive)
     }
     virtual QString dragInsertPreviewScreenId() const
     {

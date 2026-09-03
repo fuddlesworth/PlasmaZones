@@ -356,8 +356,15 @@ void AutotileEngine::applyTiling(const QString& screenId)
     // Drag-insert preview: skip emitting geometry for the dragged window so
     // KWin's interactive move isn't fought. Other windows still animate to
     // their new tile positions, producing the OrderingPage-style shift.
-    const bool filterForPreview = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
-    const QString filteredWindowId = filterForPreview ? m_dragInsertPreview->windowId : QString();
+    // Two sources for the same skip: a live preview on this screen, or a
+    // cancel that is retiling while the interactive move is still running
+    // (m_dragCancelFilterWindowId, set only inside
+    // cancelDragInsertPreview(dragStillActive = true)). The cancel filter is
+    // not screen-scoped — the window is mid-drag on exactly one screen and
+    // its id cannot collide elsewhere.
+    const bool previewOnScreen = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
+    const QString filteredWindowId = previewOnScreen ? m_dragInsertPreview->windowId : m_dragCancelFilterWindowId;
+    const bool filterForPreview = !filteredWindowId.isEmpty();
 
     const QStringList windows = state->tiledWindows();
     const QVector<QRect> zones = state->calculatedZones();
