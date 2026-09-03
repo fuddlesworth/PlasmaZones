@@ -756,6 +756,23 @@ private Q_SLOTS:
         real[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::CtrlMeta);
         real[ConfigDefaults::triggerMouseButtonField()] = 0;
         QCOMPARE(wheelFocusTriggers->validator(QVariantList{real}).toList().size(), 1);
+        // A mouse button is a legal wheel chord (hold the button, turn the
+        // wheel) and must survive the validator with the button INTACT — the
+        // validator used to zero it, which silently widened a captured
+        // button-only chord into an unmatchable empty entry.
+        QVariantMap buttonOnly;
+        buttonOnly[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::Disabled);
+        buttonOnly[ConfigDefaults::triggerMouseButtonField()] = static_cast<int>(Qt::RightButton);
+        const QVariantList buttonKept = wheelFocusTriggers->validator(QVariantList{buttonOnly}).toList();
+        QCOMPARE(buttonKept.size(), 1);
+        QCOMPARE(buttonKept.first().toMap().value(ConfigDefaults::triggerMouseButtonField()).toInt(),
+                 static_cast<int>(Qt::RightButton));
+        // An entry with neither half claims nothing and is still dropped.
+        QVariantMap emptyEntry;
+        emptyEntry[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::Disabled);
+        emptyEntry[ConfigDefaults::triggerMouseButtonField()] = 0;
+        QVERIFY(wheelFocusTriggers->validator(QVariantList{emptyEntry}).toList().isEmpty());
+        QVERIFY(wheelViewTriggers->validator(QVariantList{emptyEntry}).toList().isEmpty());
 
         const auto* alwaysCenter = findKey(schema, group, ConfigDefaults::alwaysCenterSingleColumnKey());
         QVERIFY(alwaysCenter);

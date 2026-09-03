@@ -8,10 +8,12 @@ import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
- * Own input capture: key, mouse, or modifier-only.
+ * Own input capture: a modifier combination or a mouse button, never a plain
+ * key — every host authors trigger chords, not keyboard shortcuts.
  * Uses a modal overlay when capturing so nothing else can steal focus.
- * Click the field to start; overlay captures key, mouse, or modifier-only. Escape cancels.
- * acceptMode: MetaOnly (modifier keys only), MouseOnly (mouse buttons only), or All.
+ * Click the field to start; Escape cancels.
+ * acceptMode: MetaOnly (modifier keys only), MouseOnly (mouse buttons only),
+ * or All (either shape, still one at a time).
  */
 Control {
     id: root
@@ -23,7 +25,7 @@ Control {
     property bool capturing: false
     property int acceptMode: acceptModeAll
     property string placeholderText: acceptMode === acceptModeMetaOnly ? i18n("Click to capture modifier") : (acceptMode === acceptModeMouseOnly ? i18n("Click to capture mouse button") : i18n("Click to capture"))
-    property string capturingText: acceptMode === acceptModeMetaOnly ? i18n("Press modifier(s)…") : (acceptMode === acceptModeMouseOnly ? i18n("Press mouse button…") : i18n("Press key, modifier, or mouse…"))
+    property string capturingText: acceptMode === acceptModeMetaOnly ? i18n("Press modifier(s)…") : (acceptMode === acceptModeMouseOnly ? i18n("Press mouse button…") : i18n("Press modifier(s) or mouse button…"))
     property bool tooltipEnabled: true
     // Qt::KeyboardModifier bits, from the shared TriggerLabels tables so the
     // capture masks and every display surface agree on one vocabulary.
@@ -36,7 +38,6 @@ Control {
 
     signal modifierCaptured(int modifierMask)
     signal mouseCaptured(int buttonBit)
-    signal keySequenceCaptured(string sequence)
     signal captureCancelled
 
     function startCapture() {
@@ -75,72 +76,6 @@ Control {
         return m;
     }
 
-    function keyToSequenceString(key, modifiers) {
-        var parts = [];
-        if (modifiers & Qt.ControlModifier)
-            parts.push("Ctrl");
-
-        if (modifiers & Qt.AltModifier)
-            parts.push("Alt");
-
-        if (modifiers & Qt.ShiftModifier)
-            parts.push("Shift");
-
-        if (modifiers & Qt.MetaModifier)
-            parts.push("Meta");
-
-        var keyStr = "";
-        if (key >= Qt.Key_A && key <= Qt.Key_Z) {
-            keyStr = String.fromCharCode(65 + (key - Qt.Key_A));
-        } else if (key >= Qt.Key_0 && key <= Qt.Key_9) {
-            keyStr = String.fromCharCode(48 + (key - Qt.Key_0));
-        } else {
-            var table = {};
-            table[Qt.Key_F1] = "F1";
-            table[Qt.Key_F2] = "F2";
-            table[Qt.Key_F3] = "F3";
-            table[Qt.Key_F4] = "F4";
-            table[Qt.Key_F5] = "F5";
-            table[Qt.Key_F6] = "F6";
-            table[Qt.Key_F7] = "F7";
-            table[Qt.Key_F8] = "F8";
-            table[Qt.Key_F9] = "F9";
-            table[Qt.Key_F10] = "F10";
-            table[Qt.Key_F11] = "F11";
-            table[Qt.Key_F12] = "F12";
-            table[Qt.Key_Return] = "Return";
-            table[Qt.Key_Enter] = "Enter";
-            table[Qt.Key_Space] = "Space";
-            table[Qt.Key_Tab] = "Tab";
-            table[Qt.Key_Backspace] = "Backspace";
-            table[Qt.Key_Delete] = "Delete";
-            table[Qt.Key_Left] = "Left";
-            table[Qt.Key_Right] = "Right";
-            table[Qt.Key_Up] = "Up";
-            table[Qt.Key_Down] = "Down";
-            table[Qt.Key_Home] = "Home";
-            table[Qt.Key_End] = "End";
-            table[Qt.Key_PageUp] = "PageUp";
-            table[Qt.Key_PageDown] = "PageDown";
-            table[Qt.Key_Minus] = "-";
-            table[Qt.Key_Equal] = "=";
-            table[Qt.Key_BracketLeft] = "[";
-            table[Qt.Key_BracketRight] = "]";
-            table[Qt.Key_Backslash] = "\\";
-            table[Qt.Key_Semicolon] = ";";
-            table[Qt.Key_Apostrophe] = "'";
-            table[Qt.Key_Comma] = ",";
-            table[Qt.Key_Period] = ".";
-            table[Qt.Key_Slash] = "/";
-            keyStr = table[key] || (key > 0 && key < 128 ? String.fromCharCode(key) : "");
-        }
-        if (keyStr.length > 0) {
-            parts.push(keyStr);
-            return parts.join("+");
-        }
-        return "";
-    }
-
     function isModifierKey(key) {
         return (key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt || key === Qt.Key_Meta || key === Qt.Key_AltGr);
     }
@@ -155,7 +90,7 @@ Control {
     implicitWidth: captureLabel.implicitWidth + leftPadding + rightPadding
     implicitHeight: captureLabel.implicitHeight + topPadding + bottomPadding
     ToolTip.visible: tooltipEnabled && (triggerArea.containsMouse || root.capturing)
-    ToolTip.text: root.capturing ? (root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier key(s) only (Escape to cancel)") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to cancel)") : i18n("Press a key, modifier only, or any mouse button (Escape to cancel)"))) : (root.acceptMode === root.acceptModeMetaOnly ? i18n("Click then press modifier key(s)") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Click then press any mouse button (Right, Middle, Back, Forward, etc.)") : i18n("Click then press key, modifier(s), or any mouse button")))
+    ToolTip.text: root.capturing ? (root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier key(s) only (Escape to cancel)") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to cancel)") : i18n("Press modifier key(s) or any mouse button (Escape to cancel)"))) : (root.acceptMode === root.acceptModeMetaOnly ? i18n("Click then press modifier key(s)") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Click then press any mouse button (Right, Middle, Back, Forward, etc.)") : i18n("Click then press modifier(s) or any mouse button")))
     ToolTip.delay: Kirigami.Units.toolTipDelay
 
     MouseArea {
@@ -222,18 +157,11 @@ Control {
                     root.pendingModifierMask = modMask;
                     return;
                 }
-                // Record the non-modifier press before the MetaOnly early
-                // return: releasing a modifier after e.g. Ctrl+A must not
-                // count as a bare-modifier capture.
+                // A plain key is never captured — every host authors modifier
+                // or mouse chords, not keyboard shortcuts. Record the press so
+                // releasing a modifier after e.g. Ctrl+A does not count as a
+                // bare-modifier capture; releasing the key clears the latch.
                 root.nonModifierKeyPressed = true;
-                if (root.acceptMode === root.acceptModeMetaOnly)
-                    return;
-
-                var seq = root.keyToSequenceString(event.key, event.modifiers);
-                if (seq.length > 0) {
-                    root.endCapture();
-                    root.keySequenceCaptured(seq);
-                }
             }
             Keys.onReleased: event => {
                 event.accepted = true;
@@ -264,7 +192,7 @@ Control {
                         return;
 
                     if (mouse.button === Qt.LeftButton) {
-                        // In MouseOnly mode, left click cancels (no capture); in All mode, ignore so user can press a key/mouse
+                        // In MouseOnly mode, left click cancels (no capture); in All mode, ignore so the user can still press a modifier or another button
                         if (root.acceptMode === root.acceptModeMouseOnly)
                             root.cancelCapture();
 
@@ -292,7 +220,7 @@ Control {
                 id: captureHintLabel
 
                 anchors.centerIn: parent
-                text: root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier(s). Escape to cancel.") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.") : i18n("Press key, modifier(s), or mouse button. Escape to cancel."))
+                text: root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier(s). Escape to cancel.") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.") : i18n("Press modifier(s) or a mouse button. Escape to cancel."))
                 color: Kirigami.Theme.textColor
                 font.italic: true
             }

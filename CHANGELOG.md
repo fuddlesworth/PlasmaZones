@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A scroll key can be a mouse button**: the two scroll keys under Settings → Scrolling → Window, in the Focus and view card, used to take modifier combinations only. Each can now also be a single mouse button, so you can hold a spare button and turn the wheel to move along the strip. A scroll key is either a modifier combination or a button, never both at once. ([#1042](https://github.com/fuddlesworth/PlasmaZones/pull/1042))
+
 ## [3.4.8] - 2026-09-02
 
 ### Removed

@@ -190,15 +190,14 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: TriggerLabels.editorPreferredWidth
-                // Modifiers only, matching the "scroll key" these rows are
-                // named for. The exact matcher compares buttons as a SUBSET
-                // even though it compares modifiers exactly, so a
-                // modifier-only chord would shadow a button-bearing one and
-                // the longer binding could never be reached. This is the UI
-                // half of that rule; canonicalWheelTriggerList enforces it in
-                // storage, so a hand-edited config cannot get a button in
-                // either.
-                acceptMode: acceptModeMetaOnly
+                // Same capture as the drag trigger rows: a chord is either a
+                // modifier combination or a single mouse button, never both
+                // at once. That either-or shape is what keeps the exact
+                // matcher unambiguous — modifiers compare exactly, so a
+                // modifier-only chord and a button-only chord can never
+                // satisfy each other. canonicalWheelTriggerList mirrors the
+                // shape in storage.
+                acceptMode: acceptModeAll
                 accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the column focus scroll key")
                 triggers: root.settingsBridge.scrollingWheelFocusTriggers
                 defaultTriggers: root.settingsBridge.defaultScrollingWheelFocusTriggers
@@ -218,8 +217,8 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: TriggerLabels.editorPreferredWidth
-                // Modifiers only, for the same reason as the focus row above.
-                acceptMode: acceptModeMetaOnly
+                // Same either-or capture as the focus row above.
+                acceptMode: acceptModeAll
                 accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the view scroll key")
                 triggers: root.settingsBridge.scrollingWheelViewTriggers
                 defaultTriggers: root.settingsBridge.defaultScrollingWheelViewTriggers
