@@ -890,7 +890,7 @@ A bounded timeout guards step 3 (see Risks) so a missing or slow lock never wedg
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1: `Phosphor*` atom library *(in progress)*
+### 3.1: `Phosphor*` atom library *(shipped)*
 
 Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosphor.Widgets` QML module (chosen over folding the atoms into `phosphor-shell` so the seam stays clean and the library-first philosophy holds). `StateLayer` and `Motion` are NOT re-created here: they already ship as singletons in `phosphor-theme`'s `Phosphor.Theme` module, and the atoms consume them directly. The new components are the seven below.
 
@@ -902,8 +902,8 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 | `examples/phosphor-widgets-kitchen-sink/`                                    | scaffolded | One scrollable window listing every atom in enabled/disabled states; hover/press/focus are live on the enabled specimens. Header cycles the accent token (`applyTokens`) and resets the palette to prove live retinting. |
 
 **Acceptance:** every atom respects the theme tokens; states use M3 state-layer opacities; ripple uses Motion timing.
-- [ ] Build + kitchen-sink demo runnable (pending a `-DBUILD_PHOSPHOR_SHELL=ON` build on a KDE/Qt host)
-- [ ] Accent cycle retints every atom live
+- [x] Build + kitchen-sink demo runnable (confirmed on a live session)
+- [x] Accent cycle retints every atom live (confirmed on a live session)
 - [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
 
 **Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular). The resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
@@ -912,7 +912,7 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 
 ### 3.2: `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
 
-The connected-corner geometry primitive, central to the visual identity. *(scaffolded)*
+The connected-corner geometry primitive, central to the visual identity. *(shipped)*
 
 Lives in `phosphor-shell-widgets` alongside the 3.1 atoms (same `Phosphor.Widgets` module), so the bar surface and the widgets it hosts share one import.
 
@@ -935,7 +935,7 @@ Lives in `phosphor-shell-widgets` alongside the 3.1 atoms (same `Phosphor.Widget
 
 **Effort:** L (~3 weeks, the geometry math is the bulk)
 
-### 3.3: OSD framework + first OSDs *(scaffolded)*
+### 3.3: OSD framework + first OSDs *(shipped)*
 
 Lives in a new `phosphor-shell-osd` library (module `Phosphor.OSD`), depending on theme + widgets. `OSDHost` is screen-agnostic and routed by name (compose one per monitor via `PerScreen`); the layer-shell surface is the shell's job in Phase 4, so the framework renders into whatever item it's parented to.
 
@@ -956,7 +956,7 @@ Lives in a new `phosphor-shell-osd` library (module `Phosphor.OSD`), depending o
 
 **Effort:** M (~2 weeks)
 
-### 3.4: Toast framework *(scaffolded)*
+### 3.4: Toast framework *(shipped)*
 
 Lives in a new `phosphor-shell-notifications` library (module `Phosphor.Notifications`), depending on theme + widgets. `ToastHost` renders into whatever it's parented to; the layer-shell surface per screen is the shell's job in Phase 4 (compose via `PerScreen`).
 
@@ -971,7 +971,7 @@ Lives in a new `phosphor-shell-notifications` library (module `Phosphor.Notifica
 - [x] Queue + dismiss + promote (unit-tested).
 - [x] Rich text + image (verified in an offscreen render: bold body markup, image avatar, critical accent stripe).
 - [x] Per-app-rules seam applies (suppress unit-tested; DND pill in the demo).
-- [ ] `notify-send` → toast on a live session owning the bus name (offscreen can't own it; wired and ready for a real-session check).
+- [x] `notify-send` → toast on a live session owning the bus name (confirmed on a live session).
 
 **Note:** toast/card backgrounds use `ElevationShadow` (MultiEffect), which needs a GPU and does not render under the headless offscreen path; content (text/image/stripe) renders regardless.
 
