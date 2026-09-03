@@ -4,7 +4,7 @@
     "description": "Cross-fades between desktops through a mosaic of pixel blocks that grow then shrink.",
     "author": "PlasmaZones (ported from GL-Transitions pixelize by gre, MIT)",
     "version": "1.0",
-    "category": "Pixelate",
+    "category": "Pixelation",
     "appliesTo": ["desktop"],
     "fragmentShader": "effect.frag",
     "parameters": [

@@ -5,8 +5,11 @@
 // packvalidators.h. Reproduces the animation runtime's GLSL assembly
 // (pTransition / pIn+pOut entry scaffold + generated p_<id> preamble + include
 // expansion). Daemon-capable packs bake through headless QShaderBaker;
-// compositor-only packs take the out-of-process glslang bake below, since
-// their dialect is one the SPIR-V target rejects by design.
+// compositor-only packs take the out-of-process glslang bake below, because
+// the branch that actually runs for them is the kwin classic-GL one (the bake
+// splices the PLASMAZONES_KWIN define block), whose default-block uniforms
+// the strict SPIR-V target rejects. Their UBO branch compiles under SPIR-V
+// too (the bake tests pin it), but that branch never runs for these classes.
 //
 // The two compositor-bake helpers live here rather than in
 // packvalidatorcommon because this is their only caller: the zone and surface
@@ -182,7 +185,11 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        // A parsed-but-non-object root would otherwise report "invalid JSON:
+        // no error occurred" — perr only describes parse failures.
+        const QString reason = doc.isNull() ? QStringLiteral("invalid JSON: ") + perr.errorString()
+                                            : QStringLiteral("metadata root is not a JSON object");
+        out << name << "\n  metadata       ERROR\n    " << reason << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -371,7 +378,14 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                          .arg(static_cast<int>(declaredBuffers.size()))
                          .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses);
         }
-        const double rawScale = animRoot.value(QLatin1String("bufferScale")).toDouble(1.0);
+        const QJsonValue scaleVal = animRoot.value(QLatin1String("bufferScale"));
+        // A non-numeric value (e.g. the string "0.5", a plausible typo since
+        // the wrap/filter fields ARE strings) coerces to the 1.0 default at
+        // load with no diagnostic anywhere — surface the shape error here.
+        if (!scaleVal.isUndefined() && !scaleVal.isDouble()) {
+            lints << QStringLiteral("bufferScale is not a number (falls back to 1.0 at load)");
+        }
+        const double rawScale = scaleVal.toDouble(1.0);
         if (rawScale < PhosphorAnimationShaders::AnimationShaderEffect::kMinBufferScale
             || rawScale > PhosphorAnimationShaders::AnimationShaderEffect::kMaxBufferScale) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
@@ -423,9 +437,10 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
     }
-    // A declared-but-absent vertexShader would silently fall back to
-    // shared/animation.vert at runtime, hiding the author's typo. Same lint
-    // the surface validator applies.
+    // A declared-but-absent vertexShader falls back to a shared/default vertex
+    // stage at runtime (shared/animation.vert on the daemon; the built-in kwin
+    // vertex source, with a journal warning, on the compositor), hiding the
+    // author's typo. Same lint the surface validator applies.
     if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
         lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
     }
@@ -450,13 +465,22 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
     // geometryGrid is qBound(0, raw, cap) at load, so a negative value
     // silently becomes 0 — indistinguishable from not declaring it, and the
-    // vertex stage the author wanted never subdivides. The over-cap side
-    // already warns on the journal at load; this is the quiet side.
+    // vertex stage the author wanted never subdivides. A fractional or
+    // non-numeric value is just as quiet: QJsonValue::toInt returns 0 for
+    // both, so lint on the double reading. The over-cap side already warns
+    // on the journal at load; this is the quiet side.
     {
         const QJsonValue gridVal = doc.object().value(QLatin1String("geometryGrid"));
-        if (!gridVal.isUndefined() && gridVal.toInt() < 0) {
-            lints << QStringLiteral("geometryGrid is negative (%1); it clamps to 0 at load, disabling the grid")
-                         .arg(gridVal.toInt());
+        if (!gridVal.isUndefined()) {
+            const double rawGrid = gridVal.toDouble();
+            const bool wholeNumber = gridVal.isDouble() && rawGrid == static_cast<double>(gridVal.toInt(-1));
+            if (rawGrid < 0.0) {
+                lints << QStringLiteral("geometryGrid is negative (%1); it clamps to 0 at load, disabling the grid")
+                             .arg(rawGrid);
+            } else if (!wholeNumber) {
+                lints << QStringLiteral(
+                    "geometryGrid is not a whole number; it reads as 0 at load, disabling the grid");
+            }
         }
     }
 
@@ -472,9 +496,11 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
     // Compositor-only packs take the out-of-process glslang bake instead of
-    // the SPIR-V one: their source is kwin classic-GL (default-block uniforms,
-    // unbound samplers) that the strict SPIR-V target rejects by design, and
-    // the daemon never loads them.
+    // the SPIR-V one: the branch that runs for them is the kwin classic-GL
+    // one (the bake splices the PLASMAZONES_KWIN define block), whose
+    // default-block uniforms and unbound samplers the strict SPIR-V target
+    // rejects — and the daemon never loads these packs, so validating their
+    // UBO branch here would prove nothing about the branch that runs.
     if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
         errors += bakeCompositorStage(out, packDir, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
                                       /*scaffold=*/true);
@@ -540,7 +566,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // that work.
     //
     // Skipped for compositor-only packs for the same reason the fragment
-    // stage is: the strict SPIR-V target rejects their dialect by design.
+    // stage takes the glslang route instead: what runs for them is the
+    // kwin-define branch the strict SPIR-V target rejects.
     // Unlike the fragment and vertex stages these do NOT take the glslang
     // bake either, so a compositor-only multipass pack's buffer passes are
     // compiled nowhere. No bundled pack is both, and closing it means
@@ -628,16 +655,18 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                         << "\n";
                     ++errors;
                 } else {
-                    // NO p_<id> preamble splice here: the runtime splices only
-                    // the FRAGMENT stage (loadFragmentShader and
-                    // warmShaderBakeCacheForPaths both do; loadVertexShader
-                    // does not). Splicing it here would let a daemon-path vert
-                    // that reads p_<id> pass this gate and then fail at runtime
-                    // with an undeclared identifier. Vertex-driven packs read
-                    // their params inside `#ifdef PLASMAZONES_KWIN`, which this
-                    // Vulkan-dialect bake does not take.
+                    // The p_<id> preamble IS spliced here, mirroring the
+                    // runtime: ShaderNodeRhi's vertex compile and the warm
+                    // bake both splice m_paramPreamble into the vertex
+                    // stage (added alongside the vertex-parameter work, for
+                    // parity with the kwin path's one-preamble-both-stages
+                    // splice), so vertex-driven packs can read p_<id> on
+                    // both branches. Baking without it would reject sources
+                    // the runtime accepts.
+                    const QString splicedVert =
+                        PhosphorShaders::spliceAfterVersion(expandedVert, AnimationShaderRegistry::paramPreamble(eff));
                     const ShaderCompiler::Result vertResult =
-                        ShaderCompiler::compile(expandedVert.toUtf8(), QShader::VertexStage);
+                        ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
                     errors += reportCompile(out, vertLabel, vertResult, declaredParamNames(eff.parameters));
                 }
             }

@@ -163,6 +163,11 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    wallpaperTextureChanged FINAL)
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
     Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
+    /// Image-pass grid tessellation for vertex-displacing packs (the
+    /// `geometryGrid` metadata key); 0 = the default fullscreen quad. See
+    /// ShaderNodeRhi::setGridSubdivisions for the mesh contract.
+    Q_PROPERTY(
+        int gridSubdivisions READ gridSubdivisions WRITE setGridSubdivisions NOTIFY gridSubdivisionsChanged FINAL)
 
     // ── Status ───────────────────────────────────────────────────────
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
@@ -670,6 +675,12 @@ public:
     }
     void setUseDepthBuffer(bool use);
 
+    int gridSubdivisions() const
+    {
+        return m_gridSubdivisions;
+    }
+    void setGridSubdivisions(int subdivisions);
+
     // ── Shader include paths ─────────────────────────────────────────
 
     /** Set directories to search for #include directives in shaders. */
@@ -768,6 +779,7 @@ Q_SIGNALS:
     void wallpaperTextureChanged();
     void useWallpaperChanged();
     void useDepthBufferChanged();
+    void gridSubdivisionsChanged();
     /// Emitted when status() transitions. Always delivered on the object's
     /// (GUI) thread: setStatus is called from updatePaintNode on the render
     /// thread under Qt's threaded loop, and notifyOnGuiThread marshals the
@@ -1032,6 +1044,7 @@ private:
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;
     bool m_useDepthBuffer = false;
+    int m_gridSubdivisions = 0;
 
     // ── Uniform extension ────────────────────────────────────────────
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;

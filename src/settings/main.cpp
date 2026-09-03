@@ -27,6 +27,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>
+#include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
@@ -274,6 +275,12 @@ int main(int argc, char* argv[])
     // preview pane loads. Registered under the same URI the daemon uses so the
     // one shared host works identically in both processes.
     qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    // The raw rendering-library shader item, for the live ANIMATION preview:
+    // the preview pane instantiates one over the stand-in card and drives its
+    // iTime as a real transition leg's clock would. The daemon never creates
+    // this from QML (SurfaceAnimator builds its legs in C++), so the
+    // registration exists only where the preview pane lives.
+    qmlRegisterType<PhosphorRendering::ShaderEffect>("PlasmaZones", 1, 0, "AnimationShaderItem");
 
     // Global settings search, set up BEFORE the engine so everything here
     // outlives ~QQmlApplicationEngine. Declaration order is the lifetime

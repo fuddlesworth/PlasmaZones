@@ -273,6 +273,30 @@ public:
     /// @return true if a binding existed at that slot and was removed.
     bool removeExtraBinding(int binding);
 
+    // ── Geometry ───────────────────────────────────────────────────────
+    /**
+     * @brief Tessellate the IMAGE pass into an n×n cell grid (0 = the
+     * default two-triangle fullscreen quad).
+     *
+     * Vertex-displacing animation packs (the `geometryGrid` metadata key)
+     * deform per vertex, which a 4-vertex quad can only shear linearly —
+     * the kwin path emits a window-quad grid for them, and this is the
+     * Qt-RHI analogue. Positions stay clip-space, texCoords 0..1, so the
+     * same vertex sources run unchanged; only the mesh density changes.
+     * Buffer passes keep the plain quad: they are image-space passes and
+     * never displace. Clamped to [0, kMaxGridSubdivisions] (index-buffer
+     * width); the pack metadata clamp (kMaxGeometryGridSubdivisions = 128)
+     * is tighter.
+     * Same threading contract as every setter here: updatePaintNode() only.
+     */
+    void setGridSubdivisions(int subdivisions);
+
+    /// Grid-density ceiling: (255+1)² vertices is the most a quint16 index
+    /// buffer can address. Shared by ShaderEffect's property clamp and the
+    /// node setter so the two can never disagree — the item↔node equality
+    /// short-circuits rely on both sides clamping identically.
+    static constexpr int kMaxGridSubdivisions = 255;
+
     // ── Textures ───────────────────────────────────────────────────────
     void setAudioSpectrum(const QVector<float>& spectrum);
     void setUserTexture(int slot, const QImage& image);
@@ -326,6 +350,16 @@ public:
     bool isShaderReady() const;
     QString shaderError() const;
     void invalidateShader();
+    /// Drop the resident bake, its error, and any pending rebake together.
+    /// For the "source is gone" arms of the owning item's sync (a failed
+    /// load, or a deliberately cleared source): a resident previous bake
+    /// would otherwise keep isShaderReady() true and let the item's status
+    /// block promote a just-reported Error/Null back to Ready in the same
+    /// sync, and the pending m_shaderDirty would make the next prepare()
+    /// manufacture an "empty source" error for a deliberate clear. render()
+    /// bails on the cleared readiness; the next real source set re-arms the
+    /// bake through the setters.
+    void clearBakedShader();
     void invalidateUniforms();
 
     // ── Include Paths ──────────────────────────────────────────────────
@@ -480,6 +514,13 @@ private:
     /// for the bake-cache key — see `shaderCacheKey` in
     /// shadernoderhicore.cpp for the policy.
     QString loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError);
+    /// Schedule another frame from the render thread (QQuickWindow::update()
+    /// is documented thread-safe), with safeRhi()'s liveness locking. For
+    /// prepare()-side conditions that leave work pending — a grid upload
+    /// that got no resource-update batch — where a STATIC item (no clock,
+    /// no property churn) would otherwise never be prepared again and
+    /// render()'s pending-skip would leave it blank indefinitely.
+    void requestAnotherFrame() const;
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
@@ -525,8 +566,31 @@ private:
     QString m_entryPrologue;
     QList<PhosphorShaders::EntryCandidate> m_entryCandidates;
 
+    /// Effective "tessellated image pass" predicate — see m_gridBuffersFailed.
+    /// The pipeline topology and render()'s draw arm must agree on this, or a
+    /// Triangles pipeline ends up drawing the 4-vertex strip quad.
+    bool gridActive() const
+    {
+        return m_gridSubdivisions > 0 && !m_gridBuffersFailed;
+    }
+
     // ── RHI Core Resources ─────────────────────────────────────────────
     std::unique_ptr<QRhiBuffer> m_vbo;
+    /// Image-pass grid mesh (setGridSubdivisions > 0). Null in quad mode.
+    std::unique_ptr<QRhiBuffer> m_gridVbo;
+    std::unique_ptr<QRhiBuffer> m_gridIbo;
+    int m_gridSubdivisions = 0;
+    int m_gridIndexCount = 0;
+    bool m_gridUploaded = false;
+    /// Latched when the grid VBO/IBO create() failed, so prepare() does not
+    /// retry (and warn) every frame — the owning item re-pushes its own
+    /// m_gridSubdivisions on every sync, so zeroing the count here would
+    /// immediately be undone by setGridSubdivisions and the create retried
+    /// at 60Hz. Cleared on a density change and on releaseRhiResources()
+    /// (a new device deserves a fresh attempt). While latched the node runs
+    /// in quad mode: gridActive() is the single predicate both the pipeline
+    /// topology and render()'s draw arm consult.
+    bool m_gridBuffersFailed = false;
     std::unique_ptr<QRhiBuffer> m_ubo;
     std::unique_ptr<QRhiShaderResourceBindings> m_srb;
     std::unique_ptr<QRhiGraphicsPipeline> m_pipeline;
@@ -607,8 +671,14 @@ private:
     /// entries even when the consuming shader's own mtime is unchanged.
     /// Without this, an in-memory cache hit could keep serving SPIR-V
     /// baked against an older include-content view.
-    QStringList m_vertexIncludedPaths;
-    QStringList m_fragmentIncludedPaths;
+    /// Include-file fingerprints (path + mtime per transitively-included
+    /// header), computed AT LOAD TIME — the moment the includes were read —
+    /// and folded into the bake-cache key. Statting the includes again at
+    /// bake time would open a TOCTOU window: an include edited between
+    /// expansion and fingerprinting caches old-content SPIR-V under the
+    /// new-mtime key, serving stale bakes until the mtime moves again.
+    QByteArray m_vertexIncludeFp;
+    QByteArray m_fragmentIncludeFp;
     QString m_shaderError;
     bool m_initialized = false;
     bool m_vboUploaded = false;

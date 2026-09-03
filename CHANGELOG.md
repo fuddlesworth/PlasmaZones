@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Animation shader packs now have a live preview**: opening a pack from Animations → Shaders plays it on a looping stand-in subject matched to what the pack animates. Open and close packs play on a sample window over your wallpaper, desktop switch and peek packs sweep between two stand-in desktops, tab switch packs cross between two sample windows, window move packs replay a move, and scrolling strip packs decorate a scroll settling on a stand-in strip. Open and close packs cycle through all four of their legs, including minimizing into a stand-in taskbar entry at the bottom of the preview and restoring from it, and the drag preview glides the sample window back and forth while running the same wobble spring simulation the compositor uses, so a wobbly window jiggles and settles in the preview the way it does on screen. The parameter editor drives the preview as you adjust values, and the pack runs through the same code a real transition uses. Minimize animations such as Genie now also play their full funnel on the service's own popups instead of a plain fade. To make this possible every bundled pack now compiles for both shader runtimes, and the mesh-warping move packs get a real tessellated grid there, so the preview shows their deformation rather than a flat cross-fade. This also puts the whole transition catalogue within reach of the daemon's own surfaces.
+
+### Changed
+
+- **Four window-move shader packs are now adjustable**: Flow, Fold, Stretch and Ripple Snap had their motion character baked in as fixed values. Those values are now regular parameters with the same defaults, so the trailing lag, crease count, overshoot, wave shape and their companions can be tuned per pack the way the other movement packs always could. The animation shader categories were also tidied so each pack sorts into one shared set in the browser.
+
+- **Shader browser cards no longer show previews**: the overlay shader cards showed a bundled screenshot while the decoration cards rendered a live preview each, which made the two pages feel inconsistent and the decoration page heavy with one shader chain per visible card. The cards now show name, description and parameters only, and every browser previews packs the same way, live in the pack's detail view.
+
+### Removed
+
+- **Bundled overlay shader preview images**: every snapping overlay pack shipped a screenshot that existed only for the browser cards. With the cards no longer showing previews the images were dead weight in the package, so they are gone.
+
 ### Fixed
 
 - **Letting go of the insert key mid-drag no longer resizes the window in your hand**: with drag set to float the window, tapping the insert key while dragging and then releasing it without dropping made the window jump to its old tile size while you were still holding it. Cancelling the insert preview now leaves the dragged window alone until you drop it. ([#1028](https://github.com/fuddlesworth/PlasmaZones/discussions/1028))

@@ -40,6 +40,7 @@
 #include <QSet>
 
 #include "settings/pages/animationpagescope.h"
+#include "settings/pages/animationpreviewcontroller.h"
 #include "settings/pages/animationspagecontroller.h"
 
 using namespace PlasmaZones;
@@ -844,6 +845,52 @@ private Q_SLOTS:
     ///
     /// Source-scrape, with the limitations this file documents elsewhere: it
     /// checks WHERE the arm is called from, not what it does.
+    /// Every `previewController.<name>` AnimationPreviewPane.qml calls must
+    /// exist on AnimationPreviewController. The decoration route carries the
+    /// same guard for its own pane and deliberately excludes this file (its
+    /// previewController is a different class), so without this mirror a
+    /// renamed or mistyped invokable here is a silent runtime TypeError and
+    /// a blank animation preview, not a build failure.
+    void everyPreviewControllerCallFromTheAnimationPaneIsReachable()
+    {
+        const QString path = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/AnimationPreviewPane.qml");
+        QString src = readFile(path);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("cannot read ") + path));
+
+        // Comments stripped first, matching the decoration guard: a call that
+        // survives only in prose is not a caller.
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression lineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+        src.remove(blockCommentRe);
+        src.remove(lineCommentRe);
+
+        static const QRegularExpression callRe(QStringLiteral("\\bpreviewController\\.([A-Za-z_][A-Za-z0-9_]*)"));
+        QSet<QString> used;
+        auto it = callRe.globalMatch(src);
+        while (it.hasNext())
+            used.insert(it.next().captured(1));
+        QVERIFY2(!used.isEmpty(), "scraped no previewController.* names — the pane or receiver name moved");
+
+        AnimationPreviewController c(nullptr, nullptr);
+        const QMetaObject* meta = c.metaObject();
+        QStringList unreachable;
+        for (const QString& name : used) {
+            const QByteArray raw = name.toUtf8();
+            if (meta->indexOfProperty(raw.constData()) >= 0)
+                continue;
+            bool found = false;
+            for (int i = 0; i < meta->methodCount() && !found; ++i)
+                found = meta->method(i).name() == raw;
+            if (!found)
+                unreachable.append(name);
+        }
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("AnimationPreviewPane calls these on previewController, but "
+                                           "AnimationPreviewController lacks them: %1")
+                                .arg(unreachable.join(QStringLiteral(", ")))));
+    }
+
     void theDetailDialogArmsTheZoneRendererOnOpenedNotAboutToShow()
     {
         const QString path =

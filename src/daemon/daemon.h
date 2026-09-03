@@ -1592,12 +1592,19 @@ private:
     QMetaObject::Connection m_zoneWarmBakeConnection;
     /// Skip-unchanged gate for the warm bakes: "<category>:<id>" → last
     /// scheduled fingerprint (vert path + vert mtime + frag path + frag mtime +
-    /// param preamble). The fingerprint is built as a SUPERSET of the real bake
-    /// cache key (ShaderNodeRhi::shaderCacheKey, which also folds the file
-    /// mtimes in), so an unchanged pack is skipped on a whole-catalog registry
-    /// emit while a pack whose .frag/.vert body was edited re-warms — the paths
-    /// alone would stay identical across such an edit and wrongly suppress it.
+    /// include-candidate paths + mtimes + param preamble). The fingerprint is
+    /// built as a SUPERSET of the real bake cache key
+    /// (ShaderNodeRhi::shaderCacheKey, which also folds the file mtimes and
+    /// each resolved include's mtime in), so an unchanged pack is skipped on a
+    /// whole-catalog registry emit while a pack whose .frag/.vert body OR a
+    /// shared include header was edited re-warms — the paths alone would stay
+    /// identical across such an edit and wrongly suppress it.
     QHash<QString, QString> m_scheduledBakeFingerprints;
+    /// Parent for the warm-bake QFutureWatchers. Destroyed (and re-created by
+    /// setupShaderWarmBakes) in stop(): a bake discarded by the pool clear()
+    /// never fires finished, so its watcher would otherwise accumulate on the
+    /// Daemon across stop() → init() cycles.
+    std::unique_ptr<QObject> m_bakeWatcherHost;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;

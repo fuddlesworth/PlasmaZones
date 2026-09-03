@@ -150,7 +150,7 @@ QVariantList SnappingShadersPageController::availableShaderEffects() const
     // `isUserEffect` so the pack-agnostic ShaderBrowserPage / Card /
     // Dialog can read both registries through the same key. The rest of
     // the keys (id, name, description, author, version, category,
-    // previewPath, parameters) already match.
+    // parameters) already match.
     QVariantList effects = m_shaderRegistry->availableShadersVariant();
     for (QVariant& v : effects) {
         QVariantMap m = v.toMap();
@@ -158,6 +158,9 @@ QVariantList SnappingShadersPageController::availableShaderEffects() const
             m.insert(QLatin1String("isUserEffect"), m.value(QLatin1String("isUserShader")));
             m.remove(QLatin1String("isUserShader"));
         }
+        // Dropped like the animation/decoration bridges: the browser
+        // previews live shaders and no QML reads the key any more.
+        m.remove(QLatin1String("previewPath"));
         v = m;
     }
     return effects;

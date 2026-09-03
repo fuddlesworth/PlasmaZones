@@ -10,10 +10,10 @@ import org.phosphor.animation
 /**
  * @brief Compact shader card for a shader-browser grid.
  *
- * Renders one effect as a fixed-width card: preview thumbnail (or an
- * empty area when the pack didn't ship one), name + badges row, two-line
+ * Renders one effect as a fixed-width card: name + badges row, two-line
  * description, and a small footer chip showing parameter count and a
- * usage count. Clicking the card emits `showDetails(effect)`.
+ * usage count. Clicking the card emits `showDetails(effect)`. Previews
+ * are the detail dialog's job; the card is a text catalogue entry.
  *
  * Pack-agnostic: drives both the animation-shaders browser and the
  * snapping-overlay-shaders browser. The host passes a `bridge` property
@@ -23,7 +23,7 @@ import org.phosphor.animation
  *
  * Required:
  *   - `effect`: var — effect map (id, name, description, parameters,
- *      previewPath, isUserEffect, ...).
+ *      isUserEffect, ...).
  *   - `bridge`: QtObject — exposes `shaderEffectUsages(id)`.
  *
  * Optional:
@@ -69,71 +69,6 @@ ItemDelegate {
         return "";
     }
     readonly property string _typeBadge: (root.effect && root.typeBadgeFn) ? String(root.typeBadgeFn(root.effect)) : ""
-
-    /// The scrolling viewport this card lives in, supplied by the browser page.
-    /// Used only to decide whether the card is on screen. Null disables that
-    /// gating and treats the card as always visible, which is the right
-    /// degraded behaviour for a host that renders no live preview anyway.
-    property Flickable viewport: null
-
-    /// A decoration pack with no baked thumbnail: render the real chain in the
-    /// card. Gated on the bridge actually being the decoration one, so the
-    /// animation and overlay browsers are untouched.
-    readonly property bool _liveDecorationPreview: !!(root.bridge && root.bridge.previewController && root.bridge.previewKind === "decoration" && root.effect && !(root.effect.previewPath && root.effect.previewPath.length > 0))
-
-    /// Set false by a host whose section is collapsed. A collapsed
-    /// SettingsCard clips its body to zero height and fades it out, but it
-    /// never sets `visible: false` and never unloads the content, so the cards
-    /// inside keep their own y and still map into the viewport. Scrolling
-    /// alone therefore cannot tell that they are hidden, and every decoration
-    /// pack in a collapsed section would keep a live capture chain and one
-    /// shader item per stage, producing nothing at opacity 0.
-    property bool previewLive: true
-
-    /// Whether animated packs may tick. The host drops this while the
-    /// application is not frontmost, and the preview FREEZES on its last
-    /// frame rather than being torn down — teardown is `previewLive`'s job,
-    /// and only for a pane that genuinely cannot be seen (collapsed section,
-    /// scrolled away). Focus loss is neither.
-    property bool previewAnimating: true
-
-    /// Whether this card intersects the viewport, with one card-height of slack
-    /// either side so a preview is warm by the time it is scrolled into view.
-    ///
-    /// mapToItem registers no QML dependency, so every input is read FIRST:
-    /// touching them is what makes this re-evaluate. Same idiom
-    /// SurfaceDecoration.qml uses for its anchor mapping.
-    readonly property bool _inViewport: {
-        if (!root.previewLive)
-            return false;
-        if (!root.viewport)
-            return true;
-        const contentY = root.viewport.contentY;
-        const viewH = root.viewport.height;
-        if (viewH <= 0)
-            return false;
-        // The card's own position matters as much as the scroll offset: the
-        // Flow re-wrapping on a resize or a filter change moves a card without
-        // moving contentY.
-        const selfY = root.y;
-        const selfX = root.x;
-        void selfY;
-        void selfX;
-        // And so does an ANCESTOR moving, which the card's own y does not
-        // record: a section collapsing above this one slides every later card
-        // up the page while both root.y (its offset inside its own Flow) and
-        // contentY stay exactly where they were. Walking up to the viewport
-        // and touching each ancestor's y and height is what makes those
-        // moves re-evaluate this; without it the cards a collapse pulls into
-        // view stay covered, showing empty slots until the user scrolls.
-        for (let a = root.parent; a && a !== root.viewport.contentItem; a = a.parent) {
-            void a.y;
-            void a.height;
-        }
-        const pos = root.mapToItem(root.viewport.contentItem, 0, 0);
-        const slack = root.height;
-        return (pos.y + root.height) > (contentY - slack) && pos.y < (contentY + viewH + slack);
-    }
 
     signal showDetails(var effect)
 
@@ -191,117 +126,6 @@ ItemDelegate {
             anchors.fill: parent
             anchors.margins: root._cardPad
             spacing: Kirigami.Units.smallSpacing
-
-            Rectangle {
-                readonly property bool _hasPreview: !!(root.effect && root.effect.previewPath && root.effect.previewPath.length > 0)
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: width * 9 / 16
-                // A baked preview.png still wins where a pack ships one (that
-                // is how every overlay pack thumbnails, and how a third-party
-                // decoration pack can). Decoration packs ship none, so they get
-                // the live render instead of an empty slot.
-                visible: _hasPreview || root._liveDecorationPreview
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-                border.width: 1
-                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                clip: true
-
-                Image {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    // `encodeURI` percent-encodes spaces and unicode while
-                    // preserving path separators, which a raw `"file://" + path`
-                    // concat would silently break on (e.g. user-installed packs
-                    // under `~/My Shaders/`). It leaves `#` and `?` untouched,
-                    // so those two are escaped explicitly or they would be
-                    // parsed as fragment/query delimiters in the file:// URL.
-                    // Twin site: ShaderBrowserDetailDialog.qml preset dialogs.
-                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
-                    fillMode: Image.PreserveAspectCrop
-                    // Guarded like DecorationChainPreview's twin: the Flow
-                    // hands a card zero width during first layout, and the
-                    // 1px inset would make this negative.
-                    sourceSize.width: Math.max(1, Math.round(width * 2))
-                    sourceSize.height: Math.max(1, Math.round(height * 2))
-                    asynchronous: true
-                    cache: true
-                    visible: status === Image.Ready
-                }
-
-                // Live decoration thumbnail. Decoration packs ship no baked
-                // preview.png, and unlike an overlay shader a surface pack has
-                // nothing to show without a subject to decorate, so the card
-                // renders the real chain over the stand-in card instead.
-                //
-                // In a Loader gated on _inViewport: the browser lays cards out
-                // in a Flow inside a Repeater, so EVERY delegate exists at once
-                // and an ungated binding would stand up a capture chain and a
-                // shader item for all installed packs simultaneously. The gate
-                // keeps that to the handful actually on screen and tears each
-                // one down again on scroll-away.
-                Loader {
-                    id: decorationPreviewLoader
-
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    active: root._liveDecorationPreview && root._inViewport
-                    visible: active
-
-                    sourceComponent: DecorationChainPreview {
-                        previewController: root.bridge.previewController
-                        packId: root.effect ? (root.effect.id || "") : ""
-                        // Declared defaults: the card is a catalogue entry, so
-                        // it shows the pack as shipped. Parameter editing is the
-                        // detail dialog's job.
-                        params: ({})
-                        active: true
-                        // Freeze, never tear down, while the app is not
-                        // frontmost. Focus loss is NOT occlusion — under a
-                        // Plasma applet the window is fully exposed — so a
-                        // torn-down chain reads as every decoration preview
-                        // blinking out while the overlay previews carry on.
-                        animationsPaused: !root.previewAnimating
-                        // No audioSpectrum, deliberately: an audio-reactive pack
-                        // reads inert here and alive in the detail dialog. A live
-                        // CAVA feed per visible card is real cost for a catalogue
-                        // entry, and the dialog is where a pack is actually judged.
-                        cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
-                    }
-                }
-
-                // Covers the live preview until every part of it has arrived —
-                // the wallpaper ground decoded and every stage compiled — so the
-                // card shows the empty slot and then the finished thing, the way
-                // a pack with a baked preview.png does (its Image is hidden
-                // until Ready for the same reason). Without it a grid of cards
-                // visibly assembles itself: grey, then wallpaper, then
-                // decoration, each on its own clock.
-                //
-                // COVERS rather than hides: the preview underneath has to keep
-                // rendering to reach `ready` at all, because a capture chain
-                // that is not visible is starved and never compiles. No label
-                // here, unlike the detail dialog — at thumbnail size the empty
-                // slot reads better than text, and the baked-preview cards show
-                // none either.
-                // Stays up for a pack whose shader failed to compile, too. That
-                // SETTLES the chain, so `ready` goes true with nothing worth
-                // showing under it — and lifting the cover there would leave
-                // the grid claiming a pack renders while its own detail dialog
-                // says the shader did not compile.
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    // `showable`, not `ready`: on an instance surviving a pack
-                    // switch, `ready` is still the OLD pack's answer for a
-                    // frame and the cover would lift over stale pixels. See
-                    // DecorationChainPreview.showable.
-                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.showable || decorationPreviewLoader.item.hasError)
-                    color: Kirigami.Theme.alternateBackgroundColor
-                    radius: Kirigami.Units.smallSpacing
-                }
-            }
 
             RowLayout {
                 Layout.fillWidth: true
