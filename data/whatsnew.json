@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "3.4.9",
+            "date": "2026-09-02",
+            "highlights": [
+                "New: a scroll key under Settings → Scrolling → Window can now be a single mouse button as well as a modifier combination, so a spare button plus the wheel moves you along the strip (#1042)",
+                "Fixed: clicking a taskbar entry for a window on another desktop's scrolling strip now centers the strip on it instead of leaving it off screen (#1040)",
+                "Fixed: closing a scrolling window moves the neighbours in immediately, with the closing window's animation drawn above the settling strip the way niri does (#1041)"
+            ]
+        },
+        {
             "version": "3.4.8",
             "date": "2026-09-02",
             "highlights": [

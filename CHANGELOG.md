@@ -5,11 +5,16 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.4.9] - 2026-09-02
 
 ### Added
 
 - **A scroll key can be a mouse button**: the two scroll keys under Settings → Scrolling → Window, in the Focus and view card, used to take modifier combinations only. Each can now also be a single mouse button, so you can hold a spare button and turn the wheel to move along the strip. A scroll key is either a modifier combination or a button, never both at once. ([#1042](https://github.com/fuddlesworth/PlasmaZones/pull/1042))
+
+### Fixed
+
+- **Clicking a taskbar entry for a window on another desktop centers its strip on it**: from a desktop with no scrolling strip, clicking a window that lives on a scrolling desktop switched you there but left the strip where it was, so the window you asked for could be off screen. The click activates the window before the KWin effect has caught up with the desktop switch, and the effect was still judging the click by the desktop you were leaving, which had nothing under management, so the report that centers the strip was dropped. The report is now always passed along, and the placement engines already ignore windows that are not theirs. ([#1040](https://github.com/fuddlesworth/PlasmaZones/pull/1040))
+- **Closing a scrolling window moves the neighbours in right away**: after a window closed, the remaining columns waited out the PlasmaZones animation duration before filling the gap, even when the close was animated by KWin or not animated at all, so the strip sat idle staring at a hole. That wait existed so the closing window's animation would not play over columns that had already moved, and it has been replaced at the source. The neighbours now move in on the same frame as the close, and the closing window is drawn above the settling strip for the length of its animation, the same order niri uses. ([#1041](https://github.com/fuddlesworth/PlasmaZones/pull/1041))
 
 ## [3.4.8] - 2026-09-02
 
