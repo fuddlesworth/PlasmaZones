@@ -18936,28 +18936,10 @@
         <translation>по умолчанию %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>Образец окна</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>Шейдер этого пакета не скомпилировался.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <source>New Tab</source>
         <comment>@title arriving tab in the animation preview</comment>
         <translation>Новая вкладка</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the animation preview</comment>
-        <translation>Пример окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
@@ -18969,9 +18951,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder animation preview</comment>
-        <translation>Шейдер этого пакета не скомпилировался.</translation>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>Не удалось скомпилировать шейдер этого пакета.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
@@ -18983,19 +18966,19 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Предпросмотр перемещения окна на примере окна.</translation>
+        <translation>Предпросмотр перемещения на образце окна.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
         <source>Previewing a window being dragged back and forth.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Предпросмотр окна, которое перетаскивают туда и обратно.</translation>
+        <translation>Предпросмотр окна, которое перетаскивают туда-сюда.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
         <source>Previewing a tab switch between two sample windows.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Предпросмотр переключения вкладок между двумя примерами окон.</translation>
+        <translation>Предпросмотр переключения вкладок между двумя образцами окон.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
@@ -19007,13 +18990,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
         <source>Previewing open, minimize, restore and close on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Предпросмотр открытия, сворачивания, восстановления и закрытия на примере окна.</translation>
+        <translation>Предпросмотр открытия, сворачивания, восстановления и закрытия на образце окна.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info animation preview limitation</comment>
-        <translation>Этот пакет реагирует на звук. Включите визуализатор звука в настройках шейдеров, чтобы увидеть его в движении.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>Этот пакет реагирует на звук. Включите «Звуковой спектр» в общих параметрах, чтобы увидеть его в движении.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -19026,12 +19010,6 @@
         <source>This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.</source>
         <comment>@info decoration preview limitation</comment>
         <translation>Этот пакет берёт образец того, что находится позади окна. В предпросмотре вместо настоящих окон используются обои.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>Этот пакет реагирует на звук. Включите визуализатор звука в настройках шейдеров, чтобы увидеть его в движении.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
@@ -21037,7 +21015,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>The focused window is floating, so it has no column to fill</source>
-        <translation>Окно в фокусе плавающее, поэтому у него нет столбца для заполнения</translation>
+        <translation>Активное окно является плавающим, поэтому у него нет столбца для заполнения</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
@@ -23295,17 +23273,22 @@
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
-        <translation>Пример окна</translation>
+        <comment>@title sample window in a shader preview</comment>
+        <translation>Образец окна</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
         <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
         <translation>Другое окно</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
         <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
         <translation>Предыдущая вкладка</translation>
     </message>
 </context>

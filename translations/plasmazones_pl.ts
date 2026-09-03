@@ -18936,28 +18936,10 @@
         <translation>domyślnie %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>Przykładowe okno</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>Shader tej paczki nie dał się skompilować.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <source>New Tab</source>
         <comment>@title arriving tab in the animation preview</comment>
         <translation>Nowa karta</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the animation preview</comment>
-        <translation>Przykładowe okno</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
@@ -18969,9 +18951,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder animation preview</comment>
-        <translation>Shader tej paczki nie skompilował się.</translation>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>Nie udało się skompilować shadera tej paczki.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
@@ -18983,13 +18966,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Podgląd przesunięcia okna na przykładowym oknie.</translation>
+        <translation>Podgląd przeniesienia okna na przykładowym oknie.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
         <source>Previewing a window being dragged back and forth.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Podgląd okna przeciąganego tam i z powrotem.</translation>
+        <translation>Podgląd okna przeciąganego w tę i z powrotem.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
@@ -19007,13 +18990,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
         <source>Previewing open, minimize, restore and close on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Podgląd otwarcia, zminimalizowania, przywrócenia i zamknięcia na przykładowym oknie.</translation>
+        <translation>Podgląd otwarcia, minimalizacji, przywrócenia i zamknięcia na przykładowym oknie.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info animation preview limitation</comment>
-        <translation>Ta paczka reaguje na dźwięk. Włącz wizualizację dźwięku w ustawieniach shaderów, aby zobaczyć ją w ruchu.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>Ta paczka reaguje na dźwięk. Włącz Widmo dźwięku w ustawieniach ogólnych, aby zobaczyć tę paczkę w ruchu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -19026,12 +19010,6 @@
         <source>This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.</source>
         <comment>@info decoration preview limitation</comment>
         <translation>Ta paczka próbkuje to, co znajduje się za oknem. W podglądzie tapeta zastępuje prawdziwe okna.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>Ta paczka reaguje na dźwięk. Włącz wizualizację dźwięku w ustawieniach shaderów, aby zobaczyć ją w ruchu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
@@ -21037,7 +21015,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>The focused window is floating, so it has no column to fill</source>
-        <translation>Uaktywnione okno jest pływające, więc nie ma kolumny do wypełnienia</translation>
+        <translation>Aktywne okno jest pływające, więc nie ma kolumny do wypełnienia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
@@ -23295,17 +23273,22 @@
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
+        <comment>@title sample window in a shader preview</comment>
         <translation>Przykładowe okno</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
         <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
         <translation>Inne okno</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
         <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
         <translation>Poprzednia karta</translation>
     </message>
 </context>

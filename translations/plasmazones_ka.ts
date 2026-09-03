@@ -12254,13 +12254,13 @@
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="370"/>
         <source>Set border width for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>საზღვრის სიგანის დაყენება ყველა მონიშნული ზონისთვის (0-%1)</translation>
+        <translation>დააყენეთ საზღვრის სიგანე ყველა მონიშნული ზონისთვის (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="386"/>
         <source>Set corner radius for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>კუთხის რადიუსის დაყენება ყველა მონიშნული ზონისთვის (0-%1)</translation>
+        <translation>დააყენეთ კუთხის რადიუსი ყველა მონიშნული ზონისთვის (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="399"/>
@@ -12480,13 +12480,13 @@
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="793"/>
         <source>Set zone border width in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>ზონის საზღვრის სიგანის დაყენება პიქსელებში (0-%1)</translation>
+        <translation>დააყენეთ ზონის საზღვრის სიგანე პიქსელებში (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
         <source>Set zone corner radius in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>ზონის კუთხის რადიუსის დაყენება პიქსელებში (0-%1)</translation>
+        <translation>დააყენეთ ზონის კუთხის რადიუსი პიქსელებში (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="810"/>
@@ -18893,28 +18893,10 @@
         <translation>ნაგულისხმევი %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>სანიმუშო ფანჯარა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>ამ პაკეტის შეიდერი ვერ დაკომპილირდა.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <source>New Tab</source>
         <comment>@title arriving tab in the animation preview</comment>
         <translation>ახალი ჩანართი</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the animation preview</comment>
-        <translation>ნიმუშის ფანჯარა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
@@ -18926,9 +18908,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder animation preview</comment>
-        <translation>ამ პაკეტის შეიდერი არ აეწყო.</translation>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>ამ პაკეტის შეიდერი ვერ დაკომპილირდა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
@@ -18940,37 +18923,38 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>ფანჯრის გადატანის გადახედვა ნიმუშის ფანჯარაზე.</translation>
+        <translation>ფანჯრის გადატანის გადახედვა სანიმუშო ფანჯარაზე.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
         <source>Previewing a window being dragged back and forth.</source>
         <comment>@info animation preview caption</comment>
-        <translation>იქით და უკან გადათრეული ფანჯრის გადახედვა.</translation>
+        <translation>ფანჯრის წინ და უკან გადათრევის გადახედვა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
         <source>Previewing a tab switch between two sample windows.</source>
         <comment>@info animation preview caption</comment>
-        <translation>ჩანართის გადართვის გადახედვა ორ ნიმუშის ფანჯარას შორის.</translation>
+        <translation>ჩანართის გადართვის გადახედვა ორ სანიმუშო ფანჯარას შორის.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
         <source>Previewing a scroll settling on a stand-in strip.</source>
         <comment>@info animation preview caption</comment>
-        <translation>დროებით ზოლზე გადახვევის დამშვიდების გადახედვა.</translation>
+        <translation>გადახვევის დამშვიდების გადახედვა დროებით ზოლზე.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
         <source>Previewing open, minimize, restore and close on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>გახსნის, ჩაკეცვის, აღდგენისა და დახურვის გადახედვა ნიმუშის ფანჯარაზე.</translation>
+        <translation>გახსნის, ჩაკეცვის, აღდგენისა და დახურვის გადახედვა სანიმუშო ფანჯარაზე.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info animation preview limitation</comment>
-        <translation>ეს პაკეტი ხმაზე რეაგირებს. მისი მოძრაობის სანახავად ჩართეთ ხმის ვიზუალიზატორი შეიდერების პარამეტრებში.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>ეს პაკეტი აუდიოზე რეაგირებს. მისი მოძრაობის სანახავად ჩართეთ აუდიოსპექტრი ზოგად პარამეტრებში.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -18983,12 +18967,6 @@
         <source>This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.</source>
         <comment>@info decoration preview limitation</comment>
         <translation>ეს პაკეტი იმის ნიმუშს იღებს, რაც ფანჯრის უკან არის. გადახედვაში ნამდვილი ფანჯრების ნაცვლად თქვენი ფონია გამოყენებული.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>ეს პაკეტი აუდიოზე რეაგირებს. ჩართეთ აუდიოვიზუალიზატორი შეიდერების პარამეტრებში, რომ მისი მოძრაობა ნახოთ.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
@@ -23241,17 +23219,22 @@
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
-        <translation>ნიმუშის ფანჯარა</translation>
+        <comment>@title sample window in a shader preview</comment>
+        <translation>სანიმუშო ფანჯარა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
         <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
         <translation>სხვა ფანჯარა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
         <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
         <translation>წინა ჩანართი</translation>
     </message>
 </context>

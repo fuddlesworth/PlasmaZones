@@ -289,7 +289,7 @@ Item {
                             // inside transparent room — the sub-rect the
                             // anchor fold describes.
                             anchors.margins: field.canvasPad
-                            title: root._class === "tab" ? i18nc("@title arriving tab in the animation preview", "New Tab") : i18nc("@title sample window in the animation preview", "Sample Window")
+                            title: root._class === "tab" ? i18nc("@title arriving tab in the animation preview", "New Tab") : i18nc("@title sample window in a shader preview", "Sample Window")
                         }
                     }
 
@@ -641,7 +641,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 1
                 visible: !root._previewable || !previewLoader.item || !previewLoader.item.configured || previewLoader.item.shaderItem.status === AnimationShaderItem.Error || previewLoader.item.shaderItem.status === AnimationShaderItem.Loading
-                text: (previewLoader.item && previewLoader.item.configured && previewLoader.item.shaderItem.status === AnimationShaderItem.Error) ? i18nc("@info:placeholder animation preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+                text: (previewLoader.item && previewLoader.item.configured && previewLoader.item.shaderItem.status === AnimationShaderItem.Error) ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 backgroundColor: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing
             }
@@ -679,7 +679,7 @@ Item {
             // DecorationPreviewPane's twin notice.
             visible: root._isAudioPack && root.previewController !== null && !root.previewController.audioVisualizerEnabled
             type: Kirigami.MessageType.Information
-            text: i18nc("@info animation preview limitation", "This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.")
+            text: i18nc("@info shader preview limitation", "This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.")
         }
     }
 }

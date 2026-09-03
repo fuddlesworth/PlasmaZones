@@ -12486,7 +12486,7 @@
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
         <source>Set zone corner radius in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Zonen-Eckenradius in Pixeln festlegen (0-%1)</translation>
+        <translation>Zoneneckenradius in Pixeln festlegen (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="810"/>
@@ -18893,28 +18893,10 @@
         <translation>Standard %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>Beispielfenster</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>Der Shader dieses Pakets ließ sich nicht kompilieren.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <source>New Tab</source>
         <comment>@title arriving tab in the animation preview</comment>
         <translation>Neuer Reiter</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the animation preview</comment>
-        <translation>Beispielfenster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
@@ -18926,15 +18908,16 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder animation preview</comment>
+        <comment>@info:placeholder shader preview</comment>
         <translation>Der Shader dieses Pakets konnte nicht kompiliert werden.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
         <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Vorschau eines Desktop-Wechsels hin und zurück auf Platzhalter-Desktops.</translation>
+        <translation>Vorschau eines Arbeitsflächenwechsels hin und zurück auf Platzhalter-Arbeitsflächen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
@@ -18968,9 +18951,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info animation preview limitation</comment>
-        <translation>Dieses Paket reagiert auf Audio. Schalten Sie die Audio-Visualisierung in den Shader-Einstellungen ein, um es in Bewegung zu sehen.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>Dieses Paket reagiert auf Audio. Schalten Sie das Audiospektrum in den allgemeinen Einstellungen ein, um es in Bewegung zu sehen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -18983,12 +18967,6 @@
         <source>This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.</source>
         <comment>@info decoration preview limitation</comment>
         <translation>Dieses Paket tastet ab, was hinter dem Fenster liegt. In der Vorschau steht Ihr Hintergrundbild für die echten Fenster ein.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>Dieses Paket reagiert auf Audio. Schalten Sie die Audiovisualisierung in den Shader-Einstellungen ein, um es in Bewegung zu sehen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
@@ -23241,17 +23219,22 @@
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
+        <comment>@title sample window in a shader preview</comment>
         <translation>Beispielfenster</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
         <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
         <translation>Anderes Fenster</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
         <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
         <translation>Vorheriger Reiter</translation>
     </message>
 </context>

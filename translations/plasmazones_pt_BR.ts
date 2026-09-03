@@ -12254,13 +12254,13 @@
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="370"/>
         <source>Set border width for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Definir a largura da borda de todas as zonas selecionadas (0-%1)</translation>
+        <translation>Define a largura da borda de todas as zonas selecionadas (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="386"/>
         <source>Set corner radius for all selected zones (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Definir o raio dos cantos de todas as zonas selecionadas (0-%1)</translation>
+        <translation>Define o raio dos cantos de todas as zonas selecionadas (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="399"/>
@@ -12480,13 +12480,13 @@
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="793"/>
         <source>Set zone border width in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Definir a largura da borda da zona em pixels (0-%1)</translation>
+        <translation>Define a largura da borda da zona em pixels (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
         <source>Set zone corner radius in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
-        <translation>Definir o raio dos cantos da zona em pixels (0-%1)</translation>
+        <translation>Define o raio dos cantos da zona em pixels (0-%1)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="810"/>
@@ -18893,28 +18893,10 @@
         <translation>padrão %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the decoration preview</comment>
-        <translation>Janela de exemplo</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
-        <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder decoration preview</comment>
-        <translation>O shader deste pacote não compilou.</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
         <source>New Tab</source>
         <comment>@title arriving tab in the animation preview</comment>
         <translation>Nova aba</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
-        <source>Sample Window</source>
-        <comment>@title sample window in the animation preview</comment>
-        <translation>Janela de exemplo</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
@@ -18926,21 +18908,22 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
-        <comment>@info:placeholder animation preview</comment>
+        <comment>@info:placeholder shader preview</comment>
         <translation>O shader deste pacote não compilou.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
         <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Visualização de uma troca de área de trabalho, ida e volta, em áreas de trabalho de exemplo.</translation>
+        <translation>Visualização de uma troca de área de trabalho, ida e volta, em áreas de trabalho provisórias.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Visualização de uma janela sendo movida, em uma janela de exemplo.</translation>
+        <translation>Visualização de uma janela sendo movida em uma janela de exemplo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
@@ -18958,7 +18941,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
         <source>Previewing a scroll settling on a stand-in strip.</source>
         <comment>@info animation preview caption</comment>
-        <translation>Visualização de uma rolagem se acomodando em uma faixa de exemplo.</translation>
+        <translation>Visualização de uma rolagem se acomodando em uma faixa provisória.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
@@ -18968,9 +18951,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info animation preview limitation</comment>
-        <translation>Este pacote reage ao áudio. Ligue o visualizador de áudio nas configurações de Shaders para vê-lo se mexer.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
+        <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
+        <comment>@info shader preview limitation</comment>
+        <translation>Este pacote reage ao áudio. Ligue o Espectro de áudio nas configurações gerais para vê-lo se mover.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="161"/>
@@ -18983,12 +18967,6 @@
         <source>This pack samples whatever sits behind the window. The preview stands your wallpaper in for the real windows.</source>
         <comment>@info decoration preview limitation</comment>
         <translation>Este pacote amostra o que está atrás da janela. Na visualização, o papel de parede fica no lugar das janelas reais.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
-        <source>This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.</source>
-        <comment>@info decoration preview limitation</comment>
-        <translation>Este pacote reage ao áudio. Ligue o visualizador de áudio nas configurações de Shaders para vê-lo se mover.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="996"/>
@@ -20987,7 +20965,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>The focused window is floating, so it has no column to fill</source>
-        <translation>A janela em foco está flutuante, portanto não tem coluna para preencher</translation>
+        <translation>A janela focalizada está flutuante, portanto não tem coluna para preencher</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
@@ -23241,17 +23219,22 @@
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="525"/>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="114"/>
         <source>Sample Window</source>
+        <comment>@title sample window in a shader preview</comment>
         <translation>Janela de exemplo</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="526"/>
         <source>Another Window</source>
+        <comment>@title second stand-in window in a shader preview</comment>
         <translation>Outra janela</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationpreviewcontroller.cpp" line="575"/>
         <source>Previous Tab</source>
+        <comment>@title outgoing tab in the animation preview</comment>
         <translation>Aba anterior</translation>
     </message>
 </context>
