@@ -217,7 +217,14 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall
         // through to the normal scene THIS frame; reapSettled frees the
-        // entry from postPaintScreen.
+        // entry from postPaintScreen. Release the cursor hide NOW rather
+        // than leaving it to that reap: the normal scene about to paint
+        // draws KWin's overlay item at the end of its walk and honours the
+        // item's visibility at draw time, so showing the cursor here puts
+        // it in this very frame. Left until postPaintScreen, the settle
+        // frame would paint with no cursor at all — one blink at the end
+        // of every leg.
+        updateCursorHiding();
         return false;
     }
 
@@ -241,13 +248,6 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         endOutput(screen);
         return false;
     }
-
-    // Keep KWin's own cursor out of the capture below (see the header): the
-    // scene walk paints the overlay item last, and a software cursor drawn
-    // into uStrip is smeared by the pack and never redrawn sharp, since this
-    // pass replaces the output's paint. Hidden here, blitted by drawCursor
-    // at the tail.
-    hideCursorForPass(screen);
 
     // Ensure the persistent capture target, revalidated against this frame's
     // device size and on-screen format (output scale/mode change, HDR flip).
@@ -277,6 +277,16 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             return false;
         }
     }
+
+    // Keep KWin's own cursor out of the capture below (see the header): the
+    // scene walk paints the overlay item last, and a software cursor drawn
+    // into uStrip is smeared by the pack and never redrawn sharp, since this
+    // pass replaces the output's paint. Hidden here, blitted by drawCursor
+    // at the tail. Placed AFTER the compile and allocation checks above so
+    // no return-false path between the hide and the tail exists: a pass
+    // that abandons this frame paints the normal scene with the cursor
+    // still shown.
+    hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain
     // call (effects below us + the scene), NOT a re-entry into our own
@@ -681,8 +691,18 @@ void StripTransitionManager::updateCursorHiding()
     if (!m_cursorHidden) {
         return;
     }
+    // LIVE passes only, not merely armed entries: an entry whose spring has
+    // settled and whose fade has closed no longer replaces the output's
+    // paint (paintOutput returns false), so the normal scene draws that
+    // output and needs KWin's own cursor back. paintOutput calls this on
+    // that settle frame BEFORE the entry is reaped, which is why the armed
+    // set alone cannot be the test. Live clock, same accepted skew as
+    // reapSettled.
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     for (const auto& entry : m_active) {
-        if (cursorOnOutput(entry.first)) {
+        const bool live =
+            m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs);
+        if (live && cursorOnOutput(entry.first)) {
             return; // a live pass still paints the cursor itself
         }
     }

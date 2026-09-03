@@ -253,14 +253,18 @@ private:
     /// cursor plane) and the pass blits the cursor image itself as its last
     /// draw, above the composited above-strip windows.
     ///
-    /// Hides when @p screen's pass is about to paint and the pointer is on
-    /// it. A no-op when another effect already hides the cursor, so the pass
-    /// never resurrects a cursor something else wanted gone.
+    /// Hides when @p screen's pass is about to capture (its shader compiled
+    /// and its capture target allocated, so the pass WILL replace this
+    /// frame's paint) and the pointer is on it. A no-op when another effect
+    /// already hides the cursor, so the pass never resurrects a cursor
+    /// something else wanted gone.
     void hideCursorForPass(KWin::LogicalOutput* screen);
-    /// Show the cursor again once no live pass covers the pointer: the leg
-    /// settled, the output went away, or the pointer moved to an output with
-    /// no pass. Runs from every postPaintScreen while any pass is active, so
-    /// a pointer crossing to a quiet output gets its cursor back within a
+    /// Show the cursor again once no LIVE pass (spring live or fade open)
+    /// covers the pointer: the leg settled, the output went away, or the
+    /// pointer moved to an output with no pass. Runs from paintOutput's
+    /// settle frame, so that frame's normal scene paints the cursor rather
+    /// than blinking it for a frame, and from every postPaintScreen, so a
+    /// pointer crossing to a quiet output gets its cursor back within a
     /// frame even though the hidden cursor damages nothing there.
     void updateCursorHiding();
     /// Render the scene's own cursor item into the pass, at the pointer.
