@@ -400,6 +400,25 @@ void Daemon::connectDesktopActivity()
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
+                // [SEQ E½] Re-announce the managed set UNCONDITIONALLY for this
+                // report. The effect's staleness gate rejects any announce whose
+                // per-screen desktop stamps disagree with what it last reported,
+                // and its contract is "rejection converges: the daemon
+                // re-announces for the desktop the effect has since reported".
+                // updateEngineScreens only announces when the managed set
+                // CHANGES, so on a global switch (the effect fans out one report
+                // per output) the first report's announce carries the other
+                // outputs' not-yet-updated desktops, gets rejected, and the
+                // later reports change nothing — the promised follow-up never
+                // came and the effect kept the old desktop's managed set. That
+                // stale set is how focus-follows-mouse kept running on an
+                // unassigned desktop (discussion #1028 follow-up). The adaptor
+                // coalesces per event-loop turn and stamps desktops at emit
+                // time, so the burst's last announce carries a fully consistent
+                // map and is accepted.
+                if (m_tilingAdaptor) {
+                    m_tilingAdaptor->notifyEngineScreensChanged(/*isDesktopSwitch=*/true);
+                }
                 // A desktop whose assignment is snapping demotes the screen out
                 // of tiling in the recompute above; nothing further on this path
                 // consumes the preserved snap-ZONE half, so put the released

@@ -1326,6 +1326,19 @@ target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus pla
                                                PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
+# Drag-insert cancel sweep seams + desktop-switch announce burst (the #1028
+# follow-up mechanisms): the live sweep's dragStillActive derivation, the
+# dead-session sweep's mark-first ordering, and TilingAdaptor's emit-time
+# desktop stamping under a per-output report burst.
+add_executable(test_windowdrag_cancel_sweeps dbus/test_windowdrag_cancel_sweeps.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+# Constructs a real AutotileEngine — contractual link (see the
+# test_drag_policy rationale).
+target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                            PhosphorTileEngine::PhosphorTileEngine)
+add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
+
 # Truth-table guard for resolveActivationActive() - pins the per-tick
 # overlay-active decision (toggle latch + deactivation override + the
 # always-active gate that scopes deactivation to its UI surface, #249).

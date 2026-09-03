@@ -72,6 +72,7 @@ private Q_SLOTS:
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
+    void midDragCancelReinsertsWithoutEmittingDraggedRect();
     void detachedResidueHealsInsteadOfLatching();
     void cancelRestoresADefensivelyDetachedWindow();
     void reentrantBeginRestoresPriorWindow();
@@ -1041,6 +1042,49 @@ void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
         emittedA = emittedA || emission.first().toString().contains(QStringLiteral("\"a\""));
     }
     QVERIFY(emittedA);
+}
+
+void TestScrollEngineDragInsert::midDragCancelReinsertsWithoutEmittingDraggedRect()
+{
+    // The cancel's ignored dragStillActive parameter is safe BECAUSE of the
+    // interactive-drag mark: a mid-drag cancel (trigger released, pointer
+    // still holding the window) re-inserts the window into the strip MODEL
+    // and reflows the neighbours, while the dragged window's own rect is
+    // never emitted — the daemon holds the mark for the whole drag. This is
+    // the niri-style behaviour the definition-site comment describes.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    engine->setInteractiveDragWindow(QStringLiteral("b"));
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("b")));
+
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->cancelDragInsertPreview(/*dragStillActive=*/true);
+
+    // Model re-insert happened even though the pointer still holds the frame.
+    QVERIFY(!engine->hasDragInsertPreview());
+    QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
+
+    // The re-insert relayout reflows neighbours (their columns shrank back),
+    // and the non-empty-batch guard keeps the no-"b" scan from passing
+    // vacuously, mirroring beginDetachesFromStrip's idiom.
+    QVERIFY(tiledSpy.count() >= 1);
+    bool sawSurvivingWindow = false;
+    for (const auto& emission : tiledSpy) {
+        const QString payload = emission.first().toString();
+        if (payload.contains(QStringLiteral("\"a\"")) || payload.contains(QStringLiteral("\"c\""))) {
+            sawSurvivingWindow = true;
+        }
+        QVERIFY2(!payload.contains(QStringLiteral("\"b\"")),
+                 "mid-drag cancel emitted the dragged window's rect while KWin still owns the frame");
+    }
+    QVERIFY(sawSurvivingWindow);
+    engine->setInteractiveDragWindow(QString());
 }
 
 void TestScrollEngineDragInsert::detachedResidueHealsInsteadOfLatching()

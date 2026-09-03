@@ -296,13 +296,23 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     // evaluated after its per-screen cancels have run, so do not
     // "harmonise" it to stop-first.
     stopDragScrollTimer();
+    // A preview normally belongs to the live drag's window, so a still-active
+    // drag session means the cancel retile must keep suppressing that
+    // window's geometry (see IPlacementEngine::cancelDragInsertPreview).
+    // STALE previews from a dead session must not reach this derivation —
+    // the dead-session paths (a fresh beginDrag, a compositor reconnect, a
+    // pending drag's exit) route through cancelStaleDragInsertPreviews
+    // instead, which cancels with an explicit false. As defense-in-depth,
+    // autotile additionally ignores a true flag when the interactive-drag
+    // mark names a different window than the preview.
+    const bool dragStillActive = isDragSessionActive();
     // At most one engine holds a preview, but sweep both — a stale second
     // preview would otherwise be unreachable by every cleanup path.
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->cancelDragInsertPreview();
+        m_autotileEngine->cancelDragInsertPreview(dragStillActive);
     }
     if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
-        m_scrollEngine->cancelDragInsertPreview();
+        m_scrollEngine->cancelDragInsertPreview(dragStillActive);
     }
     clearScrollDropIndicator();
 }
@@ -310,6 +320,46 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
 void WindowDragAdaptor::cancelDragInsertPreviews()
 {
     cancelDragInsertIfActive();
+}
+
+void WindowDragAdaptor::cancelStaleDragInsertPreviews()
+{
+    // Mark FIRST, cancels second — the cancels' snap-back retiles run
+    // synchronously inside cancelDragInsertPreview, and a mark still
+    // standing would suppress the very geometry this sweep exists to
+    // re-emit (applyTiling / applyLayout skip the marked window
+    // unconditionally, and clearing the mark deliberately does not retile).
+    setEngineInteractiveDragWindow(QString());
+    stopDragScrollTimer();
+    // Explicit false, never the session-liveness derivation: these paths run
+    // where the prior session is dead by construction (a fresh beginDrag —
+    // the compositor runs one interactive move at a time, so a new begin
+    // means the old move ended; a compositor reconnect; a pending drag's
+    // exit), but the dead session's ids can still be populated and would
+    // derive a phantom "still active".
+    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+        m_autotileEngine->cancelDragInsertPreview(/*dragStillActive=*/false);
+    }
+    if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
+        m_scrollEngine->cancelDragInsertPreview(/*dragStillActive=*/false);
+    }
+    clearScrollDropIndicator();
+}
+
+void WindowDragAdaptor::setEngineInteractiveDragWindow(const QString& windowId)
+{
+    // Both engines, always: each keeps the dragged window modeled as a tile
+    // in its own way (the scroll strip's DETACH-ONCE slot, autotile's tiled
+    // list), and each suppresses its own mid-drag geometry emission off this
+    // mark. The cursor's CURRENT screen is deliberately not consulted — a
+    // drag can cross engines, and the mark must already be in place on the
+    // engine the cursor arrives at.
+    if (m_autotileEngine) {
+        m_autotileEngine->setInteractiveDragWindow(windowId);
+    }
+    if (m_scrollEngine) {
+        m_scrollEngine->setInteractiveDragWindow(windowId);
+    }
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenId)
@@ -331,11 +381,15 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
         return PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId)
             || PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewPriorScreenId(), screenId);
     };
+    // Same reasoning as cancelDragInsertIfActive: this runs from desktop
+    // switches and output removals that can land mid-drag, and the cancel
+    // retile must not resize the window still in the user's hand.
+    const bool dragStillActive = isDragSessionActive();
     if (affected(m_autotileEngine)) {
-        m_autotileEngine->cancelDragInsertPreview();
+        m_autotileEngine->cancelDragInsertPreview(dragStillActive);
     }
     if (affected(m_scrollEngine)) {
-        m_scrollEngine->cancelDragInsertPreview();
+        m_scrollEngine->cancelDragInsertPreview(dragStillActive);
     }
     // Clear the indicator on the departing output regardless of whether any
     // engine cancel ran above. The engine may have self-cancelled its own
@@ -544,9 +598,7 @@ void WindowDragAdaptor::cancelSnap()
     if (m_draggedWindowId.isEmpty() && !m_pendingSnapDragWindowId.isEmpty()) {
         const QString pendingWindow = m_pendingSnapDragWindowId;
         clearPendingSnapDragState();
-        if (m_scrollEngine) {
-            m_scrollEngine->setInteractiveDragWindow(pendingWindow);
-        }
+        setEngineInteractiveDragWindow(pendingWindow);
     }
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
@@ -589,9 +641,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     // If this window was being dragged, clean up drag state
     if (windowId == m_draggedWindowId) {
         cancelDragInsertIfActive();
-        if (m_scrollEngine) {
-            m_scrollEngine->setInteractiveDragWindow(QString());
-        }
+        setEngineInteractiveDragWindow(QString());
         // Drag-teardown: only drop the shared Escape grab if no picker / snap
         // assist still needs it. A layout picker can be open over an in-flight
         // drag, and it holds kCancelOverlayId — an unconditional release here
@@ -820,7 +870,16 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // preview whose window stays structurally detached. This is the call the
     // "every preview-end path" contract on cancelDragInsertIfActive's
     // declaration asks every new teardown to add.
-    cancelDragInsertIfActive();
+    //
+    // The STALE sweep, not cancelDragInsertIfActive: the compositor holding
+    // the interactive move is GONE, so no move survives this path — the
+    // liveness derivation would read the dead session's ids as a live drag,
+    // suppress the cancel retile's snap-back, and park the previously-
+    // dragged window at its mid-drag geometry until an unrelated retile.
+    // The helper also clears the interactive-drag mark BEFORE cancelling,
+    // for the same reason (the mark suppresses geometry independently of
+    // the flag).
+    cancelStaleDragInsertPreviews();
     // The zone selector popup and its stored selection belong to the dead
     // session too: resetDragState clears neither, and with the compositor
     // gone no drag-end ever will. A surviving shown-flag pair plus the
