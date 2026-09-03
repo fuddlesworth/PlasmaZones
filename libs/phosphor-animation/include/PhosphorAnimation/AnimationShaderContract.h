@@ -60,7 +60,8 @@ namespace PhosphorAnimationShaders {
 ///     AnimationUniforms { ... };` — std140-aligned with
 ///     `PhosphorShaders::BaseUniforms` covering the base footprint
 ///     (672 bytes; pinned by BaseUniforms.h's static_asserts) plus the
-///     48-byte anchor extension (AnimationUniformExtension, total 720),
+///     672-byte anchor + transition extension (AnimationUniformExtension,
+///     total 1344),
 ///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
@@ -683,7 +684,7 @@ inline QString colorKey(int slot)
 /// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
 /// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
 /// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
-/// tail (iSurfaceScreenPos .. iAnchorRectInTexture, bytes 672-719, 720 total)
+/// tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344 total)
 /// is supplied by AnimationUniformExtension and pinned by the size
 /// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
 /// If anyone reorders `BaseUniforms`, those asserts fail at compile time

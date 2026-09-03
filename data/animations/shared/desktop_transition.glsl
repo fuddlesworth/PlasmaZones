@@ -29,10 +29,18 @@
 // fine; what is NOT fine is a pack that only holds its endpoints for t
 // exactly 0 and 1.
 //
-// Desktop transitions only ever run in the kwin-effect, and compositor-only
-// packs are excluded from the daemon's SPIR-V bake entirely, so the samplers
-// are declared unguarded: KWin's GLShader binds them by uniform location +
-// glActiveTexture, so no layout(binding) qualifier is needed.
+// Desktop transitions only ever ATTACH in the kwin-effect (the daemon has
+// no desktop scene to capture), but the pack sources compile on both
+// uniform ABIs so the settings preview can play them against stand-in
+// endpoints and the SPIR-V bake tests cover them. On the kwin branch the
+// samplers are declared unguarded — KWin's GLShader binds them by uniform
+// location + glActiveTexture, so no layout(binding) qualifier is needed.
+// On the UBO branch they alias the per-frame user-texture slots
+// (uFromDesktop = uTexture1, uToDesktop = uTexture2) and iSwitchDelta
+// comes from the AnimationUniforms block's transition tail; a host feeds
+// the endpoints with ShaderEffect::setUserTexture. No compositor-only pack
+// declares user textures of its own, which is what keeps the aliasing
+// collision-free — a pack that starts doing so must avoid slots 1 and 2.
 //
 // WHAT IS ACTUALLY BOUND ON THIS PASS. DesktopTransitionManager caches and
 // pushes exactly: uFromDesktop, uToDesktop, iTime, iResolution, iFrame,
@@ -62,8 +70,15 @@
 #ifndef PLASMAZONES_DESKTOP_TRANSITION_GLSL
 #define PLASMAZONES_DESKTOP_TRANSITION_GLSL
 
+#ifdef PLASMAZONES_KWIN
 uniform sampler2D uFromDesktop;
 uniform sampler2D uToDesktop;
+#else
+// The AnimationUniforms block (animation_uniforms.glsl) already declares
+// iSwitchDelta in its transition tail; only the samplers need a home here.
+#define uFromDesktop uTexture1
+#define uToDesktop uTexture2
+#endif
 
 // vec4 iSwitchDelta — the actual switch direction, pushed once per transition
 // by the kwin-effect (DesktopTransitionManager::begin computes it from the
@@ -75,7 +90,9 @@ uniform sampler2D uToDesktop;
 // through switchDirection() below so their configured direction params still
 // apply as the fallback (and as the forced direction when the pack's
 // followSwitch toggle is off).
+#ifdef PLASMAZONES_KWIN
 uniform vec4 iSwitchDelta;
+#endif
 
 // The switch direction as a unit vector, falling back to `fallback` (a pack's
 // configured direction params, passed through un-normalized) when the runtime
@@ -90,13 +107,24 @@ vec2 switchDirection(vec2 fallback) {
 
 // The captured desktop FBOs are KWin Y-up (origin bottom-left), while the
 // full-screen quad hands us a top-down uv, so flip Y on the sample — same
-// convention as surfaceColor / oldColor in the per-window path.
+// convention as surfaceColor / oldColor in the per-window path. The Qt-RHI
+// textures a preview host uploads are top-origin (Y-down), so the UBO
+// branch samples the uv directly, mirroring surfaceColor's per-branch
+// split.
 vec4 getFromColor(vec2 uv) {
+#ifdef PLASMAZONES_KWIN
     return texture(uFromDesktop, vec2(uv.x, 1.0 - uv.y));
+#else
+    return texture(uFromDesktop, uv);
+#endif
 }
 
 vec4 getToColor(vec2 uv) {
+#ifdef PLASMAZONES_KWIN
     return texture(uToDesktop, vec2(uv.x, 1.0 - uv.y));
+#else
+    return texture(uToDesktop, uv);
+#endif
 }
 
 // Crossfade the two captured desktops at one uv: the outgoing desktop at t=0,

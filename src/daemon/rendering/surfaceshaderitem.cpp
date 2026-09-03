@@ -393,17 +393,33 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
             } else {
+                // Read the node's error BEFORE clearing — clearBakedShader
+                // wipes it along with the resident bake.
                 QString errorMsg = node->shaderError();
                 if (errorMsg.isEmpty()) {
                     errorMsg = QStringLiteral("Shader loading failed - missing required files");
                 }
+                // Drop the partially-set sources and the resident bake
+                // together (same pattern as ShaderEffect::updatePaintNode):
+                // on the node-REUSE path a previously good bake keeps
+                // isShaderReady() true, and the status block below would
+                // promote the Error back to Ready in the same sync; the
+                // armed rebake would then stamp an "empty source" error
+                // over this real one on the next prepare().
+                node->setVertexShaderSource(QString());
+                node->setFragmentShaderSource(QString());
+                node->clearBakedShader();
                 setError(errorMsg);
             }
         } else {
-            // Source empty — clear node.
+            // Source empty — clear node. clearBakedShader (not
+            // invalidateShader) drops the resident bake so the status block
+            // below cannot promote Null back to Ready, and cancels the
+            // rebake so a deliberate clear does not end at a manufactured
+            // "empty source" Error.
             node->setVertexShaderSource(QString());
             node->setFragmentShaderSource(QString());
-            node->invalidateShader();
+            node->clearBakedShader();
             setStatus(Status::Null);
         }
     }

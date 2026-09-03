@@ -557,10 +557,10 @@ private Q_SLOTS:
     /// Every `previewController.<name>` the decoration preview QML calls must
     /// exist on this controller.
     ///
-    /// The animations route has the same guard for its `bridge.*` surface, but
-    /// it only ever instantiates AnimationsPageController, so it cannot speak
-    /// for these files — and `previewController` itself is on its
-    /// documented-optional list, which excludes it from every check there. A
+    /// The animations route has the same guard for its `bridge.*` surface
+    /// plus its own previewController mirror for AnimationPreviewPane
+    /// (test_animations_qml_contracts), but it cannot speak for THESE files:
+    /// their previewController is this controller, not that route's. A
     /// renamed or mistyped invokable is otherwise a silent runtime TypeError
     /// and a blank preview, not a build failure.
     void every_preview_controller_call_from_the_decoration_qml_is_reachable()
@@ -588,8 +588,14 @@ private Q_SLOTS:
         // calls through it, so it does not carry the token today — listed
         // anyway, because a card that starts calling one directly belongs to
         // the same route-agnostic exemption rather than to this guard.
+        // AnimationPreviewPane belongs to the ANIMATION route: its
+        // previewController is an AnimationPreviewController, so holding this
+        // controller to its calls would demand the wrong route's API — the
+        // exact mistake the note above describes for the dialog. Its own
+        // metaobject mirror lives in test_animations_qml_contracts.
         const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
-                                   settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml")};
+                                   settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml"),
+                                   settingsQml + QStringLiteral("/AnimationPreviewPane.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
         while (sweep.hasNext()) {
             const QString path = sweep.next();

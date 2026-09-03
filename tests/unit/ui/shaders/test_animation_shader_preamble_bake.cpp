@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// End-to-end proof for T1.1 on the animation side: for every daemon-eligible
-// built-in animation shader, generate its `#define p_<id> ...` preamble from
+// End-to-end proof for T1.1 on the animation side: for every built-in
+// animation shader, generate its `#define p_<id> ...` preamble from
 // metadata.json (via the production AnimationShaderRegistry::paramPreamble),
 // splice it after #version into the include-expanded source, and bake the
 // result through ShaderCompiler. This pins that the GENERATED accessors
 // actually compile against the real animation UBO (animation_uniforms.glsl) —
 // catching any naming, slot, or UBO-mismatch regression before the preamble
-// is wired into the live runtimes. Compositor-only packs are excluded (their
-// source is kwin classic-GL by design); test_animation_shader_kwin_bake
-// covers their preamble compile WHERE a desktop-GL 4.5 context exists — it
-// QSKIPs headless, so a GPU-less CI run leaves those packs uncovered.
+// is wired into the live runtimes. Compositor-only packs bake here too: the
+// shared transition includes carry UBO branches, so every pack's effect.frag
+// assembles and compiles under the strict SPIR-V target (attach to a daemon
+// surface is still refused elsewhere). Their kwin-dialect coverage remains
+// test_animation_shader_kwin_bake, which needs a desktop-GL 4.5 context and
+// QSKIPs headless.
 //
 // Also asserts the p_<id> macro for at least one known param resolves to the
 // SAME lane the runtime's translateAnimationParams uploads to, so a future
@@ -67,14 +69,12 @@ private Q_SLOTS:
             const QString packDir = animationsDir + QLatin1Char('/') + sub;
             if (QFileInfo::exists(packDir + QStringLiteral("/effect.frag"))
                 && QFileInfo::exists(packDir + QStringLiteral("/metadata.json"))) {
-                // Compositor-only packs (desktop / geometry / move classes)
-                // are authored against the kwin classic-GL dialect with no
-                // daemon branch — the strict SPIR-V target rejects their
-                // default-block uniforms by design. Their compile coverage
-                // is test_animation_shader_kwin_bake.
-                if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(loadEffect(packDir))) {
-                    continue;
-                }
+                // Compositor-only packs bake here too: the shared
+                // transition includes carry UBO branches, so every pack's
+                // effect.frag assembles and compiles under the strict
+                // SPIR-V target. Attach to a daemon surface is still
+                // refused elsewhere; kwin-dialect coverage remains
+                // test_animation_shader_kwin_bake.
                 QTest::newRow(qPrintable(sub)) << packDir;
                 any = true;
             }

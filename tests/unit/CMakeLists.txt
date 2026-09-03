@@ -973,19 +973,20 @@ target_link_libraries(test_zone_uniform_extension PRIVATE Qt6::Test Qt6::Core Qt
 target_compile_definitions(test_zone_uniform_extension PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 
-# Bake-check the VERTEX stage of every daemon-eligible animation pack (plus
+# Bake-check the VERTEX stage of every animation pack (plus
 # shared/animation.vert) against ShaderCompiler so a qsb-incompatible source
 # change (e.g. accidentally re-introducing default-block uniforms in
 # #version 450) fails CI instead of silently breaking the daemon's
 # overlay-surface animation path. Pinned by the canonical UBO declaration in
-# data/animations/shared/animation_uniforms.glsl. Compositor-only packs are
-# excluded here (their source is kwin classic-GL by design). They are compiled
+# data/animations/shared/animation_uniforms.glsl. Compositor-only packs bake
+# here too — the shared includes carry UBO branches, so every vert compiles
+# under the strict SPIR-V target. Their kwin-dialect variant is compiled
 # headlessly by the shader_validate_animations gate, which shells out to
 # glslang, and additionally by test_animation_shader_kwin_bake where a
 # desktop-GL 4.5 context exists (it QSKIPs headless). Fragment-stage coverage
 # lives in test_animation_shader_preamble_bake.
 add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
-target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering)
+target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
 
@@ -1019,12 +1020,13 @@ add_executable(test_shader_param_preamble ui/shaders/test_shader_param_preamble.
 target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
 
-# End-to-end: every daemon-eligible built-in animation shader must still bake
+# End-to-end: every built-in animation shader must still bake
 # once its generated `#define p_<id> ...` preamble is spliced in — proving the
 # generated accessors compile against the real animation UBO. Compositor-only
-# packs are excluded here. The shader_validate_animations gate compiles them
-# headlessly through glslang, and test_animation_shader_kwin_bake covers them
-# again where a desktop-GL 4.5 context exists (it QSKIPs headless).
+# packs bake here too under the UBO branch. The shader_validate_animations
+# gate compiles their kwin-dialect variant headlessly through glslang, and
+# test_animation_shader_kwin_bake covers it again where a desktop-GL 4.5
+# context exists (it QSKIPs headless).
 add_executable(test_animation_shader_preamble_bake ui/shaders/test_animation_shader_preamble_bake.cpp)
 target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
@@ -1458,6 +1460,10 @@ add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_con
 # cannot silently miss one of the eleven.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/animationpreviewcontroller.cpp
+    # The preview controller's move simulation drives the kwin-effect's
+    # wobble spring integrator (see animationpreviewcontroller.h).
+    ${CMAKE_SOURCE_DIR}/kwin-effect/plasmazoneseffect/mesh_sim.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_overrides.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_groupwrites.cpp
@@ -1487,6 +1493,7 @@ target_link_libraries(test_animations_page_controller
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1504,6 +1511,7 @@ target_link_libraries(test_animations_suppression_mirror
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1527,6 +1535,7 @@ target_link_libraries(test_animations_qml_contracts
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1547,6 +1556,7 @@ target_link_libraries(test_animations_profile_store_sync
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1567,6 +1577,7 @@ target_link_libraries(test_animations_group_writes
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1582,6 +1593,7 @@ target_link_libraries(test_animations_group_write_bounds
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1598,6 +1610,7 @@ target_link_libraries(test_animations_motion_sets
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1616,6 +1629,7 @@ target_link_libraries(test_animations_presets
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1632,6 +1646,7 @@ target_link_libraries(test_animations_shader_overrides
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1653,6 +1668,7 @@ target_link_libraries(test_animations_shader_param_writes
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
@@ -1673,6 +1689,7 @@ target_link_libraries(test_animations_stale_params
         Qt6::Core
         Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
