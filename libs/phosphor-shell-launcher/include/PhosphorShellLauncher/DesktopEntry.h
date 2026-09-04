@@ -70,6 +70,14 @@ struct PHOSPHORSHELLLAUNCHER_EXPORT DesktopEntry
     // file that is unreadable, has no [Desktop Entry] group, is not
     // Type=Application, has no Name, or names a TryExec that cannot be
     // found on PATH (the spec's "treat as if it did not exist").
+    ///
+    /// `id` is the entry id to stamp on the result. The DEFAULT derives one
+    /// from the file's own name alone, which is NOT what a scan produces: the
+    /// scanner folds a vendor subdirectory into the id with a hyphen
+    /// ("kde4/foo.desktop" becomes "kde4-foo"), because that is what makes an
+    /// id unique across a whole applications tree. A caller parsing one file
+    /// out of context gets the simpler form, which is right for that use and
+    /// will not match the same file's id from a scan.
     [[nodiscard]] static std::optional<DesktopEntry> parse(const QString& filePath, const QString& locale,
                                                            const QString& id = QString());
 };

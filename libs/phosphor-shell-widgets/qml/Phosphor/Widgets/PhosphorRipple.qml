@@ -112,12 +112,6 @@ Item {
     // severs any binding on that property permanently, and the symptom
     // is a value that simply stops updating. Bind a wrapper instead, or
     // move the animation onto a helper property this one reads.
-    // NOTE for anyone binding a property of this Shape: the ripple
-    // animation below drives `opacity` through PropertyAction and
-    // NumberAnimation, which are imperative writes. The first ripple
-    // severs any binding on that property permanently, and the symptom
-    // is a value that simply stops updating. Bind a wrapper instead, or
-    // move the animation onto a helper property this one reads.
     Shape {
         id: sweep
 
@@ -221,7 +215,7 @@ Item {
     // Restart the ripple from a fresh press point. Stopping first resets
     // any in-flight sweep so rapid taps each get their own ripple rather
     // than stacking on a half-faded one.
-    function start(px, py) {
+    function start(px: real, py: real): void {
         rippleAnim.stop();
         sweep.cx = px;
         sweep.cy = py;
