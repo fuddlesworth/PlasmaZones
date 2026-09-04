@@ -126,9 +126,20 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
             // fallback would try to build a second shell there. Put the lib
             // back before giving up, so the failure is the clean no-op the
             // caller's contract expects.
-            qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
-                                 << "vanished during the target-side modal reset; reverting lib-side rekey";
-            m_shellHost->rekey(newKey, oldKey);
+            if (m_shellHost->rekey(newKey, oldKey)) {
+                qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
+                                     << "vanished during the target-side modal reset; reverted lib-side rekey";
+            } else {
+                // Whatever removed the donor put a live shell at oldKey, so the
+                // lib refuses to move back onto it. The lib is left keyed at
+                // newKey with no daemon entry there, which the caller's
+                // recreate fallback will not repair. Say so rather than let the
+                // success wording above cover it.
+                qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
+                                     << "vanished during the target-side modal reset AND the revert was refused; lib "
+                                        "is keyed"
+                                     << newKey << "with no daemon entry";
+            }
             return false;
         }
     }

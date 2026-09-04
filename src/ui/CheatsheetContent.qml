@@ -128,7 +128,7 @@ Item {
     /// Whether a key's text is something a filter field should receive.
     ///
     /// `event.text` is non-empty for far more than typing: Escape carries
-    /// , Return \r and Backspace \b. Treating any non-empty text as
+    /// \x1b, Return \r and Backspace \b. Treating any non-empty text as
     /// typing would insert control characters into the query and, worse,
     /// swallow Escape — which is the sheet's dismiss key, and must reach the
     /// daemon's global grab rather than being eaten here. Space is printable
