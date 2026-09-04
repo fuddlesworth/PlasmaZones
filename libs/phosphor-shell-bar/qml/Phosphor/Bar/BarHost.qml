@@ -194,6 +194,14 @@ PanelWindow {
         layer.effect: ElevationShadow {
             level: 2
         }
+        // PINNED to the fully-open size, not to the item's live height.
+        // The capsule's height animates with the pocket, and a layer sized
+        // from the item reallocates its offscreen texture on every frame of
+        // that animation, for the full width of the output. Fixing the
+        // texture at the largest size the capsule ever reaches allocates
+        // once, and the extra area while closed costs memory rather than
+        // per-frame work.
+        layer.textureSize: Qt.size(Math.max(1, width), Math.max(1, panel.barThickness + panel._usableSocketDepth))
 
         // The capsule has to be tall enough to paint the pocket it grows;
         // BarCanvas draws the strip in its top `barHeight` band and the

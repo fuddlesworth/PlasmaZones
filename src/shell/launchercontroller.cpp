@@ -60,6 +60,17 @@ LauncherController::LauncherController(QObject* parent)
     , m_toplevels(new PhosphorShell::Toplevels(this))
     , m_model(new PhosphorShellLauncher::LauncherModel(this))
 {
+    // STARTUP COST, stated because this runs before the first frame.
+    // Every provider is materialised here rather than on first open, so
+    // that opening the launcher is instant: a user pressing the shortcut
+    // does not wait for an applications scan. The two costs that buys
+    // are the clipboard service's constructor, which reads persisted
+    // history from disk and binds a Wayland data-control source, and the
+    // applications provider's first scan. The scan is already posted to
+    // the event loop rather than run inline, so it lands after the first
+    // frame; the clipboard service is not, and moving it would mean
+    // teaching the provider to attach to a service that arrives later.
+    //
     // Registration order is the pill order and the tie-break between
     // providers with equal best scores. Capabilities are advisory until
     // the Phase 5 runtime, declared so the built-ins exercise the manifest

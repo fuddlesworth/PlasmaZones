@@ -80,6 +80,12 @@ Item {
     // The user asked for this tile's detail view.
     signal detailRequested
 
+    // The pixel sizes in this file (160, 72, the 22 icon, the 28 chevron
+    // target) are raw numbers because Tokens carries spacing, radii,
+    // type and motion but no SIZE family. They are design-system values
+    // and belong in one, which is a change to phosphor-theme rather than
+    // to this file: adding a token family here alone would leave the bar
+    // and the launcher expressing the same measurements differently.
     implicitWidth: 160
     // A FLOOR, not a fixed size. 72 is the design height, but the label and
     // readout are text: at a larger font scale the content outgrows it and

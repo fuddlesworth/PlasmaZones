@@ -76,6 +76,16 @@ Item {
             // and simply reads null once the output dies. Hence the guard.
             socketOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
 
+            // ONE CONTROL CENTER PER SCREEN, built on that screen's first
+            // open and kept: the bar's pocket Loader latches active, and
+            // the tiles hold live service connections that would be torn
+            // down and re-enumerated on every close. On a multi-head
+            // setup that means one NetworkManager, BlueZ and PipeWire
+            // host per output the user has opened the panel on. Sharing
+            // one instance across bars would mean reparenting a live
+            // surface between outputs, which the socket transport's
+            // one-at-a-time invariant already forbids.
+            //
             // The pocket depth is a constant on the bar, and the pocket
             // CLIPS: a tile set taller than the depth is cut off with no
             // scroll and nothing to say so. Three toggles and two sliders
