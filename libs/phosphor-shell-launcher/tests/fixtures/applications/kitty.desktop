@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Desktop Entry]
+Type=Application
+Name=kitty
+Name[de]=Katze
+Comment=Fast\sGPU\sterminal
+Icon=kitty
+Exec=kitty
+Terminal=true
+Keywords=term;
+Keywords[de]=terminal;a\;b;
+Categories=System;TerminalEmulator;

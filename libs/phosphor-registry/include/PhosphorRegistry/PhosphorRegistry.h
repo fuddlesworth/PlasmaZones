@@ -10,6 +10,7 @@
 #include <PhosphorRegistry/IControlCenterTileFactory.h>
 #include <PhosphorRegistry/IDesktopWidgetFactory.h>
 #include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/ILauncherProvider.h>
 #include <PhosphorRegistry/ILauncherProviderFactory.h>
 #include <PhosphorRegistry/IOSDFactory.h>
 #include <PhosphorRegistry/Manifest.h>
