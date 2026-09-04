@@ -211,32 +211,48 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // direction, losing that edge its marker. Those writes therefore do not
     // stamp.
     //
-    // This predicate is safe where the two earlier ones were not, and the
-    // difference is which clock it reads. Those asked what the CONSUMER would
-    // see, through `lastFullyMaximized`, which trails the commit by a client
-    // round trip. This asks only whether the write it is about to issue changes
-    // the mode the window is ASKED to hold — the thing KWin acts on, known
-    // exactly here. It is not a prediction about the edge; the direction tag
-    // handles that. It only refuses writes for which no edge is possible. The
-    // in-flight case that holed the old gate is admitted correctly: a batch
-    // writing Full while the user's Restore is in flight reads
-    // requested=Restore, sees the bit flip, and stamps.
+    // BOTH CLOCKS, because neither alone is safe and their errors point
+    // opposite ways. The requested mode is what KWin acts on; the committed
+    // mode is what the consumer's edge is derived from; and on Wayland they
+    // disagree for a client round trip. Ask only requested and a write issued
+    // while a quick-tile request sits over a still-fully-maximized window looks
+    // like partial→Restore and is refused — but it commits Full→Restore, a real
+    // edge, which then arrives unstamped and arms the user marker for a restore
+    // the effect authored. Ask only committed and the in-flight case that holed
+    // the earlier gate comes back. So the write is stamped when EITHER reading
+    // admits an edge.
+    //
+    // The asymmetry is deliberate, because the two errors are not equally bad.
+    // Over-stamping leaves a stamp no edge collects; the direction tag stops
+    // any edge but a same-direction one taking it, and the deadline bounds even
+    // that, so the cost is at most one mis-chosen leg. Under-stamping arms a
+    // false marker for a write the effect made, every time, which is the defect
+    // this whole mechanism exists to prevent. Where the two clocks disagree,
+    // erring toward stamping is the cheaper mistake.
+    //
+    // This is still not a prediction about the edge — the direction tag settles
+    // that. It only refuses writes for which NEITHER clock allows one.
     //
     // Before the call, not after: on X11 the handler has already run by the
     // time maximize() returns.
-    const bool willFlipFullyMaximized =
-        (mode == KWin::MaximizeFull) != (kw->requestedMaximizeMode() == KWin::MaximizeFull);
-    if (KWin::EffectWindow* ew = kw->effectWindow(); ew == nullptr) {
+    const bool wroteFullyMaximized = mode == KWin::MaximizeFull;
+    const bool willFlipFullyMaximized = (wroteFullyMaximized != (kw->requestedMaximizeMode() == KWin::MaximizeFull))
+        || (wroteFullyMaximized != (kw->maximizeMode() == KWin::MaximizeFull));
+    if (KWin::EffectWindow* ew = kw->effectWindow(); ew != nullptr) {
+        if (willFlipFullyMaximized) {
+            m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew, wroteFullyMaximized);
+        }
+    } else if (willFlipFullyMaximized) {
         // The write still goes out, so its edge will reach noteMaximizeEdge
         // with nothing to identify it and arm the user marker for a maximize
         // the effect made. Believed unreachable — a Window this handler is
         // acting on has an EffectWindow, that being how it got here — but a
         // silent miss here is a mis-anchored morph somewhere else entirely, so
-        // it is worth a line in a support report rather than nothing.
+        // it is worth a line in a support report rather than nothing. Gated on
+        // the same predicate as the stamp: a write that would not have stamped
+        // anyway has lost nothing and must not warn.
         qCWarning(lcEffect) << "Maximize write with no EffectWindow — authorship unrecorded, a following"
                             << "placement may take the maximize leg";
-    } else if (willFlipFullyMaximized) {
-        m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew, mode == KWin::MaximizeFull);
     }
     kw->maximize(mode);
 }
@@ -311,7 +327,10 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     });
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
     // The one authored write whose stamp no edge can consume, so it is dropped
-    // by hand. The pre-write above forced lastFullyMaximized false precisely so
+    // by hand — when there is one to drop. The stamp gate above can decline for
+    // this write (both clocks reading not-fully-maximized), in which case this
+    // is a no-op, which is why it is written as a conditional remove rather
+    // than an assertion that something was there. The pre-write above forced lastFullyMaximized false precisely so
     // this write's echo reads as a no-edge and never reaches noteMaximizeEdge —
     // which also means the stamp it just left has nothing to match it. Left
     // standing it would wait out the deadline, and the first genuine user
