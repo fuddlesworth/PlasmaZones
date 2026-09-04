@@ -2262,10 +2262,10 @@ target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
 add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# shell/ - Bar registry owner + QML-component widget factory (Phase 4.1)
+# shell/ - shell-process controllers, factories and popout transports
 # ═══════════════════════════════════════════════════════════════════════════════
-# Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. The target compiles the
-# four src/shell sources directly rather than linking the gated
+# Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. These targets compile the
+# src/shell sources they need directly rather than linking the gated
 # phosphor-shell binary, those sources are unconditional files on disk, and
 # the only non-Qt dependency (PhosphorRegistry) is added unconditionally at
 # the top level. Gating would make these guard tests vanish from the default
@@ -2375,6 +2375,103 @@ if(TARGET PhosphorShell::PhosphorShell)
     add_test(NAME test_system_usage COMMAND test_system_usage)
 endif()
 
+# RoutingPopoutTransport: one IPopoutTransport in front of the layer and
+# bar-socket transports, routed by popout id. Pure C++ over two in-test
+# fakes, so it needs only the popout contract library — no layer stack, no
+# QML engine, no Wayland.
+if(TARGET PhosphorPopout::PhosphorPopout)
+    add_executable(test_routing_popout_transport
+        shell/test_routing_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/RoutingPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/routingpopouttransport.cpp
+    )
+    target_include_directories(test_routing_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_routing_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            PhosphorPopout::PhosphorPopout
+    )
+    add_test(NAME test_routing_popout_transport COMMAND test_routing_popout_transport)
+endif()
+
+# ControlCenterController: the shell's tile registry owner and the
+# target-screen resolver behind the bar socket. Needs a QGuiApplication
+# (a real QScreen to resolve) and the QML engine's ownership API, hence
+# Gui + Qml; runs offscreen. Links the registry (the controller owns a
+# Registry<IControlCenterTileFactory>) and the idle service (the controller
+# hands an IdleService* to IdleTile's initial properties).
+if(TARGET PhosphorRegistry::PhosphorRegistry AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_control_center_controller
+        shell/test_control_center_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_control_center_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_control_center_controller
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+    )
+    add_test(NAME test_control_center_controller COMMAND test_control_center_controller)
+
+    # The tile factory on its own. Pure engine-testable logic that had no
+    # test, including the JavaScriptOwnership hand-off the control-center
+    # surface depends on to destroy the tiles it built.
+    add_executable(test_qml_component_tile_factory
+        shell/test_qml_component_tile_factory.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_qml_component_tile_factory PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_qml_component_tile_factory
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+    )
+    add_test(NAME test_qml_component_tile_factory COMMAND test_qml_component_tile_factory)
+endif()
+
+# SocketPopoutTransport, the bar-pocket popout transport.
+# Needs the popout library for IPopoutTransport, and the control-center
+# controller because the transport is the sole writer of its openScreen.
+if(TARGET PhosphorPopout::PhosphorPopout AND TARGET PhosphorRegistry::PhosphorRegistry
+   AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_socket_popout_transport
+        shell/test_socket_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/SocketPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/socketpopouttransport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_socket_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_socket_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorPopout::PhosphorPopout
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+    )
+    add_test(NAME test_socket_popout_transport COMMAND test_socket_popout_transport)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
 # Apply a shared environment to every test in this directory so new tests added
@@ -2420,3 +2517,15 @@ foreach(_pz_test IN LISTS _all_tests)
 endforeach()
 
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
+
+# Two outputs for the control-center controller, which the sweep above cannot
+# express because it gives every test the same single-screen offscreen QPA.
+# screenOf resolves an item's window screen and falls back to the primary, and
+# with one output those are the same pointer, so the resolution branch could be
+# deleted with the suite still green. Appended AFTER the sweep on purpose: the
+# environment list is read last-wins, so this overrides the plain offscreen
+# entry rather than fighting it.
+if(TARGET test_control_center_controller)
+    phosphor_append_test_environment(test_control_center_controller
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
+endif()

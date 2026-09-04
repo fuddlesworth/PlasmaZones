@@ -282,10 +282,15 @@ QString PopoutController::open(const PopoutRequest& request)
 
     const QString handle = d->transport->openSurface(request);
     if (handle.isEmpty()) {
-        // Transport refused. Any prior cooperative in this scope was
-        // already closed above. That is intentional. Restoring the
-        // prior popout on transport failure would put us in an
-        // inconsistent state.
+        // Transport refused, and whatever was swept above stays closed.
+        // Note how much that is for a MODAL request: the sweep covers every
+        // cooperative popout in every scope, so a refused modal leaves the
+        // user with nothing open rather than with what they had. That is
+        // deliberate. Reopening them would mean re-running each one's
+        // transport call with no guarantee any of them succeeds either, and
+        // a half-restored set is worse than an empty one: the user presses
+        // the trigger again and gets a consistent result, where a partial
+        // restore leaves state nobody can reason about.
         return {};
     }
 

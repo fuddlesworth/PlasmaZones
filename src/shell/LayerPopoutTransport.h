@@ -5,6 +5,7 @@
 #include <PhosphorPopout/IPopoutTransport.h>
 
 #include <QHash>
+#include <QMargins>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -14,6 +15,7 @@
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
 class QQuickItem;
+class QScreen;
 QT_END_NAMESPACE
 
 namespace PhosphorLayer {
@@ -46,11 +48,20 @@ namespace PhosphorShellApp {
  * ## Surface shape
  *
  * Every popout gets a full-screen overlay surface: `Layer::Overlay`, all
- * four anchors, `exclusiveZone == -1`. The scrim and the centring both live
- * in QML (PopoutHost paints the backdrop and centres its content), so the
+ * four anchors, `exclusiveZone == -1`. The scrim and the placement both live
+ * in QML (PopoutHost paints the backdrop and positions its frame), so the
  * surface itself is simply "the whole output, above everything". Note that
  * `Role::isValid()` REJECTS an overlay with `exclusiveZone >= 0`, so -1 here
  * is required rather than merely conventional.
+ *
+ * ## Placement
+ *
+ * `PopoutRequest::anchor` maps to a PopoutHost `placement`. ScreenCenter
+ * centres the frame. The three bar anchors hang it below the top reserved
+ * band (the bar's exclusive zone, from the reserved-margins provider) at
+ * the left inset, centred, or the right inset. Custom places the frame's
+ * top-left at `customAnchor`. AtPointer has no pointer position to work
+ * from yet, so it centres and warns.
  *
  * Keyboard interactivity follows `PopoutRequest::keyboardFocus`: Exclusive
  * when the popout wants keys (a modal menu with single-key actions), None
@@ -84,6 +95,16 @@ public:
     /// the startup engine and again for each hot-reload engine.
     void setEngine(QQmlEngine* engine);
 
+    /// How much of each screen edge this shell's own panels reserve, for
+    /// the bar-anchored placements: a popout hangs below the top reserved
+    /// band rather than the screen edge. The popout surface is full-bleed
+    /// on the Overlay layer, so the compositor tells it nothing about other
+    /// surfaces' zones; the shell engine placed the bar and knows. Installed
+    /// by main.cpp. Without one, bar anchors hang from the screen edge and
+    /// warn once per open.
+    using ReservedMarginsProvider = std::function<QMargins(QScreen*)>;
+    void setReservedMarginsProvider(ReservedMarginsProvider provider);
+
     /// Tear down every live surface synchronously, without notifying the
     /// controller. For shutdown and for the moment before a hot reload
     /// destroys the engine: the surfaces are about to become invalid either
@@ -116,6 +137,13 @@ private:
         // for surfaces that close themselves, so a close we initiated must
         // stay silent even though it drains through the same animation.
         bool closing = false;
+        // Which popout this entry belongs to. The controller frees its own
+        // row before asking us to close, and our close only starts an
+        // animation, so a caller toggling faster than that animation opens a
+        // second surface for the same popout while the first is still
+        // draining. Recorded so openSurface can retire the draining one
+        // instead of stacking on top of it.
+        QString popoutId;
     };
 
     void destroyEntry(const QString& handle, Entry entry);
@@ -133,6 +161,7 @@ private:
     PhosphorLayer::SurfaceFactory* m_factory = nullptr;
     PhosphorLayer::IScreenProvider* m_screens = nullptr;
     QPointer<QQmlEngine> m_engine;
+    ReservedMarginsProvider m_reservedMargins;
     QHash<QString, Entry> m_entries;
     std::function<void(const QString&)> m_dismissed;
     quint64 m_counter = 0;

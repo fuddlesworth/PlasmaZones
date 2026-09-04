@@ -1,0 +1,37 @@
+{
+    "_comment": [
+        "SPDX-FileCopyrightText: 2026 fuddlesworth",
+        "SPDX-License-Identifier: GPL-3.0-or-later",
+        "",
+        "Offscreen-QPA screen configuration for test_control_center_controller.",
+        "",
+        "ControlCenterController::screenOf falls back to the primary screen when it",
+        "cannot resolve one from the item. With a single output the resolved answer",
+        "and the fallback are the same pointer, so the resolution branch could be",
+        "deleted outright with the suite still green. A second output makes the two",
+        "distinguishable. The offscreen platform plugin accepts this file via",
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>."
+    ],
+    "screens": [
+        {
+            "name": "TEST-0",
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        },
+        {
+            "name": "TEST-1",
+            "x": 1920,
+            "y": 0,
+            "width": 1280,
+            "height": 1024,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        }
+    ]
+}

@@ -43,11 +43,27 @@
 #include <QSize>
 #include <QTimer>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <mutex>
 
+namespace {
+// Coalescing window for a rebuild. It serves TWO requirements, which is worth
+// knowing before retuning it: an editor writing shell.qml (often several
+// events per save), and a screen-topology change routed through the same
+// timer so a KVM switch or lid toggle does not rebuild once per output. A
+// physical transition can span longer than this, in which case it drives more
+// than one rebuild; raising it to fix that would also delay every hot reload.
+constexpr int kReloadDebounceMs = 100;
+} // namespace
+
+// In the anonymous namespace, like the sibling libraries: at file scope
+// this is an exported symbol, and the target builds with hidden
+// visibility precisely so a library's internals stay internal.
+namespace {
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
+} // namespace
 
 namespace PhosphorShell {
 
@@ -57,7 +73,7 @@ ShellEngine::ShellEngine(Deps deps, QObject* parent)
 {
     m_reloadTimer = new QTimer(this);
     m_reloadTimer->setSingleShot(true);
-    m_reloadTimer->setInterval(100);
+    m_reloadTimer->setInterval(kReloadDebounceMs);
     connect(m_reloadTimer, &QTimer::timeout, this, &ShellEngine::onFileChanged);
 }
 
@@ -191,7 +207,16 @@ bool ShellEngine::buildAndMaterialize()
     // BEFORE the shell QML is parsed. Image providers, custom context
     // properties, and engine-scoped singletons all need to be in place
     // by the time QQmlComponent walks the QML tree.
-    for (const auto& hook : m_engineHooks) {
+    // Index, not a range-for. addEngineHook appends, and the header does not
+    // forbid a hook from registering another, so iterating by reference over
+    // a vector that can reallocate mid-loop is undefined behaviour. Snapshot
+    // the size too, so a hook added during this pass is not also driven here:
+    // addEngineHook already invokes a late arrival itself once the engine
+    // exists, and running it twice on the same engine is worse than not
+    // running it at all.
+    const size_t hookCount = m_engineHooks.size();
+    for (size_t i = 0; i < hookCount && i < m_engineHooks.size(); ++i) {
+        const auto& hook = m_engineHooks.at(i);
         if (hook) {
             hook(m_engine.get());
         }
@@ -252,12 +277,49 @@ QQmlEngine* ShellEngine::engine() const
     return m_engine.get();
 }
 
+QMargins ShellEngine::reservedMarginsFor(QScreen* screen) const
+{
+    QMargins margins;
+    if (!screen) {
+        return margins;
+    }
+    for (const ReservedEdge& reserved : m_reserved) {
+        // A dead QPointer compares equal to nullptr, never to a live screen.
+        if (reserved.screen != screen || reserved.zone <= 0) {
+            continue;
+        }
+        // Largest wins per edge: two panels reserving the same edge overlap
+        // from the popout's point of view, they do not stack.
+        switch (static_cast<PanelWindow::Edge>(reserved.edge)) {
+        case PanelWindow::Top:
+            margins.setTop(std::max(margins.top(), reserved.zone));
+            break;
+        case PanelWindow::Bottom:
+            margins.setBottom(std::max(margins.bottom(), reserved.zone));
+            break;
+        case PanelWindow::Left:
+            margins.setLeft(std::max(margins.left(), reserved.zone));
+            break;
+        case PanelWindow::Right:
+            margins.setRight(std::max(margins.right(), reserved.zone));
+            break;
+        }
+    }
+    return margins;
+}
+
 void ShellEngine::teardown()
 {
     for (auto& surface : m_surfaces) {
         surface->hide();
     }
     m_surfaces.clear(); // unique_ptr destructors run, no manual delete
+    // The reservations describe the surfaces just torn down; a reload
+    // rebuilds both together.
+    m_reserved.clear();
+    // Same generation, same lifetime. savePersistentState() runs before
+    // teardown, so clearing here does not cost the state it collected.
+    m_panels.clear();
     // Drop singleton entries before the QQmlEngine destroys their backing
     // PersistentProperties. QPointer auto-nulls on destruction, so the map
     // stays safe to query, but we'd accumulate one stale (null) entry per
@@ -285,11 +347,20 @@ void ShellEngine::setupWatcher()
 
     m_watcher = new QFileSystemWatcher(this);
 
+    // Both returns are checked. When the per-user inotify watch limit is
+    // exhausted these fail, and hot reload then stops working for the life of
+    // the process with nothing logged at any level: the re-arm below can only
+    // run from a reload, and the missing watch is what would have caused one.
     const QString filePath = m_shellUrl.toLocalFile();
-    m_watcher->addPath(filePath);
+    if (!m_watcher->addPath(filePath)) {
+        qCWarning(lcShellEngine) << "could not watch" << filePath
+                                 << "— hot reload is disabled (inotify watch limit reached?)";
+    }
 
     const QString dir = QFileInfo(filePath).absolutePath();
-    m_watcher->addPath(dir);
+    if (!m_watcher->addPath(dir)) {
+        qCWarning(lcShellEngine) << "could not watch" << dir << "— an atomic-rename save will not trigger a reload";
+    }
 
     auto kickReload = [this]() {
         m_reloadTimer->start();
@@ -336,8 +407,8 @@ void ShellEngine::onFileChanged()
     // had to restart the shell to recover.
     if (m_watcher) {
         const QString filePath = m_shellUrl.toLocalFile();
-        if (!m_watcher->files().contains(filePath)) {
-            m_watcher->addPath(filePath);
+        if (!m_watcher->files().contains(filePath) && !m_watcher->addPath(filePath)) {
+            qCWarning(lcShellEngine) << "could not re-arm the watch on" << filePath << "— hot reload is now disabled";
         }
         // The DIRECTORY watch can drop the same way: replacing or
         // recreating the shell.qml directory (atomic dir swaps, build
@@ -345,8 +416,9 @@ void ShellEngine::onFileChanged()
         // stop triggering reloads until restart. Re-arm it alongside the
         // file watch.
         const QString dirPath = QFileInfo(filePath).absolutePath();
-        if (!m_watcher->directories().contains(dirPath)) {
-            m_watcher->addPath(dirPath);
+        if (!m_watcher->directories().contains(dirPath) && !m_watcher->addPath(dirPath)) {
+            qCWarning(lcShellEngine) << "could not re-arm the watch on" << dirPath
+                                     << "— rename-style saves will not trigger a reload";
         }
     }
 
@@ -433,6 +505,24 @@ bool ShellEngine::materializePanels(QString* failureReason)
         }
         QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
         if (!targetScreen) {
+            // For the ROOT panel this is fatal, the same as a failed surface
+            // below: the QML root IS that panel, so skipping it leaves an
+            // engine with nothing on screen while load() still reports
+            // success and the embedder believes the shell is up. A child
+            // panel is skipped and the rest still build, which keeps a
+            // usable shell.
+            if (panel == rootPanel) {
+                qCCritical(lcShellEngine) << "Root PanelWindow has no screen available "
+                                          << "(neither panel.screen nor screenProvider.primary()) — aborting load";
+                m_surfaces.clear();
+                m_reserved.clear();
+                m_panels.clear();
+                if (failureReason) {
+                    *failureReason =
+                        QStringLiteral("ShellEngine: the root PanelWindow has no screen to materialize on");
+                }
+                return false;
+            }
             qCWarning(lcShellEngine) << "Skipping PanelWindow: no screen available "
                                      << "(neither panel.screen nor screenProvider.primary())";
             continue;
@@ -660,6 +750,12 @@ bool ShellEngine::materializePanels(QString* failureReason)
         // referring to it. The surface has already adopted the panel as its
         // content item, so destroying it takes the panel with it.
         std::unique_ptr<PhosphorLayer::Surface> ownedSurface(m_deps.surfaceFactory->create(std::move(cfg), nullptr));
+        // The two failures below are NOT the same event and the diagnostics
+        // must not read as though they are: a null factory result never
+        // reached the compositor, while a surface that reaches Failed after
+        // show() has already committed a wl_surface and been rejected. The
+        // first points at configuration, the second at the compositor.
+        bool failedAfterShow = false;
         if (ownedSurface) {
             ownedSurface->setParent(nullptr);
             ownedSurface->show();
@@ -676,13 +772,29 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // root panel, the whole QML root) — with m_rootRef non-null, so
             // the fail-loud branch below would not even fire correctly.
             if (ownedSurface->state() == PhosphorLayer::Surface::State::Failed) {
-                qCWarning(lcShellEngine) << "Panel surface reached Failed state after show()";
+                failedAfterShow = true;
                 ownedSurface.reset();
             }
         }
         if (ownedSurface) {
             auto* surface = ownedSurface.get();
             m_surfaces.emplace_back(std::move(ownedSurface));
+            // What this panel reserved, for reservedMarginsFor(). The zone
+            // recorded is the Role's, i.e. what was actually advertised —
+            // an Overlay panel that asked for one gets -1 and reserves
+            // nothing, and that is what a popout hanging from it must see.
+            // Record the RESOLVED screen, not the panel's own property. A
+            // panel that leaves `screen` unset is materialized on the primary
+            // output, and storing the unset value would leave a null QPointer
+            // here that never matches a live screen, so reservedMarginsFor()
+            // would report zero margins for a panel that is genuinely
+            // reserving space.
+            m_reserved.push_back(
+                {QPointer<QScreen>(targetScreen), static_cast<int>(panel->edge()), role.exclusiveZone});
+            // The panel is no longer a descendant of the QML root (it was
+            // detached above and handed to the Surface), so record it here
+            // or collectPersistentProperties() cannot see inside it.
+            m_panels.emplace_back(panel);
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
 
@@ -699,7 +811,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // and Qt never re-applies it.
             installInputRegion(panel, surface);
         } else {
-            qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
+            qCWarning(lcShellEngine) << (failedAfterShow
+                                             ? "PanelWindow surface was rejected by the compositor after show()"
+                                             : "PanelWindow surface could not be created at all");
             // For child panels we soldier on — losing one panel still
             // leaves a usable shell. For the ROOT panel, the cfg.contentItem
             // destructor has already deleted the QML root and m_rootRef
@@ -712,12 +826,20 @@ bool ShellEngine::materializePanels(QString* failureReason)
             if (wasRootPanel) {
                 qCCritical(lcShellEngine) << "Root panel surface creation failed — aborting load";
                 m_surfaces.clear();
+                // Keep the two in step. The caller's failure path runs
+                // teardown(), which clears both, but leaving reservations
+                // that describe destroyed surfaces here would bite the first
+                // time this function grows a second failure exit.
+                m_reserved.clear();
+                m_panels.clear();
                 // Report rather than emit. `failed` has to reach the consumer
                 // AFTER teardown, or a handler that synchronously rebuilds
                 // would have its fresh engine destroyed by the teardown that
                 // runs when this returns.
                 if (failureReason) {
-                    *failureReason = QStringLiteral("Failed to create surface for root PanelWindow");
+                    *failureReason = failedAfterShow
+                        ? QStringLiteral("The compositor rejected the root PanelWindow's surface")
+                        : QStringLiteral("The root PanelWindow's surface could not be created");
                 }
                 return false;
             }
@@ -731,15 +853,38 @@ bool ShellEngine::materializePanels(QString* failureReason)
     // takes ownership via cfg.contentItem). m_rootRef (QPointer) still
     // tracks the live root regardless of which path we took, so
     // findChildren works for both rootPanel and Item-rooted shells.
-    if (m_rootRef) {
-        const auto persists = m_rootRef->findChildren<PersistentProperties*>();
-        for (auto* p : persists) {
-            if (!p->reloadId().isEmpty()) {
-                m_shellGlobal->registerSingleton(p->reloadId(), p);
-            }
+    const auto persists = collectPersistentProperties();
+    for (auto* p : persists) {
+        if (!p->reloadId().isEmpty()) {
+            m_shellGlobal->registerSingleton(p->reloadId(), p);
         }
     }
     return true;
+}
+
+QList<PersistentProperties*> ShellEngine::collectPersistentProperties() const
+{
+    QList<PersistentProperties*> found;
+    const auto absorb = [&found](QObject* subtree) {
+        if (!subtree) {
+            return;
+        }
+        const auto children = subtree->findChildren<PersistentProperties*>();
+        for (auto* p : children) {
+            // The root may itself be one of the materialized panels, and a
+            // panel nested inside another would be reached twice, so dedupe
+            // rather than registering or saving the same object repeatedly.
+            if (!found.contains(p)) {
+                found.append(p);
+            }
+        }
+    };
+
+    absorb(m_rootRef);
+    for (const auto& panel : m_panels) {
+        absorb(panel);
+    }
+    return found;
 }
 
 void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface)
@@ -785,18 +930,28 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // current ownership graph happens to make that unreachable (the panel is
     // a QObject child of `window`), but the guard should mean what it says.
     const QPointer<PanelWindow> guardedPanel(panel);
-    // Edge and thickness are captured BY VALUE, matching the closing
-    // comment's contract: panel geometry is fixed at materialization
-    // (installDynamicAutoFit snapshots the same way). Sampling the live
-    // properties here would let a post-materialization QML write move the
-    // input band on the next resize tick while the surface size, anchors
-    // and exclusive zone stayed frozen — exactly the partially-applied
-    // state the "deliberately NOT connected" note below rules out.
-    const auto apply = [guardedPanel, window, edge = panel->edge(), thickness = panel->thickness()] {
+    // Edge is captured BY VALUE, matching the closing comment's contract:
+    // panel geometry is fixed at materialization (installDynamicAutoFit
+    // snapshots the same way). Sampling the live edge/thickness here would
+    // let a post-materialization QML write move the input band on the next
+    // resize tick while the surface size, anchors and exclusive zone stayed
+    // frozen — exactly the partially-applied state the "deliberately NOT
+    // connected" note below rules out.
+    //
+    // The band DEPTH is the one exception, and it is read live through
+    // effectiveInputThickness(). That resolves to the captured-equivalent
+    // `thickness` unless the panel sets `interactiveThickness`, which is
+    // the opt-in for a surface that paints into its shadow strip and needs
+    // clicks there — a bar with a popout growing out of it. Moving only the
+    // input region is exactly what that case wants: the surface, anchors
+    // and exclusive zone must NOT follow, or every window tiled below the
+    // bar would shift when a popout opened. The interactiveThicknessChanged
+    // connection below is what makes the live read take effect.
+    const auto apply = [guardedPanel, window, edge = panel->edge()] {
         if (!guardedPanel) {
             return;
         }
-        const QRect visible = PanelWindow::visibleBand(edge, thickness, window->size());
+        const QRect visible = PanelWindow::visibleBand(edge, guardedPanel->effectiveInputThickness(), window->size());
         if (visible.isEmpty()) {
             return;
         }
@@ -853,6 +1008,18 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // builds an empty region first and then tests the transparent-input flag
     // to choose between it and the mask, so transparent-for-input wins and a
     // masked panel still goes fully click-through while hidden.
+
+    // Connected to interactiveThicknessChanged, unlike thicknessChanged
+    // below. This is the ONE post-materialization geometry write a panel
+    // may make, and it is safe for the exact reason the others are not: it
+    // moves the input region ALONE and is meant to. A bar that grows a
+    // popout into its shadow strip has to make that strip clickable while
+    // the popout is open, and must NOT disturb the surface size, anchors or
+    // exclusive zone doing it, or every window tiled below would shift.
+    // `thickness` cannot express that — widening it moves the exclusive
+    // zone — which is why the depth is a separate property rather than a
+    // relaxation of the rule below.
+    connect(panel, &PanelWindow::interactiveThicknessChanged, window, apply);
 
     // Deliberately NOT connected to thicknessChanged / edgeChanged.
     //
@@ -953,17 +1120,12 @@ void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surfa
 
 void ShellEngine::savePersistentState()
 {
-    // Use m_rootRef (non-owning QPointer) instead of m_rootObject because the
-    // root may have been a PanelWindow whose ownership was transferred to a
-    // Surface in materializePanels — m_rootObject is then released, but the
-    // QObject is still alive (parented to the wrapper window) and m_rootRef
-    // still tracks it.
     if (!m_rootRef) {
         return;
     }
 
     m_persistentState.clear();
-    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
+    const auto persists = collectPersistentProperties();
     for (const auto* p : persists) {
         if (!p->reloadId().isEmpty()) {
             m_persistentState[p->reloadId()] = p->saveState();
@@ -978,7 +1140,7 @@ void ShellEngine::restorePersistentState()
         return;
     }
 
-    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
+    const auto persists = collectPersistentProperties();
     for (auto* p : persists) {
         if (m_persistentState.contains(p->reloadId())) {
             p->restoreState(m_persistentState[p->reloadId()]);

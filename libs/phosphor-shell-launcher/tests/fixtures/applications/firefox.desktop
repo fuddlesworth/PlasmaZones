@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Desktop Entry]
+Type=Application
+Name=Firefox
+GenericName=Web Browser
+Comment=Browse the World Wide Web
+Icon=firefox
+Exec=firefox %u
+Keywords=Internet;WWW;Browser;
+Categories=Network;WebBrowser;
+Terminal=false
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=firefox --new-window

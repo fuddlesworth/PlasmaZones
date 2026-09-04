@@ -72,6 +72,11 @@ void PanelWindow::setThickness(int thickness)
     // coercion (matching SystemUsage::setInterval) so a QML author binding
     // thickness: 0 gets a diagnostic rather than a silent 1 px panel.
     const int clamped = qMax(1, thickness);
+    // Warned BEFORE the change check, deliberately, and pinned by
+    // thicknessClampsToOneAndWarns: the diagnostic is about the VALUE the
+    // author wrote, not about whether it moved the property. A second
+    // `thickness: -5` is just as wrong as the first, and staying silent
+    // because the panel already sits at 1 would hide it.
     if (clamped != thickness) {
         qCWarning(lcPanelWindow) << "thickness" << thickness << "clamped to" << clamped
                                  << "(a panel needs at least 1 px)";
@@ -98,6 +103,31 @@ void PanelWindow::setShadowSize(int size)
     }
     m_shadowSize = clamped;
     Q_EMIT shadowSizeChanged();
+}
+
+int PanelWindow::interactiveThickness() const
+{
+    return m_interactiveThickness;
+}
+
+void PanelWindow::setInteractiveThickness(int thickness)
+{
+    // Clamp to [0, INT_MAX]. 0 = follow `thickness` (the default, and what
+    // every panel that does not paint into its shadow strip wants);
+    // negative values are nonsense. No clamp against thickness + shadowSize
+    // here: visibleBand() already clamps the band to the surface, and the
+    // surface size is not known to this item.
+    const int clamped = qMax(0, thickness);
+    if (m_interactiveThickness == clamped) {
+        return;
+    }
+    m_interactiveThickness = clamped;
+    Q_EMIT interactiveThicknessChanged();
+}
+
+int PanelWindow::effectiveInputThickness() const
+{
+    return m_interactiveThickness > 0 ? m_interactiveThickness : m_thickness;
 }
 
 int PanelWindow::cornerCarveRadius() const
@@ -128,6 +158,12 @@ QScreen* PanelWindow::screen() const
 
 void PanelWindow::setScreen(QScreen* screen)
 {
+    // The member is a QPointer, so an unplugged output nulls it WITHOUT this
+    // setter running and without screenChanged. The engine rebuilds the whole
+    // shell on a topology change, so nothing observes the gap today, and
+    // emitting from a QPointer's silent clear is not possible without
+    // watching every screen. The property is documented as read-once at
+    // materialization for that reason; see the header.
     if (m_screen == screen) {
         return;
     }
