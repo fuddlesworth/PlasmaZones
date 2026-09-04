@@ -7,6 +7,7 @@
 
 #include <QList>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 
 QT_BEGIN_NAMESPACE
@@ -49,8 +50,21 @@ public:
     [[nodiscard]] QList<PhosphorRegistry::LauncherResult> results() const override;
     [[nodiscard]] bool activate(const QString& resultId, Activation activation) override;
 
-private:
+private Q_SLOTS:
+    // A slot, not a plain method: watchToplevels connects to each toplevel's
+    // titleChanged / appIdChanged by NAME, since this library does not link
+    // the Wayland toplevel type, and a name-based connect needs a name on
+    // this side too.
     void recompute();
+
+private:
+    /// Subscribe to every toplevel's own title / app-id notifications.
+    ///
+    /// The list model announces rows arriving and leaving, not a window
+    /// RENAMING itself, and a browser or editor retitles constantly. Without
+    /// this the launcher listed the title a window had when it opened for
+    /// the rest of the session.
+    void watchToplevels();
     [[nodiscard]] QObject* toplevelAt(int row) const;
     [[nodiscard]] QObject* toplevelFor(const QString& resultId) const;
 
@@ -58,6 +72,9 @@ private:
     int m_toplevelRole = -1;
     QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
+    // Toplevels already subscribed to, so a rescan does not stack a second
+    // connection on each one. Entries are dropped as the objects die.
+    QSet<QObject*> m_watched;
 };
 
 } // namespace PhosphorShellLauncher

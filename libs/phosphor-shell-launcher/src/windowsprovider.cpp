@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QMetaMethod>
 #include <QMetaObject>
 #include <QVariant>
 
@@ -116,8 +117,39 @@ void WindowsProvider::setQuery(const QString& query)
     recompute();
 }
 
+void WindowsProvider::watchToplevels()
+{
+    if (!m_toplevels) {
+        return;
+    }
+    const int rows = m_toplevels->rowCount();
+    for (int row = 0; row < rows; ++row) {
+        QObject* obj = toplevelAt(row);
+        if (!obj || m_watched.contains(obj)) {
+            continue;
+        }
+        // Connected by NAME rather than to a typed signal, for the same
+        // reason the role lookup is by name: this library does not link the
+        // Wayland toplevel type, and a host can pass any model whose rows
+        // carry these notifications.
+        const QMetaObject* meta = obj->metaObject();
+        for (const char* signalName : {"titleChanged()", "appIdChanged()"}) {
+            const int index = meta->indexOfSignal(signalName);
+            if (index < 0) {
+                continue;
+            }
+            connect(obj, meta->method(index), this, metaObject()->method(metaObject()->indexOfSlot("recompute()")));
+        }
+        connect(obj, &QObject::destroyed, this, [this](QObject* dead) {
+            m_watched.remove(dead);
+        });
+        m_watched.insert(obj);
+    }
+}
+
 void WindowsProvider::recompute()
 {
+    watchToplevels();
     // See AppsProvider::recompute: this runs on every window open and close
     // for the whole session, including while the launcher is closed.
     const QList<LauncherResult> previous = std::move(m_results);

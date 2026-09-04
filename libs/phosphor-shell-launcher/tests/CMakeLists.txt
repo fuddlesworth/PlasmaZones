@@ -48,6 +48,10 @@ phosphorshelllauncher_add_test(test_launchermodel)
 # ClipboardProvider, against a fake service. The provider talks to its
 # service purely by name, so the fake is the contract.
 phosphorshelllauncher_add_test(test_clipboardprovider)
+# WindowsProvider, against a fake toplevel model. Same reasoning as the
+# clipboard test: the source is reached by role and property name, so the
+# fake IS the contract.
+phosphorshelllauncher_add_test(test_windowsprovider)
 
 # CalculatorProvider's copy path needs a QGuiApplication for the clipboard,
 # so it cannot join the guiless helper above: that helper's binaries are
