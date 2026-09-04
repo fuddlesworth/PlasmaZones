@@ -44,8 +44,11 @@ inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // The shared SINGLE-PAYLOAD key: any action whose whole payload is one scalar
 // stores it here, across the appearance, overlay, gap, engine-parameter and
 // per-window-override families. The wire type follows the action's descriptor
-// kind — a [0.0, 1.0] double for the opacity and fraction actions, an integer
-// for the gap and border-metric actions, a bool for the on/off overrides, a
+// kind — a [0.0, 1.0] double for the opacity and fraction actions, a number
+// the consumer rounds or truncates to whole pixels for the gap and
+// border-metric actions (the validators accept any in-range number, so a
+// hand-written 8.5 loads and lands on the consumer's rounding), a bool for
+// the on/off overrides, a
 // `#AARRGGBB` hex string (or the `BorderColorToken::Accent` sentinel, resolved
 // to the live system accent) for the colour actions, and an enum wire token for
 // the token-valued ones.
@@ -164,16 +167,53 @@ inline constexpr int MaxScreenIdLength = 128;
 inline constexpr int MaxFontFamilyLength = 128;
 
 /// Upper bounds for the per-window border appearance overrides
-/// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
-/// the per-window pair, ruleaction_builtins_engine.cpp for the overlay
-/// WIDTH — the overlay RADIUS deliberately uses its own wider
-/// `kMaxOverlayBorderRadius`, see ruleaction_builtins_p.h) and the KWin-effect
-/// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
-/// programmatically-built or hand-edited payload out of this range is
-/// rejected at both boundaries rather than drawn.
-inline constexpr double MaxBorderWidth = 10.0;
-inline constexpr double MaxBorderRadius = 20.0;
+/// (`SetBorderWidth` / `SetBorderRadius`), in logical px, mirroring the
+/// PhosphorCompositor::DecorationDefaults BorderWidthMax / BorderRadiusMax
+/// slider ceilings. Hand-mirrored, because phosphor-rules does not link
+/// phosphor-compositor; the pair is pinned by static_asserts in the KWin
+/// effect's shader_resolve.cpp, which is the one translation unit that sees
+/// both headers. Shared so the load-time descriptor validators
+/// (ruleaction_builtins_appearance.cpp) and that consumer re-validation stay
+/// in lockstep — a programmatically-built or hand-edited payload out of this
+/// range is rejected at both boundaries rather than drawn.
+///
+/// The zone-overlay actions keep their own `kMaxOverlayBorderWidth` /
+/// `kMaxOverlayBorderRadius` (ruleaction_builtins_p.h) rather than reusing
+/// this pair. The overlay WIDTH bound is narrower (10 against 20); the radius
+/// bounds happen to coincide at 50 today, and stay separate symbols so
+/// retuning the window decoration cannot silently move the overlay.
+inline constexpr double MaxBorderWidth = 20.0;
+inline constexpr double MaxBorderRadius = 50.0;
+
+/// Bounds for the per-event animation duration override
+/// (`OverrideAnimationTiming`'s optional `durationMs`), in ms. Hand-mirrored
+/// from PhosphorAnimation::Limits::Min/MaxAnimationDurationMs, which
+/// phosphor-rules does not link; pinned by static_asserts in the KWin effect's
+/// shader_resolve.cpp, the one translation unit that sees both. These are the
+/// numbers the consumer actually honours, since it qBounds an incoming duration
+/// to them. Only the MAX is published as the descriptor's schema ceiling, so
+/// the editor cannot offer a duration the effect would quietly cut; the schema
+/// FLOOR stays 0, because 0 is the disengaged sentinel. Min exists to pin the
+/// consumer's clamp, not to bound the editor, so a duration of 1 to 49 is
+/// authorable and rounds up at the consumer.
+inline constexpr double MinAnimationDurationMs = 50.0;
+inline constexpr double MaxAnimationDurationMs = 2000.0;
+
+/// Upper bound for the context-domain gap actions (`SetInnerGap`,
+/// `SetOuterGap`, and the four per-side variants), in logical px. Equal to
+/// `PlasmaZones::Defaults::MaxGap` / `PhosphorEngine::GeometryDefaults::MaxGap`
+/// (pinned by a static_assert in src/daemon/daemon.cpp). This is the range the
+/// rule editor OFFERS: it is published as the parameter's schema `max`, which
+/// is the spin box's ceiling, and every placement arm clamps a resolved gap to
+/// it, so a larger value could never be drawn anyway.
+///
+/// It is deliberately NOT the LOAD bound. That stays looser (`kMaxGap`,
+/// ruleaction_builtins_p.h) so a rule authored when the editor offered a wider
+/// range still loads: a rejected action is dropped, taking its whole rule with
+/// it when it was the only one. The visible consequence of the asymmetry is
+/// that such a stored value displays clamped to this ceiling in the editor, and
+/// collapses to it if the user nudges that spin box.
+inline constexpr double MaxGap = 200.0;
 
 /// Bounds for a scrolling-engine work-area FRACTION, width or height. The pair
 /// is named for the column-width action it was introduced with, but it now
@@ -263,8 +303,9 @@ inline constexpr double MaxTabIndicatorFontWeight = 900.0;
 /// value the settings page would refuse. Both floors are 0 and neither is a
 /// sentinel: a zero border width is a fill with no edge, and a zero radius is
 /// a square corner. Deliberately NOT shared with the tab-indicator constants
-/// above — the two families' ranges agree today by coincidence of taste, not
-/// by contract, and tying them would make retuning one silently move the other.
+/// above, whose ranges are wider (radius 64 against 50, width 64 against 10):
+/// the two families are tuned independently, so tying them would make
+/// retuning one silently move the other.
 inline constexpr double MinDropIndicatorOpacity = 0.0;
 inline constexpr double MaxDropIndicatorOpacity = 1.0;
 inline constexpr double MinDropIndicatorBorderWidth = 0.0;

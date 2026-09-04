@@ -22,6 +22,12 @@ QtObject {
     // rather than as a state layer painted over the surface.
     readonly property real disabled_content: 0.38
     readonly property real disabled_container: 0.12
+    // Secondary-content opacity, for a supporting line that must ride the
+    // SAME foreground colour as its primary rather than take a theme role
+    // of its own. A tile whose container flips to `primary` on activation
+    // needs its sublabel to follow to `on_primary`, and no static role
+    // pairing guarantees contrast across both states.
+    readonly property real secondary_content: 0.75
 
     // Disabled-state tints: the given foreground colour at the M3 disabled
     // opacity. Pass the colour in (rather than reading a Theme role here) so

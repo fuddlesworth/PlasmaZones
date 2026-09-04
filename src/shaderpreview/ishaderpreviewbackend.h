@@ -41,8 +41,8 @@ public:
 
     /// Raw zone maps the preview renders over. The editor returns the live
     /// layout so the preview matches what the user is editing; the settings app
-    /// returns the shipped master-stack layout so the preview matches the baked
-    /// preview.png thumbnails. An empty list makes the controller fall back to a
+    /// returns the shipped master-stack layout as a representative stand-in.
+    /// An empty list makes the controller fall back to a
     /// single full-area zone.
     virtual QVariantList previewZones() const = 0;
 

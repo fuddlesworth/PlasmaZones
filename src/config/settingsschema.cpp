@@ -181,8 +181,8 @@ QVariant canonicalTriggerList(const QVariant& v)
 }
 
 /// Canonicalize a WHEEL chord list: canonicalTriggerList, then drop any entry
-/// naming DragModifier::AlwaysActive, zero the mouse button on the entries
-/// that remain, and drop any entry left with no modifier at all.
+/// naming DragModifier::AlwaysActive, and drop any entry left with neither a
+/// modifier nor a mouse button.
 ///
 /// AlwaysActive is a drag-only sentinel and it does not survive the move to
 /// exact matching. modifierMaskFor has no case for it, so it folds to
@@ -204,24 +204,27 @@ QVariant canonicalWheelTriggerList(const QVariant& v)
     for (const QVariant& entry : canon) {
         const QVariantMap src = entry.toMap();
         const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
+        const int mouseButton = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt();
         if (modifier == static_cast<int>(DragModifier::AlwaysActive)) {
             continue;
         }
-        // A wheel chord is modifiers only, so the mouse button is dropped
-        // rather than stored. The exact matcher compares buttons as a SUBSET
-        // even though it compares modifiers exactly, which means a
-        // modifier-only chord shadows the same modifier plus a button and the
-        // longer binding could never be reached. The settings rows offer
-        // modifiers only for that reason; enforcing it here too is what makes
-        // it an invariant rather than a UI convention, and it also cleans up a
-        // button left behind by a config written before the rows were
-        // narrowed. An entry that was ONLY a button has nothing left and goes.
-        if (modifier == static_cast<int>(DragModifier::Disabled)) {
+        // A mouse button is a legal wheel chord (hold the button, turn the
+        // wheel), and the capture UI authors it as button-only or
+        // modifier-only, never combined — matching the drag rows. The exact
+        // matcher already keeps the two shapes distinct: modifiers compare
+        // exactly, so a button-only entry (modifier Disabled) matches only
+        // with no chord modifier held, and a modifier-only entry cannot be
+        // satisfied by a button alone. Buttons themselves stay
+        // subset-matched, so a hand-edited modifier+button combo can be
+        // shadowed by the same bare modifier — the combo is unreachable from
+        // the UI, so the exposure is a hand-edit shadowing a hand-edit.
+        // An entry with neither half claims nothing and goes.
+        if (modifier == static_cast<int>(DragModifier::Disabled) && mouseButton == 0) {
             continue;
         }
         QVariantMap canonEntry;
         canonEntry[ConfigKeys::triggerModifierField()] = modifier;
-        canonEntry[ConfigKeys::triggerMouseButtonField()] = 0;
+        canonEntry[ConfigKeys::triggerMouseButtonField()] = mouseButton;
         out.append(canonEntry);
     }
     return QVariant(out);

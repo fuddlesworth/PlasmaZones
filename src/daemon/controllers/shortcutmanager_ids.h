@@ -132,7 +132,8 @@ inline constexpr auto kIdScrollCycleWindowHeight = "scroll_cycle_window_height";
 inline constexpr auto kIdScrollCycleWindowHeightBack = "scroll_cycle_window_height_back";
 inline constexpr auto kIdScrollIncreaseWindowHeight = "scroll_increase_window_height";
 inline constexpr auto kIdScrollDecreaseWindowHeight = "scroll_decrease_window_height";
-inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights";
+inline constexpr auto kIdScrollMaximizeWindowHeight = "scroll_maximize_window_height";
+inline constexpr auto kIdScrollExpandWindow = "scroll_expand_window";
 inline constexpr auto kIdScrollCenterVisibleColumns = "scroll_center_visible_columns";
 inline constexpr auto kIdScrollFocusWindowTop = "scroll_focus_window_top";
 inline constexpr auto kIdScrollFocusWindowBottom = "scroll_focus_window_bottom";
@@ -146,6 +147,8 @@ inline constexpr auto kIdScrollViewPageBack = "scroll_view_page_back";
 inline constexpr auto kIdScrollViewPageForward = "scroll_view_page_forward";
 inline constexpr auto kIdScrollEqualizeColumnWidths = "scroll_equalize_column_widths";
 inline constexpr auto kIdScrollMinimizeColumnWidth = "scroll_minimize_column_width";
+inline constexpr auto kIdScrollEqualizeWindowHeights = "scroll_equalize_window_heights";
+inline constexpr auto kIdScrollMinimizeWindowHeight = "scroll_minimize_window_height";
 
 // The indexed slot families are prefix-keyed rather than enumerated above.
 // Exported so the id builders below and the cheatsheet catalog's

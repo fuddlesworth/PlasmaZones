@@ -71,12 +71,6 @@ public:
     // suite that never touches them behaves exactly like the no-settings
     // fixtures; a case driving one must call refreshConfigFromSettings()
     // afterwards, same as stripAxis.
-    /// Close-settle reflow hold. 0 (the interface default) keeps the
-    /// historical immediate reflow; the closehold suite drives it non-zero.
-    /// A case setting it must call refreshConfigFromSettings() afterwards,
-    /// same as stripAxis.
-    int closeReflowDelayMs = 0;
-
     bool dragScrollEnabled = PhosphorEngine::IScrollSettings::kDragScrollEnabledDefault;
     int dragScrollTriggerWidth = PhosphorEngine::IScrollSettings::kDragScrollTriggerWidthDefault;
     int dragScrollDelayMs = PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault;
@@ -145,10 +139,6 @@ public:
     bool scrollingCropStraddlers() const override
     {
         return cropStraddlers;
-    }
-    int scrollingCloseReflowDelayMs() const override
-    {
-        return closeReflowDelayMs;
     }
     bool scrollingDragScrollEnabled() const override
     {

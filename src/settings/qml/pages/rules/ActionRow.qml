@@ -449,7 +449,7 @@ ColumnLayout {
         }
 
         // Stock-animation conflict chip — a per-window shader on the minimize
-        // or maximize event cannot suppress KDE's own effect for that event.
+        // event or a placement event cannot suppress KDE's own effect for it.
         // Predicate, tooltip, and the tree-suppression hide condition all
         // live in the shared component (also used by the read-only rule
         // summary, ActionListView).

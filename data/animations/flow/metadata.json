@@ -10,5 +10,14 @@
     "vertexShader": "effect.vert",
     "fboExtent": "surface",
     "geometryGrid": 40,
-    "parameters": []
+    "parameters": [
+        {
+            "id": "spread",
+            "name": "Trail Lag",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 0.8
+        }
+    ]
 }

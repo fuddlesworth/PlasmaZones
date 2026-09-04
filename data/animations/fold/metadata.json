@@ -10,5 +10,38 @@
     "vertexShader": "effect.vert",
     "fboExtent": "surface",
     "geometryGrid": 48,
-    "parameters": []
+    "parameters": [
+        {
+            "id": "folds",
+            "name": "Creases",
+            "type": "float",
+            "default": 5.0,
+            "min": 2.0,
+            "max": 10.0
+        },
+        {
+            "id": "compress",
+            "name": "Compression",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 0.6
+        },
+        {
+            "id": "depth",
+            "name": "Ridge Depth",
+            "type": "float",
+            "default": 0.13,
+            "min": 0.0,
+            "max": 0.3
+        },
+        {
+            "id": "shade",
+            "name": "Valley Shading",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
 }

@@ -230,7 +230,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("focus")});
     search->setPageKeywords(QStringLiteral("animations-window-motion"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("movement"), PhosphorI18n::tr("motion"),
-                             PhosphorI18n::tr("snap"), PhosphorI18n::tr("maximize")});
+                             PhosphorI18n::tr("place"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("tile"),
+                             PhosphorI18n::tr("maximize")});
     search->setPageKeywords(QStringLiteral("animations-window-dragging"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("dragging"),
                              PhosphorI18n::tr("move"), PhosphorI18n::tr("wobble"), PhosphorI18n::tr("physics")});

@@ -464,7 +464,15 @@ void ScrollEngine::commitDragInsertPreview()
     }
 }
 
-void ScrollEngine::cancelDragInsertPreview()
+// dragStillActive is accepted for interface parity and deliberately unused:
+// the scroll preview DETACHES the window from the strip for the whole hold,
+// so the cancel's re-insert is the only thing that can put it back. The
+// re-insert plus neighbour reflow is the intended niri-style behaviour, and
+// the dragged window's own rect is never emitted mid-drag anyway — applyLayout
+// suppresses it through the daemon-set m_interactiveDragWindow mark, which is
+// exactly why ignoring the flag here is safe. (The drag then re-begins a
+// preview on whichever screen the cursor is on.)
+void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
 {
     if (!m_dragInsertPreview) {
         return;
@@ -610,13 +618,18 @@ void ScrollEngine::cancelDragInsertPreview()
             m_parkedScrollEdge.remove(p.windowId);
             applyLayout(p.targetScreenId, false);
             Q_EMIT placementChanged(p.targetScreenId);
+            // Only for the arm that actually re-homed the window: the else
+            // arm below drops it from the engine entirely, and telling the
+            // daemon "not floating on targetScreen" for a window this engine
+            // no longer holds would clear a real float mark with no engine
+            // owning the window.
+            Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
         } else {
             // Target context refused too — the window would stay tracked
             // against a key holding it nowhere. Drop the reverse-map entry
             // instead of latching the detached-residue limbo.
             m_states.removeWindow(p.windowId);
         }
-        Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
         return;
     }
 

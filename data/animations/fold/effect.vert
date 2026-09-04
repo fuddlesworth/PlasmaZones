@@ -25,9 +25,14 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
+#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
+// Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
+// kwin-effect paint pipeline for any shader that declares them. On the
+// UBO branch both rects come from the AnimationUniforms transition tail.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
+#endif
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = crease
 // shade (1 = lit ridge, < 1 = shadowed valley, applied as a coverage
 // fade — see effect.frag), .w = old->new cross-fade.
@@ -35,13 +40,25 @@ layout(location = 1) out vec4 vFold;
 
 void main() {
     const float PI = 3.14159265358979;
-    const float FOLDS = 5.0;      // crease count along the travel axis
-    const float COMPRESS = 0.35;  // how far the accordion pulls in at full fold
-    const float DEPTH = 0.13;     // perpendicular ridge amplitude (card uv)
-    const float SHADE = 0.45;     // max valley darkening
+    // p_folds / p_compress / p_depth / p_shade were the baked FOLDS = 5.0,
+    // COMPRESS = 0.35, DEPTH = 0.13 and SHADE = 0.45 constants before they
+    // were declared. Only compress needs a guard: past 1.0 the compression
+    // term goes negative and mirrors the card; the others degrade
+    // gracefully (shade is re-clamped in effect.frag).
+    float foldCount = p_folds;
+    float compress = clamp(p_compress, 0.0, 0.6);
+    float foldDepth = p_depth;
+    float valleyShade = p_shade;
 
     // Card uv with KWin's window-quad texcoord flip re-applied (see flow).
+#ifdef PLASMAZONES_KWIN
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
+    // ...and spans the captured canvas: fold the anchor sub-rect so cuv is
+    // card space (identity rect on a bare-card capture = passthrough).
+    vec2 cuv = (texCoord - iAnchorRectInTexture.xy) / max(iAnchorRectInTexture.zw, vec2(1.0e-5));
+#endif
 
     // Forward progress and a smoothstep ease for the translation.
     float tt = legProgress();
@@ -89,10 +106,10 @@ void main() {
     // Accordion: compress along travel and add a triangle-wave ridge
     // perpendicular to it.
     float s01 = clamp(sRaw + 0.5, 0.0, 1.0);
-    float phase = s01 * FOLDS;
+    float phase = s01 * foldCount;
     float saw = abs(fract(phase) - 0.5) * 2.0 - 0.5; // triangle in [-0.5, 0.5]
-    float sDev = sRaw * (1.0 - f * COMPRESS);
-    float ridge = saw * f * DEPTH;
+    float sDev = sRaw * (1.0 - f * compress);
+    float ridge = saw * f * foldDepth;
 
     vec2 duv = vec2(0.5) + dir * sDev + perp * (r + ridge);
 
@@ -115,9 +132,17 @@ void main() {
 
     // Crease shade: ridges toward the viewer stay lit, valleys fade toward
     // the backdrop with fold depth (a coverage fade — see effect.frag).
-    float shade = 1.0 - f * SHADE * (0.5 - saw);
+    float shade = 1.0 - f * valleyShade * (0.5 - saw);
 
     vTexCoord = cuv;
     vFold = vec4(cuv, shade, ease);
+#ifdef PLASMAZONES_KWIN
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
+#else
+    // Qt-RHI path: logical-px delta to clip units at 2 / iResolution, on
+    // the pack's geometryGrid mesh — see flow's #else arm for the full
+    // contract.
+    vec2 rhiDisplaced = position + (screenPos - toPos) * 2.0 / max(iResolution, vec2(1.0));
+    gl_Position = qt_Matrix * vec4(rhiDisplaced, 0.0, 1.0);
+#endif
 }

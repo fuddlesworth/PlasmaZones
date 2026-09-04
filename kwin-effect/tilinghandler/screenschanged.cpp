@@ -301,7 +301,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             }
             // Snap-out: leaving tile-managed sizing.
             m_effect->applyWindowGeometry(w, savedGeo.toRect(), /*allowDuringDrag=*/false,
-                                          /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                          /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowPlaceOut);
             // Re-seed the tracked screen: the bracket above
             // suppressed the VS-crossing detectors whose early
             // return sits BEFORE their tracker write, and
@@ -951,7 +951,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         }
         m_effect->applyWindowGeometry(w, it.value().toRect(), /*allowDuringDrag=*/false,
-                                      /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                      /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowPlaceOut);
         // Re-seed the tracked screen — same pairing rule as the inline
         // restore arm and requestDaemonPreTileRestore: the bracket
         // suppressed the detectors' own tracker write, and the restore can

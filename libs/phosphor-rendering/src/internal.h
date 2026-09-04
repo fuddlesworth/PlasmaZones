@@ -58,6 +58,14 @@ inline QString localPathFromShaderUrl(const QUrl& url)
 /// source-hash cache while the filename cache kept serving stale bakes.
 void clearFilenameShaderCache();
 
+/// Fingerprint a list of canonical include paths (path + mtime per file,
+/// sorted, deduplicated). Defined in shadernoderhicore.cpp beside the cache
+/// key it feeds. Call it AT EXPANSION TIME — immediately after the load that
+/// produced @p paths — never later: statting the mtimes at bake time opens a
+/// TOCTOU window where an include edited between expansion and fingerprinting
+/// caches old-content SPIR-V under the new-mtime key.
+QByteArray includeFingerprint(QStringList paths);
+
 /// Apply the T1.4 entry-point scaffold to a raw fragment source. Returns
 /// @p raw unchanged when @p candidates is empty or @p raw already defines
 /// `main()`; otherwise prepends @p prologue and appends the first matching

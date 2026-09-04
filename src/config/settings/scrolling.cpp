@@ -134,15 +134,6 @@ P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCen
 P_STORE_GET(bool, scrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, bool)
 P_STORE_SET_BOOL(setScrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, scrollingSmartGapsChanged)
 
-// Derived, not stored — see the header, including why the GLOBAL duration is
-// a deliberate approximation of the per-window close leg. Rides the animation
-// settings' change signals into the engine because refreshConfigFromSettings
-// re-reads every IScrollSettings value on any settings change.
-int Settings::scrollingCloseReflowDelayMs() const
-{
-    return animationsEnabled() ? animationDuration() : 0;
-}
-
 P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
 P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
 
@@ -794,9 +785,12 @@ P_STORE_SET_STRING(setScrollingIncreaseWindowHeightShortcut, shortcutsScrollingG
 P_STORE_GET(QString, scrollingDecreaseWindowHeightShortcut, shortcutsScrollingGroup, decreaseWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingDecreaseWindowHeightShortcut, shortcutsScrollingGroup, decreaseWindowHeightKey,
                    scrollingDecreaseWindowHeightShortcutChanged)
-P_STORE_GET(QString, scrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey, QString)
-P_STORE_SET_STRING(setScrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey,
-                   scrollingResetWindowHeightsShortcutChanged)
+P_STORE_GET(QString, scrollingMaximizeWindowHeightShortcut, shortcutsScrollingGroup, maximizeWindowHeightKey, QString)
+P_STORE_SET_STRING(setScrollingMaximizeWindowHeightShortcut, shortcutsScrollingGroup, maximizeWindowHeightKey,
+                   scrollingMaximizeWindowHeightShortcutChanged)
+P_STORE_GET(QString, scrollingExpandWindowShortcut, shortcutsScrollingGroup, expandWindowKey, QString)
+P_STORE_SET_STRING(setScrollingExpandWindowShortcut, shortcutsScrollingGroup, expandWindowKey,
+                   scrollingExpandWindowShortcutChanged)
 P_STORE_GET(QString, scrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey, QString)
 P_STORE_SET_STRING(setScrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey,
                    scrollingCenterVisibleColumnsShortcutChanged)
@@ -837,5 +831,11 @@ P_STORE_SET_STRING(setScrollingEqualizeColumnWidthsShortcut, shortcutsScrollingG
 P_STORE_GET(QString, scrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey, QString)
 P_STORE_SET_STRING(setScrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey,
                    scrollingMinimizeColumnWidthShortcutChanged)
+P_STORE_GET(QString, scrollingEqualizeWindowHeightsShortcut, shortcutsScrollingGroup, equalizeWindowHeightsKey, QString)
+P_STORE_SET_STRING(setScrollingEqualizeWindowHeightsShortcut, shortcutsScrollingGroup, equalizeWindowHeightsKey,
+                   scrollingEqualizeWindowHeightsShortcutChanged)
+P_STORE_GET(QString, scrollingMinimizeWindowHeightShortcut, shortcutsScrollingGroup, minimizeWindowHeightKey, QString)
+P_STORE_SET_STRING(setScrollingMinimizeWindowHeightShortcut, shortcutsScrollingGroup, minimizeWindowHeightKey,
+                   scrollingMinimizeWindowHeightShortcutChanged)
 
 } // namespace PlasmaZones

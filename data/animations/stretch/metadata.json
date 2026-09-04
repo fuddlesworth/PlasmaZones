@@ -10,5 +10,30 @@
     "vertexShader": "effect.vert",
     "fboExtent": "surface",
     "geometryGrid": 40,
-    "parameters": []
+    "parameters": [
+        {
+            "id": "overshoot",
+            "name": "Overshoot",
+            "type": "float",
+            "default": 1.2,
+            "min": 1.0,
+            "max": 1.5
+        },
+        {
+            "id": "spread",
+            "name": "Trail Lag",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 0.8
+        },
+        {
+            "id": "squash",
+            "name": "Squash",
+            "type": "float",
+            "default": 0.16,
+            "min": 0.0,
+            "max": 0.4
+        }
+    ]
 }

@@ -10,6 +10,8 @@
 #include <QString>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorScrollEngine {
 
 /// Per-screen override-map keys for ScrollEngine::applyPerScreenConfig.
@@ -710,12 +712,14 @@ inline int proportionalPx(qreal proportion, int workExtent, int gap)
 /// TYPED order under niri.
 ///
 /// Both the pick and the WRAP are by extent, not by position, and that is
-/// what makes the SIZE-order claim above true. The preset lists are
-/// deduplicated at the boundary but never sorted (minimizeActiveColumnWidth's
-/// comment spells out why), so a list typed as e.g. 1/2, 1/3, 2/3 has its
-/// narrowest entry in the middle. Wrapping to position 0 there would hand a
-/// forward press the MIDDLE entry and leave the narrowest reachable only
-/// backwards.
+/// what makes the SIZE-order claim above true. Order is NOT guaranteed: the
+/// settings schema's canonicalProportionList deduplicates what a user types
+/// but preserves their order, refreshConfigFromSettings' parser and the
+/// per-screen override path neither sort nor deduplicate, and only the
+/// template channel arrives sorted (phosphor-zones normalizePresetList). So a
+/// list typed as e.g. 1/2, 1/3, 2/3 keeps its narrowest entry in the middle.
+/// Wrapping to position 0 there would hand a forward press the MIDDLE entry
+/// and leave the narrowest reachable only backwards.
 ///
 /// @p resolve maps a vocabulary index to the pixel extent that entry would
 /// render at. Returns -1 for an empty vocabulary.
@@ -760,6 +764,47 @@ struct Tile
 {
     QString windowId;
     WindowHeight height;
+    /// The height this tile carried when toggleMaximizeActiveWindowHeight last
+    /// maximized it, so the un-maximize press can put it back instead of
+    /// falling to Auto. Empty means "not maximized by that verb", which is
+    /// also the answer for a tile that reached full height by another route
+    /// (an adjust clamped at the budget, a preset cycled to the top) — those
+    /// still un-maximize to Auto, since there is no remembered height to
+    /// restore and Auto is the height family's "the column decides".
+    ///
+    /// Held HERE rather than as a strip-level index the way the width axis
+    /// holds m_preMaximizeColumnIdx: an index has to be re-clamped by every
+    /// insert, removal, reorder, consume and expel (that bookkeeping is why
+    /// this verb originally shipped without a slot at all), while a field on
+    /// the tile travels with it through all of those for free, because every
+    /// one of those paths moves the Tile struct whole.
+    ///
+    /// Set ONLY by that verb's maximize arm. What clears it again divides on
+    /// who chose the height, not on whether the tile moved.
+    ///
+    /// A height the CALLER names settles it, even when the tile already held
+    /// that value: setActiveWindowHeight and setWindowHeightIntent both clear
+    /// above their equality bail, reconcileWindowSize clears before comparing
+    /// the size a user's interactive resize settled on, resetToDefaults clears
+    /// as it applies the layout's default, and equalize clears every tile in
+    /// the column outright. In each of those someone asked for a specific
+    /// height and got it, so there is no maximize left to undo.
+    ///
+    /// A height the VERB computes does not, unless the write lands. adjust,
+    /// minimize and expand bail when the press would move no pixels, and the
+    /// preset cycle bails when the entry it picked is the one the tile already
+    /// holds; all four clear only past that bail. A refusal is not a
+    /// countermand — a held-down key sitting at its limit must not erase the
+    /// memory. Nor does dropping a column's maximize-to-edges override on its
+    /// own: that press reports a change, but it has not settled a height. Because of that the
+    /// standing slot is also what the toggle READS to decide the tile is
+    /// maximized: it cannot go stale the way the height itself does when the
+    /// budget moves under it. Deliberately
+    /// NOT serialized and not carried across a re-insert (migration, unfloat,
+    /// stash restore, drag commit), which is the same session-and-place scope
+    /// the width axis's slot has — a window that comes back from one of those
+    /// un-maximizes to Auto.
+    std::optional<WindowHeight> preMaximizeHeight;
     /// Minimized tiles keep their slot/order but are excluded from layout;
     /// unminimize restores the window into the same slot.
     bool minimized = false;
@@ -949,22 +994,30 @@ struct ScrollLayoutParams
     /// Defaulted to Horizontal so every existing construction, the test
     /// fixtures included, keeps the historical layout with no edit.
     StripAxis axis = StripAxis::horizontal();
-    /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
+    /// Preset proportion lists (the niri 1/3, 1/2, 2/3 plus 3/4 and full). Never empty —
     /// resolvers snap a Preset fraction anchor to the nearest entry.
-    /// KEEP IN SYNC with THREE other copies, not one:
+    /// KEEP IN SYNC with FOUR other copies, not one:
     ///   1. ScrollEngine::m_presetColumnWidths / m_presetWindowHeights, the
     ///      member seeds these mirror (ScrollEngine.h);
     ///   2. ScrollEngine::refreshConfigFromSettings' fallback list
     ///      (engine_core.cpp), the empty-config fallback;
-    ///   3. ConfigDefaults' "0.333,0.5,0.667" strings
+    ///   3. ConfigDefaults' "0.333,0.5,0.667,0.75,1" strings
     ///      (configdefaults_scrolling.h) — the one a CONFIGURED user actually
     ///      gets, and the only one expressed in decimal rather than as
-    ///      thirds, so it is already very slightly different by construction.
-    /// The ops-suite literal-260 preset assertion pins THIS copy alone, so a
-    /// change to any of the other three leaves the test green while the
-    /// running engine shifts.
-    QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    ///      thirds, so it is already very slightly different by construction;
+    ///   4. EditorController::createNewScrollingTemplate's seed for a brand-new
+    ///      template (src/editor/controller/scrollingtemplate.cpp). A template's
+    ///      list REPLACES this one wholesale on the screens it covers, so a
+    ///      stale seed there narrows the cycle rather than diverging quietly.
+    /// The ops-suite assertion that pins THIS copy is the 800 one in
+    /// reconcileLoneTileRecordsHeightIntent (test_scrollstrip_ops.cpp): a
+    /// forward press from 720px only reaches the full-height entry if this list
+    /// carries it. The neighbouring literal-260 assertion is the wrap-to-
+    /// shortest answer and stays green under any vocabulary that starts at 1/3,
+    /// so it pins nothing here. A change to any of the other four copies still
+    /// leaves the suite green while the running engine shifts.
+    QList<qreal> presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
     /// Whether the strip's layout math honours client minimum sizes (the

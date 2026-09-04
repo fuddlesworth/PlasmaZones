@@ -1219,8 +1219,33 @@ public:
 
     /**
      * @brief Cancel the active drag-insert preview, restoring the original order.
+     *
+     * @p dragStillActive carries the base-interface contract (the previewed
+     * window is still under an interactive move, so the cancel's own retiles
+     * must keep skipping its geometry). Ignored when the daemon-set
+     * interactive-drag mark names a DIFFERENT window than the preview: the
+     * preview is then stale residue from an earlier drag, nobody is holding
+     * its window, and suppressing its snap-back would park it at the
+     * previewed rect until an unrelated retile.
      */
-    void cancelDragInsertPreview() override;
+    void cancelDragInsertPreview(bool dragStillActive = false) override;
+
+    /**
+     * @brief Mark @p windowId as under a compositor interactive move
+     * (IPlacementEngine contract). Empty clears.
+     *
+     * While set, applyTiling never emits this window's geometry: autotile
+     * keeps a dragged window modeled as a tile, so any retile that runs
+     * during the drag — a deferred geometry-retry, a window opening or
+     * closing on the screen, a settings retile, an engine-internal preview
+     * self-cancel — would otherwise apply the tile rect to the window in the
+     * user's hand (discussion #1028). The preview filter and the cancel
+     * filter cover only the preview's own lifecycle; this covers the whole
+     * drag. Clearing does NOT retile — every drop path finalizes on its own
+     * (commit re-applies, ApplyFloat floats the window out, a cancelled move
+     * has KWin restore the frame).
+     */
+    void setInteractiveDragWindow(const QString& windowId) override;
 
     /**
      * @brief Compute the insert index for a cursor position on an autotile screen.
@@ -1954,6 +1979,19 @@ private:
     // AutotileEngine::DragInsertPreview spelling valid for existing call sites.
     using DragInsertPreview = ::PhosphorTileEngine::DragInsertPreview;
     std::optional<DragInsertPreview> m_dragInsertPreview;
+
+    /// Set only for the duration of cancelDragInsertPreview(dragStillActive =
+    /// true)'s retiles: the window whose interactive move is still running and
+    /// must keep being skipped by applyTiling's geometry emission even though
+    /// m_dragInsertPreview has already been reset. Empty otherwise.
+    QString m_dragCancelFilterWindowId;
+
+    /// The window under a compositor interactive move (canonical id), set by
+    /// the daemon at beginDrag and cleared on every drag exit. While set,
+    /// applyTiling skips its geometry emission entirely — the drag-long
+    /// counterpart to the scope-bound cancel filter above (see
+    /// setInteractiveDragWindow). Empty otherwise.
+    QString m_interactiveDragWindow;
 
     /**
      * @brief Process all pending retiles (fires via QueuedConnection)

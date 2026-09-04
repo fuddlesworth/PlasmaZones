@@ -28,19 +28,27 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
+#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
+// Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
+// kwin-effect paint pipeline for any shader that declares them. On the
+// UBO branch both rects come from the AnimationUniforms transition tail.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
+#endif
 // Per-vertex data for the fragment: .xy = sampling card uv, .z = old->new
 // cross-fade.
 layout(location = 1) out vec3 vStretch;
 
 // easeOutBack: rises to 1 with a single overshoot near the end, settling
-// exactly at 1. OVERSHOOT scales the spring: 1.0 gives the classic ~10%
-// overshoot, and 1.2 here for a slightly firmer snap.
+// exactly at 1. p_overshoot scales the spring: 1.0 gives the classic ~10%
+// overshoot; it was the baked OVERSHOOT = 1.2 constant (a slightly firmer
+// snap) before it was declared.
 float backOut(float x) {
-    const float OVERSHOOT = 1.2;
-    float c1 = 1.70158 * OVERSHOOT;
+    // Clamped to the declared [1.0, 1.5] range like p_spread / p_squash
+    // below: a hand-edited large value (say 10) makes c1 ~17 and hurls
+    // vertices far off-window mid-leg.
+    float c1 = 1.70158 * clamp(p_overshoot, 1.0, 1.5);
     float c3 = c1 + 1.0;
     float xm = x - 1.0;
     return 1.0 + c3 * xm * xm * xm + c1 * xm * xm;
@@ -48,11 +56,22 @@ float backOut(float x) {
 
 void main() {
     const float PI = 3.14159265358979;
-    const float SPREAD = 0.45;  // how far trailing verts lag the leading edge
-    const float SQUASH = 0.16;  // perpendicular thinning at peak motion
+    // p_spread / p_squash were the baked SPREAD = 0.45 (trailing lag) and
+    // SQUASH = 0.16 (perpendicular thinning) constants before they were
+    // declared; both clamped to their declared ranges — an unbounded spread
+    // pushes the stagger start past 1 (flow's guard), and a squash past 1
+    // inverts the thinning into a stretch.
+    float squash = clamp(p_squash, 0.0, 0.4);
 
     // Card uv with KWin's window-quad texcoord flip re-applied (see flow).
+#ifdef PLASMAZONES_KWIN
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
+    // ...and spans the captured canvas: fold the anchor sub-rect so cuv is
+    // card space (identity rect on a bare-card capture = passthrough).
+    vec2 cuv = (texCoord - iAnchorRectInTexture.xy) / max(iAnchorRectInTexture.zw, vec2(1.0e-5));
+#endif
 
     float tt = legProgress();
 
@@ -78,7 +97,7 @@ void main() {
     // at different times — a tear, not a stretch. Scale the stagger by the
     // travel share so a pure resize springs uniformly (the back-ease bounce
     // and the perpendicular squash both survive, since they ride the centre).
-    float spread = SPREAD * legTravelShare(iFromRect, iToRect);
+    float spread = clamp(p_spread, 0.0, 0.8) * legTravelShare(iFromRect, iToRect);
 
     // Per-vertex staggered spring: leading edge (s = 1) starts at t = 0,
     // trailing edge (s = 0) lags by `spread`; each rides a back-ease that
@@ -112,14 +131,21 @@ void main() {
     // sin(PI * tt) goes negative past the ends, which would invert the squash into
     // a stretch on the tail of an overshoot. The envelope has no meaning outside the
     // leg; the intended overshoot rides on the rect, not on this.
-    float perpComp = dot(rel, perp) * (1.0 - SQUASH * sin(PI * clamp(tt, 0.0, 1.0)));
+    float perpComp = dot(rel, perp) * (1.0 - squash * sin(PI * clamp(tt, 0.0, 1.0)));
     vec2 finalPos = centerPos + dir * alongComp + perp * perpComp;
-
-    // quad-space <-> screen-space is a pure 1:1 translation, so the screen
-    // delta from this vertex's settled position applies straight to it.
-    vec2 displaced = position + (finalPos - toPos);
 
     vTexCoord = cuv;
     vStretch = vec3(cuv, clamp(eC, 0.0, 1.0));
+#ifdef PLASMAZONES_KWIN
+    // quad-space <-> screen-space is a pure 1:1 translation, so the screen
+    // delta from this vertex's settled position applies straight to it.
+    vec2 displaced = position + (finalPos - toPos);
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
+#else
+    // Qt-RHI path: logical-px delta to clip units at 2 / iResolution, on
+    // the pack's geometryGrid mesh — see flow's #else arm for the full
+    // contract.
+    vec2 rhiDisplaced = position + (finalPos - toPos) * 2.0 / max(iResolution, vec2(1.0));
+    gl_Position = qt_Matrix * vec4(rhiDisplaced, 0.0, 1.0);
+#endif
 }

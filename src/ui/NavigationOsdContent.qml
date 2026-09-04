@@ -549,12 +549,17 @@ Item {
         } else if (action === "retile") {
             return i18n("Layout refreshed");
         } else if (action === "resize") {
-            // "equalize" is the group-width verb's reason: it rewrote every
-            // fully visible column, so the single-target copy would
-            // understate it. The bare reason is every other width and height
-            // verb.
+            // "equalize" and "equalize_heights" are the two group sizing
+            // verbs' reasons: each rewrote a whole group, so the
+            // single-target copy would understate it. They are separate
+            // tokens because the copy names what changed, and one axis
+            // reading the other's token announces the wrong thing. The bare
+            // reason is every other width and height verb.
             if (reason === "equalize")
                 return i18n("Column widths equalized");
+
+            if (reason === "equalize_heights")
+                return i18n("Window heights equalized");
 
             return i18nc("@info:status the window was resized", "Resized");
         } else if (action === "tabbed") {

@@ -13,6 +13,38 @@
             ]
         },
         {
+            "version": "3.4.11",
+            "date": "2026-09-04",
+            "highlights": [
+                "New: scrolling window heights have the same four shortcuts column widths have. Maximize Window Height, Grow Window into Empty Space and Minimize Window Height are their width chord with Ctrl added, and Reset Window Heights is now Equalize Window Heights (#1060)",
+                "Changed: the shortcut cheatsheet has a filter field that matches actions, categories and key sequences, and each category stays whole under one heading instead of being split across columns (#1059)",
+                "Changed: the new shortcut and cheatsheet text is translated in all seven languages (#1061)",
+                "Fixed: restoring a maximized window on a scrolling screen plays the Released animation instead of Placed (#1058)"
+            ]
+        },
+        {
+            "version": "3.4.10",
+            "date": "2026-09-04",
+            "highlights": [
+                "New: animation shader packs play a live preview in Animations → Shaders, on a stand-in subject matched to what the pack animates, and the parameter editor drives it as you adjust values (#1046)",
+                "New: the scrolling width and height preset cycle goes on to three quarters and full size (#1050)",
+                "Changed: gaps go up to 200 pixels, the corner radius to 50 and the border width to 20 (#1050)",
+                "Changed: the window motion events are now Placed and Released, the separate Maximized event is gone, and your assignments carry over (#1052)",
+                "Fixed: the mouse pointer no longer wobbles along with a strip animation such as Jelly (#1049)",
+                "Fixed: focusing a column on another desktop's strip lands all of its neighbours, and a service restart no longer comes up with an empty strip (#1047, #1053)",
+                "Fixed: letting go of the insert key mid-drag leaves the window in your hand alone, and focus-follows-mouse no longer leaks onto desktops without a placement mode (#1028)"
+            ]
+        },
+        {
+            "version": "3.4.9",
+            "date": "2026-09-02",
+            "highlights": [
+                "New: a scroll key under Settings → Scrolling → Window can now be a single mouse button as well as a modifier combination, so a spare button plus the wheel moves you along the strip (#1042)",
+                "Fixed: clicking a taskbar entry for a window on another desktop's scrolling strip now centers the strip on it instead of leaving it off screen (#1040)",
+                "Fixed: closing a scrolling window moves the neighbours in immediately, with the closing window's animation drawn above the settling strip the way niri does (#1041)"
+            ]
+        },
+        {
             "version": "3.4.8",
             "date": "2026-09-02",
             "highlights": [

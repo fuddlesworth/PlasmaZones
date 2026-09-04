@@ -20,6 +20,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorCompositor/DecorationDefaults.h> // pinned against the rule bounds below
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
@@ -35,11 +36,31 @@
 
 namespace PlasmaZones {
 
+// The rule-side per-window border bounds are hand-mirrored from the compositor
+// slider ceilings: phosphor-rules does not link phosphor-compositor, so the two
+// cannot share a symbol. This is the one translation unit that sees both, and
+// the drift it guards against is silent rather than loud — intSlot below DROPS
+// an out-of-range slot instead of clamping it, so a raised slider ceiling with
+// a stale rule bound would make the widest values authorable in settings vanish
+// from any rule that carried them.
+static_assert(PhosphorRules::MaxBorderWidth == PhosphorCompositor::DecorationDefaults::BorderWidthMax,
+              "Rule border-width ceiling and the window-decoration slider ceiling must match");
+static_assert(PhosphorRules::MaxBorderRadius == PhosphorCompositor::DecorationDefaults::BorderRadiusMax,
+              "Rule border-radius ceiling and the window-decoration slider ceiling must match");
+// Same reasoning for the per-event animation duration override: the rule layer
+// publishes these as the editor's spin-box range, and resolveAnimationTiming
+// below qBounds an incoming value to the PhosphorAnimation limits. If the two
+// drifted apart the editor would offer durations the effect quietly rewrote.
+static_assert(PhosphorRules::MinAnimationDurationMs == PhosphorAnimation::Limits::MinAnimationDurationMs,
+              "Rule animation-duration floor and the animation limit must match");
+static_assert(PhosphorRules::MaxAnimationDurationMs == PhosphorAnimation::Limits::MaxAnimationDurationMs,
+              "Rule animation-duration ceiling and the animation limit must match");
+
 namespace {
 
 // OverrideAnimation* action param keys consumed by the resolvers below come
 // from the shared PhosphorRules::ActionParam vocabulary so the resolver,
-// the action-registry validators in ruleaction.cpp, the rule-editor UI, and
+// the action-registry validators in ruleaction_builtins_*.cpp, the rule-editor UI, and
 // the v3→v4 migration in configmigration.cpp::buildAnimationAppRule all read
 // from one source of truth. A future rename of any of these wire keys flows
 // to every consumer in a single edit.
@@ -244,10 +265,14 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         return v.toBool();
     };
     // Upper bounds are the SHARED PhosphorRules::MaxBorderWidth / MaxBorderRadius
-    // constants that the load-time descriptor validators (ruleaction.cpp) also
-    // use, so this consumer re-validation is genuinely symmetric — a
-    // programmatically-built / hand-edited payload with width:5000 is rejected
-    // here, not drawn — and the two boundaries can never silently drift.
+    // constants that the load-time descriptor validators
+    // (ruleaction_builtins_appearance.cpp) also use, so this consumer
+    // re-validation is genuinely symmetric — a programmatically-built /
+    // hand-edited payload with width:5000 is rejected here, not drawn — and the
+    // two boundaries can never silently drift. This translation unit is also
+    // the one place that sees both the rules constants and the compositor
+    // slider ceilings they mirror, so it is where that pair is pinned (see the
+    // static_asserts at the top of the file).
     const auto intSlot = [&resolved](QLatin1StringView slot, double maxValue) -> std::optional<int> {
         const auto action = resolved.slot(QString(slot));
         if (!action) {

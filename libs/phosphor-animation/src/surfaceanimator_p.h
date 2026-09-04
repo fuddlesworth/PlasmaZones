@@ -128,10 +128,6 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root);
 QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickItem* shaderItem,
                                                QQuickItem* shaderSource, bool foundExplicitAnchor);
 
-void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
-                             const PhosphorAnimationShaders::AnimationShaderEffect& effect,
-                             const QStringList& shaderIncludePaths);
-
 void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderEffect* shaderItem,
                            QQuickShaderEffectSource* shaderSource,
                            PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind extent);

@@ -34,8 +34,13 @@
 //
 // Geometry-morph endpoints (logical-screen px, x/y/w/h). Default-block
 // uniforms pushed by the kwin-effect paint pipeline.
+#ifdef PLASMAZONES_KWIN
+// On the UBO branch both rects come from the AnimationUniforms transition
+// tail (shared/animation_uniforms.glsl); only the kwin branch declares
+// them as default-block uniforms.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
+#endif
 
 vec4 pTransition(vec2 uv, float t) {
     // `t` is the raw (possibly flipped) iTime the pTransition entry contract
@@ -78,8 +83,15 @@ vec4 pTransition(vec2 uv, float t) {
     // frame-anchored, so an out-of-range coordinate resolves into the padded
     // canvas's margin band. Zero pad reduces to the plain frame-edge mask.
     vec2 pad = surfacePadRel();
+    // pad is a fraction of the FINAL frame (the compositor's layer canvas is
+    // derived from the settled frameGeometry), but ruv is normalised by the
+    // MORPHING rect — rescale per axis or the halo band is under-widened on
+    // a grow leg (halo cropped at the sweeping edge until t→1) and
+    // over-widened on a shrink. The cuv mask below is already in final-frame
+    // units and takes pad unscaled.
+    vec2 rpad = pad * iToRect.zw / max(rect.zw, vec2(1.0));
     vec2 fw = max(fwidth(ruv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, ruv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - ruv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, ruv + rpad), smoothstep(vec2(0.0), fw, 1.0 + rpad - ruv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

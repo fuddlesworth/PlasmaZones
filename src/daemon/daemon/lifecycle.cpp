@@ -642,6 +642,11 @@ void Daemon::stop()
     // adaptor detaches above guard against.
     m_shaderBakePool.clear();
     m_shaderBakePool.waitForDone(500);
+    // Reap the warm-bake QFutureWatchers with their host: a bake discarded by
+    // the clear() above never fires finished, so its watcher (whose finished
+    // handler is also its deleteLater) would otherwise survive every
+    // stop() → init() cycle. setupShaderWarmBakes creates a fresh host.
+    m_bakeWatcherHost.reset();
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }

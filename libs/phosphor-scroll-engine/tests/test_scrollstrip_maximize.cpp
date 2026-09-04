@@ -300,7 +300,10 @@ void TestScrollStripMaximize::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
 //
 // EVERY clearing site in this file is driven, not a representative sample: the
 // contract is spelled out per verb across a dozen sites, so a slot that drove
-// four of them left deleting the clear from the other eight green. The one
+// four of them left deleting the clear from the other eight green. That is not
+// hypothetical — the three whole-size height verbs were added without being
+// added here, and the maximize toggle among them shipped an equality-gated
+// clear that refused forever on a column this slot would have caught. The one
 // site this fixture cannot reach is the per-member drop inside
 // equalizeVisibleColumnWidths' write loop: the fixture sets a 20px outer gap,
 // so a flagged column renders at the RAW main extent, fills the viewport
@@ -394,7 +397,7 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     QVERIFY(renderedMain() <= gappedMain);
 
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
-    QVERIFY2(strip.resetActiveColumnHeights(), "the height reset must report the drop");
+    QVERIFY2(strip.equalizeActiveColumnHeights(), "the height equalize must report the drop");
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 
@@ -407,6 +410,42 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
 
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QVERIFY2(strip.adjustActiveWindowHeight(-25.0, params), "the height adjust must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // The three whole-size height verbs. Each clears the override
+    // unconditionally while it is set, the rule setActiveWindowHeight states:
+    // under the override the stored intents are not rendered at all, so a
+    // press whose result equals the stored value is still a real change.
+    //
+    // The maximize toggle is the one that proves it, and only from AUTO. This
+    // fixture's column holds a single visible tile, so under the override it
+    // measures the WHOLE raw extent and the toggle decides it is already
+    // maximized, making its result Auto (in a stack the raw share falls under
+    // the budget and the toggle would answer Fixed instead). The equalize puts
+    // the tile on Auto first so that result EQUALS the stored intent and the
+    // unconditional clear is the only thing that can report a change. Driven
+    // from the Fixed the adjust above leaves, the old equality-gated clear
+    // fired too (Auto differs from Fixed) and this triplet passed against the
+    // very bug it is here to catch.
+    QVERIFY2(strip.equalizeActiveColumnHeights(), "the tile must be on Auto for the press below to be the hard case");
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.toggleMaximizeActiveWindowHeight(params), "the height maximize toggle must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.minimizeActiveWindowHeight(params), "the height minimize must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // Expand drops the override BEFORE it measures, since under the override
+    // every tile resolves to a share of the RAW cross extent, which is not the
+    // budget the verb compares against. This press succeeds; the case where a
+    // press REFUSES and still has to report the drop is covered in
+    // test_scrollstrip_sizing.cpp.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.expandActiveWindowToAvailableHeight(params), "the height expand must report the drop");
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 

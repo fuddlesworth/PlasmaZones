@@ -12,6 +12,8 @@
 #include <QMutexLocker>
 #include <QPointF>
 #include <QSizeF>
+#include <QVector>
+#include <QVector2D>
 #include <QVector4D>
 
 #include <atomic>
@@ -39,11 +41,13 @@ namespace PhosphorAnimation {
 /// fields through this extension isolates the two pipelines: zone
 /// shaders attach `ZoneUniformExtension` (`kZoneExtensionBytes` after base) and
 /// never observe these fields at all; animation shaders attach
-/// `AnimationUniformExtension` (48 bytes after base) — `iSurfaceScreenPos`
+/// `AnimationUniformExtension` (672 bytes after base) — `iSurfaceScreenPos`
 /// at offset 672, `iAnchorSize` at 688, `iAnchorPosInFbo` at 696,
-/// `iAnchorRectInTexture` at 704 — matching the trailing-field layout
-/// `data/animations/shared/animation_uniforms.glsl`'s UBO branch
-/// declares.
+/// `iAnchorRectInTexture` at 704, then the transition-class tail
+/// (`iSwitchDelta` 720 through `iHasOldWindow` 812, `iIconRect` 816,
+/// `iMoveTrail` 832, `iMoveMesh` 1088-1343) — matching the
+/// trailing-field layout `data/animations/shared/animation_uniforms.glsl`'s
+/// UBO branch declares.
 ///
 /// Cross-runtime parity: the kwin-effect path uses classic GL
 /// `setUniform` lookups for these names (see `paint_shader_window.cpp`)
@@ -209,6 +213,115 @@ public:
         m_dirty.store(true, std::memory_order_release);
     }
 
+    /// Transition-class fields (bytes 48..143 of the extension, UBO offsets
+    /// 720..815). These carry what the compositor's transition passes push
+    /// as default-block uniforms (desktop_transition.glsl's iSwitchDelta,
+    /// strip_transition.glsl's iStripMotion / iStripRect / iStripAxis,
+    /// old_content.glsl's iOldWindowOpacity, the geometry family's
+    /// iFromRect / iToRect) so the same pack sources compile and run under
+    /// the Qt-RHI UBO branch. The daemon's SurfaceAnimator never sets them
+    /// (its legs are appearance-contract only); the settings preview host
+    /// is the consumer that does. Zero-initialised, which every helper in
+    /// the shared includes treats as "not driven".
+    void setISwitchDelta(const QVector4D& v)
+    {
+        setVec4(m_data.iSwitchDelta, v);
+    }
+    void setIStripMotion(const QVector4D& v)
+    {
+        setVec4(m_data.iStripMotion, v);
+    }
+    void setIStripRect(const QVector4D& v)
+    {
+        setVec4(m_data.iStripRect, v);
+    }
+    void setIFromRect(const QVector4D& v)
+    {
+        setVec4(m_data.iFromRect, v);
+    }
+    void setIToRect(const QVector4D& v)
+    {
+        setVec4(m_data.iToRect, v);
+    }
+    void setIStripAxis(const QVector2D& v)
+    {
+        QMutexLocker lock(&m_mutex);
+        if (m_data.iStripAxis[0] == v.x() && m_data.iStripAxis[1] == v.y()) {
+            return;
+        }
+        m_data.iStripAxis[0] = v.x();
+        m_data.iStripAxis[1] = v.y();
+        m_dirty.store(true, std::memory_order_release);
+    }
+    void setIOldWindowOpacity(float v)
+    {
+        QMutexLocker lock(&m_mutex);
+        if (m_data.iOldWindowOpacity == v) {
+            return;
+        }
+        m_data.iOldWindowOpacity = v;
+        m_dirty.store(true, std::memory_order_release);
+    }
+    void setIHasOldWindow(bool has)
+    {
+        QMutexLocker lock(&m_mutex);
+        const int v = has ? 1 : 0;
+        if (m_data.iHasOldWindow == v) {
+            return;
+        }
+        m_data.iHasOldWindow = v;
+        m_dirty.store(true, std::memory_order_release);
+    }
+    /// Minimize target (the kwin path's iIconRect): x/y/w/h in the same
+    /// space as iSurfaceScreenPos. All-zero means "no icon target", which
+    /// genie / phosphor-siphon degrade from by collapsing onto the
+    /// window's own bottom edge.
+    void setIIconRect(const QVector4D& rect)
+    {
+        setVec4(m_data.iIconRect, rect);
+    }
+    /// Move-trail ring (the kwin path's iMoveTrail): up to 16 offsets of
+    /// past window origins RELATIVE to the current origin, newest first,
+    /// ~15 ms apart, logical px y-down. Fewer than 16 supplied entries
+    /// zero-fill the rest ("no older history").
+    void setIMoveTrail(const QVector<QVector2D>& trail)
+    {
+        QMutexLocker lock(&m_mutex);
+        bool changed = false;
+        for (int i = 0; i < 16; ++i) {
+            const float x = i < trail.size() ? trail[i].x() : 0.0f;
+            const float y = i < trail.size() ? trail[i].y() : 0.0f;
+            if (m_data.iMoveTrail[i][0] != x || m_data.iMoveTrail[i][1] != y) {
+                m_data.iMoveTrail[i][0] = x;
+                m_data.iMoveTrail[i][1] = y;
+                changed = true;
+            }
+        }
+        if (changed) {
+            m_dirty.store(true, std::memory_order_release);
+        }
+    }
+    /// Wobble lattice (the kwin path's iMoveMesh): 16 per-node deflections
+    /// from the node's ideal grid spot on the current frame, node
+    /// (i,j) = [i + 4*j], row 0 at the top, logical px y-down.
+    void setIMoveMesh(const QVector<QVector2D>& mesh)
+    {
+        QMutexLocker lock(&m_mutex);
+        bool changed = false;
+        for (int i = 0; i < 16; ++i) {
+            const float x = i < mesh.size() ? mesh[i].x() : 0.0f;
+            const float y = i < mesh.size() ? mesh[i].y() : 0.0f;
+            if (m_data.iMoveMesh[i][0] != x || m_data.iMoveMesh[i][1] != y) {
+                m_data.iMoveMesh[i][0] = x;
+                m_data.iMoveMesh[i][1] = y;
+                changed = true;
+            }
+        }
+        if (changed) {
+            m_dirty.store(true, std::memory_order_release);
+        }
+    }
+
     /// Card's UV sub-rect within `uTexture0`, as `(x, y, width, height)`
     /// in the captured texture's [0, 1] space. The daemon renders the
     /// shader anchor into `uTexture0`; when the anchor is larger than
@@ -238,6 +351,21 @@ public:
     }
 
 private:
+    /// Shared identity-short-circuiting vec4 write for the transition-tail
+    /// setters above.
+    void setVec4(float (&dst)[4], const QVector4D& v)
+    {
+        QMutexLocker lock(&m_mutex);
+        if (dst[0] == v.x() && dst[1] == v.y() && dst[2] == v.z() && dst[3] == v.w()) {
+            return;
+        }
+        dst[0] = v.x();
+        dst[1] = v.y();
+        dst[2] = v.z();
+        dst[3] = v.w();
+        m_dirty.store(true, std::memory_order_release);
+    }
+
     /// Std140 layout — appended after BaseUniforms at offset
     /// `sizeof(PhosphorShaders::BaseUniforms)`. Mirror of the trailing
     /// fields in `data/animations/shared/animation_uniforms.glsl`'s UBO
@@ -257,11 +385,31 @@ private:
                                        //   within uTexture0. offset 32 is already 16-aligned, so
                                        //   std140 inserts no pad before it. See
                                        //   setIAnchorRectInTexture's docstring.
+        // ── Transition-class tail (see the setter block's doc) ──────────
+        float iSwitchDelta[4]; // offset 48 (16 bytes), UBO offset 720
+        float iStripMotion[4]; // offset 64 (16 bytes), UBO offset 736
+        float iStripRect[4]; // offset 80 (16 bytes), UBO offset 752
+        float iFromRect[4]; // offset 96 (16 bytes), UBO offset 768
+        float iToRect[4]; // offset 112 (16 bytes), UBO offset 784
+        float iStripAxis[2]; // offset 128 (8 bytes), UBO offset 800
+        float iOldWindowOpacity; // offset 136 (4 bytes), UBO offset 808
+        int iHasOldWindow; // offset 140 (4 bytes), UBO offset 812. The UBO
+                           //   branch's mirror of the kwin default-block
+                           //   uniform of the same name (oldColor()'s
+                           //   snapshot gate).
+        float iIconRect[4]; // offset 144 (16 bytes), UBO offset 816 — see
+                            //   setIIconRect.
+        float iMoveTrail[16][4]; // offset 160 (256 bytes), UBO offset 832.
+                                 //   std140 gives a vec2 array a 16-byte
+                                 //   element stride, so each entry is
+                                 //   (x, y, pad, pad); see setIMoveTrail.
+        float iMoveMesh[16][4]; // offset 416 (256 bytes), UBO offset 1088.
+                                //   Same stride story; see setIMoveMesh.
     };
-    static_assert(sizeof(AnimationExtensionData) == 48,
-                  "AnimationExtensionData must be exactly 48 bytes — std140 vec4-aligned, no trailing pad");
-    static_assert(sizeof(PhosphorShaders::BaseUniforms) + sizeof(AnimationExtensionData) == 720,
-                  "BaseUniforms + AnimationExtensionData must total 720 bytes — matches the trailing-field "
+    static_assert(sizeof(AnimationExtensionData) == 672,
+                  "AnimationExtensionData must be exactly 672 bytes — std140 vec4-aligned, no trailing pad");
+    static_assert(sizeof(PhosphorShaders::BaseUniforms) + sizeof(AnimationExtensionData) == 1344,
+                  "BaseUniforms + AnimationExtensionData must total 1344 bytes — matches the trailing-field "
                   "layout declared in data/animations/shared/animation_uniforms.glsl");
     static_assert(sizeof(PhosphorShaders::BaseUniforms) == 672,
                   "BaseUniforms must remain at 672 bytes — growing it shifts ZoneUniformExtension's "

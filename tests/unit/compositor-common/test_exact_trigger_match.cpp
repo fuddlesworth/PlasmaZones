@@ -135,8 +135,11 @@ private Q_SLOTS:
     }
 
     // The button axis is SUBSET-matched even here, unlike the modifier axis.
-    // A modifier-only chord therefore shadows the same modifier plus a
-    // button, which is the reason the scroll-key rows offer modifiers only.
+    // A modifier-only chord therefore shadows the same modifier PLUS a
+    // button — but the capture UI only authors modifier-only or button-only
+    // chords, never combined, and under exact modifier matching those two
+    // shapes can never satisfy each other, so every UI-authorable binding
+    // stays reachable. A combined chord takes a hand-edited config.
     void buttonAxisIsSubsetNotExact()
     {
         const QVector<ParsedTrigger> modifierOnly{trigger(ModMeta)};

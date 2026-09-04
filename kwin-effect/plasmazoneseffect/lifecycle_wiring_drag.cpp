@@ -248,7 +248,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // path below: scrolling screens are a subset of managed screens,
             // so a tail call after its early return could never run for any
             // screen that actually has pills.
-            if (m_tilingHandler && KWin::effects) {
+            if (KWin::effects) {
                 m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
             }
 

@@ -1127,10 +1127,10 @@ private:
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
     //
     // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
-    // hardcoded to "window.snapIn" inside applyWindowGeometry, which fired the same shader for every
-    // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
+    // hardcoded to one path inside applyWindowGeometry, which fired the same shader for every
+    // motion that flowed through this chokepoint — place, release, resnap, resize, restore, etc.
     // Callers now pass the logical event path so the shader tree can route each one independently.
-    // Default is WindowSnapIn (the kwin-effect's default snap-into-zone window animation).
+    // Default is WindowPlaceIn (the placement animation every engine's arrival leg rides).
     //
     // originOverride replaces the window's CURRENT frame as the animation's
     // departure rect. Normally the two are the same — a window animates from
@@ -1163,7 +1163,7 @@ private:
     // immediate path assumes the caller already demoted.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
-                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
                              bool demoteMaximizeOnDeferredReplay = false);
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
@@ -2647,14 +2647,19 @@ private:
     /// Mutable because the predicate is const and is the only place the inputs
     /// it reports are assembled — same shape, and the same justification, as
     /// the mutable m_scrollClipLossReported once-reporting set in the tiling
-    /// handler. Keyed by window id and swept only on windowDeleted, so within a
-    /// session it is bounded by the number of distinct windows traced while the
-    /// category was enabled rather than by the live strip population: the
-    /// relocation map it shadows is torn down on unfloat, screen change, engine
-    /// flip and daemon loss, and none of those reach this gate. Entries are two
-    /// points and three bools, and a stale key is only ever compared, never
-    /// dereferenced, so the cost of the looser bound is bytes in a debugging
-    /// session.
+    /// handler. Keyed by window id, swept in slotWindowClosed with a
+    /// windowDeleted backstop for a delete that had no preceding close, so it
+    /// is bounded by the live traced population. Nothing re-enters it after the
+    /// close sweep: two of its three insert sites are behind a positive
+    /// scrollManagedOutputFor, which refuses a deleted window, and the third
+    /// needs a live m_scrollVisualDelta entry that slotWindowClosed removes
+    /// before the sweep. It was
+    /// previously swept only on windowDeleted, and that removal sits behind the
+    /// id-cache guard the close path has already cleared — so on an ordinary
+    /// close it never ran and entries lived for the session. Entries are two
+    /// points and three bools and a stale key is only ever compared, never
+    /// dereferenced, so the leak cost bytes in a debugging session rather than
+    /// correctness, which is why it went unnoticed.
     struct StripDiagSample
     {
         bool hadPlacement = false;

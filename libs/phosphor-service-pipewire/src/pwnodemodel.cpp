@@ -38,10 +38,41 @@ public:
     QHash<PwNode*, int> rowIndex;
     // Track our QMetaObject::Connection handles so we can disconnect
     // cleanly when the source connection or filter set changes. Each
-    // PwNode adds two connections (info + props); a single connection
-    // tracks nodeAdded / nodeRemoved on the PipeWireConnection itself.
+    // PwNode adds two connections (info + props) in nodeWires. The
+    // PipeWireConnection itself adds two more in connectionWires, for
+    // nodeAdded and nodeRemoved.
     QList<QMetaObject::Connection> connectionWires;
     QHash<PwNode*, QList<QMetaObject::Connection>> nodeWires;
+
+    // Last value published through `firstNodeChanged`. Row 0's identity is
+    // its own observable: a rebuild can swap every row for a different set
+    // of the same size, which moves row 0 while leaving the count alone, so
+    // `countChanged` is not a usable proxy for it.
+    //
+    // QPointer, not a raw pointer, even though this is only ever COMPARED.
+    // A comparison against a freed address is exactly where ABA bites: if a
+    // connection is destroyed externally (taking its PwNodes with it) and a
+    // later rebuild happens to allocate the new row 0 at the same address,
+    // a raw compare reports "unchanged" and suppresses firstNodeChanged —
+    // while QML's binding has already been nulled by the old object's
+    // destruction. The widget would then stay dead for the session, which
+    // is the exact failure this property exists to prevent. QPointer
+    // auto-nulls on destruction, so the next refresh always sees a real
+    // difference and emits.
+    QPointer<PwNode> publishedFirstNode;
+
+    // Re-read row 0 and emit only on an actual identity change. Call after
+    // EVERY mutation of `nodes`; it is a pointer compare, so the cost of
+    // calling it redundantly is nil next to the cost of missing a path.
+    void refreshFirstNode()
+    {
+        PwNode* const current = nodes.isEmpty() ? nullptr : nodes.constFirst();
+        if (current == publishedFirstNode.data()) {
+            return;
+        }
+        publishedFirstNode = current;
+        Q_EMIT q->firstNodeChanged();
+    }
 
     // Tear down all wires + rows and re-seed from the current
     // `connection` member's node snapshot. Used by both
@@ -95,14 +126,16 @@ PwNodeModel::~PwNodeModel()
         QObject::disconnect(wire);
     }
     d->connectionWires.clear();
-    for (auto* node : d->nodes) {
-        if (!d->nodeWires.contains(node))
-            continue;
-        // Same disconnect-bool-ignored contract as the connectionWires
-        // loop above: false = sender/receiver already gone (auto-
-        // cleanup), true = wire proactively dropped. Both outcomes are
-        // the desired post-state.
-        for (const auto& wire : d->nodeWires.value(node)) {
+    // Iterate nodeWires itself, not d->nodes. This is the container being
+    // cleared, so walking it needs no contains() guard and cannot miss an
+    // entry whose node has already left d->nodes — which the old shape did,
+    // contradicting the symmetry the comment above claims.
+    //
+    // Same disconnect-bool-ignored contract as the connectionWires loop:
+    // false = sender/receiver already gone (auto-cleanup), true = wire
+    // proactively dropped. Both outcomes are the desired post-state.
+    for (auto it = d->nodeWires.cbegin(); it != d->nodeWires.cend(); ++it) {
+        for (const auto& wire : it.value()) {
             QObject::disconnect(wire);
         }
     }
@@ -135,7 +168,14 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
     // the prior connection had no matching rows AND was then
     // externally destroyed — the QPointer auto-null would leave both
     // bindings stale (the auto-null itself never fires NOTIFY).
-    if (d->connection.isNull() && connection == nullptr && (!d->nodes.isEmpty() || !d->connectionWires.isEmpty())) {
+    // The flush runs for ANY replacement of an externally-destroyed
+    // connection, not only a null one: handing a NEW connection to a model
+    // whose caches still hold the dead connection's PwNode* would otherwise
+    // fall through to rebuildFromConnection, whose remove phase runs
+    // beginRemoveRows over those dangling pointers — and a view that
+    // queries data() from rowsAboutToBeRemoved dereferences freed memory.
+    // beginResetModel forbids exactly those per-row queries.
+    if (d->connection.isNull() && (!d->nodes.isEmpty() || !d->connectionWires.isEmpty())) {
         const bool hadRows = !d->nodes.isEmpty();
         if (hadRows) {
             beginResetModel();
@@ -151,6 +191,13 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
         if (hadRows) {
             endResetModel();
             Q_EMIT countChanged();
+            // NOT refreshFirstNode(): by this point the connection and its
+            // PwNodes are already destroyed, so the published QPointer has
+            // silently auto-nulled and the change gate would compare
+            // nullptr against nullptr and stay silent — swallowing what is
+            // observably a row 0 → nothing transition. Publish it directly.
+            d->publishedFirstNode = nullptr;
+            Q_EMIT firstNodeChanged();
         }
         // Fire connectionChanged at the acknowledgement boundary so
         // bindings observing the property get a NOTIFY for the implicit
@@ -158,8 +205,13 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
         // auto-nulled. Without this, any binding wired solely through
         // connectionChanged stays pinned to the prior non-null value
         // in its dependency graph.
-        Q_EMIT connectionChanged();
-        return;
+        if (connection == nullptr) {
+            Q_EMIT connectionChanged();
+            return;
+        }
+        // A NEW connection follows the flush: fall through to the normal
+        // assignment + rebuild below, which now runs against clean caches
+        // and fires connectionChanged once the rows describe it.
     }
     if (d->connection == connection)
         return;
@@ -214,6 +266,10 @@ void PwNodeModel::Private::rebuildFromConnection()
         // must have a corresponding entry in `nodeWires` (the inserts
         // are paired inside wireNode + the snapshot/append paths).
         // If this fires we've leaked the wire pair somewhere.
+        // Release-build behaviour of this assert is benign by construction:
+        // nodeWires.value() on a missing key yields a default-constructed empty
+        // QList and the loop below is a no-op, so there is no separate runtime
+        // guard to pair it with.
         Q_ASSERT(nodeWires.contains(node));
         for (const auto& wire : nodeWires.value(node)) {
             QObject::disconnect(wire);
@@ -300,6 +356,7 @@ void PwNodeModel::Private::rebuildFromConnection()
                 wireNode(node);
                 q->endInsertRows();
                 Q_EMIT q->countChanged();
+                refreshFirstNode();
             }));
         connectionWires.append(
             QObject::connect(connection.data(), &PipeWireConnection::nodeRemoved, q, [this](PwNode* node) {
@@ -333,6 +390,7 @@ void PwNodeModel::Private::rebuildFromConnection()
                 }
                 q->endRemoveRows();
                 Q_EMIT q->countChanged();
+                refreshFirstNode();
             }));
         // Seed from current snapshot: any nodes already surfaced
         // before this model attached. The `rowIndex.contains(node)`
@@ -369,6 +427,9 @@ void PwNodeModel::Private::rebuildFromConnection()
     if (nodes.size() != oldCount) {
         Q_EMIT q->countChanged();
     }
+    // A rebuild can replace every row with a different set of the SAME
+    // size, so this is the one path where row 0 moves with no countChanged.
+    refreshFirstNode();
 }
 
 QStringList PwNodeModel::mediaClasses() const
@@ -421,6 +482,14 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
             endResetModel();
             Q_EMIT countChanged();
         }
+        // Same as setConnection's recovery branch: the published QPointer
+        // has already auto-nulled along with the destroyed nodes, so the
+        // change gate cannot see the transition. Publish directly when
+        // there were rows; with none, nothing moved.
+        if (hadRows) {
+            d->publishedFirstNode = nullptr;
+            Q_EMIT firstNodeChanged();
+        }
         // Fire connectionChanged at the acknowledgement boundary so
         // bindings see the implicit non-null → null transition that
         // happened when the QPointer auto-nulled (no prior NOTIFY
@@ -433,6 +502,22 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
 int PwNodeModel::rowCount(const QModelIndex& parent) const
 {
     return parent.isValid() ? 0 : d->nodes.size();
+}
+
+PwNode* PwNodeModel::firstNode() const
+{
+    return d->nodes.isEmpty() ? nullptr : d->nodes.constFirst();
+}
+
+PwNode* PwNodeModel::nodeAt(int row) const
+{
+    // No null check on the element: both insert paths reject null before it
+    // reaches `nodes`, so a row is never null. data()'s extra check is
+    // belt-and-braces at the QAbstractItemModel boundary, not evidence that
+    // this one is missing something.
+    if (row < 0 || row >= d->nodes.size())
+        return nullptr;
+    return d->nodes.at(row);
 }
 
 QVariant PwNodeModel::data(const QModelIndex& index, int role) const

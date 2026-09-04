@@ -575,7 +575,7 @@ public:
     }
     static QString defaultAutotileAlgorithm()
     {
-        return QStringLiteral("bsp");
+        return QString(PhosphorTiles::AutotileDefaults::DefaultAlgorithmId);
     }
     static constexpr qreal autotileSplitRatio()
     {
@@ -591,15 +591,15 @@ public:
     }
     static constexpr qreal autotileSplitRatioStep()
     {
-        return 0.05;
+        return PhosphorTiles::AutotileDefaults::DefaultSplitRatioStep;
     }
     static constexpr qreal autotileSplitRatioStepMin()
     {
-        return 0.01;
+        return PhosphorTiles::AutotileDefaults::MinSplitRatioStep;
     }
     static constexpr qreal autotileSplitRatioStepMax()
     {
-        return 0.25;
+        return PhosphorTiles::AutotileDefaults::MaxSplitRatioStep;
     }
     static constexpr int autotileMasterCount()
     {
@@ -670,11 +670,11 @@ public:
     }
     static constexpr int animationSequenceModeMin()
     {
-        return 0;
+        return PhosphorAnimation::Limits::SequenceModeAllAtOnce;
     }
     static constexpr int animationSequenceModeMax()
     {
-        return 1;
+        return PhosphorAnimation::Limits::SequenceModeCascade;
     }
     static constexpr int animationStaggerInterval()
     {

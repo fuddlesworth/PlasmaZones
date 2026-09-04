@@ -58,10 +58,15 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
 inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-osd"));
 
 /// Passive overlay shell - single per-screen wlr-layer-shell host that
-/// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
+/// groups every passive overlay (OSD, zone-selector, main zone overlay,
 /// and post-migration snap-assist + layout picker + cheatsheet) onto one
-/// wl_surface per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
-/// click-through). Hiding ONE slot never unmaps anything: the per-content
+/// wl_surface per screen. FullscreenOverlay primitive (AnchorAll, attached
+/// kbd-None, click-through).
+///
+/// The role's KeyboardInteractivity is the ATTACH value only.
+/// ShellHost::syncSurfaceState raises the live surface to Exclusive while a
+/// slot that has to type is up (today the cheatsheet's search field) and
+/// drops it back to None on the first edge of dismissal. Hiding ONE slot never unmaps anything: the per-content
 /// slots toggle visibility within the shared scene graph, and the shell's
 /// own show/hide is driven off the anyVisible aggregate, so the wl_surface
 /// only moves when the LAST visible slot goes.

@@ -1011,16 +1011,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
         it = matches(it.key().screenId) ? m_burstPendingApplies.erase(it) : std::next(it);
     }
-    // Close-reflow hold + retile queue, completing the per-screen sweep. An
-    // armed flush timer holds only the id, and its lambda re-reads both maps,
-    // so dropping the entries here just makes it a no-op when it fires. Without
-    // this a monitor that comes back inherits the hold deadline it left with.
-    for (auto it = m_closeReflowHoldUntil.begin(); it != m_closeReflowHoldUntil.end();) {
-        it = matches(it.key()) ? m_closeReflowHoldUntil.erase(it) : std::next(it);
-    }
-    for (auto it = m_closeReflowFlushScheduled.begin(); it != m_closeReflowFlushScheduled.end();) {
-        it = matches(*it) ? m_closeReflowFlushScheduled.erase(it) : std::next(it);
-    }
+    // Retile queue, completing the per-screen sweep.
     for (auto it = m_pendingRetiles.begin(); it != m_pendingRetiles.end();) {
         it = matches(*it) ? m_pendingRetiles.erase(it) : std::next(it);
     }

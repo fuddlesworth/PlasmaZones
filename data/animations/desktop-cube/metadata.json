@@ -4,7 +4,7 @@
     "description": "Rotates the two desktops past each other like the faces of a spinning cube. This is the classic desktop switcher look.",
     "author": "PlasmaZones (ported from GL-Transitions cube by gre, MIT)",
     "version": "1.0",
-    "category": "Cube",
+    "category": "3D",
     "appliesTo": ["desktop"],
     "fragmentShader": "effect.frag",
     "parameters": [

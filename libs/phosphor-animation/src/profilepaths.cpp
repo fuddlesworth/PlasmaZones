@@ -40,17 +40,19 @@ const QString WindowFocus = QStringLiteral("window.appearance.focus");
 // packs cannot drive (no discrete before/after until release, and KWin
 // repaints the re-laid content live anyway), and the soft-body sim
 // deliberately omits KWin's resize edge-lock logic, so no pack class had a
-// real story there. Discrete resizes are covered by snapIn / layoutSwitch /
-// maximize. `window.movement.snapResize` was dropped with it: no callsite
+// real story there. Discrete resizes are covered by placeIn / placeOut /
+// layoutSwitch. `window.movement.snapResize` was dropped with it: no callsite
 // ever routed it. A stale config override on either path is pruned from the
 // SHADER tree by shaderSupportedEventPaths() on both read and write. The
 // motion tree has no such prune, so a motion override there simply lingers,
 // unreachable from the UI and named by no resolver.
 const QString WindowMovement = QStringLiteral("window.movement");
-const QString WindowMaximize = QStringLiteral("window.movement.maximize");
 const QString WindowMove = QStringLiteral("window.movement.move");
-const QString WindowSnapIn = QStringLiteral("window.movement.snapIn");
-const QString WindowSnapOut = QStringLiteral("window.movement.snapOut");
+// Renamed from snapIn / snapOut, and the maximize node retired into them, at
+// config schema v7 (configmigration_v7.cpp carries the stored-override rename
+// and the rules.json event rename rides finalizeV4Conversion's cleanup path).
+const QString WindowPlaceIn = QStringLiteral("window.movement.placeIn");
+const QString WindowPlaceOut = QStringLiteral("window.movement.placeOut");
 const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch");
 
 // desktop.* — full-screen two-texture from/to blends driven by the
@@ -174,10 +176,9 @@ QStringList allBuiltInPaths()
         WindowMinimize,
         WindowFocus,
         WindowMovement,
-        WindowMaximize,
         WindowMove,
-        WindowSnapIn,
-        WindowSnapOut,
+        WindowPlaceIn,
+        WindowPlaceOut,
         WindowLayoutSwitch,
         Desktop,
         DesktopSwitch,
@@ -279,18 +280,22 @@ bool eventPathResolvesPerWindow(const QString& path)
     // check the claim rather than trust it:
     //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
     //                          (open/close/focus) and daemon_apply (minimize)
-    //   window.movement.maximize / .move
-    //                        — tryBeginShaderForEvent from window_connections
-    //   window.movement.snapIn / .snapOut / .layoutSwitch
+    //   window.movement.move — tryBeginShaderForEvent from window_connections
+    //   window.movement.placeIn / .placeOut / .layoutSwitch
     //                        — applyWindowGeometry's resolve in drag_snap, and
     //                          every other applyWindowGeometry caller that takes
-    //                          the default profilePath (it defaults to snapIn),
-    //                          which includes the tiling and scrolling reflows
+    //                          the default profilePath (it defaults to placeIn),
+    //                          which includes the tiling and scrolling reflows;
+    //                          plus tryBeginShaderForEvent from
+    //                          window_connections (beginMaximizeShaderMorph, the
+    //                          KWin-native maximize of an unmanaged window,
+    //                          which rides placeIn growing and placeOut
+    //                          restoring)
     //   scrolling.tabSwitch  — tryBeginShaderForEvent from the tiling handler's
     //                          tab swap, which passes the arriving window
     static const QStringList kPerWindowPaths{
-        WindowOpen, WindowClose,  WindowMinimize, WindowFocus,        WindowMaximize,
-        WindowMove, WindowSnapIn, WindowSnapOut,  WindowLayoutSwitch, ScrollingTabSwitch,
+        WindowOpen,    WindowClose,    WindowMinimize,     WindowFocus,        WindowMove,
+        WindowPlaceIn, WindowPlaceOut, WindowLayoutSwitch, ScrollingTabSwitch,
     };
     return kPerWindowPaths.contains(path);
 }
@@ -319,10 +324,11 @@ QString eventClassForPath(const QString& path)
     if (path == WindowMove) {
         return EventClassMove;
     }
-    // Geometry legs carry an old rect and a new rect (snap/layoutSwitch/
-    // maximize) — the rest of the window.movement sub-tree, including its
-    // cascade parent. Maximize IS a geometry change with a before/after
-    // rect, so morph can drive it even though it isn't a built-in default.
+    // Geometry legs carry an old rect and a new rect (placeIn / placeOut /
+    // layoutSwitch) — the rest of the window.movement sub-tree, including its
+    // cascade parent. The three geometry leaves all carry the window-morph
+    // built-in default (defaultShaderEffectIdForPath). The move leaf above is
+    // the sub-tree's one exception.
     if (path == WindowMovement || path.startsWith(movementPrefix)) {
         return EventClassGeometry;
     }
@@ -386,16 +392,18 @@ QString eventClassForPath(const QString& path)
 
 QString defaultShaderEffectIdForPath(const QString& path)
 {
-    // Window snap events default to the geometry-morph shader so a window
-    // animates via shader cross-fade when it snaps/tiles/reflows. This is
-    // the same geometry leg set `eventClassForPath` classes as
-    // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
-    // morph is selectable there, but it isn't a built-in default) — keep the
-    // two lists in sync if a new geometry leg is added. `window.movement.move`
-    // is EXCLUDED: the interactive drag is a held transition a crossfade pack
-    // cannot drive (see eventClassForPath), so it carries no built-in default
-    // and its move-class packs (wobble) stay opt-in.
-    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch) {
+    // Window geometry events default to the geometry-morph shader so a window
+    // animates via shader cross-fade when it is placed, released, reflowed or
+    // maximized. This is the same geometry leg set `eventClassForPath` classes
+    // as EventClassGeometry — keep the two lists in sync if a new geometry leg
+    // is added. A built-in default counts as pack ownership for the
+    // stock-effect suppression (syncStockEffectSuppression), and the native
+    // maximize morph rides placeIn / placeOut, so KWin's own maximize effect is
+    // unloaded by default. `window.movement.move` is EXCLUDED: the interactive
+    // drag is a held transition a crossfade pack cannot drive (see
+    // eventClassForPath), so it carries no built-in default and its move-class
+    // packs (wobble) stay opt-in.
+    if (path == WindowPlaceIn || path == WindowPlaceOut || path == WindowLayoutSwitch) {
         return QStringLiteral("window-morph");
     }
     // Overlay surface show/hide (OSD + popups) default to the fade-and-scale

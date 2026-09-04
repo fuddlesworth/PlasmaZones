@@ -409,8 +409,12 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "Toggles the focused column between covering the whole work area with no gaps "
                               "and its normal size. The covering state is the one the window's maximize "
                               "button shows."));
-        add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
+        // No shortLabel: it used to read "Grow into Empty Space", which stopped
+        // being unambiguous the moment the height twin landed. The
+        // registration names ("Grow Column / Window into Empty Space") say
+        // which one a row is, and shortening them back would put two
+        // identical labels in the list.
+        add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Grows the focused column to fill the empty space visible on screen. "
                               "Other columns keep their size."));
@@ -434,10 +438,21 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused window through the screen's size presets within its column, "
                               "in reverse."));
-        add(kIdScrollResetWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+        // The height twins of Maximize Column, Grow Column into Empty Space,
+        // Minimize Column Width and Equalize Column Widths, in the order their
+        // width siblings appear above.
+        add(kIdScrollMaximizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Clears manual window sizes in the focused column so its windows share the "
-                              "column's space evenly."));
+                              "Toggles the focused window between filling its column and the height it "
+                              "had before, or an even share with the other windows there if it had none."));
+        add(kIdScrollExpandWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Grows the focused window to fill the empty space left in its column. "
+                              "The other windows there keep their size."));
+        add(kIdScrollMinimizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused window to the smallest size preset."));
+        add(kIdScrollEqualizeWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Gives every window in the focused column an equal share of it."));
         // ── The view ──
         add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));

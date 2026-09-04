@@ -17,14 +17,12 @@
 // frame. Restoring runs the ease the other way, so the same ramp fades
 // each region in as it pours back out of the icon.
 
-#ifdef PLASMAZONES_KWIN
 // .xy = card uv, .z = arrival ease (0 = at rest, 1 = inside the icon),
-// .w = lane seed. Interpolated from effect.vert across the grid.
+// .w = lane seed. Interpolated from effect.vert across the grid — on both
+// uniform ABIs, since the deformation went dual-branch.
 // iIconRect is consumed in the vertex stage.
 layout(location = 1) in vec4 vSiphon;
-#endif
 
-#include <anchor_remap.glsl>
 #include <noise.glsl>
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
@@ -41,7 +39,6 @@ vec3 fluxGradient(float t) {
 }
 
 vec4 pTransition(vec2 uv, float t) {
-#ifdef PLASMAZONES_KWIN
     vec2 cuv = vSiphon.xy;
     float e = clamp(vSiphon.z, 0.0, 1.0);
     float lane = vSiphon.w;
@@ -94,11 +91,4 @@ vec4 pTransition(vec2 uv, float t) {
 
     col.rgb = clamp(col.rgb, 0.0, 1.0);
     return col * (mask * alpha);
-#else
-    // Daemon path: the siphon is compositor-only. Degrade to a plain fade
-    // so an assignment to an overlay show/hide leg still animates. The
-    // host flips iTime on hide legs, so one expression covers both
-    // directions.
-    return surfaceColor(anchorRemap(uv)) * clamp(iTime, 0.0, 1.0);
-#endif
 }

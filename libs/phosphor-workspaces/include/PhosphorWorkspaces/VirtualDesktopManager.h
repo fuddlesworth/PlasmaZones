@@ -11,9 +11,12 @@
 #include <QStringList>
 #include <QTimer>
 
+QT_BEGIN_NAMESPACE
+class QDBusArgument;
 class QDBusInterface;
 class QDBusMessage;
 class QDBusServiceWatcher;
+QT_END_NAMESPACE
 
 namespace PhosphorWorkspaces {
 
@@ -79,6 +82,11 @@ public:
     void renameScreen(const QString& oldId, const QString& newId);
 
     void setCurrentDesktop(int desktop);
+    /// Switch by KWin's desktop UUID rather than by position. Positions
+    /// renumber whenever a desktop is created or removed, so anything that
+    /// holds a desktop across such an event (a pager's pills, a rule) must
+    /// key on the id. Unknown ids are ignored.
+    void setCurrentDesktopById(const QString& desktopId);
 
     /// Ask KWin to create a desktop at the given 0-based global position (KWin's
     /// D-Bus signature; the caller computes the position, this wrapper only
@@ -92,7 +100,9 @@ public:
     void setDesktopName(const QString& desktopId, const QString& name);
 
     /// Ordered KWin desktop UUID strings (global order, refreshed from the
-    /// `desktops` property). Empty until the first refresh or without KWin.
+    /// `desktops` property), index-aligned with desktopNames(). The stable
+    /// identity of a desktop: names are user-editable and positions renumber,
+    /// ids do neither. Empty until the first refresh or without KWin.
     QStringList desktopIds() const;
     /// UUID at 1-based global index, or empty when out of range.
     QString desktopIdAt(int desktop) const;
@@ -118,6 +128,12 @@ public:
     /// user should read rawDesktopNames() and substitute their own translated
     /// fallback for the empty entries.
     QStringList desktopNames() const;
+    /// True once KWin's VirtualDesktopManager interface answered on the
+    /// session bus. False on a non-KWin compositor or before init(), where
+    /// every getter degrades to a single synthetic desktop — a UI should
+    /// hide itself rather than show a pager with one permanent pill.
+    /// init() returns true unconditionally and so cannot be used for this.
+    bool isAvailable() const;
 
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
@@ -128,6 +144,13 @@ Q_SIGNALS:
     /// cancels drag-insert previews here) run on that re-announce too; see
     /// applyDesktopListReply for why that is accepted.
     void desktopCountChanged(int count);
+    /// The desktop LIST changed — a desktop was added, removed, reordered,
+    /// or renamed. Distinct from desktopCountChanged, which a rename does
+    /// not move: KWin delivers renames through `desktopDataChanged`, and
+    /// without this signal a pager would keep showing the old label until
+    /// something unrelated forced a refresh. Emitted only when the ids or
+    /// names actually differ from the previous snapshot.
+    void desktopsChanged();
     /// A single screen's current virtual desktop changed (per-output virtual
     /// desktops). The primary trigger the daemon's per-screen desktop handler
     /// subscribes to; in single-desktop mode it is driven the same for every
@@ -144,12 +167,18 @@ Q_SIGNALS:
     void desktopListChanged(const QStringList& desktopIds);
 
 private Q_SLOTS:
-    void onNumberOfDesktopsChanged(int count);
+    /// KWin's countChanged carries `u`, not `i`. A slot declared `int`
+    /// registers successfully and is then NEVER invoked, because the hook
+    /// signature must match the message signature exactly.
+    void onNumberOfDesktopsChanged(uint count);
     void refreshFromKWin();
     void onKWinCurrentChanged(const QString& desktopId);
     void onKWinDesktopCreated(const QString& desktopId);
     void onKWinDesktopRemoved(const QString& desktopId);
     void onKWinDesktopRowsChanged();
+    /// KWin's per-desktop metadata changed (a rename, or a position move).
+    /// The count is unchanged, so only a list refresh can pick it up.
+    void onKWinDesktopDataChanged();
 
 private:
     /// Bind (or re-bind after a KWin restart) the D-Bus proxy and re-read the

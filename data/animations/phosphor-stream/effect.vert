@@ -26,18 +26,23 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
+#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 // Geometry-morph endpoints (logical-screen px, x/y/w/h), pushed by the
-// kwin-effect paint pipeline for any shader that declares them.
+// kwin-effect paint pipeline for any shader that declares them. On the
+// UBO branch both rects come from the AnimationUniforms transition tail.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
+#endif
 // Per-vertex flow handed to the fragment: .xy = card uv, .z = arrival
 // ease (0 = still at the old rect, 1 = settled), .w = lane seed.
 layout(location = 1) out vec4 vFlow;
 
 // Deliberately local rather than including noise.glsl: the vertex stage
-// needs exactly one scalar hash, and the frag already carries the full
-// noise module for its own use.
+// needs only this one scalar hash, and the frag already carries the full
+// noise module for its own use. phosphor-siphon's vert inlines the same
+// hash for the same reason — hoist both into a shared header only if a
+// third copy ever appears.
 float laneHash(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
@@ -45,7 +50,14 @@ float laneHash(float n) {
 void main() {
     // Card uv with y = 0 at the window top (KWin Y-flips window-quad
     // texcoords on upload; re-apply the flip, same as flow).
+#ifdef PLASMAZONES_KWIN
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
+    // ...and spans the captured canvas: fold the anchor sub-rect so cuv is
+    // card space (identity rect on a bare-card capture = passthrough).
+    vec2 cuv = (texCoord - iAnchorRectInTexture.xy) / max(iAnchorRectInTexture.zw, vec2(1.0e-5));
+#endif
 
     // Travel direction in screen space (y-down), from the leg's RIGID
     // translation rather than its centre delta — an anchored stretch moves
@@ -101,5 +113,12 @@ void main() {
 
     vTexCoord = cuv;
     vFlow = vec4(cuv, e, lh);
+#ifdef PLASMAZONES_KWIN
     gl_Position = modelViewProjectionMatrix * vec4(position + delta, 0.0, 1.0);
+#else
+    // Qt-RHI path: logical-px delta to clip units at 2 / iResolution, on
+    // the pack's geometryGrid mesh — see flow's #else arm for the full
+    // contract.
+    gl_Position = qt_Matrix * vec4(position + delta * 2.0 / max(iResolution, vec2(1.0)), 0.0, 1.0);
+#endif
 }

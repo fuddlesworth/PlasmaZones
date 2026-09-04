@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.4.8 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.4.11 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -74,7 +74,9 @@ set(QT_MIN_VERSION "6.10.0")
 set(KF_MIN_VERSION "6.26.0")
 
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
-set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+# Prepend our own cmake/ so project modules (PhosphorTestIsolation) resolve
+# alongside ECM's.
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${ECM_MODULE_PATH})
 
 # Test/tool toggles MUST be set before KDECMakeSettings, which calls
 # include(CTest) and locks BUILD_TESTING into the cache as ON. Declaring
@@ -158,6 +160,18 @@ option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 # development:
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
+
+# The shell tier is exempt from the portable Qt-only invariant: the bar and
+# power modules hard-require KF6 Kirigami (icon resolution through
+# Kirigami.Icon), so a Qt-only shell build has nothing to draw icons with.
+# Fail here with the reason rather than letting the nested
+# find_package(KF6Kirigami REQUIRED) raise a bare not-found later.
+if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
+    message(FATAL_ERROR
+        "BUILD_PHOSPHOR_SHELL requires USE_KDE_FRAMEWORKS=ON: the shell tier "
+        "(libs/phosphor-shell-bar, libs/phosphor-shell-power, libs/phosphor-shell-control-center, libs/phosphor-shell-launcher) depends on KF6 "
+        "Kirigami for icon rendering and has no Qt-only fallback.")
+endif()
 
 if(USE_KDE_FRAMEWORKS)
     add_compile_definitions(USE_KDE_FRAMEWORKS)
@@ -362,6 +376,17 @@ add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mecha
 # that a strict RPM build rejects as unpackaged files. Gate the whole tier;
 # the matching example demos under examples/ are gated the same way. Order
 # matters: phosphor-shell links theme/popout/ipc, so they precede it.
+# phosphor-engine and phosphor-workspaces precede the shell tier because
+# phosphor-shell links PhosphorWorkspaces (backing the Workspaces QML
+# singleton), and phosphor-workspaces links PhosphorEngine. Declared after
+# the shell block, the in-tree targets would not exist yet at the point
+# phosphor-shell looks for them, and its find_package fallback would
+# silently resolve against a system-installed copy instead.
+# Their own dependencies — identity, protocol, layout-api, geometry — are
+# all declared further up.
+add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
+add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
+
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
     add_subdirectory(libs/phosphor-popout)  # central popout coordinator (lifetime, focus, scope arbitration)
@@ -371,9 +396,11 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
     add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets
     add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-control-center) # Phosphor.ControlCenter tile surface (Phase 4.4); depends on theme + widgets + Kirigami
+    add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
+    add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center and launcher)
+    add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
 endif()
-add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
-add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrolling placement engine (strip model + engine)
@@ -381,8 +408,10 @@ add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrolling placement e
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 
 # Canonical list of engine library target names. Consumed by the
-# engine QML firewall below; declared here next to the engine
-# subdirs so the list moves with the targets it gates.
+# engine QML firewall below. Kept in sync with the engine
+# add_subdirectory calls by hand; the firewall FATAL_ERRORs naming any
+# entry that matches no target, so a single renamed engine cannot quietly
+# stop being guarded.
 set(PHOSPHOR_ENGINE_TARGETS
     PhosphorZones
     PhosphorSnapEngine
@@ -417,10 +446,12 @@ set(PHOSPHOR_ENGINE_TARGETS
 # zero-match firewall would let a future Qml link through unnoticed,
 # which is exactly the failure mode the rationale above is designed
 # to prevent.
-set(_p_engine_matched_any FALSE)
+set(_p_engine_unmatched "")
 foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
+    if(NOT TARGET ${_p_engine_lib})
+        list(APPEND _p_engine_unmatched ${_p_engine_lib})
+    endif()
     if(TARGET ${_p_engine_lib})
-        set(_p_engine_matched_any TRUE)
         get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
         if(_p_engine_links)
             foreach(_p_link IN LISTS _p_engine_links)
@@ -445,17 +476,21 @@ foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         endif()
     endif()
 endforeach()
-if(NOT _p_engine_matched_any)
+if(_p_engine_unmatched)
+    # PER-ENTRY, not "did anything match". Every name in the list is an
+    # unconditional target by this point in the file, so a name that matches
+    # nothing means that ONE engine silently stopped being guarded while the
+    # others still are — the realistic staleness mode, and one a
+    # matched-anything check sails straight past.
     message(FATAL_ERROR
-        "Engine QML firewall matched zero targets from PHOSPHOR_ENGINE_TARGETS "
-        "(${PHOSPHOR_ENGINE_TARGETS}). The firewall is a no-op in this state, "
-        "which defeats its purpose. Either an engine lib was renamed without "
-        "updating the list, the add_subdirectory order changed so engines "
-        "haven't been declared yet at this point, or every engine subdir got "
-        "gated behind an option that's currently OFF. Update "
-        "PHOSPHOR_ENGINE_TARGETS to match the real engine target names, or "
-        "move this firewall block below the add_subdirectory calls that "
-        "declare the engines.")
+        "Engine QML firewall matched no target for: ${_p_engine_unmatched}. "
+        "Those entries of PHOSPHOR_ENGINE_TARGETS guard nothing, so a Qml "
+        "link into them would go unnoticed. Either the library was renamed "
+        "without updating the list, the add_subdirectory order changed so it "
+        "has not been declared yet at this point, or it got gated behind an "
+        "option that is currently OFF. Update PHOSPHOR_ENGINE_TARGETS to "
+        "match the real engine target names, or move this firewall block "
+        "below the add_subdirectory calls that declare the engines.")
 endif()
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 add_subdirectory(libs/phosphor-control) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
@@ -609,6 +644,23 @@ install(DIRECTORY data/overlays/
     PATTERN ".*" EXCLUDE
 )
 
+# The bundled overlay packs no longer ship preview.png card screenshots
+# (the browser previews live shaders), but install(DIRECTORY) never removes
+# files dropped from the tree, and the registry still adopts a lingering
+# preview.png into a pack's previewPath on a manually-upgraded prefix.
+# Same DESTDIR-aware, own-subdirectory-bounded cleanup pattern as the
+# animation-profiles wipe above; one level deep, bundled pack dirs only.
+install(CODE "
+    set(_p_overlays_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/overlays\")
+    if(EXISTS \"\${_p_overlays_install_dir}\")
+        file(GLOB _p_stale_overlay_previews \"\${_p_overlays_install_dir}/*/preview.png\")
+        if(_p_stale_overlay_previews)
+            message(STATUS \"Removing stale overlay preview.png files from \${_p_overlays_install_dir}\")
+            file(REMOVE \${_p_stale_overlay_previews})
+        endif()
+    endif()
+")
+
 # Install bundled animation transition shader packs. The daemon's
 # AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
 # at startup; user overrides at ~/.local/share/plasmazones/animations win.
@@ -703,6 +755,8 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-bar-canvas-demo)
     add_subdirectory(examples/phosphor-osd-demo)
     add_subdirectory(examples/phosphor-toast-demo)
+    add_subdirectory(examples/phosphor-control-center-demo)
+    add_subdirectory(examples/phosphor-launcher-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell

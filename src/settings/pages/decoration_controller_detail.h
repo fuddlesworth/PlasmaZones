@@ -61,10 +61,8 @@ inline QVariantMap effectToMap(const PhosphorSurfaceShaders::SurfaceShaderEffect
     m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
     m.insert(QLatin1String("providesBorder"), effect.providesBorder);
     m.insert(QLatin1String("providesOpacityTint"), effect.providesOpacityTint);
-    // previewPath is resolved to an absolute path by the registry's loader,
-    // so QML can pass it to Image.source (with a file:// prefix). Empty when
-    // the pack shipped no preview — the page renders a placeholder.
-    m.insert(QLatin1String("previewPath"), effect.previewPath);
+    // No previewPath: the browser previews live decoration chains now, and
+    // no QML reads the key (see the animation twin's note).
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters)

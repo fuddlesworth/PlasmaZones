@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Desktop Entry]
+Type=Application
+Name=Nested Tool
+Exec=nested-tool

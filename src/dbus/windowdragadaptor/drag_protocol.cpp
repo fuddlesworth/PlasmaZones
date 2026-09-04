@@ -251,12 +251,13 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // drag. The scroll engine keeps a dragged tile in its strip model (the
     // effect's immediate float is visual only), so without this mark any
     // mid-drag retile re-emits the slot rect against KWin's move and the
-    // per-ack reconcile pins size intents to transient drag frames. Cleared
-    // on every drag exit (endDrag before the drop settles, window close,
-    // and the clean-slate reset above for crash recovery).
-    if (m_scrollEngine) {
-        m_scrollEngine->setInteractiveDragWindow(windowId);
-    }
+    // per-ack reconcile pins size intents to transient drag frames. Autotile
+    // keeps its dragged window modeled as a tile too, so the same mark gates
+    // applyTiling's emission there (discussion #1028: a deferred retile
+    // resized the window in the user's hand). Cleared on every drag exit
+    // (endDrag before the drop settles, window close, and the clean-slate
+    // reset above for crash recovery).
+    setEngineInteractiveDragWindow(windowId);
 
     // Reset the drag-insert toggle latch on every drag start. This runs
     // before branching so it covers both the bypass path (drag starts on an
@@ -589,13 +590,15 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     }
     // Any drag-insert preview left over from an incomplete previous drag
     // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
-    // must be cleared too — its referenced window may no longer exist.
-    cancelDragInsertIfActive();
-    // Same staleness argument for the interactive-drag mark: a leftover
-    // mark would silently exempt a window from layout forever.
-    if (m_scrollEngine) {
-        m_scrollEngine->setInteractiveDragWindow(QString());
-    }
+    // must be cleared too — its referenced window may no longer exist, and
+    // nobody is holding it, so the snap-back must actually be emitted. The
+    // stale sweep clears the interactive-drag mark first (a leftover mark
+    // would suppress that snap-back, then silently exempt a window from
+    // layout forever) and cancels with an explicit false rather than the
+    // liveness derivation, which can read a dead session's ids as a live
+    // drag (a crashed drag's m_draggedWindowId is still set when beginDrag
+    // routes through here).
+    cancelStaleDragInsertPreviews();
 }
 
 PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY,
@@ -659,10 +662,11 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId.isEmpty()) {
             m_currentDragPolicy = {};
             m_dragReorderActive = false;
-            cancelDragInsertIfActive();
-            if (m_scrollEngine) {
-                m_scrollEngine->setInteractiveDragWindow(QString());
-            }
+            // Stale-residue sweep: mark cleared first, cancels explicit
+            // false (see cancelStaleDragInsertPreviews) — with no live and
+            // no pending drag, whatever this finds belongs to a dead
+            // session and must snap back now.
+            cancelStaleDragInsertPreviews();
         }
         return outcome;
     }
@@ -675,9 +679,7 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // The interactive move is over: release the window back to engine
     // authority BEFORE the drop settles, so a preview commit's finalizing
     // relayout emits the dragged window's rect unfiltered.
-    if (m_scrollEngine) {
-        m_scrollEngine->setInteractiveDragWindow(QString());
-    }
+    setEngineInteractiveDragWindow(QString());
 
     qCInfo(lcDbusWindow) << "endDrag:" << windowId << "cursor=" << cursorX << cursorY << "cancelled=" << cancelled
                          << "bypass=" << bypassReason;

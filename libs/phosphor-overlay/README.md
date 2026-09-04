@@ -55,7 +55,7 @@ host.setPreDestroyCallback([&](const QString& sid) {
 // Lifecycle:
 host.registerConfigForRole(MyOsdRole, buildOsdConfig());
 host.ensureShell(screenId, physScreen);
-host.syncSurfaceState(screenId, /*anyVisible=*/true, /*anyInputGrabbing=*/false);
+host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = false});
 host.hideSlot(screenId, QStringLiteral("osd"), [&]{ /* on hide-leg settle */ });
 host.destroyShell(screenId);
 ```
@@ -85,9 +85,15 @@ host.destroyShell(screenId);
   `SurfaceAnimator::beginHide` without the caller re-specifying the
   role at every dismiss / cancel call site.
 - **`syncSurfaceState` is mechanism-only.** Consumers compute
-  `anyVisible` and `anyInputGrabbing` from their content slot
+  `visible` and `inputGrabbing` from their content slot
   visibility (e.g. modal vs non-modal classification), and the library
   decides surface mapping + `Qt::WindowTransparentForInput` toggling.
+  A third field, `keyboardGrabbing`, drives the layer surface's keyboard
+  interactivity between Exclusive and None at runtime — only content that
+  has to read typed characters should ask for it, since while it is held
+  the focused toplevel receives no keys. It is per-screen with no
+  cross-screen arbitration, so a consumer moving such content between
+  screens must sync the screen it left as well as the one it entered.
 - **Sticky per-screen creation failure.** When the surface factory
   returns nullptr for a screen, the host flags it. Subsequent
   `ensureShell` calls short-circuit until `clearFailure(screenId)` is

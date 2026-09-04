@@ -475,10 +475,18 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollAdjustWindowHeightRequested(-sm->scrollWindowHeightStepPercent());
      }},
-    {kIdScrollResetWindowHeights, &ConfigDefaults::scrollingResetWindowHeightsShortcut,
-     &Settings::scrollingResetWindowHeightsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Reset Window Heights"),
+    {kIdScrollMaximizeWindowHeight, &ConfigDefaults::scrollingMaximizeWindowHeightShortcut,
+     &Settings::scrollingMaximizeWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Maximize Window Height"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollResetWindowHeightsRequested();
+         Q_EMIT sm->scrollMaximizeWindowHeightRequested();
+     }},
+    // "Grow window into empty space", the wording its width twin settled on
+    // (see kIdScrollExpandColumn): it names what the op does rather than
+    // reading as another spelling of Maximize Window Height.
+    {kIdScrollExpandWindow, &ConfigDefaults::scrollingExpandWindowShortcut, &Settings::scrollingExpandWindowShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Grow Window into Empty Space"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollExpandWindowRequested();
      }},
     {kIdScrollCenterVisibleColumns, &ConfigDefaults::scrollingCenterVisibleColumnsShortcut,
      &Settings::scrollingCenterVisibleColumnsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Center Visible Columns"),
@@ -554,6 +562,16 @@ const StaticEntry kStaticEntries[] = {
      &Settings::scrollingMinimizeColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Minimize Column Width"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMinimizeColumnWidthRequested();
+     }},
+    {kIdScrollEqualizeWindowHeights, &ConfigDefaults::scrollingEqualizeWindowHeightsShortcut,
+     &Settings::scrollingEqualizeWindowHeightsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Equalize Window Heights"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollEqualizeWindowHeightsRequested();
+     }},
+    {kIdScrollMinimizeWindowHeight, &ConfigDefaults::scrollingMinimizeWindowHeightShortcut,
+     &Settings::scrollingMinimizeWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Minimize Window Height"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMinimizeWindowHeightRequested();
      }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────

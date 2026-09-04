@@ -10,15 +10,10 @@
 // fragment can paint the morphing rect anywhere between the old and new
 // frames.
 //
-// COMPOSITOR-ONLY by design, as with every geometry/move-class vert in this
-// tree (flow, fold, ripple-snap, stretch, phosphor-stream, wobble): this file
-// has no `#ifdef PLASMAZONES_KWIN` split and leaves
-// `modelViewProjectionMatrix` unguarded, which the strict SPIR-V bake
-// rejects. The daemon-eligible verts (morph, bounce) carry the dual-branch
-// form instead. That is safe only because this pack's appliesTo is ["geometry"]
-// — `shaderEffectIsCompositorOnly()` is true, so the daemon never bakes it.
-// Do NOT copy this shape into a pack that declares "appearance"; take the
-// dual-branch form from morph/bounce instead.
+// Dual-branch like the rest of the tree since the UBO branches landed: the
+// kwin branch places the output-spanning quad via the MVP matrix; the
+// Qt-RHI branch (the settings preview host) emits the plain qt_Matrix quad
+// and takes its uniforms from the AnimationUniforms block.
 
 #version 450
 
@@ -27,12 +22,25 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
+#ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
+#else
+// Pulls in qt_Matrix (and the AnimationUniforms block) for the Qt-RHI
+// branch; the kwin branch keeps this file's original minimal shape.
+#include <animation_uniforms.glsl>
+#endif
 
 void main() {
+#ifdef PLASMAZONES_KWIN
     // KWin's offscreen FBO is Y-up; flip so vTexCoord is the Y-down screen
     // UV the contract specifies, and place the output-spanning quad via the
     // MVP matrix.
     vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
+#else
+    // The Qt-RHI quad's texCoord is Y-down already — no re-flip; the quad
+    // spans the shader item, so qt_Matrix places it.
+    vTexCoord = texCoord;
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
+#endif
 }

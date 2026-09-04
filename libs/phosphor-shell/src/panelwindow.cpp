@@ -3,6 +3,14 @@
 
 #include <PhosphorShell/PanelWindow.h>
 
+#include <QLoggingCategory>
+#include <QRect>
+#include <QSize>
+
+namespace {
+Q_LOGGING_CATEGORY(lcPanelWindow, "phosphorshell.panelwindow")
+} // namespace
+
 namespace PhosphorShell {
 
 PanelWindow::PanelWindow(QQuickItem* parent)
@@ -11,6 +19,31 @@ PanelWindow::PanelWindow(QQuickItem* parent)
 }
 
 PanelWindow::~PanelWindow() = default;
+
+QRect PanelWindow::visibleBand(Edge edge, int thickness, QSize surfaceSize)
+{
+    const int w = surfaceSize.width();
+    const int h = surfaceSize.height();
+    if (thickness <= 0 || w <= 0 || h <= 0) {
+        return {};
+    }
+
+    // Clamp to the surface. A thickness at or past the surface depth means
+    // there is no shadow strip to exclude, and the band is simply the whole
+    // surface — never a rect that overhangs it, which would be an input
+    // region the compositor has to clip.
+    switch (edge) {
+    case Top:
+        return {0, 0, w, qMin(thickness, h)};
+    case Bottom:
+        return {0, qMax(0, h - thickness), w, qMin(thickness, h)};
+    case Left:
+        return {0, 0, qMin(thickness, w), h};
+    case Right:
+        return {qMax(0, w - thickness), 0, qMin(thickness, w), h};
+    }
+    return {};
+}
 
 PanelWindow::Edge PanelWindow::edge() const
 {
@@ -34,9 +67,20 @@ int PanelWindow::thickness() const
 void PanelWindow::setThickness(int thickness)
 {
     // Clamp to [1, INT_MAX]. Wayland rejects 0×N surfaces, and a negative
-    // thickness has no meaningful interpretation — silently coercing to
-    // 1 px is safer than passing nonsense to the layer-shell protocol.
+    // thickness has no meaningful interpretation — coercing to 1 px is
+    // safer than passing nonsense to the layer-shell protocol. Warn on the
+    // coercion (matching SystemUsage::setInterval) so a QML author binding
+    // thickness: 0 gets a diagnostic rather than a silent 1 px panel.
     const int clamped = qMax(1, thickness);
+    // Warned BEFORE the change check, deliberately, and pinned by
+    // thicknessClampsToOneAndWarns: the diagnostic is about the VALUE the
+    // author wrote, not about whether it moved the property. A second
+    // `thickness: -5` is just as wrong as the first, and staying silent
+    // because the panel already sits at 1 would hide it.
+    if (clamped != thickness) {
+        qCWarning(lcPanelWindow) << "thickness" << thickness << "clamped to" << clamped
+                                 << "(a panel needs at least 1 px)";
+    }
     if (m_thickness == clamped) {
         return;
     }
@@ -59,6 +103,31 @@ void PanelWindow::setShadowSize(int size)
     }
     m_shadowSize = clamped;
     Q_EMIT shadowSizeChanged();
+}
+
+int PanelWindow::interactiveThickness() const
+{
+    return m_interactiveThickness;
+}
+
+void PanelWindow::setInteractiveThickness(int thickness)
+{
+    // Clamp to [0, INT_MAX]. 0 = follow `thickness` (the default, and what
+    // every panel that does not paint into its shadow strip wants);
+    // negative values are nonsense. No clamp against thickness + shadowSize
+    // here: visibleBand() already clamps the band to the surface, and the
+    // surface size is not known to this item.
+    const int clamped = qMax(0, thickness);
+    if (m_interactiveThickness == clamped) {
+        return;
+    }
+    m_interactiveThickness = clamped;
+    Q_EMIT interactiveThicknessChanged();
+}
+
+int PanelWindow::effectiveInputThickness() const
+{
+    return m_interactiveThickness > 0 ? m_interactiveThickness : m_thickness;
 }
 
 int PanelWindow::cornerCarveRadius() const
@@ -89,6 +158,12 @@ QScreen* PanelWindow::screen() const
 
 void PanelWindow::setScreen(QScreen* screen)
 {
+    // The member is a QPointer, so an unplugged output nulls it WITHOUT this
+    // setter running and without screenChanged. The engine rebuilds the whole
+    // shell on a topology change, so nothing observes the gap today, and
+    // emitting from a QPointer's silent clear is not possible without
+    // watching every screen. The property is documented as read-once at
+    // materialization for that reason; see the header.
     if (m_screen == screen) {
         return;
     }

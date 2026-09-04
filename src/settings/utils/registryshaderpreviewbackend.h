@@ -23,8 +23,8 @@ namespace PlasmaZones {
 /// ShaderRegistry (no D-Bus round-trip — the settings app already scans the
 /// shader dirs for its browser) and ISettings (audio-visualizer config). The
 /// settings app has no edited layout, so previewZones() returns the shipped
-/// master-stack layout so the live preview matches the baked preview.png
-/// thumbnails (see previewZones() below).
+/// master-stack layout as a representative stand-in (see previewZones()
+/// below).
 ///
 /// Both pointers are borrowed; SettingsController owns the registry + settings
 /// and outlives this backend.
@@ -49,10 +49,10 @@ public:
         return m_registry ? m_registry->translateParamsToUniforms(shaderId, params) : QVariantMap();
     }
 
-    // The SAME master-stack layout (1 master + 3-stack) the shader-render tool
-    // uses to generate the static preview.png thumbnails
-    // (data/layouts/master-stack.json + tools/shader-render/layoutloader.cpp),
-    // so the live preview matches the shipped previews. Relative geometry
+    // The master-stack layout (1 master + 3-stack, mirroring
+    // data/layouts/master-stack.json) as a representative zone arrangement
+    // for the live preview — the same shape tools/shader-render renders
+    // with. Relative geometry
     // (fractional 0–1); the controller scales to preview pixels and applies the
     // theme's default zone appearance (only X/Y/Width/Height + ZoneNumber set).
     QVariantList previewZones() const override

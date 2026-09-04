@@ -69,14 +69,19 @@ Item {
 
     // Clamp to [from, to] and emit moved() only on a real change. Shared by
     // the keyboard path; pointer drag/tap go through _setFromX.
+    //
+    // Deliberately does NOT assign `value`. A host binds `value` to the
+    // service's echo, and a JS assignment here would destroy that binding on
+    // the first interaction, after which the handle would stop following the
+    // service entirely: a change made elsewhere, or a request the service
+    // clamped or refused, would leave the handle showing a position the
+    // system never reached. `moved` asks; `value` answers.
     function _setValue(v) {
         if (to <= from)
             return;
         const clamped = Math.max(from, Math.min(to, v));
-        if (clamped !== value) {
-            value = clamped;
+        if (clamped !== value)
             moved(clamped);
-        }
     }
 
     Accessible.role: Accessible.Slider
@@ -91,7 +96,15 @@ Item {
     // Normalised 0..1 position of the current value. Guards a non-positive
     // range (from == to, or an inverted from > to) so it collapses to 0
     // instead of producing NaN or a negative ratio.
-    readonly property real _ratio: to > from ? Math.max(0, Math.min(1, (value - from) / (to - from))) : 0
+    //
+    // While a drag is in flight the handle follows the POINTER rather than
+    // `value`, so it does not lag a service round trip under the finger. The
+    // moment the drag ends it goes back to following `value`, so the final
+    // resting position is always the one the service actually reached.
+    readonly property real _ratio: to > from ? Math.max(0, Math.min(1, ((drag.active ? _visual : value) - from) / (to - from))) : 0
+    // Pointer position during a drag, in value units. Meaningless while
+    // `drag.active` is false.
+    property real _visual: 0
     // Travel available to the handle centre: the full width minus the
     // handle so it never overhangs either end.
     readonly property real _trackWidth: width - handle.width
@@ -106,10 +119,12 @@ Item {
             return;
         const r = Math.max(0, Math.min(1, (px - handle.width / 2) / _trackWidth));
         const v = from + r * (to - from);
-        if (v !== value) {
-            value = v;
+        // Track the pointer locally so the handle does not lag the finger,
+        // but never assign `value`: see _setValue for why that binding has to
+        // survive. _ratio reads _visual only while the drag is active.
+        _visual = v;
+        if (v !== value)
             moved(v);
-        }
     }
 
     readonly property color _disabledTint: StateLayer.disabledContent(Theme.on_surface)

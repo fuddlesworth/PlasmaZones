@@ -258,7 +258,7 @@ private Q_SLOTS:
         // Family root carries a shader...
         QVERIFY(c.setShaderOverride(PP::Window, QStringLiteral("matrix"), {}));
         // ...the sibling geometry leg inherits it...
-        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowPlaceIn).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("matrix"));
         // ...the drag leaf refuses it.
         QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
@@ -267,7 +267,7 @@ private Q_SLOTS:
         // Window Motion page — the CHANGELOG's "no longer takes the All
         // Windows shader" promise).
         QVERIFY(c.setShaderOverride(PP::WindowMovement, QStringLiteral("glitch"), {}));
-        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowPlaceIn).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("glitch"));
         QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
 
@@ -290,7 +290,7 @@ private Q_SLOTS:
 
         QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
         // Contrast: the snap sibling gets the built-in geometry default.
-        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowPlaceIn).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("window-morph"));
     }
 
@@ -341,7 +341,7 @@ private Q_SLOTS:
         QVERIFY2(!moveIds.contains(QStringLiteral("dissolve")),
                  "universal crossfade must not be offered on the drag leaf");
 
-        const QStringList snapIds = pickerIdsFor(c, PP::WindowSnapIn);
+        const QStringList snapIds = pickerIdsFor(c, PP::WindowPlaceIn);
         QVERIFY2(snapIds.contains(QStringLiteral("window-morph")), "geometry pack must stay offered on snap legs");
         QVERIFY2(!snapIds.contains(QStringLiteral("wobble")), "move pack must not be offered on a crossfade leg");
     }
@@ -380,7 +380,7 @@ private Q_SLOTS:
         // the pack that must not leak between them is the interesting case, not
         // the unrelated window ones.
         for (const QString& path :
-             {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingTabSwitch}) {
+             {PP::WindowPlaceIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingTabSwitch}) {
             const QStringList ids = pickerIdsFor(c, path);
             QVERIFY2(!ids.isEmpty(), qPrintable(QStringLiteral("picker offered nothing at all on ") + path));
             QVERIFY2(!ids.contains(QStringLiteral("strip-motion-blur")),
@@ -451,7 +451,7 @@ private Q_SLOTS:
         // …and the tab packs stay out of every other picker, including the
         // strip sibling that shares the scrolling subtree.
         for (const QString& path :
-             {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingView}) {
+             {PP::WindowPlaceIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingView}) {
             const QStringList ids = pickerIdsFor(c, path);
             // Same reason as the strip twin: without this every assertion in
             // the loop is satisfied by an empty list.
@@ -502,7 +502,7 @@ private Q_SLOTS:
         // satisfied by a `defaultShaderEffectIdForPath` that returns nothing
         // for anything. A path that DOES carry a built-in default is what makes
         // the emptiness above a statement about the tab leaf.
-        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowPlaceIn).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("window-morph"));
     }
 
@@ -807,15 +807,15 @@ private Q_SLOTS:
 
         // Drag-leaf override + one genuine shadowing sibling for contrast.
         QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
-        QVERIFY(c.setShaderOverride(PP::WindowSnapIn, QStringLiteral("window-morph"), {}));
+        QVERIFY(c.setShaderOverride(PP::WindowPlaceIn, QStringLiteral("window-morph"), {}));
 
-        // Only the snapIn override shadows the movement parent.
+        // Only the placeIn override shadows the movement parent.
         QCOMPARE(c.shaderOverrideDescendantCount(PP::WindowMovement), 1);
 
-        // Clearing shadowing children removes snapIn but PRESERVES the
+        // Clearing shadowing children removes placeIn but PRESERVES the
         // isolated drag-leaf override.
         QCOMPARE(c.clearShaderOverrideDescendants(PP::WindowMovement), 1);
-        QVERIFY(c.rawShaderProfile(PP::WindowSnapIn).isEmpty());
+        QVERIFY(c.rawShaderProfile(PP::WindowPlaceIn).isEmpty());
         QCOMPARE(c.rawShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("wobble"));
     }

@@ -83,11 +83,10 @@ inline QVariantMap effectToMap(const PhosphorAnimationShaders::AnimationShaderEf
     // which folds this into ready-made `dimmed`/`dimReason` flags.
     m.insert(QLatin1String("appliesTo"), QVariant::fromValue(effect.appliesTo));
     m.insert(QLatin1String("isUserEffect"), effect.isUserEffect);
-    // `previewPath` is resolved to an absolute path by the registry's
-    // `parseEffect`, so QML can pass it directly to `Image.source` (with
-    // a `file://` scheme prefix). Empty when the pack didn't ship a
-    // preview — the page renders a placeholder for that case.
-    m.insert(QLatin1String("previewPath"), effect.previewPath);
+    // No `previewPath`: the browser previews live shaders now, and no QML
+    // reads the key. The registry-level field stays (a user pack may still
+    // ship a preview.png for other consumers); it just isn't ferried to
+    // this page's rows.
     QVariantList params;
     params.reserve(effect.parameters.size());
     for (const auto& p : effect.parameters) {
@@ -221,7 +220,7 @@ inline QStringList collectParamsOnlyDescendants(const PhosphorAnimationShaders::
     return out;
 }
 
-/// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
+/// Title-case a single camelCase segment: "placeIn" → "Place In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
 /// for single-word segments.
 ///
