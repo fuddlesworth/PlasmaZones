@@ -1030,6 +1030,28 @@ depending on theme + widgets + Kirigami.
 1.3 as a documented header waiting for this surface, so 4.4 consumes the
 seam rather than defining it.
 
+**Presentation: the connected-corner socket, arbitrated like a popout.**
+The control center grows out of the bar's capsule as one painted shape
+(`BarHost.socketContent` / `socketOpen`; `PanelWindow.interactiveThickness`
+makes the pocket clickable without moving the exclusive zone). It has no
+surface of its own, but it still goes through `PopoutController`:
+`src/shell/RoutingPopoutTransport` fronts the layer transport and a
+`SocketPopoutTransport` that is the sole writer of
+`ControlCenterController.openScreen`, routed by popout id (never by anchor,
+because `BarCenter` is the request default). That is what lets the Modal
+power menu close it and refuses it while a modal is up, with no per-surface
+bookkeeping in shell.qml. `LayerPopoutTransport` still centres everything
+and warns on positional anchors; bar-anchored placement for
+surface-backed popouts remains unbuilt.
+
+**A trap worth recording:** `screenOf()` returns a `QScreen*` to QML and a
+`QScreen` has no QObject parent, so QML's default for an invokable return is
+JavaScriptOwnership and the GC deleted the live screen (five crashes on
+2026-09-03 that presented as three different bugs). The controller marks
+it `CppOwnership`; `tests/unit/shell/test_control_center_controller.cpp`
+pins that through a real `QQmlEngine`, because the transfer only happens
+in the engine's wrapper path and a plain C++ call cannot detect it.
+
 **Why the last five are deferred, individually:**
 - **NightMode** has no backing service at all. Nothing in `libs/phosphor-service-*`
   does gamma or colour temperature, and on a standalone compositor that is

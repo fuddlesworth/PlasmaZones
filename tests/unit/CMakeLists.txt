@@ -2369,6 +2369,56 @@ if(TARGET PhosphorShell::PhosphorShell)
     add_test(NAME test_system_usage COMMAND test_system_usage)
 endif()
 
+# RoutingPopoutTransport: one IPopoutTransport in front of the layer and
+# bar-socket transports, routed by popout id. Pure C++ over two in-test
+# fakes, so it needs only the popout contract library — no layer stack, no
+# QML engine, no Wayland.
+if(TARGET PhosphorPopout::PhosphorPopout)
+    add_executable(test_routing_popout_transport
+        shell/test_routing_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/RoutingPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/routingpopouttransport.cpp
+    )
+    target_include_directories(test_routing_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_routing_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            PhosphorPopout::PhosphorPopout
+    )
+    add_test(NAME test_routing_popout_transport COMMAND test_routing_popout_transport)
+endif()
+
+# ControlCenterController: the shell's tile registry owner and the
+# target-screen resolver behind the bar socket. Needs a QGuiApplication
+# (a real QScreen to resolve) and the QML engine's ownership API, hence
+# Gui + Qml; runs offscreen. Links the registry (the controller owns a
+# Registry<IControlCenterTileFactory>) and the idle service (the controller
+# hands an IdleService* to IdleTile's initial properties).
+if(TARGET PhosphorRegistry::PhosphorRegistry AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_control_center_controller
+        shell/test_control_center_controller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_control_center_controller PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_control_center_controller
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+    )
+    add_test(NAME test_control_center_controller COMMAND test_control_center_controller)
+    phosphor_apply_test_isolation(test_control_center_controller)
+    phosphor_append_test_environment(test_control_center_controller "QT_QPA_PLATFORM=offscreen")
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
 # Apply a shared environment to every test in this directory so new tests added

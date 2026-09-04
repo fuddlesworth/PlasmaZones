@@ -712,6 +712,13 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/controlcentercontroller.cpp
         shell/QmlComponentTileFactory.h
         shell/qmlcomponenttilefactory.cpp
+        # The popout transport stack: one router in front of the layer
+        # transport and the bar-socket transport, so PopoutController
+        # arbitrates both presentation paths.
+        shell/RoutingPopoutTransport.h
+        shell/routingpopouttransport.cpp
+        shell/SocketPopoutTransport.h
+        shell/socketpopouttransport.cpp
     )
 
     target_link_libraries(phosphor-shell

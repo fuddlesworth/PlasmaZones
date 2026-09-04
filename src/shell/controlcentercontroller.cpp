@@ -67,43 +67,42 @@ QString ControlCenterController::openScreen() const
     return m_openScreen;
 }
 
-void ControlCenterController::toggleOnScreen(const QString& screenName)
+void ControlCenterController::setOpenScreen(const QString& screenName)
 {
-    // Same screen → close. Different screen → move (the assignment below
-    // does both legs, since the new value replaces the old). Empty → close.
-    const QString next = (screenName.isEmpty() || screenName == m_openScreen) ? QString() : screenName;
-    if (next == m_openScreen) {
+    if (m_openScreen == screenName) {
         return;
     }
-    m_openScreen = next;
+    m_openScreen = screenName;
     Q_EMIT openScreenChanged();
 }
 
-void ControlCenterController::close()
+QScreen* ControlCenterController::screenOf(QQuickItem* item) const
 {
-    if (m_openScreen.isEmpty()) {
-        return;
-    }
-    m_openScreen.clear();
-    Q_EMIT openScreenChanged();
-}
-
-QString ControlCenterController::screenNameOf(QQuickItem* item) const
-{
+    QScreen* screen = nullptr;
     if (item) {
         if (const QQuickWindow* window = item->window()) {
-            if (const QScreen* screen = window->screen()) {
-                return screen->name();
-            }
+            screen = window->screen();
         }
     }
     // An unresolved source should open the panel somewhere sensible rather
-    // than nowhere: an empty name matches no bar, so the control center
-    // would silently fail to appear.
-    if (const QScreen* primary = QGuiApplication::primaryScreen()) {
-        return primary->name();
+    // than nowhere: a null targetScreen would leave the socket transport
+    // with no bar to name.
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
     }
-    return {};
+    // LOAD-BEARING. A QScreen has no QObject parent, and QML's rule for a
+    // Q_INVOKABLE returning a parentless QObject* is JavaScriptOwnership:
+    // the JS garbage collector DELETES the object once its wrapper is
+    // collected. Without this line the GC destroyed the live QScreen — on
+    // the next engine teardown at hot reload (ScreenModel then dereferenced
+    // a freed screen in PerScreenPanels::build, cores 531950 / 543377 /
+    // 553625 / 554585 on 2026-09-03), and, with different GC timing, in the
+    // middle of the very next IPC toggle (cores 499902 / 522648). The screen
+    // belongs to QGuiApplication; say so.
+    if (screen) {
+        QQmlEngine::setObjectOwnership(screen, QQmlEngine::CppOwnership);
+    }
+    return screen;
 }
 
 QQuickItem* ControlCenterController::createTile(const QString& id, QQuickItem* parent)

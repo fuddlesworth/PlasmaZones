@@ -124,25 +124,38 @@ Item {
     }
 
     // The control center grows out of the bar's own capsule (the
-    // connected-corner socket), so it is NOT a popout: there is no separate
-    // surface to place, and BarHost paints the body as part of the bar's
-    // Shape. The bar delegate above mounts the content; all this file owns
-    // is the open/close verb.
+    // connected-corner socket). There is no surface to place — BarHost
+    // paints the body as part of the bar's Shape and the delegate above
+    // mounts the content — but it IS still a popout to the controller:
+    // main.cpp routes the "control-center" id to a SocketPopoutTransport
+    // that drives ControlCenterRegistry.openScreen. Going through
+    // Popouts rather than writing that property directly is what makes
+    // the Modal power menu close it, refuses it while a modal is up, and
+    // drains it on reload, all without this file remembering to.
     //
-    // That also means it does not go through PopoutController, so the
-    // Modal power menu does not close it automatically the way it would a
-    // Cooperative popout. Opening the power menu closes it explicitly
-    // below, which is the same outcome by a different road.
-    function toggleControlCenter(screenName: string): void {
-        ControlCenterRegistry.toggleOnScreen(screenName);
+    // No `content`: the socket transport creates nothing, and the
+    // controller never reads it. `targetScreen` is the output whose bar
+    // button fired, so a multi-head setup grows the pocket on that bar.
+    // No keyboard focus: a bar-painted pocket is not a surface that can
+    // take a layer-shell grab.
+    function toggleControlCenter(source: Item): void {
+        // screenOf hands back a QScreen the C++ side owns; the controller
+        // marks it CppOwnership before returning, so the JS GC cannot
+        // delete the live screen when this wrapper is collected. Do not
+        // reach for a QScreen any other way from QML.
+        Popouts.toggle({
+            "popoutId": "control-center",
+            "targetScreen": ControlCenterRegistry.screenOf(source),
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            "keyboardFocus": false,
+            "dismissOnFocusLoss": false
+        });
     }
 
     function togglePowerMenu(): void {
-        // The control center is painted into a bar capsule, not opened
-        // through PopoutController, so the Modal power menu's automatic
-        // "close every cooperative popout" does not reach it. Close it by
-        // hand so the two are never up together.
-        ControlCenterRegistry.close();
+        // Nothing to do about the control center here: it is a Cooperative
+        // popout on the same controller, so opening this Modal one closes
+        // it through the controller's own arbitration.
         // toggle rather than open: pressing the bar button (or Ctrl+Alt+Del)
         // a second time should put the menu away, and the controller rejects
         // a plain open for an id that is already showing.
@@ -179,7 +192,7 @@ Item {
             else if (id === "controlcenter")
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
-                root.toggleControlCenter(ControlCenterRegistry.screenNameOf(source));
+                root.toggleControlCenter(source);
         }
     }
 
@@ -209,42 +222,26 @@ Item {
     // power menu, and the same reason: bind a compositor key to toggle, and
     // call show from a script that wants the panel up regardless.
     //
-    // The no-argument forms are the ones a keybind uses, so they must stay
-    // callable as `phosphorctl call control-center.toggle` — IpcTarget
-    // arity is strict, and a lone `toggle(screen)` would reject that with
-    // "argument count mismatch". The *OnScreen variants take the explicit
-    // output, for a keybind that should follow the pointer.
+    // All three are argument-free, which is the form a keybind uses:
+    // IpcTarget arity is strict, so a `toggle(screen)` would reject a bare
+    // `phosphorctl call control-center.toggle` with "argument count
+    // mismatch". A null source resolves to the primary output's bar.
     IpcTarget {
         target: "control-center"
 
         function show(): void {
-            showOnScreen(ControlCenterRegistry.screenNameOf(null));
+            if (!Popouts.isOpen("control-center"))
+                root.toggleControlCenter(null);
         }
 
         function toggle(): void {
-            // Open anywhere means close; nothing open means open on the
-            // primary. Routing through toggleOnScreen with the primary name
-            // would instead MOVE a panel that is open on another output,
-            // which is not what a bare toggle means.
-            if (ControlCenterRegistry.openScreen !== "")
-                ControlCenterRegistry.close();
-            else
-                ControlCenterRegistry.toggleOnScreen(ControlCenterRegistry.screenNameOf(null));
-        }
-
-        function showOnScreen(screen: string): void {
-            // toggleOnScreen would CLOSE it if that screen already has it,
-            // which is not what a caller asking to show it means.
-            if (ControlCenterRegistry.openScreen !== screen)
-                ControlCenterRegistry.toggleOnScreen(screen);
-        }
-
-        function toggleOnScreen(screen: string): void {
-            root.toggleControlCenter(screen);
+            root.toggleControlCenter(null);
         }
 
         function hide(): void {
-            ControlCenterRegistry.close();
+            // close() on an empty handle is a no-op, so this is safe when
+            // nothing is open.
+            Popouts.close(Popouts.handleFor("control-center"));
         }
     }
 }

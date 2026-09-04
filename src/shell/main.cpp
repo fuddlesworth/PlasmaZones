@@ -4,6 +4,8 @@
 #include "BarController.h"
 #include "ControlCenterController.h"
 #include "LayerPopoutTransport.h"
+#include "RoutingPopoutTransport.h"
+#include "SocketPopoutTransport.h"
 
 #include <PhosphorServiceIdle/IdleService.h>
 
@@ -263,7 +265,18 @@ int main(int argc, char* argv[])
     // controller has to be destroyed while the transport is still alive —
     // which reverse-declaration order gives us for free.
     PhosphorShellApp::LayerPopoutTransport popoutTransport(&factory, screenProvider.get());
-    PhosphorPopout::PopoutController popouts(&popoutTransport);
+    // The bar-socket transport and the router in front of both. The
+    // controller sees ONE transport, so its arbitration (Modal closes
+    // Cooperative, Cooperative refused while a modal is up, closeAll on
+    // reload) covers the control center painted into the bar exactly as it
+    // covers popouts with surfaces of their own. Routing is by popout id:
+    // "control-center" is the one socket-hosted popout today. Declared
+    // after the layer transport and before the controller, so reverse
+    // destruction tears the controller down first.
+    PhosphorShellApp::SocketPopoutTransport socketTransport(&controlCenterController);
+    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &socketTransport,
+                                                             {QStringLiteral("control-center")});
+    PhosphorPopout::PopoutController popouts(&routedTransport);
 
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{

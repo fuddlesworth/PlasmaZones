@@ -6,6 +6,15 @@
 #include <PhosphorRegistry/Registry.h>
 
 #include <QObject>
+// A full include, NOT a forward declaration, and load-bearing: screenOf()
+// returns QScreen* to QML. moc registers the return metatype from this
+// header, and Qt's pointer-to-QObject detection needs the COMPLETE type to
+// set the PointerToQObject flag. With only `class QScreen;` here the flag
+// was missing, QML did not wrap the return as an object, and
+// QV4::ExecutionEngine::fromData took an unknown-pointer path and
+// segfaulted the shell on the third IPC toggle (the first two survived
+// by returning undefined, silently falling back to the primary output).
+#include <QScreen>
 #include <QString>
 #include <QStringList>
 
@@ -70,26 +79,28 @@ public:
 
     [[nodiscard]] QString openScreen() const;
 
-    /// Open the control center on `screenName`, close it if that screen
-    /// already has it, and move it if another screen does. Moving rather
-    /// than opening a second copy keeps the "one control center" rule the
-    /// popout controller enforces for surface-backed popouts, which a
-    /// bar-painted socket does not go through.
+    /// Set which output's bar shows the control center; empty closes it.
     ///
-    /// An empty `screenName` closes it.
-    Q_INVOKABLE void toggleOnScreen(const QString& screenName);
-    Q_INVOKABLE void close();
+    /// NOT Q_INVOKABLE on purpose. The only writer is SocketPopoutTransport,
+    /// acting on PopoutController's behalf, so that open/close is arbitrated
+    /// like every other popout: the Modal power menu closes it, a
+    /// Cooperative open is refused while a modal is up, closeAll() on
+    /// reload drains it. QML opens it through `Popouts.toggle(...)` with
+    /// popoutId "control-center"; a direct setter here would let shell.qml
+    /// bypass all of that again.
+    void setOpenScreen(const QString& screenName);
 
-    /// Name of the output `item` is displayed on, or the primary screen's
-    /// name when it cannot be resolved (no window yet, or a null item).
+    /// The output `item` is displayed on, or the primary screen when it
+    /// cannot be resolved (no window yet, or a null item). Never null while
+    /// a screen exists at all.
     ///
     /// Used to turn the bar widget that fired `BarRegistry.widgetActivated`
-    /// into the output whose capsule should grow. Done in C++ rather than
-    /// by chaining `item.Window.window.screen.name` in QML because that
-    /// chain is invisible to qmllint (QQuickWindow's `screen` is not in its
-    /// declarative type info), so a typo there would only surface at
-    /// runtime, as an undefined that quietly opens nothing.
-    [[nodiscard]] Q_INVOKABLE QString screenNameOf(QQuickItem* item) const;
+    /// into the PopoutRequest.targetScreen whose capsule should grow. Done
+    /// in C++ rather than by chaining `item.Window.window.screen` in QML
+    /// because that chain is invisible to qmllint (QQuickWindow's `screen`
+    /// is not in its declarative type info), so a typo there would only
+    /// surface at runtime, as an undefined that quietly opens nothing.
+    [[nodiscard]] Q_INVOKABLE QScreen* screenOf(QQuickItem* item) const;
 
 Q_SIGNALS:
     void openScreenChanged();
