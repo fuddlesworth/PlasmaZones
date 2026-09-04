@@ -2592,8 +2592,10 @@ private:
     /// handler. Keyed by window id, swept in slotWindowClosed with a
     /// windowDeleted backstop for a delete that had no preceding close, so it
     /// is bounded by the live traced population. Nothing re-enters it after the
-    /// close sweep: every insert site is behind scrollManagedOutputFor, which
-    /// refuses a deleted window. It was
+    /// close sweep: two of its three insert sites are behind a positive
+    /// scrollManagedOutputFor, which refuses a deleted window, and the third
+    /// needs a live m_scrollVisualDelta entry that slotWindowClosed removes
+    /// before the sweep. It was
     /// previously swept only on windowDeleted, and that removal sits behind the
     /// id-cache guard the close path has already cleared — so on an ordinary
     /// close it never ran and entries lived for the session. Entries are two

@@ -97,6 +97,12 @@ public:
     /// cannot complete it through the geometry hook.
     void noteMaximizeDemotedForSnap(KWin::EffectWindow* w)
     {
+        // Null-guarded like every sibling in this family. A null key would
+        // insert an entry no sweep can ever reach, since every remover is
+        // keyed by a live window.
+        if (!w) {
+            return;
+        }
         m_lastFullyMaximized.insert(w, false);
         m_pendingMaximizeMorph.remove(w);
         // A demote is a SNAP placement, so it must not inherit a maximize leg

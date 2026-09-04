@@ -295,10 +295,11 @@ public:
     /// serviceUnregistered handler for what belongs there and why.
     ///
     /// Two further deliberate exceptions, both self-healing rather than drained: m_maximizeToggleInFlight entries
-    /// expire on read via MaximizeToggleFlightMs — except one carrying a recorded press, which is KEPT
-    /// (stamped armedAtMs = 0) so a reply landing tens of seconds later cannot toggle a window the user
-    /// gave up on, and which the reply's own take or cleanupAutotileTracking collects — and
-    /// m_windowedFsClearInFlight is reply-gated — a toggle or clear
+    /// expire on read via MaximizeToggleFlightMs — except one carrying a recorded press, whose ENTRY is kept
+    /// (stamped armedAtMs = 0) so the press itself survives: only the in-flight suppression lapses, and the
+    /// reply still takes the entry and honours the click rather than throwing it away on a slow round trip.
+    /// That take, or cleanupAutotileTracking, is what collects it. And m_windowedFsClearInFlight is
+    /// reply-gated — a toggle or clear
     /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
     /// so a drain here would only race the same cleanup.
     void clearPerSessionDaemonState();
@@ -452,9 +453,11 @@ public:
     /// Re-drive a maximize claim the batch took but skipped applying because
     /// the window was under a user gesture.
     ///
-    /// Both Apply arms insert ledger membership before their compositor call
-    /// and then skip that call mid-drag, so the ledger records a bit KWin does
-    /// not hold — and the interception compares KWin's bit against membership
+    /// Both Apply arms take ledger membership around their compositor call and then skip that call
+    /// mid-drag, so the ledger records a bit KWin does not hold. (The column arm inserts BEFORE the
+    /// call, which its own note ties to the X11 synchronous re-entry; the monocle arm inserts after,
+    /// gated on the mode read before it. Same net state, different orderings — do not carry the
+    /// column arm's reasoning across.) — and the interception compares KWin's bit against membership
     /// to decide whether anything was requested, so a click in the interim
     /// reads the disagreement as a fresh toggle. Nothing else
     /// closes it: the gesture end replays geometry only, and the engine emits

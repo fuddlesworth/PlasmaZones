@@ -513,6 +513,36 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectA
     if (!kw) {
         return false;
     }
+    // THE EFFECT'S OWN ECHO NEVER DISPATCHES, whatever bit it left behind.
+    //
+    // Claimed here rather than only inside the already-agrees arm below, and
+    // the difference is the whole point: that arm fires when the resulting bit
+    // MATCHES membership, so it covers an authored echo only while membership
+    // still says what it said at write time. On Wayland a client round trip
+    // separates the two, and membership can move inside it — a Release arm
+    // running between the write and its echo is enough. The echo then arrives
+    // DISAGREEING, falls past that arm, and reaches the dispatch below, which
+    // sends the engine a toggle nobody pressed and moves the window for it.
+    // What disqualifies a dispatch is authorship, not agreement, so the test is
+    // made on authorship and made first. Every authored write whose echo agrees
+    // is caught either way; this is what covers the ones that do not, including
+    // any future arm that writes a bit membership does not yet hold.
+    //
+    // Wayland only in practice: on X11 the echo is synchronous under the
+    // suppression counter, so the caller's own conjunct means this function is
+    // never entered for it. And below the screen gate above, so the ordinary
+    // monocle echo on a non-scrolling screen still declines exactly as before
+    // and is still absorbed by the shader layer's same-effect short-circuit
+    // rather than skipped here.
+    //
+    // Claimed rather than declined, matching the arm below: the caller must not
+    // run its own maximize shader for a state change the batch that authored it
+    // already owns the leg for.
+    if (effectAuthoredEdge) {
+        qCDebug(lcEffect) << "Maximize interception: claiming" << windowId
+                          << "— committed echo of the effect's own maximize write, nothing to dispatch";
+        return true;
+    }
     // Decline BEFORE the cancel when there is no daemon to answer.
     //
     // The dispatch below is fire-and-forget and drops silently on this same
@@ -580,29 +610,21 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectA
     // arbitrary backlog against a state each press was aimed at from a
     // different starting point.
     //
-    // AND NEVER THE EFFECT'S OWN ECHO, which is what effectAuthoredEdge is for.
-    // This arm used to argue the echo could not reach it, on the grounds that
-    // an echo of the effect's own write arrives only after the reply has
-    // cleared the flight entry. True of the entry the reply CLEARED, and false
-    // once the reply's own pending-press guard re-dispatches: that guard runs
-    // at scope exit, after the refusal's write-back, and arms a fresh entry
-    // that is very much alive when the write-back's Wayland echo lands a round
-    // trip later. The echo then found KWin's bit equal to membership — it had
-    // just been set to exactly that — recorded a press nobody made, and the
-    // next refusal re-dispatched on it. A strip that keeps refusing keeps the
-    // cycle going, one unrequested toggle and one visible bit write per round
-    // trip, with nothing to stop it.
-    //
-    // The echo is only distinguishable here because the maximize lambda hands
-    // the answer down: the authorship stamp is consumed by noteMaximizeEdge
-    // before this runs, so by this point nothing else can tell the two apart.
-    // A genuine second press during the re-dispatched round trip still
-    // coalesces — it carries no authorship and lands after the echo.
+    // The effect's own echo cannot reach this arm — it is claimed above, on
+    // authorship, before membership is even consulted. That guard is what
+    // closes the re-dispatch loop this arm used to feed: the reply's
+    // pending-press scope guard re-arms a fresh flight entry after the
+    // refusal's write-back, so that write-back's Wayland echo arrived with an
+    // entry very much alive and with KWin's bit equal to membership — it had
+    // just been set to exactly that. It was recorded as a press nobody made,
+    // and the next refusal re-dispatched on it, one unrequested toggle and one
+    // visible bit write per round trip for as long as the strip kept refusing.
+    // A genuine second press still coalesces here: it carries no authorship.
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
         const bool inFlight = maximizeToggleInFlight(windowId);
-        if (inFlight && !effectAuthoredEdge) {
+        if (inFlight) {
             m_maximizeToggleInFlight[windowId].pendingPress = true;
         }
         // Entry presence is logged separately from the live/expired answer,
@@ -610,15 +632,9 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectA
         // report: a flight that expired with a press already recorded keeps
         // its entry while answering false here, so this press is neither
         // coalesced nor dispatched. (An expiry with no recorded press erases
-        // the entry, so both read false there.) The effect's own echo is the
-        // other way they disagree — a live, unexpired entry that still
-        // coalesces nothing — and the authored-echo field names it. The press is deliberately not
-        // recorded in that case — the reply may still land tens of seconds
-        // later, and honouring it then would toggle the window long after the
-        // user gave up on the click.
+        // the entry, so both read false there.)
         qCInfo(lcEffect) << "Maximize interception: KWin already agrees with the engine for" << windowId
-                         << "— no toggle dispatched (coalesced press:" << (inFlight && !effectAuthoredEdge)
-                         << "authored echo:" << effectAuthoredEdge
+                         << "— no toggle dispatched (coalesced press:" << inFlight
                          << "flight entry standing:" << m_maximizeToggleInFlight.contains(windowId) << ")";
         return true;
     }
@@ -1042,6 +1058,22 @@ void TilingHandler::restoreAllMaximizedToEdges()
             m_maximizedToEdgesWindows.insert(wid);
             continue;
         }
+        // FOURTH unpaid arm, and the gesture half of the pair every other
+        // maximize write in this file carries. maximize() moveResizes, so a
+        // drain landing mid-drag snaps the window to its restore rect under the
+        // user's pointer — the exact reason every sibling write skips. Retained
+        // like the three arms above, and this claim really can be paid: every
+        // gesture ends in reconcileMaximizeAfterGesture, which with the flags
+        // clear either re-drives the claim or routes it to
+        // releaseMaximizedToEdges, and a daemon loss additionally gets the
+        // bring-up drain. The one caller that cannot pay is unload, where the
+        // set is about to be destroyed and the bit is stranded — accepted,
+        // because the effect is going away and the alternative is snapping a
+        // window under the pointer on the way out.
+        if (w->isUserMove() || w->isUserResize()) {
+            m_maximizedToEdgesWindows.insert(wid);
+            continue;
+        }
         if (kw->requestedMaximizeMode() != KWin::MaximizeRestore) {
             // Through the shared bracket rather than an inline ++/maximize/--:
             // three hand-rolled copies of this write had drifted apart, and
@@ -1103,6 +1135,19 @@ void TilingHandler::restoreAllMonocleMaximized()
             m_monocleMaximizedWindows.insert(wid);
             continue;
         }
+        // NO gesture retain arm here, unlike its maximized-to-edges twin, and
+        // the asymmetry is deliberate. A retain needs a payer, and this set has
+        // none: reconcileMaximizeAfterGesture's only monocle action is to
+        // re-apply MaximizeFull, never to restore, so on the engine-disable
+        // caller a retained mid-drag member would keep its bit against an
+        // engine that is no longer managing it — and if KWin's drag-restore had
+        // already cleared the bit, reconcile would re-maximize it. Nothing
+        // re-drains either: re-enabling does not call this, and the sole insert
+        // site is gated on the window not already being maximized, so no batch
+        // re-establishes or clears the entry. Paying the restore under the
+        // pointer is the lesser cost. The edges twin retains because its claim
+        // genuinely can be paid — through releaseMaximizedToEdges at the
+        // gesture end, and through the bring-up drain after a daemon loss.
         // Through the helper, not a bare maximize(), even though the loop-wide
         // bracket above already holds the counter. The counter does not cover
         // this on EITHER platform, which is easy to misread: noteMaximizeEdge

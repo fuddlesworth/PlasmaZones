@@ -791,7 +791,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // m_lastFullyMaximized.
     connect(w, &KWin::EffectWindow::windowMaximizedStateAboutToChange, this,
             [this](KWin::EffectWindow* window, bool, bool) {
-                if (window) {
+                // isDeleted() as well as null: a departure rect captured for a
+                // corpse anchors nothing (no morph is owed for a window that is
+                // going away) and the entry would just wait for the
+                // windowDeleted sweep.
+                if (window && !window->isDeleted()) {
                     m_shaderManager.m_preMaximizeFrame.insert(window, window->frameGeometry());
                 }
             });
@@ -845,7 +849,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
-                if (!window) {
+                // isDeleted() as well as null. Every body below is meaningless
+                // for a corpse, and one is actively harmful: the rule-cache
+                // invalidation calls getWindowId, which re-populates the id
+                // caches slotWindowClosed has just scrubbed (window_lifecycle
+                // spells that hazard out), leaving a stale mapping for the
+                // windowDeleted backstop to clean up again.
+                if (!window || window->isDeleted()) {
                     return;
                 }
                 const bool fullyMaximized = horizontal && vertical;
@@ -1072,11 +1082,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // sequences collapse into at most one D-Bus push.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
-                // isDeleted() alongside the null test, matching every sibling
-                // lambda in this file. A window held alive under
-                // WindowClosedGrabRole still emits this, and every body below
-                // is meaningless for a corpse — the centring one actively
-                // wrong, since it would move() a closed window. The two that
+                // isDeleted() alongside the null test, as the other lambdas
+                // over this signal and its maximize siblings do. A window held
+                // alive under WindowClosedGrabRole still emits this, and every
+                // body below is meaningless for a corpse — the centring one
+                // actively wrong, since it would move() a closed window. The two that
                 // reach shared state already declined on their own
                 // (flushPendingFrameGeometry skips a deleted window,
                 // slotWindowClosed has already dropped the suppression entry),
@@ -1183,10 +1193,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // lookup. Body -1 above already orders it this way.
                 if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()) {
                     const QString scrollId = getWindowId(safeW.data());
+                    // Copied out, not held as an iterator across the predicate
+                    // below. scrollManagedOutputFor does not touch this map
+                    // today, so the iterator would survive — but it resolves a
+                    // screen, a float verdict and an output, and a future
+                    // reader has no reason to expect an unrelated call to be
+                    // iterator-critical. The value is a QRect. The hit/miss
+                    // answer is kept as its own bool rather than inferred from
+                    // the copied rect, so the test stays exactly the one the
+                    // iterator comparison made.
                     const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
-                    if (colIt != m_scrollOfferedColumn.constEnd() && scrollManagedOutputFor(safeW.data())) {
+                    const bool haveOffer = colIt != m_scrollOfferedColumn.constEnd();
+                    const QRect offered = haveOffer ? *colIt : QRect();
+                    if (haveOffer && scrollManagedOutputFor(safeW.data())) {
                         const QRect live = safeW->frameGeometry().toRect();
-                        if (live.size() != colIt->size() && !live.size().isEmpty()) {
+                        if (live.size() != offered.size() && !live.size().isEmpty()) {
                             // Same centring as the strip apply and the paint
                             // resolver: the same toRect() rounding, and the
                             // same clamp at zero, so a frame whose minimum
@@ -1196,8 +1217,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                             // isEmpty rather than isValid: QSize::isValid()
                             // admits 0x0, which would centre a degenerate
                             // mid-unmap commit by the whole column.
-                            const QPoint centred(colIt->x() + qMax(0, colIt->width() - live.width()) / 2,
-                                                 colIt->y() + qMax(0, colIt->height() - live.height()) / 2);
+                            const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
+                                                 offered.y() + qMax(0, offered.height() - live.height()) / 2);
                             if (live.topLeft() != centred && safeW->window()) {
                                 // Bracketed like every other geometry commit
                                 // in the tree. The move emits a synchronous
