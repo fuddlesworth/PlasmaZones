@@ -23331,7 +23331,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>
         <source>No matches</source>
-        <translation>დამთხვევების გარეშე</translation>
+        <translation>დამთხვევები არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>

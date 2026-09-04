@@ -23321,7 +23321,7 @@
         <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="105"/>
         <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="116"/>
         <source>Filter shortcuts</source>
-        <translation>Kürzel filtern</translation>
+        <translation>Tastenkürzel filtern</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="136"/>
