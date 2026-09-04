@@ -112,7 +112,55 @@ private Q_SLOTS:
     void addingTheSameProviderTwiceIsRefused();
     void roleNamesCoverEveryRoleTheSurfaceBinds();
     void everyRebuildKeepsTheModelSignalsWellFormed();
+    void oneKeystrokeCostsOneRebuildNotOnePerProvider();
+    void anInactiveModelDefersItsRebuildUntilItIsLookedAtAgain();
 };
+
+// Providers stay subscribed to their sources all session, so a clipboard
+// copy or a window opening drives a recompute whether or not the launcher is
+// on screen. Rebuilding for those reset the model behind a surface nobody
+// could see, destroying every delegate each time.
+void TestLauncherModel::anInactiveModelDefersItsRebuildUntilItIsLookedAtAgain()
+{
+    LauncherModel model;
+    auto* a = new FakeProvider(QStringLiteral("a"), false, &model);
+    a->rows = {FakeProvider::row(QStringLiteral("a1"), 10)};
+    model.addProvider(a);
+    model.setQuery(QStringLiteral("x"));
+    QCOMPARE(model.rowCount(), 1);
+
+    model.setActive(false);
+    QSignalSpy wasReset(&model, &QAbstractItemModel::modelReset);
+
+    // The source changes while the surface is closed.
+    a->rows.append(FakeProvider::row(QStringLiteral("a2"), 9));
+    a->setQuery(QStringLiteral("x"));
+    QCOMPARE(wasReset.count(), 0);
+
+    // Coming back shows the current answer, so deferring costs no staleness.
+    model.setActive(true);
+    QCOMPARE(wasReset.count(), 1);
+    QCOMPARE(model.rowCount(), 2);
+}
+
+// Each provider answers setQuery synchronously, and each answer used to
+// rebuild on its own. Five providers meant five full model resets per
+// keystroke, and a reset destroys every delegate and drops the selected
+// row, so the selection jumped while the user typed.
+void TestLauncherModel::oneKeystrokeCostsOneRebuildNotOnePerProvider()
+{
+    LauncherModel model;
+    for (int i = 0; i < 5; ++i) {
+        auto* p = new FakeProvider(QStringLiteral("p%1").arg(i), false, &model);
+        p->rows = {FakeProvider::row(QStringLiteral("r%1").arg(i), 10 - i)};
+        model.addProvider(p);
+    }
+
+    QSignalSpy wasReset(&model, &QAbstractItemModel::modelReset);
+    model.setQuery(QStringLiteral("x"));
+    QCOMPARE(model.rowCount(), 5);
+    QCOMPARE(wasReset.count(), 1);
+}
 
 // rowCount and data stay correct even when the reset bracket is broken, so
 // the rest of this file cannot see a rebuild that emits its begin/end pair

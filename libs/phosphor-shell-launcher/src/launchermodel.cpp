@@ -61,13 +61,37 @@ void LauncherModel::setQuery(const QString& query)
     }
     m_query = query;
     Q_EMIT queryChanged();
-    // Each provider emits resultsChanged from setQuery (or later, if it
-    // is asynchronous), and each emission rebuilds. That is N rebuilds
-    // for N synchronous providers on every keystroke, which is fine at
-    // launcher scale and keeps the model honest for async providers with
-    // no extra machinery.
+    // Batched. Every provider answers a query synchronously, and each
+    // answer used to rebuild on its own: five providers meant five full
+    // model resets per keystroke, each destroying every delegate and
+    // resetting the current row, so the selection jumped while the user
+    // typed. The flag suppresses the per-provider rebuilds and one runs
+    // after the last provider has answered.
+    //
+    // An asynchronous provider answering later still rebuilds on its own,
+    // because the flag is only up for the duration of this loop.
+    m_batchingQuery = true;
     for (ILauncherProvider* provider : std::as_const(m_providers)) {
         provider->setQuery(m_query);
+    }
+    m_batchingQuery = false;
+    rebuild();
+}
+
+bool LauncherModel::active() const
+{
+    return m_active;
+}
+
+void LauncherModel::setActive(bool active)
+{
+    if (m_active == active) {
+        return;
+    }
+    m_active = active;
+    Q_EMIT activeChanged();
+    if (m_active && m_rebuildDeferred) {
+        rebuild();
     }
 }
 
@@ -134,6 +158,17 @@ QVariantList LauncherModel::providers() const
 
 void LauncherModel::rebuild()
 {
+    if (m_batchingQuery) {
+        return;
+    }
+    if (!m_active) {
+        // Nobody is looking. Remember that the rows are stale and rebuild
+        // once the surface comes back, rather than resetting the model for
+        // every clipboard copy and every window that opens all session.
+        m_rebuildDeferred = true;
+        return;
+    }
+    m_rebuildDeferred = false;
     // Gather per provider, then order providers by their best row.
     struct Group
     {

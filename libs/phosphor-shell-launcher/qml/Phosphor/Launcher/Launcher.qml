@@ -64,6 +64,17 @@ FocusScope {
     // see the two agree without reaching into the field.
     readonly property alias queryText: field.text
 
+    // Tell the model whether anyone is looking. Providers stay subscribed
+    // all session so that opening the launcher is instant, and without this
+    // every clipboard copy and every window opening reset the model behind a
+    // surface nobody could see.
+    Binding {
+        target: root.results
+        property: "active"
+        value: root.visible
+        restoreMode: Binding.RestoreNone
+    }
+
     // Reset for a fresh open: empty query, all providers, selection on
     // top, keyboard in the field. The host calls this on open rather than
     // rebuilding the surface, so provider state (the apps scan) survives.

@@ -33,6 +33,7 @@ class PHOSPHORSHELLLAUNCHER_EXPORT LauncherModel : public QAbstractListModel
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY queryChanged)
     // Empty shows every provider; a provider id shows only that one.
     // The pills in the surface set this; Tab cycles it.
+    Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(QString providerFilter READ providerFilter WRITE setProviderFilter NOTIFY providerFilterChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     // One entry per registered provider, in registration order, each a
@@ -67,6 +68,20 @@ public:
     [[nodiscard]] QString query() const;
     void setQuery(const QString& query);
 
+    /// Whether the surface showing this model is on screen.
+    ///
+    /// Providers stay subscribed to their sources for the whole session,
+    /// because a launcher that rescanned on open would be slow exactly when
+    /// the user is waiting. That means every clipboard copy and every window
+    /// opening drives a recompute, and each one used to rebuild the model
+    /// too: a full reset, destroying every delegate, for a surface nobody is
+    /// looking at. While inactive the rebuild is deferred, and one runs when
+    /// the surface comes back.
+    ///
+    /// Defaults to true, so a host that never sets it behaves as before.
+    [[nodiscard]] bool active() const;
+    void setActive(bool active);
+
     [[nodiscard]] QString providerFilter() const;
     void setProviderFilter(const QString& providerId);
     // Step the filter through "all" and each provider that has rows, in
@@ -86,6 +101,7 @@ public:
 
 Q_SIGNALS:
     void queryChanged();
+    void activeChanged();
     void providerFilterChanged();
     void countChanged();
     void providersChanged();
@@ -100,6 +116,13 @@ private:
 
     QList<PhosphorRegistry::ILauncherProvider*> m_providers;
     QString m_query;
+    // Up only while setQuery is pushing the query to every provider, so
+    // their synchronous answers coalesce into one rebuild instead of one
+    // each. See setQuery.
+    bool m_batchingQuery = false;
+    bool m_active = true;
+    // A rebuild that was skipped because the surface was not on screen.
+    bool m_rebuildDeferred = false;
     QString m_providerFilter;
     QList<Row> m_rows;
     // Per-provider row counts for the current query, unfiltered.
