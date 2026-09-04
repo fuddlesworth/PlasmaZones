@@ -1,18 +1,21 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests, sixteen targets. Headless throughout: two
-# files drive the axis-free primitives directly (StripAxis and the park
-# decision, which take their axis as an argument and so need no fixture),
-# four exercise the pure strip model against the shared screen fixture, and
-# ten drive the engine through null (or stubbed) daemon dependencies and the
-# geometry-provider seam. None needs a QPA platform, so
+# PhosphorScrollEngine unit tests. Headless throughout: the two
+# pse_add_axis_free_test files drive the axis-free primitives directly
+# (StripAxis and the park decision, which take their axis as an argument and so
+# need no fixture), the test_scrollstrip_* suites exercise the pure strip model
+# against the shared screen fixture, and the test_scrollengine_* ones drive the
+# engine through null (or stubbed) daemon dependencies and the
+# geometry-provider seam. Named by prefix rather than counted, because the
+# counts that used to sit here went stale every time a suite was added or
+# split. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
 # (they need an event dispatcher for the coalesced retile and the prunes'
 # deleteLater) — the convention lives in each file's *_MAIN macro; nothing
 # here enforces it.
 #
-# The fourteen fixture-driven suites register TWICE, once per axis, via
+# The fixture-driven suites register TWICE, once per axis, via
 # pse_add_test. The two axis-free ones use pse_add_axis_free_test and register
 # once: the shared fixture HEADER still rides their target (the function adds
 # it to every target, and automoc produces nothing for it), but they never
@@ -125,6 +128,7 @@ pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 # suite. Every slot builds its own strip and asserts geometry, not just the
 # verb's bool.
 pse_add_test(test_scrollstrip_sizing test_scrollstrip_sizing.cpp)
+pse_add_test(test_scrollstrip_height test_scrollstrip_height.cpp)
 # The maximize-to-edges flag's resolution and clearing contract, split out of
 # the sizing suite once that file passed the size ceiling. Same fixture shape,
 # one concern: what a flagged column resolves to, and what turns it back off.

@@ -669,9 +669,12 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Grows the focused window within its column by the configured step.")},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused window within its column by the configured step.")},
-        {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString,
-         QStringLiteral("Clears manual window sizes in the focused column so its windows share the column's space "
-                        "evenly.")},
+        {CD::maximizeWindowHeightKey(), CD::scrollingMaximizeWindowHeightShortcut(), QMetaType::QString,
+         QStringLiteral("Toggles the focused window between filling its column and the height it had before, or an "
+                        "even share with the other windows there if it had none.")},
+        {CD::expandWindowKey(), CD::scrollingExpandWindowShortcut(), QMetaType::QString,
+         QStringLiteral("Grows the focused window to fill the empty space left in its column. The other windows there "
+                        "keep their size.")},
         {CD::centerVisibleColumnsKey(), CD::scrollingCenterVisibleColumnsShortcut(), QMetaType::QString,
          QStringLiteral("Scrolls the view so the fully visible columns sit centered as a group.")},
         {CD::focusWindowTopKey(), CD::scrollingFocusWindowTopShortcut(), QMetaType::QString,
@@ -704,6 +707,10 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
                         "are left alone.")},
         {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused column to the smallest size preset.")},
+        {CD::equalizeWindowHeightsKey(), CD::scrollingEqualizeWindowHeightsShortcut(), QMetaType::QString,
+         QStringLiteral("Gives every window in the focused column an equal share of it.")},
+        {CD::minimizeWindowHeightKey(), CD::scrollingMinimizeWindowHeightShortcut(), QMetaType::QString,
+         QStringLiteral("Shrinks the focused window to the smallest size preset.")},
     };
 }
 

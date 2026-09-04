@@ -428,8 +428,99 @@ public:
     /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
     /// column-extent space the cycle measures in.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
-    /// Back to the even auto-split for EVERY tile in the active column.
-    bool resetActiveColumnHeights();
+    /// Toggle the active tile between filling its column's cross budget and
+    /// the height it had before, falling back to the even auto-split when it
+    /// had none of its own. The height twin of toggleMaximizeActiveColumn,
+    /// restore included: the displaced height is kept in the tile's
+    /// @c preMaximizeHeight rather than in a strip-level index, so unlike
+    /// m_preMaximizeColumnIdx it needs no re-clamping from the structural ops.
+    /// Auto is what un-maximizing means for a tile that never had a height of
+    /// its own, since the height family reads Auto as "the column decides".
+    /// For a tile that is alone in its column Auto and the full budget render
+    /// identically, so that press changes the stored intent without moving
+    /// anything — the toggle still answers true, because the intent decides
+    /// how the tile shares the column the moment a sibling arrives.
+    ///
+    /// The maximized test reads the stored intent as well as the rendered
+    /// extent: siblings held up by their client minimums can stop the tile
+    /// reaching the budget on screen, and a pixel-only test would then
+    /// maximize forever and never come back. Both non-Auto spellings count —
+    /// a Preset whose fraction RESOLVES to the budget is maximized just as a
+    /// Fixed at the budget is, or the top preset would be silently rewritten
+    /// to a Fixed of the same extent and lose its anchor. A TABBED column
+    /// toggles in the column's own space, the cycle and adjust verbs' rule.
+    ///
+    /// reconcileWindowSize overwrites the stored height with whatever size a
+    /// resize settles on, and clears the restore slot with it. That is safe,
+    /// and the reason is worth writing down because it is not obvious: reconcile
+    /// is reached from exactly one place, ScrollEngine::onWindowResized, which
+    /// the daemon calls only from WindowTrackingAdaptor::notifyWindowResized,
+    /// which the effect fires only from windowFinishUserMovedResized gated on
+    /// KWin's isUserResize(). So the ONLY thing that can overwrite the intent
+    /// is a user's finished interactive resize, and a user who has just
+    /// dragged this window to a size of their own SHOULD stop reading as
+    /// maximized. A client resizing itself — a terminal quantising to its
+    /// character cell — is never reported to the daemon at all and cannot
+    /// erase the maximize.
+    ///
+    /// Do not "fix" this by refusing the ack in reconcile. That makes
+    /// onWindowResized's refused-ack branch schedule a retile which re-applies
+    /// the same rect, and a client that will not take it quantises again: a
+    /// self-driving loop, which is what that branch's own comment describes.
+    ///
+    /// The height the maximize displaced is remembered in the tile's
+    /// @c preMaximizeHeight, so un-maximizing puts it back; Auto is the answer
+    /// only when nothing was remembered, which is the case for a tile that
+    /// reached the budget by another route.
+    ///
+    /// That slot is BOTH the restore value and the first half of the maximized
+    /// test, and this is where the height axis deliberately DIVERGES from the
+    /// width axis rather than mirroring it. The width toggle keeps its restore
+    /// in m_preMaximizeColumnIdx + m_preMaximizeWidth and re-infers maximized
+    /// state from resolved pixels, which it can afford because a column's main
+    /// budget is the whole viewport: it does not move when the STRIP changes
+    /// shape, only when the work area does, and the width restore arm
+    /// re-validates its stored width against the current one before using it.
+    /// A column's CROSS budget moves on both counts — it is the cross extent
+    /// less one gap per inter-tile seam, so closing a sibling or tabbing the
+    /// column grows it without the work area moving at all — and a tile holding
+    /// Fixed(the old budget) then re-infers as NOT maximized. Consulting the
+    /// slot first is what stops that press re-entering the maximize arm and
+    /// overwriting the user's remembered height with a near-full one. The
+    /// pixel and intent tests stay behind it for the tile that reached full
+    /// height by another route and so has no slot.
+    ///
+    /// It lives on the tile rather than in a strip-level index precisely so
+    /// the structural ops do not have to re-clamp it; Tile's own note carries
+    /// the rest, including why it is neither serialized nor carried across a
+    /// re-insert.
+    bool toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& params);
+    /// The active tile at its shortest: the smallest preset height, or
+    /// MinWindowHeightFraction of the work area's cross extent when the preset
+    /// list is empty. The height twin of minimizeActiveColumnWidth, and the
+    /// empty-list arm is reachable only from a test or an embedder for the
+    /// same reason. Height has no Proportion spelling, so that fallback is
+    /// written as Fixed pixels rather than as a fraction.
+    /// Refuses when the tile already renders there.
+    bool minimizeActiveWindowHeight(const ScrollLayoutParams& params);
+    /// Grow the active tile into the empty cross space left in its column.
+    /// The height twin of expandActiveColumnToAvailableWidth. Empty space
+    /// inside a column exists only when no tile is Auto: an Auto tile absorbs
+    /// the leftover by weight in the relayout, so with one present the
+    /// measurement below finds nothing to claim and the verb refuses.
+    ///
+    /// One case routes through toggleMaximizeActiveWindowHeight rather than
+    /// writing Fixed pixels, the expand-column verb's rule: the active tile is
+    /// the only visible one in its column (or the column is tabbed, where
+    /// every tab is committed at the column's own rect and there is no
+    /// leftover WITHIN it), so the result is the whole budget and going
+    /// through the toggle leaves a way back out.
+    bool expandActiveWindowToAvailableHeight(const ScrollLayoutParams& params);
+    /// Back to the even auto-split for EVERY tile in the active column: the
+    /// height twin of equalizeVisibleColumnWidths. Auto IS the even share, so
+    /// unlike the width verb this one names the split rather than computing
+    /// it, and it needs no params.
+    bool equalizeActiveColumnHeights();
     /// Record the size a client/user resize actually settled on. The acked
     /// MAIN extent becomes the column's Fixed width intent only when
     /// @p mainChanged (the engine compares against the last applied rect) — a
@@ -679,8 +770,40 @@ private:
     /// resolution and no targeted per-tile helper can replace it. Answers -1
     /// when there is no active tile or it resolved to nothing (a minimized
     /// tile is dropped from the relayout entirely). Shortcut-rate path, not
-    /// per-frame — both height verbs call it once per press.
+    /// per-frame: the height verbs call it once per press, and
+    /// expandActiveWindowToAvailableHeight relayouts a second time to walk the
+    /// column's resolved tiles.
     int activeTileCrossPx(const ScrollLayoutParams& params) const;
+    /// The cross-axis budget the active column's tiles divide: the work area's
+    /// cross extent net of the inner gaps BETWEEN its visible tiles, floored
+    /// at one pixel per tile. This is relayout's @c availH for that column, so
+    /// a height a verb clamps to it is a height that will actually render —
+    /// EXCEPT under @c maximizedToEdges, where relayout resolves the column
+    /// against the raw work area with no inner gap and ignores the stored
+    /// intents entirely, so a share measured there is not comparable with this
+    /// gapped budget. expandActiveWindowToAvailableHeight drops the override
+    /// before it measures for exactly that reason;
+    /// toggleMaximizeActiveWindowHeight does NOT, and reads a raw-area share
+    /// against this budget. That is safe either way: a LONE visible tile
+    /// measures the whole raw extent and so reads as already maximized, and in
+    /// a stack the raw share falls BELOW this budget, so the press reads as
+    /// not maximized and writes Fixed(budget) — the right maximize target
+    /// regardless. A
+    /// TABBED column stacks nothing and spends no inner gaps, so its budget is
+    /// the whole cross extent (tabbedColumnCrossPx caps its owner there).
+    /// Answers -1 when there is no active column or the work area is
+    /// degenerate.
+    int activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const;
+    /// The shortest the active tile may be written, in the space the height
+    /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
+    /// is already added). MinWindowHeightFraction of the work area's cross
+    /// extent, raised to the client minimum while @c respectMinimumSize is on
+    /// — and while tabbed, to the tallest minimum in the whole tab set, since
+    /// every visible tab is committed at that one rect. Capped at the work
+    /// area's cross extent so a client minimum larger than the screen cannot
+    /// invert a qBound. Answers -1 when there is no active tile or the work
+    /// area is degenerate.
+    int activeWindowHeightFloorPx(const ScrollLayoutParams& params) const;
     /// Make @p tileIdx the tab whose height decides @p c's cross extent, when
     /// @p c is tabbed and @p incoming is a height worth owning it for. Writes
     /// only Column::heightOwnerId — no tile's height is touched, so the tabs

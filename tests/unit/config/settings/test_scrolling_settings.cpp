@@ -238,7 +238,18 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+PgDown"));
         // Off Meta+Alt+0, where it read as a tenth quick-layout digit; now
         // the Alt twin of Retile's T beside Equalize's Shift twin.
-        QCOMPARE(ConfigDefaults::scrollingResetWindowHeightsShortcut(), QStringLiteral("Meta+Ctrl+Alt+T"));
+        QCOMPARE(ConfigDefaults::scrollingEqualizeWindowHeightsShortcut(), QStringLiteral("Meta+Ctrl+Alt+T"));
+        // The three whole-size height verbs, each its width twin's chord with
+        // Ctrl added. Both halves of each pair are pinned: the CHANGELOG
+        // advertises the pairing itself ("Meta+Alt+F maximizes the column and
+        // Meta+Ctrl+Alt+F maximizes the window in it"), so a retune of either
+        // side would ship a doc claim the defaults contradict.
+        QCOMPARE(ConfigDefaults::scrollingMaximizeColumnShortcut(), QStringLiteral("Meta+Alt+F"));
+        QCOMPARE(ConfigDefaults::scrollingMaximizeWindowHeightShortcut(), QStringLiteral("Meta+Ctrl+Alt+F"));
+        QCOMPARE(ConfigDefaults::scrollingExpandColumnShortcut(), QStringLiteral("Meta+Alt+E"));
+        QCOMPARE(ConfigDefaults::scrollingExpandWindowShortcut(), QStringLiteral("Meta+Ctrl+Alt+E"));
+        QCOMPARE(ConfigDefaults::scrollingMinimizeColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+E"));
+        QCOMPARE(ConfigDefaults::scrollingMinimizeWindowHeightShortcut(), QStringLiteral("Meta+Ctrl+Alt+Shift+E"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
         // The no-focus PAGE pan, on a free letter of the Meta+Alt pool. The
         // step pan is the wheel's (Meta+Shift+wheel, an effect-side axis
@@ -1553,6 +1564,11 @@ private Q_SLOTS:
     /// write of the value already held.
     void heightKindStoresEveryKindAndEmitsOnce()
     {
+        // Every Settings-constructing slot in this file takes one: without it
+        // the slot reads and WRITES the developer's own config, which makes
+        // the ladder below depend on whatever height kind happens to be
+        // stored there.
+        TestHelpers::IsolatedConfigGuard guard;
         Settings settings;
         QSignalSpy kindSpy(&settings, &Settings::scrollingDefaultWindowHeightKindChanged);
 

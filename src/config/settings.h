@@ -657,8 +657,10 @@ public:
                    setScrollingIncreaseWindowHeightShortcut NOTIFY scrollingIncreaseWindowHeightShortcutChanged)
     Q_PROPERTY(QString scrollingDecreaseWindowHeightShortcut READ scrollingDecreaseWindowHeightShortcut WRITE
                    setScrollingDecreaseWindowHeightShortcut NOTIFY scrollingDecreaseWindowHeightShortcutChanged)
-    Q_PROPERTY(QString scrollingResetWindowHeightsShortcut READ scrollingResetWindowHeightsShortcut WRITE
-                   setScrollingResetWindowHeightsShortcut NOTIFY scrollingResetWindowHeightsShortcutChanged)
+    Q_PROPERTY(QString scrollingMaximizeWindowHeightShortcut READ scrollingMaximizeWindowHeightShortcut WRITE
+                   setScrollingMaximizeWindowHeightShortcut NOTIFY scrollingMaximizeWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingExpandWindowShortcut READ scrollingExpandWindowShortcut WRITE
+                   setScrollingExpandWindowShortcut NOTIFY scrollingExpandWindowShortcutChanged)
     Q_PROPERTY(QString scrollingCenterVisibleColumnsShortcut READ scrollingCenterVisibleColumnsShortcut WRITE
                    setScrollingCenterVisibleColumnsShortcut NOTIFY scrollingCenterVisibleColumnsShortcutChanged)
     Q_PROPERTY(QString scrollingFocusWindowTopShortcut READ scrollingFocusWindowTopShortcut WRITE
@@ -685,6 +687,10 @@ public:
                    setScrollingEqualizeColumnWidthsShortcut NOTIFY scrollingEqualizeColumnWidthsShortcutChanged)
     Q_PROPERTY(QString scrollingMinimizeColumnWidthShortcut READ scrollingMinimizeColumnWidthShortcut WRITE
                    setScrollingMinimizeColumnWidthShortcut NOTIFY scrollingMinimizeColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingEqualizeWindowHeightsShortcut READ scrollingEqualizeWindowHeightsShortcut WRITE
+                   setScrollingEqualizeWindowHeightsShortcut NOTIFY scrollingEqualizeWindowHeightsShortcutChanged)
+    Q_PROPERTY(QString scrollingMinimizeWindowHeightShortcut READ scrollingMinimizeWindowHeightShortcut WRITE
+                   setScrollingMinimizeWindowHeightShortcut NOTIFY scrollingMinimizeWindowHeightShortcutChanged)
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
@@ -1599,8 +1605,10 @@ public:
     void setScrollingIncreaseWindowHeightShortcut(const QString& shortcut);
     QString scrollingDecreaseWindowHeightShortcut() const;
     void setScrollingDecreaseWindowHeightShortcut(const QString& shortcut);
-    QString scrollingResetWindowHeightsShortcut() const;
-    void setScrollingResetWindowHeightsShortcut(const QString& shortcut);
+    QString scrollingMaximizeWindowHeightShortcut() const;
+    void setScrollingMaximizeWindowHeightShortcut(const QString& shortcut);
+    QString scrollingExpandWindowShortcut() const;
+    void setScrollingExpandWindowShortcut(const QString& shortcut);
     QString scrollingCenterVisibleColumnsShortcut() const;
     void setScrollingCenterVisibleColumnsShortcut(const QString& shortcut);
     QString scrollingFocusWindowTopShortcut() const;
@@ -1627,6 +1635,10 @@ public:
     void setScrollingEqualizeColumnWidthsShortcut(const QString& shortcut);
     QString scrollingMinimizeColumnWidthShortcut() const;
     void setScrollingMinimizeColumnWidthShortcut(const QString& shortcut);
+    QString scrollingEqualizeWindowHeightsShortcut() const;
+    void setScrollingEqualizeWindowHeightsShortcut(const QString& shortcut);
+    QString scrollingMinimizeWindowHeightShortcut() const;
+    void setScrollingMinimizeWindowHeightShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;

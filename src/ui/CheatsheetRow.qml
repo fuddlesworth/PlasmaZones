@@ -227,9 +227,11 @@ RowLayout {
         // the visible children out of the a11y tree so screen readers don't
         // announce them twice.
         Accessible.ignored: true
-        // Wrap, never elide: the model ships group-contextual short labels
-        // sized to fit, and a pathological case (translation, custom font)
-        // grows a second line instead of losing text.
+        // Wrap, never elide: most rows ship a group-contextual short label
+        // sized to fit, a few deliberately render their full registration name
+        // because no short form stays unambiguous against a twin, and a
+        // pathological case (translation, custom font) grows a second line
+        // instead of losing text.
         wrapMode: Text.Wrap
         font.family: root.effectiveFamily
         font.pixelSize: root.rowFontSize

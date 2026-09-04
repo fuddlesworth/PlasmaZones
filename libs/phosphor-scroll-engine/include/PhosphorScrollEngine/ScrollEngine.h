@@ -281,7 +281,22 @@ public:
     void resetStripToDefaults(const QString& screenId);
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
-    void resetWindowHeights(const QString& screenId);
+    /// Toggle the focused window between filling its column and the even
+    /// split (the height twin of toggleMaximizeColumn). Unlike that one this
+    /// keeps no pre-maximize slot; ScrollStrip::toggleMaximizeActiveWindowHeight
+    /// documents why.
+    void maximizeWindowHeight(const QString& screenId);
+    /// The focused window at the shortest preset height (the height twin of
+    /// minimizeColumnWidth).
+    void minimizeWindowHeight(const QString& screenId);
+    /// Grow the focused window into the empty space left in its column (the
+    /// height twin of expandColumnToAvailableWidth). A column holding an Auto
+    /// window has no empty space to claim, since that window already absorbs
+    /// it.
+    void expandWindowToAvailableHeight(const QString& screenId);
+    /// An equal share of the focused column for each of its windows (the
+    /// height twin of equalizeVisibleColumnWidths).
+    void equalizeWindowHeights(const QString& screenId);
     /// Center the span of fully visible columns (niri center-visible-columns).
     void centerVisibleColumns(const QString& screenId);
     /// Scroll the view along the strip by @p percent of the work area's MAIN

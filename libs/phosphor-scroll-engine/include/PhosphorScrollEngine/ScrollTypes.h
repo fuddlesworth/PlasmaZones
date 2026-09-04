@@ -10,6 +10,8 @@
 #include <QString>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorScrollEngine {
 
 /// Per-screen override-map keys for ScrollEngine::applyPerScreenConfig.
@@ -762,6 +764,47 @@ struct Tile
 {
     QString windowId;
     WindowHeight height;
+    /// The height this tile carried when toggleMaximizeActiveWindowHeight last
+    /// maximized it, so the un-maximize press can put it back instead of
+    /// falling to Auto. Empty means "not maximized by that verb", which is
+    /// also the answer for a tile that reached full height by another route
+    /// (an adjust clamped at the budget, a preset cycled to the top) — those
+    /// still un-maximize to Auto, since there is no remembered height to
+    /// restore and Auto is the height family's "the column decides".
+    ///
+    /// Held HERE rather than as a strip-level index the way the width axis
+    /// holds m_preMaximizeColumnIdx: an index has to be re-clamped by every
+    /// insert, removal, reorder, consume and expel (that bookkeeping is why
+    /// this verb originally shipped without a slot at all), while a field on
+    /// the tile travels with it through all of those for free, because every
+    /// one of those paths moves the Tile struct whole.
+    ///
+    /// Set ONLY by that verb's maximize arm. What clears it again divides on
+    /// who chose the height, not on whether the tile moved.
+    ///
+    /// A height the CALLER names settles it, even when the tile already held
+    /// that value: setActiveWindowHeight and setWindowHeightIntent both clear
+    /// above their equality bail, reconcileWindowSize clears before comparing
+    /// the size a user's interactive resize settled on, resetToDefaults clears
+    /// as it applies the layout's default, and equalize clears every tile in
+    /// the column outright. In each of those someone asked for a specific
+    /// height and got it, so there is no maximize left to undo.
+    ///
+    /// A height the VERB computes does not, unless the write lands. adjust,
+    /// minimize and expand bail when the press would move no pixels, and the
+    /// preset cycle bails when the entry it picked is the one the tile already
+    /// holds; all four clear only past that bail. A refusal is not a
+    /// countermand — a held-down key sitting at its limit must not erase the
+    /// memory. Nor does dropping a column's maximize-to-edges override on its
+    /// own: that press reports a change, but it has not settled a height. Because of that the
+    /// standing slot is also what the toggle READS to decide the tile is
+    /// maximized: it cannot go stale the way the height itself does when the
+    /// budget moves under it. Deliberately
+    /// NOT serialized and not carried across a re-insert (migration, unfloat,
+    /// stash restore, drag commit), which is the same session-and-place scope
+    /// the width axis's slot has — a window that comes back from one of those
+    /// un-maximizes to Auto.
+    std::optional<WindowHeight> preMaximizeHeight;
     /// Minimized tiles keep their slot/order but are excluded from layout;
     /// unminimize restores the window into the same slot.
     bool minimized = false;
