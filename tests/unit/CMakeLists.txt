@@ -2256,7 +2256,7 @@ target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
 add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# shell/ - Bar registry owner + QML-component widget factory (Phase 4.1)
+# shell/ - shell-process controllers, factories and popout transports
 # ═══════════════════════════════════════════════════════════════════════════════
 # Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. The target compiles the
 # four src/shell sources directly rather than linking the gated

@@ -13,7 +13,11 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickTest)
 # cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
 # open and hangs ctest after the test itself passed) plus a per-target XDG
 # sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
-include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+# Guarded so a standalone subtree configure of this library still works
+# without the top-level module, matching the launcher's sibling tests.
+if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+endif()
 add_executable(test_phosphor_shell_control_center tst_controlcenter.cpp)
 
 target_compile_features(test_phosphor_shell_control_center PRIVATE cxx_std_20)
@@ -40,6 +44,13 @@ add_test(
     NAME test_phosphor_shell_control_center
     COMMAND test_phosphor_shell_control_center -input ${CMAKE_CURRENT_SOURCE_DIR}
 )
-phosphor_apply_test_isolation(test_phosphor_shell_control_center)
 set_property(TEST test_phosphor_shell_control_center APPEND PROPERTY LABELS "phosphorshellcontrolcenter")
-phosphor_append_test_environment(test_phosphor_shell_control_center "QT_QPA_PLATFORM=offscreen")
+# Same fallback the launcher's tests carry: under a standalone configure the
+# helper is absent, and the offscreen platform still has to be set or the test
+# tries to open a real window.
+if(COMMAND phosphor_apply_test_isolation)
+    phosphor_apply_test_isolation(test_phosphor_shell_control_center)
+    phosphor_append_test_environment(test_phosphor_shell_control_center "QT_QPA_PLATFORM=offscreen")
+else()
+    set_property(TEST test_phosphor_shell_control_center APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

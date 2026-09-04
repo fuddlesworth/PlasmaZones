@@ -118,3 +118,31 @@ contract: tile materialisation order, a provider returning null, the
 detail-view routing, and the rebuild path. The provider in those tests is
 a plain QML object with `createTile(id, parent)`, which is exactly the
 seam the shell fills with a registry-backed controller.
+
+## Dependencies
+
+- Qt6 >= 6.6 Core / Gui / Qml / Quick and KF6 Kirigami, for the tile icons.
+  This module is QML-only: it builds no C++ library of its own.
+- `phosphor-theme` (`Phosphor.Theme`) for tokens, Motion and the state-layer
+  opacities; `phosphor-shell-widgets` (`Phosphor.Widgets`) for the slider and
+  the ripple. In-tree builds link their QML plugins automatically.
+- No service dependency. The tiles bind whichever `Phosphor.Service.*` types
+  their host has registered, so this module never links them itself.
+
+## Status
+
+Phase 4.4: in the tree. The host, the shared tile chrome, the slider variant,
+the detail panel and five built-in tiles are present, with a QtQuickTest
+suite over the host's registry-agnostic contract.
+
+Built only with `-DBUILD_PHOSPHOR_SHELL=ON`, which is off by default.
+The acceptance demo is `examples/phosphor-control-center-demo/`, a plain
+window that hosts the grid over the real services, so a tile whose service
+is missing on the machine reports itself unavailable rather than vanishing.
+
+Two things are deliberately unfinished. `DetailPanel` has no content path
+yet: a tile declaring `hasDetail` gets the chevron and the slide-over, but
+nothing supplies a title or a body. And the shipped mount is the bar's
+socket, whose surface requests no keyboard interactivity, so the tile and
+panel key handlers are inert there.
+

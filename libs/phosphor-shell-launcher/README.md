@@ -69,11 +69,38 @@ Launcher {
 ## Tests
 
 `tests/` is Qt Test over the core (matcher orderings and the exact
-perfect score, parser and scanner over a fixture tree, each provider's
-gate and ranking, the model's grouping/ordering/filter/activation) plus a
+perfect score, parser and scanner over a fixture tree, the pure-logic
+providers' gates and ranking (apps, calculator, command), the model's grouping/ordering/filter/activation) plus a
 QtQuickTest harness for the surface's keyboard contract against a fake
 model. Every claim with a mutation-shaped failure mode was verified by
 mutation: disabling the matcher's run-bonus inheritance, the scanner's
 first-directory-wins, the model's best-row ordering, the calculator's
 bare-number gate, the command PATH gate and the apps secondary-field
 penalty each fail the test written for it.
+
+## Dependencies
+
+- Qt6 >= 6.6 Core for the core library, plus Gui privately for the one
+  clipboard call the calculator makes. Qml / Quick / `QtQuick.Shapes`
+  (`Qt6::QuickShapes`) and KF6 Kirigami for the QML module.
+- `phosphor-registry` (`ILauncherProvider`, `ILauncherProviderFactory`) as a
+  public dependency: the provider contract appears in this library's own
+  public headers.
+- `phosphor-theme` (`Phosphor.Theme`) for tokens and Motion, and
+  `phosphor-shell-widgets` (`Phosphor.Widgets`) for the field, pill and row
+  chrome. In-tree builds link their QML plugins automatically.
+- At runtime, `xdg-terminal-exec` (or `$TERMINAL`) for the terminal legs of
+  the apps and command providers. Absent, those activations warn and refuse
+  rather than failing the launcher.
+
+## Status
+
+Phase 4.2: in the tree. The core library, the five providers, the ranked
+model and the spotlight surface are all present, with six Qt Test suites and
+a QtQuickTest harness. The clipboard and windows providers are model-backed
+and have no suites of their own yet.
+
+Built only with `-DBUILD_PHOSPHOR_SHELL=ON`, which is off by default.
+The acceptance demo is `examples/phosphor-launcher-demo/`, a plain window
+that hosts the surface over the real providers, so it lists the running
+session's applications, clipboard and PATH.

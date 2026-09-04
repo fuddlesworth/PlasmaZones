@@ -28,6 +28,12 @@ function(phosphorshelllauncher_add_test name)
     )
     add_test(NAME ${name} COMMAND ${name})
     set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorshelllauncher")
+    # Pin the locale. Equal-scoring results are ordered with
+    # localeAwareCompare, whose collation comes from the process locale, so an
+    # ordering assertion over a tie would otherwise mean different things on a
+    # developer's machine and in CI. Case ordering in particular differs
+    # between the C locale and ICU.
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT "LC_ALL=C.UTF-8")
     if(COMMAND phosphor_apply_test_isolation)
         phosphor_apply_test_isolation(${name})
     endif()

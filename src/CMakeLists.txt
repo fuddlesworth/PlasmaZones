@@ -745,12 +745,12 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellControlCenterQmlplugin
             # The launcher: its core (LauncherModel + the built-in providers
             # LauncherController materialises), the Phosphor.Launcher module
-            # + registrar for shell.qml's launcher popout, and the clipboard
-            # service the controller owns for the clipboard provider.
+            # + registrar for shell.qml's launcher popout. The clipboard
+            # service the controller owns for the clipboard provider is
+            # already listed with the other services below.
             PhosphorShellLauncher::PhosphorShellLauncher
             PhosphorShellLauncher::PhosphorShellLauncherQml
             PhosphorShellLauncherQmlplugin
-            PhosphorServiceClipboard::PhosphorServiceClipboard
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.
