@@ -50,8 +50,9 @@ PanelWindow {
     // The transparent strip below the exclusive zone is still part of the
     // wl_surface, so it would swallow clicks along the top edge of whatever
     // tiles beneath. ShellEngine masks the surface's input region down to
-    // the painted band (PanelWindow.visibleBand), which excludes it — see
-    // `shadowSize` and `interactiveThickness` above.
+    // the painted band (PanelWindow.visibleBand), which excludes it. The
+    // two properties that set that up, `shadowSize` and
+    // `interactiveThickness`, are assigned further down this file.
     alignment: PanelWindow.Fill
     // The bar never wants keyboard focus (Plasma-panel behaviour); attached
     // popouts take their own grab.
@@ -93,8 +94,13 @@ PanelWindow {
     // Reserved ONCE, at materialization: ShellEngine snapshots
     // `thickness + shadowSize` when it creates the layer surface and never
     // resizes it, so a pocket that needs room later must have it reserved
-    // now. Costs nothing while closed — the strip is transparent and, by
+    // now. Costs nothing while closed: the strip is transparent and, by
     // default, outside the input region.
+    //
+    // This is the lever for a bar that will never grow a pocket. Setting it
+    // to 0 gives the surface no room below the capsule beyond its shadow,
+    // which is right for a bar with no socket content and wrong for one that
+    // might open later, since the reservation cannot grow afterwards.
     property int socketReserve: panel._usableSocketDepth
 
     // Emitted when the pocket has finished closing.

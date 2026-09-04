@@ -78,6 +78,13 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// carves aggressively enough for that to matter should expect clicks in
     /// the carve to hit the panel.
     Q_PROPERTY(int cornerCarveRadius READ cornerCarveRadius WRITE setCornerCarveRadius NOTIFY cornerCarveRadiusChanged)
+    /// The output this panel wants. Null means the primary.
+    ///
+    /// READ ONCE, at materialization. The notify fires on an explicit write,
+    /// but the member is a guarded pointer and an unplugged output clears it
+    /// silently, so a binding on this property can go stale. Nothing observes
+    /// that today because a topology change rebuilds the whole shell, which
+    /// is the supported way this value ever changes.
     Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
     // `panelLayer` rather than `layer` — QQuickItem already exposes a
     // FINAL `layer` group property (the cached-rendering layer accessed

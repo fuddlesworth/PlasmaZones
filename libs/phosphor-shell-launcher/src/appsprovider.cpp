@@ -66,6 +66,13 @@ AppsProvider::AppsProvider(QStringList directories, QString locale, QStringList 
 {
 }
 
+// NOTE ON TRANSLATION. Every user-facing string in this library goes through
+// QCoreApplication::translate with the "PhosphorShellLauncher" context, which
+// reads as translatable, but the build's extraction step does not cover
+// libs/phosphor-shell-launcher: there is no catalogue for this context, so
+// these strings ship in English whatever the locale. Adding the path to
+// extraction is what makes them translatable; the calls are already in the
+// right shape for that day.
 AppsProvider::AppsProvider(QStringList directories, QString locale, QStringList currentDesktop, bool deferFirstScan,
                            QObject* parent)
     : ILauncherProvider(parent)

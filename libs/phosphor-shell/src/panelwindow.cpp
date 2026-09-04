@@ -158,6 +158,12 @@ QScreen* PanelWindow::screen() const
 
 void PanelWindow::setScreen(QScreen* screen)
 {
+    // The member is a QPointer, so an unplugged output nulls it WITHOUT this
+    // setter running and without screenChanged. The engine rebuilds the whole
+    // shell on a topology change, so nothing observes the gap today, and
+    // emitting from a QPointer's silent clear is not possible without
+    // watching every screen. The property is documented as read-once at
+    // materialization for that reason; see the header.
     if (m_screen == screen) {
         return;
     }
