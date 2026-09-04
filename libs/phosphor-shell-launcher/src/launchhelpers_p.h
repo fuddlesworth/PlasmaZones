@@ -5,7 +5,6 @@
 // Private helpers shared by the providers that start processes. Not
 // installed, not exported.
 
-#include <QLoggingCategory>
 #include <QStandardPaths>
 #include <QStringList>
 

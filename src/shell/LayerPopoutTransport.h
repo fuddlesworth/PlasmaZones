@@ -5,8 +5,8 @@
 #include <PhosphorPopout/IPopoutTransport.h>
 
 #include <QHash>
-#include <QObject>
 #include <QMargins>
+#include <QObject>
 #include <QPointer>
 #include <QString>
 

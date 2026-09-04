@@ -14,7 +14,6 @@
 #include <QLocale>
 #include <QLoggingCategory>
 #include <QProcess>
-#include <QStandardPaths>
 #include <QTimer>
 
 #include <algorithm>

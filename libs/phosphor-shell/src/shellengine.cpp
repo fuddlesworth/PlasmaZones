@@ -58,7 +58,12 @@ namespace {
 constexpr int kReloadDebounceMs = 100;
 } // namespace
 
+// In the anonymous namespace, like the sibling libraries: at file scope
+// this is an exported symbol, and the target builds with hidden
+// visibility precisely so a library's internals stay internal.
+namespace {
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
+} // namespace
 
 namespace PhosphorShell {
 

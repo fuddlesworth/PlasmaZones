@@ -7,9 +7,9 @@
 
 #include <QMargins>
 #include <QPointer>
+#include <QQuickItem>
 #include <QRect>
 #include <QSize>
-#include <QQuickItem>
 
 QT_BEGIN_NAMESPACE
 class QScreen;

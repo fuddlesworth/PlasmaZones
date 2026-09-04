@@ -72,6 +72,11 @@ void PanelWindow::setThickness(int thickness)
     // coercion (matching SystemUsage::setInterval) so a QML author binding
     // thickness: 0 gets a diagnostic rather than a silent 1 px panel.
     const int clamped = qMax(1, thickness);
+    // Warned BEFORE the change check, deliberately, and pinned by
+    // thicknessClampsToOneAndWarns: the diagnostic is about the VALUE the
+    // author wrote, not about whether it moved the property. A second
+    // `thickness: -5` is just as wrong as the first, and staying silent
+    // because the panel already sits at 1 would hide it.
     if (clamped != thickness) {
         qCWarning(lcPanelWindow) << "thickness" << thickness << "clamped to" << clamped
                                  << "(a panel needs at least 1 px)";

@@ -73,7 +73,7 @@ ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleServic
 
     // Order here is the order they appear in the grid. The two sliders sit
     // last because they span the full width, so the three half-width
-    // toggles pack cleanly above them.
+    // toggles (network, bluetooth, idle) pack cleanly above them.
     reg({.id = QStringLiteral("network"),
          .displayName = QStringLiteral("Wi-Fi"),
          .typeName = QStringLiteral("NetworkTile"),
