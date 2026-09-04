@@ -153,6 +153,8 @@ void ClipboardProvider::recompute()
             r.score = score;
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Copy");
             r.alternateActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Remove from history");
+            // Pruning is something a user does several times in a row.
+            r.alternateIsRepeatable = true;
             m_results.append(std::move(r));
         }
         if (!m_query.isEmpty()) {

@@ -99,6 +99,16 @@ public:
     // provider refused; the surface stays open in that case.
     [[nodiscard]] Q_INVOKABLE bool activate(int row, bool alternate = false);
 
+    /// Whether row's ALTERNATE action can sensibly be repeated on the same
+    /// list, which is what decides whether the surface closes after it.
+    ///
+    /// The clipboard's remove is the case this exists for: pruning history
+    /// is something a user does several times in a row, and closing after
+    /// the first meant reopening and retyping to remove the second. False
+    /// for a row out of range, and irrelevant to the primary action, which
+    /// always finishes the interaction.
+    [[nodiscard]] Q_INVOKABLE bool alternateIsRepeatable(int row) const;
+
 Q_SIGNALS:
     void queryChanged();
     void activeChanged();

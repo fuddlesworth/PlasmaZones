@@ -317,4 +317,12 @@ bool LauncherModel::activate(int row, bool alternate)
         resultId, alternate ? ILauncherProvider::Activation::Alternate : ILauncherProvider::Activation::Primary);
 }
 
+bool LauncherModel::alternateIsRepeatable(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return false;
+    }
+    return m_rows.at(row).result.alternateIsRepeatable;
+}
+
 } // namespace PhosphorShellLauncher

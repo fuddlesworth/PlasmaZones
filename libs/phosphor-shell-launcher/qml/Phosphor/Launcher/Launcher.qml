@@ -96,8 +96,20 @@ FocusScope {
     function activateCurrent(alternate: bool): void {
         if (list.currentIndex < 0 || list.currentIndex >= list.count)
             return;
-        if (root.results.activate(list.currentIndex, alternate))
-            root.activated();
+        const row = list.currentIndex;
+        // Read BEFORE activating. A repeatable alternate action is
+        // destructive by nature: the clipboard's remove drops the row and
+        // rebuilds the model synchronously, so asking afterwards would be
+        // asking about whatever moved into that index.
+        const repeatable = alternate && root.results.alternateIsRepeatable(row);
+        if (!root.results.activate(row, alternate))
+            return;
+        // A repeatable action leaves the surface open: removing one
+        // clipboard entry usually means removing the next, and closing would
+        // mean reopening and retyping to get there.
+        if (repeatable)
+            return;
+        root.activated();
     }
 
     Rectangle {

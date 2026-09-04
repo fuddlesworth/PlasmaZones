@@ -43,6 +43,14 @@ public:
     // an app id, since a client could otherwise have the shell load an
     // arbitrary file.
     QString iconName;
+    // Whether the ALTERNATE action can sensibly be performed again on the
+    // same list. A destructive prune (removing clipboard entries one by
+    // one) is: the user usually wants several, and closing after the first
+    // means reopening and retyping. Launching something is not.
+    //
+    // Only the alternate action has this. A primary action is the reason
+    // the user opened the launcher, so it always finishes the interaction.
+    bool alternateIsRepeatable = false;
     // Ranking score, higher is better. Providers that fuzzy-match should
     // return the matcher's score so rows from different providers rank
     // against each other on one scale; a provider that answers a query

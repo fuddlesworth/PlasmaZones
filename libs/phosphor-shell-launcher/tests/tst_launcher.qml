@@ -46,6 +46,15 @@ TestCase {
             property var cycles: []
             property bool acceptActivation: true
 
+            // Mirrors the real model. The surface asks this before a
+            // destructive alternate action, so that it can decide whether to
+            // stay open without reading an index the action just invalidated.
+            property bool repeatableAlternate: false
+
+            function alternateIsRepeatable(row: int): bool {
+                return fake.repeatableAlternate;
+            }
+
             function activate(row: int, alternate: bool): bool {
                 activations.push({
                     "row": row,
@@ -156,6 +165,28 @@ TestCase {
         compare(t.results.activations.length, 1);
         compare(t.results.activations[0].row, 1, "moved to the second row");
         compare(t.results.activations[0].alternate, true, "Alt+Return is the alternate");
+    }
+
+    // The clipboard's remove is repeatable: pruning history is something a
+    // user does several times in a row, and closing after the first meant
+    // reopening and retyping to remove the second.
+    function test_a_repeatable_alternate_action_leaves_the_surface_open() {
+        const t = makeLauncher();
+        const activated = createTemporaryObject(spyComp, testCase, {
+            "target": t.launcher,
+            "signalName": "activated"
+        });
+        t.results.repeatableAlternate = true;
+
+        keyClick(Qt.Key_Down);
+        keyClick(Qt.Key_Return, Qt.AltModifier);
+        compare(t.results.activations.length, 1, "the action still happened");
+        compare(activated.count, 0, "but the surface stays open for the next one");
+
+        // The PRIMARY action always finishes the interaction, repeatable
+        // alternate or not.
+        keyClick(Qt.Key_Return);
+        compare(activated.count, 1, "the primary action still closes");
     }
 
     function test_up_never_goes_above_the_first_row() {
