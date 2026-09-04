@@ -193,7 +193,10 @@ FocusScope {
                     // filter that survives a query change keeps the reason
                     // for the empty list on screen.
                     visible: pill.modelData.count > 0 || pill.selected
-                    text: qsTr("%1 %2", "provider filter pill: provider name, then its result count").arg(pill.modelData.name).arg(pill.modelData.count)
+                    // The count goes through the locale, so a locale using
+                    // non-Latin digits shows its own. JS stringification
+                    // always produced Latin ones.
+                    text: qsTr("%1 %2", "provider filter pill: provider name, then its result count").arg(pill.modelData.name).arg(Number(pill.modelData.count).toLocaleString(Qt.locale()))
                     selected: root.results.providerFilter === pill.modelData.id
                     onClicked: {
                         root.results.providerFilter = pill.modelData.id;

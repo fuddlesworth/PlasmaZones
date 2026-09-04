@@ -24,7 +24,11 @@ Window {
     height: 620
     visible: true
     title: qsTr("Phosphor Control Center")
-    color: "#050916"
+    // The clear colour behind the gradient below. Token-derived rather than
+    // a hex literal, so a palette change moves it with everything else; it
+    // is only visible for the first frame and at the edges of a fractional
+    // scale, but a hardcoded navy would survive a light theme.
+    color: Qt.darker(Theme.surface, 1.6)
 
     Rectangle {
         anchors.fill: parent
