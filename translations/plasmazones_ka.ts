@@ -514,32 +514,42 @@
         <translation>ეკრანის კიდეებამდე გადიდება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
+        <source>Maximize Window Height</source>
+        <translation>ფანჯრის სიმაღლის გადიდება</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="444"/>
+        <source>Grow Window into Empty Space</source>
+        <translation>ფანჯრის გაზრდა ცარიელ ადგილში</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="454"/>
         <source>Focus First Window in Column</source>
         <translation>სვეტში პირველი ფანჯრის ფოკუსირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="451"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="459"/>
         <source>Focus Last Window in Column</source>
         <translation>სვეტში ბოლო ფანჯრის ფოკუსირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="457"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="465"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
         <translation>წინა სვეტის ფოკუსირება, კიდეზე გაჩერებით</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="463"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="471"/>
         <source>Focus Next Column, Stopping at the Edge</source>
         <translation>შემდეგი სვეტის ფოკუსირება, კიდეზე გაჩერებით</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="469"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="477"/>
         <source>Focus Previous Column, Wrapping</source>
         <translation>წინა სვეტის ფოკუსირება, შემოვლით</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="483"/>
         <source>Focus Next Column, Wrapping</source>
         <translation>შემდეგი სვეტის ფოკუსირება, შემოვლით</translation>
     </message>
@@ -609,47 +619,52 @@
         <translation>ფანჯრის სიმაღლის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
-        <source>Reset Window Heights</source>
-        <translation>ფანჯრების სიმაღლეების ჩამოყრა</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="449"/>
         <source>Center Visible Columns</source>
         <translation>ხილული სვეტების ცენტრირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="488"/>
         <source>Move Window to Floating</source>
         <translation>ფანჯრის მოტივტივეში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="485"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="493"/>
         <source>Move Window to Tiled</source>
         <translation>ფანჯრის დაფილულში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="504"/>
         <source>Scroll View Back a Page</source>
         <translation>ხედის ერთი გვერდით უკან გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="509"/>
         <source>Scroll View Forward a Page</source>
         <translation>ხედის ერთი გვერდით წინ გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="514"/>
         <source>Equalize Column Widths</source>
         <translation>სვეტების სიგანეების გათანაბრება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="511"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="519"/>
         <source>Minimize Column Width</source>
         <translation>სვეტის სიგანის მინიმუმამდე შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="518"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="524"/>
+        <source>Equalize Window Heights</source>
+        <translation>ფანჯრების სიმაღლეების გათანაბრება</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="529"/>
+        <source>Minimize Window Height</source>
+        <translation>ფანჯრის სიმაღლის მინიმუმამდე შემცირება</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="536"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>მალსახმობების ცნობარის გახსნა</translation>
@@ -819,7 +834,7 @@
         <translation>ფანჯრის გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="407"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="422"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
         <translation>ხედს ისე გადაახვევს, რომ ფოკუსირებული სვეტი ეკრანის ცენტრში მოექცეს.</translation>
     </message>
@@ -829,7 +844,7 @@
         <translation>ფოკუსირებულ სვეტს დაწყობილ ფანჯრებსა და ჩანართებს შორის გადართავს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="421"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="436"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
         <translation>ფოკუსირებულ ფანჯარას სრულეკრანიან ხედში გადაიყვანს, თუმცა ის სვეტში თავის ადგილს ინარჩუნებს და ეკრანს არ ფარავს. გამოსასვლელად კიდევ ერთხელ დააჭირეთ.</translation>
     </message>
@@ -869,42 +884,32 @@
         <translation>ფოკუსირებულ სვეტს სამუშაო არეს შევსებასა და უფრო პატარა ზომას შორის გადართავს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="394"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
         <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის შაბლონებში გადაატარებს მის სვეტში.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
         <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის შაბლონებში უკუმიმართულებით გადაატარებს მის სვეტში.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
         <source>Grows the focused window within its column by the configured step.</source>
         <translation>ფოკუსირებულ ფანჯარას მის სვეტში მითითებული ბიჯით გაზრდის.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="395"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
         <translation>ფოკუსირებულ ფანჯარას მის სვეტში მითითებული ბიჯით შეამცირებს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
-        <source>Clears manual window sizes in the focused column so its windows share the column&apos;s space evenly.</source>
-        <translation>ფოკუსირებულ სვეტში ხელით მითითებულ ფანჯრის ზომებს გაასუფთავებს, რათა მისმა ფანჯრებმა სვეტის ადგილი თანაბრად გაინაწილონ.</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="377"/>
-        <source>Grow into Empty Space</source>
-        <translation>ცარიელ ადგილში გაზრდა</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="378"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
         <translation>ფოკუსირებულ სვეტს ისე გაზრდის, რომ ეკრანზე ხილული ცარიელი ადგილი შეავსოს. სხვა სვეტები ზომას ინარჩუნებენ.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
         <translation>ხედს ისე გადაახვევს, რომ სრულად ხილული სვეტები ჯგუფად ცენტრში მოექცეს.</translation>
     </message>
@@ -919,48 +924,48 @@
         <translation>ფოკუსს ფოკუსირებული სვეტის ბოლო ფანჯარაზე გადააქვს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="427"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="442"/>
         <source>Move to Floating</source>
         <translation>მოტივტივეში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="443"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
         <translation>ფოკუსირებულ ფანჯარას მოტივტივედ აქცევს. მოტივტივების გადამრთველისგან განსხვავებით, ის არასოდეს აბრუნებს ფილებში.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="431"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="446"/>
         <source>Move to Tiled</source>
         <translation>დაფილულში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
         <translation>ფოკუსირებულ მოტივტივე ფანჯარას მის სვეტში აბრუნებს. მოტივტივების გადამრთველისგან განსხვავებით, ის არასოდეს ხდის მოტივტივეს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="455"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="470"/>
         <source>Applies the numbered layout to this screen.</source>
         <translation>ამ ეკრანზე დანომრილ განლაგებას გადაატარებს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="456"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
         <source>Applies the numbered column template to this screen.</source>
         <translation>ამ ეკრანზე დანომრილ სვეტის ნიმუშს გადაატარებს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="486"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
         <translation>ფოკუსირებულ ფანჯარას ამ ეკრანზე დანომრილ ადგილას გაგზავნის.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="611"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="626"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation>განლაგების %1 გადატარება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
         <source>Cycle Window Height</source>
         <translation>ფანჯრის სიმაღლის გადართვა</translation>
     </message>
@@ -1000,7 +1005,7 @@
         <translation>ფოკუსირებულ ფანჯარას საზიარო სვეტიდან ზოლის ბოლოსკენ გამოყოფს. თუ ფანჯარა სვეტში მარტოა, ის ნაცვლად ამისა შემდეგ სვეტს შეუერთდება.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
         <source>Cycle Window Height Back</source>
         <translation>ფანჯრის სიმაღლის უკან გადართვა</translation>
     </message>
@@ -1050,57 +1055,77 @@
         <translation>ფოკუსირებულ სვეტს გადართავს მთელი სამუშაო არის დაშორებების გარეშე დაფარვასა და მის ჩვეულებრივ ზომას შორის. დაფარვის მდგომარეობაა ის, რომელსაც ფანჯრის გადიდების ღილაკი აჩვენებს.</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
+        <source>Toggles the focused window between filling its column and the height it had before, or an even share with the other windows there if it had none.</source>
+        <translation>ფოკუსირებულ ფანჯარას გადართავს მისი სვეტის შევსებასა და წინანდელ სიმაღლეს შორის. თუ ასეთი არ ჰქონდა, იქ არსებულ სხვა ფანჯრებთან თანაბარ წილს მიიღებს.</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
+        <source>Grows the focused window to fill the empty space left in its column. The other windows there keep their size.</source>
+        <translation>ფოკუსირებულ ფანჯარას ისე გაზრდის, რომ მის სვეტში დარჩენილი ცარიელი ადგილი შეავსოს. იქ არსებული სხვა ფანჯრები ზომას ინარჩუნებენ.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
+        <source>Shrinks the focused window to the smallest size preset.</source>
+        <translation>ფოკუსირებულ ფანჯარას ზომის უმცირეს შაბლონამდე შეამცირებს.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
+        <source>Gives every window in the focused column an equal share of it.</source>
+        <translation>ფოკუსირებულ სვეტში თითოეულ ფანჯარას მისგან თანაბარ წილს მისცემს.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
         <translation>ხედს მთელი ეკრანით ზოლის დასაწყისისკენ გადაახვევს. ფოკუსი თავის ადგილას რჩება.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
         <translation>ხედს მთელი ეკრანით ზოლის ბოლოსკენ გადაახვევს. ფოკუსი თავის ადგილას რჩება.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="384"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="388"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
         <translation>ეკრანზე სრულად ხილულ თითოეულ სვეტს ეკრანის თანაბარ წილს მისცემს. კიდეზე მოჭრილი სვეტები ხელუხლებელი რჩება.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
         <translation>ფოკუსირებულ სვეტს ზომის უმცირეს შაბლონამდე შეამცირებს.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="577"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
         <source>Arrows</source>
         <translation>ისრები</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="620"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="635"/>
         <source>Move Window</source>
         <translation>ფანჯრის გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="627"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="642"/>
         <source>Move Focus</source>
         <translation>ფოკუსის გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="632"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="647"/>
         <source>Swap Window</source>
         <translation>ფანჯრის გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="637"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="652"/>
         <source>Span Window</source>
         <translation>ფანჯრის გავრცობა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="643"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="658"/>
         <source>Swap Screens</source>
         <translation>ეკრანების გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1090"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1108"/>
         <source>Apply Layout %1</source>
         <translation>განლაგების %1 გადატარება</translation>
     </message>
@@ -1541,7 +1566,7 @@
         <translation>სერვისები ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1108"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1126"/>
         <source>Snap to Zone %1</source>
         <translation>მიმაგრება ზონასთან %1</translation>
     </message>
@@ -1989,6 +2014,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="43"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="162"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="390"/>
         <source>Tiling</source>
         <translation>ფილებად დაწყობა</translation>
     </message>
@@ -2003,7 +2029,7 @@
         <translation>კონტექსტი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="478"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="493"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
@@ -2259,7 +2285,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="212"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="466"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="481"/>
         <source>Zones</source>
         <translation>ზონები</translation>
     </message>
@@ -2424,6 +2450,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="30"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="40"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="393"/>
         <source>Snapping</source>
         <translation>მიმაგრება</translation>
     </message>
@@ -6843,7 +6870,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="50"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="313"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="522"/>
         <source>Keyboard Shortcuts</source>
         <translation>კლავიატურის მალსახმობები</translation>
     </message>
@@ -9822,7 +9849,7 @@
         <translation>მიმაგრებით ზომის შეცვლა (გადათრევის გადახედვა)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="616"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="631"/>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="496"/>
@@ -10078,7 +10105,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="450"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="465"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="214"/>
         <source>Layouts</source>
         <translation>განლაგებები</translation>
@@ -10188,6 +10215,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="392"/>
         <source>Scrolling</source>
         <translation>გადახვევა</translation>
     </message>
@@ -20647,35 +20675,46 @@
         <translation>ფერის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="444"/>
         <source>Dismiss shortcut cheatsheet</source>
         <translation>მალსახმობების ცნობარის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="534"/>
+        <source>Filtered for %1 mode on this screen</source>
+        <comment>which placement mode the listed shortcuts belong to</comment>
+        <translation>გაფილტრულია ამ ეკრანზე რეჟიმისთვის %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="575"/>
         <source>No shortcuts apply in the current mode.</source>
         <translation>ამჟამინდელ რეჟიმში მალსახმობები არ გამოიყენება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="398"/>
-        <source>%1 (continued)</source>
-        <comment>category heading for a section that continues from the previous column</comment>
-        <translation>%1 (გაგრძელება)</translation>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="702"/>
+        <source>Press Escape to close</source>
+        <translation>დასახურად დააჭირეთ Escape-ს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="159"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, keys</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="159"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, state</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="167"/>
+        <source>Match, %1</source>
+        <comment>a shortcut row that answers the current search, then the row itself</comment>
+        <translation>დამთხვევა, %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="300"/>
         <source>Unassigned</source>
         <translation>მიუნიჭებელი</translation>
     </message>
@@ -20692,7 +20731,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="382"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="791"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="796"/>
         <source>Dismiss notification</source>
         <translation>შეტყობინების დახურვა</translation>
     </message>
@@ -20879,7 +20918,7 @@
         <translation>გაცვლილია მთავარ ფანჯარასთან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
         <source>Resized</source>
         <comment>@info:status the window was resized</comment>
         <translation>ზომა შეიცვალა</translation>
@@ -21141,74 +21180,79 @@
         <translation>განლაგება განახლდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="557"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="559"/>
         <source>Column widths equalized</source>
         <translation>სვეტების სიგანეები გათანაბრდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="561"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
+        <source>Window heights equalized</source>
+        <translation>ფანჯრების სიმაღლეები გათანაბრდა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="566"/>
         <source>Tabbed display toggled</source>
         <translation>ჩანართებით ჩვენება გადაირთო</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="568"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="573"/>
         <source>Windowed fullscreen off</source>
         <translation>ფანჯრული სრული ეკრანი გამორთულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="570"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="575"/>
         <source>Windowed fullscreen on</source>
         <translation>ფანჯრული სრული ეკრანი ჩართულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="572"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="577"/>
         <source>Window moved between columns</source>
         <translation>ფანჯარა სვეტებს შორის გადავიდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="574"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
         <source>Window expelled into its own column</source>
         <translation>ფანჯარა საკუთარ სვეტში გამოიძევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="584"/>
         <source>Visible columns centered</source>
         <translation>ხილული სვეტები ცენტრშია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="581"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="586"/>
         <source>Column centered</source>
         <translation>სვეტი ცენტრშია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="586"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="591"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
         <translation>გადახვეულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="589"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="594"/>
         <source>Virtual screens swapped</source>
         <translation>ვირტუალური ეკრანები გაცვლილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="592"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="597"/>
         <source>Virtual screens rotated</source>
         <translation>ვირტუალური ეკრანები მოტრიალდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="594"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="599"/>
         <source>Action completed</source>
         <translation>მოქმედება დასრულდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="651"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="656"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="688"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="693"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation>მოკლე უკუკავშირი კლავიატურით შესრულებული ფანჯრისა და განლაგების ქმედებებისთვის</translation>
     </message>
@@ -23251,6 +23295,49 @@
         <source>Previous Tab</source>
         <comment>@title outgoing tab in the animation preview</comment>
         <translation>წინა ჩანართი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>Hide unassigned actions</source>
+        <translation>მიუნიჭებელი ქმედებების დამალვა</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>%n unassigned action matches</source>
+        <translation>
+            <numerusform>%n მიუნიჭებელი ქმედება ემთხვევა</numerusform>
+            <numerusform>%n მიუნიჭებელი ქმედება ემთხვევა</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>%n unassigned action</source>
+        <translation>
+            <numerusform>%n მიუნიჭებელი ქმედება</numerusform>
+            <numerusform>%n მიუნიჭებელი ქმედება</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="105"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="116"/>
+        <source>Filter shortcuts</source>
+        <translation>მალსახმობების გაფილტვრა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="136"/>
+        <source>Clear the filter</source>
+        <translation>ფილტრის გასუფთავება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>
+        <source>No matches</source>
+        <translation>დამთხვევები არაა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>
+        <source>%1 of %2</source>
+        <comment>matching shortcuts out of the total</comment>
+        <translation>%1 %2-დან</translation>
     </message>
 </context>
 </TS>
