@@ -136,7 +136,13 @@ void ClipboardProvider::recompute()
                 score = m->score;
             }
             LauncherResult r;
-            r.id = m_history->data(idx, m_timestampRole).toString();
+            // Timestamp AND row, because two entries captured in the same
+            // instant render the same timestamp: a shared id makes rowFor
+            // resolve both to whichever comes first, so activating the
+            // second copied the first. The row disambiguates within one
+            // rendering of the history, which is exactly the window an
+            // activation lives in, and rowFor re-derives the same pair.
+            r.id = m_history->data(idx, m_timestampRole).toString() + u'#' + QString::number(row);
             // A single line for the row; the entry itself keeps its newlines.
             r.title = preview.simplified();
             r.subtitle = m_history->data(idx, m_mimeRole).toString();
@@ -172,12 +178,26 @@ int ClipboardProvider::rowFor(const QString& resultId) const
         return -1;
     }
     const int rows = m_history->rowCount();
+    // The id is "<timestamp>#<row as it was when the row was built>". The
+    // timestamp is what identifies the ENTRY, since history shifts under the
+    // user between typing and Enter; the row only breaks a tie between two
+    // entries captured in the same instant.
+    const qsizetype hash = resultId.lastIndexOf(u'#');
+    const QString stamp = hash < 0 ? resultId : resultId.left(hash);
+    const int hintedRow = hash < 0 ? -1 : resultId.mid(hash + 1).toInt();
+    int firstMatch = -1;
     for (int row = 0; row < rows; ++row) {
-        if (m_history->data(m_history->index(row, 0), m_timestampRole).toString() == resultId) {
+        if (m_history->data(m_history->index(row, 0), m_timestampRole).toString() != stamp) {
+            continue;
+        }
+        if (row == hintedRow) {
             return row;
         }
+        if (firstMatch < 0) {
+            firstMatch = row;
+        }
     }
-    return -1;
+    return firstMatch;
 }
 
 bool ClipboardProvider::activate(const QString& resultId, Activation activation)

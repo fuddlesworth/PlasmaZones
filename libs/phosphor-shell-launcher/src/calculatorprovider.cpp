@@ -350,20 +350,6 @@ bool CalculatorProvider::isCalculation(QStringView expression)
     return v.has_value() && std::isfinite(*v) && parser.sawOperator();
 }
 
-namespace {
-// Parsed as an expression with an operator, but the value is not
-// representable, which in practice means an overflow to infinity. Distinct
-// from "not an expression at all", which is what the user typing a word
-// produces, and from division by zero, which term() refuses outright so it
-// yields no value to test.
-bool parsesButIsNotFinite(QStringView expression)
-{
-    Parser parser(expression);
-    const auto v = parser.run();
-    return v.has_value() && !std::isfinite(*v) && parser.sawOperator();
-}
-} // namespace
-
 QString CalculatorProvider::format(double value)
 {
     // The C locale, deliberately, for the reason the header gives: this one
@@ -384,10 +370,22 @@ QString CalculatorProvider::format(double value)
 
 void CalculatorProvider::setQuery(const QString& query)
 {
+    const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
     m_answer.clear();
-    if (isCalculation(query)) {
-        if (const auto v = evaluate(query)) {
+
+    // ONE parse. isCalculation and evaluate each build
+    // their own Parser over the same text, and the out-of-range branch
+    // built a third, so the old shape parsed two or three times per
+    // keystroke to answer questions one run already knows.
+    Parser parser(query);
+    const auto value = parser.run();
+    const bool sawOperator = parser.sawOperator();
+    const bool answerable = value.has_value() && std::isfinite(*value) && sawOperator;
+
+    if (answerable) {
+        {
+            const auto v = value;
             m_answer = format(*v);
             LauncherResult r;
             r.id = QStringLiteral("answer");
@@ -399,7 +397,7 @@ void CalculatorProvider::setQuery(const QString& query)
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Copy");
             m_results.append(std::move(r));
         }
-    } else if (parsesButIsNotFinite(query)) {
+    } else if (value.has_value() && !std::isfinite(*value) && sawOperator) {
         // It WAS an expression, it just has no representable answer:
         // 2^5000, or a division by zero. Say so, rather than showing nothing
         // and leaving the user to guess whether the syntax was wrong. No
@@ -411,6 +409,11 @@ void CalculatorProvider::setQuery(const QString& query)
         r.iconName = iconName();
         r.score = FuzzyMatcher::perfectScore(static_cast<int>(query.size())) + 1;
         m_results.append(std::move(r));
+    }
+    // Conditional, like every sibling provider: an unconditional emission
+    // costs the model a full reset on every keystroke that changes nothing.
+    if (m_results == previous) {
+        return;
     }
     Q_EMIT resultsChanged();
 }

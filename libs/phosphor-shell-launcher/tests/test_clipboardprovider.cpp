@@ -165,6 +165,7 @@ private Q_SLOTS:
     void aQueryFuzzyMatchesThePreviewText();
     void theCapAppliesAfterRankingNotBeforeIt();
     void primaryActivationCopiesTheRowTheIdNames();
+    void twoEntriesFromTheSameInstantStayDistinct();
     void alternateActivationRemovesTheRow();
     void activationRefusesWhenTheEntryHasLeftHistory();
     void activationReportsTheServicesOwnRefusal();
@@ -175,7 +176,7 @@ void TestClipboardProvider::aNullServiceIsInertRatherThanFatal()
     ClipboardProvider provider(nullptr);
     provider.setQuery(QString());
     QVERIFY(provider.results().isEmpty());
-    QVERIFY(!provider.activate(QStringLiteral("300"), Activation::Primary));
+    QVERIFY(!provider.activate(QStringLiteral("300#0"), Activation::Primary));
 }
 
 void TestClipboardProvider::anEmptyQueryListsTheWholeHistoryInOrder()
@@ -189,8 +190,10 @@ void TestClipboardProvider::anEmptyQueryListsTheWholeHistoryInOrder()
     QCOMPARE(results.size(), 3);
     // Model order, most recent first, unranked: with no query there is
     // nothing to rank by.
-    QCOMPARE(results.at(0).id, QStringLiteral("300"));
-    QCOMPARE(results.at(2).id, QStringLiteral("100"));
+    // The id carries the row after the timestamp, because two entries
+    // captured in the same instant would otherwise share one.
+    QCOMPARE(results.at(0).id, QStringLiteral("300#0"));
+    QCOMPARE(results.at(2).id, QStringLiteral("100#2"));
     QCOMPARE(results.at(1).title, QStringLiteral("git rebase --interactive"));
     QCOMPARE(results.at(1).subtitle, QStringLiteral("text/plain"));
 }
@@ -203,7 +206,7 @@ void TestClipboardProvider::aQueryFuzzyMatchesThePreviewText()
     provider.setQuery(QStringLiteral("rebase"));
     const auto results = provider.results();
     QCOMPARE(results.size(), 1);
-    QCOMPARE(results.first().id, QStringLiteral("200"));
+    QCOMPARE(results.first().id, QStringLiteral("200#1"));
 
     provider.setQuery(QStringLiteral("nothing here matches this"));
     QVERIFY(provider.results().isEmpty());
@@ -221,7 +224,7 @@ void TestClipboardProvider::theCapAppliesAfterRankingNotBeforeIt()
     provider.setQuery(QStringLiteral("prose"));
     const auto results = provider.results();
     QCOMPARE(results.size(), 1);
-    QCOMPARE(results.first().id, QStringLiteral("100"));
+    QCOMPARE(results.first().id, QStringLiteral("100#2"));
 }
 
 void TestClipboardProvider::primaryActivationCopiesTheRowTheIdNames()
@@ -230,10 +233,29 @@ void TestClipboardProvider::primaryActivationCopiesTheRowTheIdNames()
     ClipboardProvider provider(&service);
     provider.setQuery(QString());
 
-    QVERIFY2(provider.activate(QStringLiteral("200"), Activation::Primary), "the copy really happened");
+    QVERIFY2(provider.activate(QStringLiteral("200#1"), Activation::Primary), "the copy really happened");
     // Re-resolved by timestamp at activation time, not by a captured index.
     QCOMPARE(service.copiedRows, QList<int>{1});
     QVERIFY(service.removedRows.isEmpty());
+}
+
+// Two entries captured in the same instant render the same timestamp. With
+// the timestamp alone as the id, both rows carried one id and activation
+// resolved either to whichever came first, so copying the second copied the
+// first.
+void TestClipboardProvider::twoEntriesFromTheSameInstantStayDistinct()
+{
+    FakeService service({{QStringLiteral("first"), QStringLiteral("text/plain"), QStringLiteral("500")},
+                         {QStringLiteral("second"), QStringLiteral("text/plain"), QStringLiteral("500")}});
+    ClipboardProvider provider(&service);
+    provider.setQuery(QString());
+
+    const auto results = provider.results();
+    QCOMPARE(results.size(), 2);
+    QVERIFY2(results.at(0).id != results.at(1).id, "same-instant entries get distinct ids");
+
+    QVERIFY(provider.activate(results.at(1).id, Activation::Primary));
+    QCOMPARE(service.copiedRows, QList<int>{1});
 }
 
 void TestClipboardProvider::alternateActivationRemovesTheRow()
@@ -242,7 +264,7 @@ void TestClipboardProvider::alternateActivationRemovesTheRow()
     ClipboardProvider provider(&service);
     provider.setQuery(QString());
 
-    QVERIFY(provider.activate(QStringLiteral("300"), Activation::Alternate));
+    QVERIFY(provider.activate(QStringLiteral("300#0"), Activation::Alternate));
     QCOMPARE(service.removedRows, QList<int>{0});
     QVERIFY(service.copiedRows.isEmpty());
     QCOMPARE(service.model()->rowCount(), 2);
@@ -257,7 +279,7 @@ void TestClipboardProvider::activationRefusesWhenTheEntryHasLeftHistory()
     // History shifts under the user between typing and Enter, which is the
     // whole reason rows are addressed by timestamp.
     service.model()->removeAt(1);
-    QVERIFY(!provider.activate(QStringLiteral("200"), Activation::Primary));
+    QVERIFY(!provider.activate(QStringLiteral("200#1"), Activation::Primary));
     QVERIFY(service.copiedRows.isEmpty());
 }
 
@@ -270,7 +292,7 @@ void TestClipboardProvider::activationReportsTheServicesOwnRefusal()
 
     // The service was asked and declined. Reporting success here closed the
     // launcher on a copy that never happened.
-    QVERIFY(!provider.activate(QStringLiteral("300"), Activation::Primary));
+    QVERIFY(!provider.activate(QStringLiteral("300#0"), Activation::Primary));
     QCOMPARE(service.copiedRows, QList<int>{0});
 }
 
