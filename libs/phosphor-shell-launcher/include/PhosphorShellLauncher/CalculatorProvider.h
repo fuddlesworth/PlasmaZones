@@ -74,8 +74,11 @@ public:
     [[nodiscard]] static QString format(double value);
 
 private:
-    QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
+    // The formatted answer, kept for activate() to copy. The query itself
+    // is not: unlike the other providers, nothing here re-reads it after
+    // setQuery, because the answer already carries everything activation
+    // needs.
     QString m_answer;
 };
 

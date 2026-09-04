@@ -384,7 +384,6 @@ QString CalculatorProvider::format(double value)
 
 void CalculatorProvider::setQuery(const QString& query)
 {
-    m_query = query;
     m_results.clear();
     m_answer.clear();
     if (isCalculation(query)) {

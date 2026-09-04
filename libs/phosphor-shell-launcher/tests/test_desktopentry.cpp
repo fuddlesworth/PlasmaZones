@@ -11,6 +11,9 @@
 #include <PhosphorShellLauncher/DesktopEntry.h>
 
 #include <QDir>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QtTest/QtTest>
 
 using PhosphorShellLauncher::DesktopEntry;
@@ -33,6 +36,7 @@ private Q_SLOTS:
     void parsesTheFieldsALauncherNeeds();
     void localisesWithTheSpecFallbackOrder();
     void localisesALocaleNameCarryingAScriptSubtag();
+    void aDuplicatedKeyKeepsItsFirstValue();
     void execArgsResolveQuotingAndDropFieldCodes();
     void rejectsWhatTheSpecSaysToTreatAsAbsent();
     void showsOnAppliesOnlyShowInThenNotShowIn();
@@ -102,6 +106,23 @@ void TestDesktopEntry::localisesALocaleNameCarryingAScriptSubtag()
     auto none = DesktopEntry::parse(path, QStringLiteral("fi_FI"));
     QVERIFY(none.has_value());
     QCOMPARE(none->name, QStringLiteral("kitty"));
+}
+
+// The spec says a duplicated key takes its FIRST occurrence. QHash::insert
+// overwrites, so a malformed file used to take the last one.
+void TestDesktopEntry::aDuplicatedKeyKeepsItsFirstValue()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = QDir(dir.path()).filePath(QStringLiteral("dup.desktop"));
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    f.write("[Desktop Entry]\nType=Application\nName=First\nName=Second\nExec=true\n");
+    f.close();
+
+    const auto e = DesktopEntry::parse(path, QString());
+    QVERIFY(e.has_value());
+    QCOMPARE(e->name, QStringLiteral("First"));
 }
 
 void TestDesktopEntry::execArgsResolveQuotingAndDropFieldCodes()

@@ -250,7 +250,13 @@ std::optional<DesktopEntry> DesktopEntry::parse(const QString& filePath, const Q
         if (eq <= 0) {
             continue;
         }
-        group.insert(view.left(eq).trimmed().toString(), view.mid(eq + 1).trimmed().toString());
+        // FIRST occurrence wins, which is what the spec says for a
+        // duplicated key. QHash::insert overwrites, so a malformed file with
+        // two Name= lines used to take the last one.
+        const QString key = view.left(eq).trimmed().toString();
+        if (!group.contains(key)) {
+            group.insert(key, view.mid(eq + 1).trimmed().toString());
+        }
     }
     if (!sawEntryGroup) {
         return std::nullopt;
