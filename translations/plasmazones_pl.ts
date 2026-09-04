@@ -7120,7 +7120,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="193"/>
         <source>place</source>
-        <translation type="unfinished"></translation>
+        <translation>umieszczanie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
@@ -9692,13 +9692,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="30"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="36"/>
         <source>Placed</source>
-        <translation type="unfinished"></translation>
+        <translation>Umieszczone</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="32"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="41"/>
         <source>Released</source>
-        <translation type="unfinished"></translation>
+        <translation>Zwolnione</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="98"/>
@@ -15213,7 +15213,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="27"/>
         <source>Animations for windows being placed, released and rearranged, including maximizing. “All Windows” is the default. Each event can override it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Animacje dla okien umieszczanych, zwalnianych i przestawianych, w tym maksymalizowanych. Domyślnie obowiązuje „Wszystkie okna”. Każde zdarzenie może to nadpisać.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="31"/>
@@ -15578,8 +15578,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/StockAnimationConflictChip.qml.cpp" line="59"/>
         <source>A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together when such a window maximizes or restores.</source>
-        <oldsource>A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.</oldsource>
-        <translation type="unfinished">Reguła nie może wyłączyć animacji maksymalizacji KDE dla pasujących okien. Jeśli jest włączona w Ustawieniach systemowych → Efekty pulpitu, obie animacje odtworzą się razem.</translation>
+        <translation>Reguła nie może wyłączyć animacji maksymalizacji KDE dla pasujących okien. Jeśli jest włączona w Ustawieniach systemowych → Efekty pulpitu, obie animacje odtworzą się razem, gdy takie okno zostanie zmaksymalizowane lub przywrócone.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/StockAnimationConflictChip.qml.cpp" line="59"/>
@@ -18946,7 +18945,7 @@
         <translation>Nowa karta</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="627"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/shared/ShaderPreviewPlaceholder.qml.cpp" line="52"/>
         <source>Preview unavailable</source>
@@ -18954,50 +18953,50 @@
         <translation>Podgląd niedostępny</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="644"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="627"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="139"/>
         <source>This pack&apos;s shader did not compile.</source>
         <comment>@info:placeholder shader preview</comment>
         <translation>Nie udało się skompilować shadera tej paczki.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="658"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="641"/>
         <source>Previewing a desktop switch, there and back, on stand-in desktops.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przełączenia pulpitu tam i z powrotem na zastępczych pulpitach.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="660"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="643"/>
         <source>Previewing a window move on a sample window.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przeniesienia okna na przykładowym oknie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="662"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="645"/>
         <source>Previewing a window being dragged back and forth.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd okna przeciąganego w tę i z powrotem.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="664"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="647"/>
         <source>Previewing a tab switch between two sample windows.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przełączenia karty między dwoma przykładowymi oknami.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="666"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="649"/>
         <source>Previewing a scroll settling on a stand-in strip.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd przewijania zatrzymującego się na zastępczym pasie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="668"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="651"/>
         <source>Previewing open, minimize, restore and close on a sample window.</source>
         <comment>@info animation preview caption</comment>
         <translation>Podgląd otwarcia, minimalizacji, przywrócenia i zamknięcia na przykładowym oknie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="682"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/AnimationPreviewPane.qml.cpp" line="665"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/DecorationPreviewPane.qml.cpp" line="187"/>
         <source>This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.</source>
         <comment>@info shader preview limitation</comment>
@@ -23097,13 +23096,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Placed</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Umieszczone</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Released</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Zwolnione</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
