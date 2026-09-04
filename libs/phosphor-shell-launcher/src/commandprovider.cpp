@@ -107,6 +107,12 @@ bool CommandProvider::activate(const QString& resultId, Activation activation)
     if (resultId != QLatin1String("run") || m_query.isEmpty()) {
         return false;
     }
+    // Runs the CURRENT query rather than text captured in the row, which is
+    // safe here for a reason worth stating: the row's title IS the query,
+    // this provider offers exactly one row, and the surface pushes every
+    // keystroke through setQuery before it can activate anything. The two
+    // cannot diverge. A provider whose rows outlive the query that produced
+    // them must not copy this shape.
     // Re-validated, not assumed. setQuery refuses to offer the row unless the
     // program resolves, but the row the surface holds can outlive that: the
     // binary is uninstalled, or $PATH changes, between typing and Enter.

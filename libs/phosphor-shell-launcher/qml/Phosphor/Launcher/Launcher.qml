@@ -254,6 +254,8 @@ FocusScope {
             section.property: "providerName"
             section.criteria: ViewSection.FullString
             section.delegate: Item {
+                id: sectionHeader
+
                 required property string section
 
                 width: ListView.view.width
@@ -263,7 +265,11 @@ FocusScope {
                     anchors.left: parent.left
                     anchors.leftMargin: Tokens.spacing_s
                     anchors.verticalCenter: parent.verticalCenter
-                    text: parent.section
+                    // Named, not reached through the implicit parent chain.
+                    // This file sets ComponentBehavior: Bound precisely so
+                    // scoping is explicit, and a parent-chain lookup is the
+                    // one thing that silently is not.
+                    text: sectionHeader.section
                     textFormat: Text.PlainText
                     color: Theme.on_surface_variant
                     font.family: Tokens.font_family
