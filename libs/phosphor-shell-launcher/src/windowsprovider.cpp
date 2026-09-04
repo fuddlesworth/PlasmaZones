@@ -7,6 +7,7 @@
 
 #include <QAbstractItemModel>
 #include <QCoreApplication>
+#include <QDir>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QVariant>
@@ -15,6 +16,16 @@
 
 namespace {
 Q_LOGGING_CATEGORY(lcWindows, "phosphor.launcher.windows")
+
+// Window titles come from the client and have no length bound. The matcher's
+// cost is proportional to the candidate, and this runs per window per
+// keystroke, so truncate to far more than a title needs to be identifiable.
+constexpr int kMaxCandidateChars = 512;
+
+// Match the cap the sibling providers apply, so one launcher does not present
+// three different result-count policies. Applied AFTER ranking, so the best
+// matches survive rather than the first ones found.
+constexpr int kMaximumResults = 24;
 }
 
 namespace PhosphorShellLauncher {
@@ -33,6 +44,7 @@ WindowsProvider::WindowsProvider(QAbstractItemModel* toplevels, QObject* parent)
     for (auto it = roles.cbegin(); it != roles.cend(); ++it) {
         if (it.value() == "toplevel") {
             m_toplevelRole = it.key();
+            break;
         }
     }
     if (m_toplevelRole < 0) {
@@ -114,8 +126,12 @@ void WindowsProvider::recompute()
             if (!obj) {
                 continue;
             }
-            const QString title = obj->property("title").toString();
-            const QString appId = obj->property("appId").toString();
+            // Window titles are client-supplied and unbounded. The matcher
+            // allocates matrices proportional to the candidate length on
+            // every keystroke, so cap what reaches it; no launcher needs
+            // more than this to identify a window.
+            const QString title = obj->property("title").toString().left(kMaxCandidateChars);
+            const QString appId = obj->property("appId").toString().left(kMaxCandidateChars);
             int score = 0;
             if (!m_query.isEmpty()) {
                 int best = -1;
@@ -136,8 +152,11 @@ void WindowsProvider::recompute()
             r.subtitle = appId;
             // The app id doubles as the icon name for most desktop apps
             // (org.mozilla.firefox → its icon); the theme resolves what it
-            // can and the surface falls back to the provider glyph.
-            r.iconName = appId;
+            // can and the surface falls back to the provider glyph. It is
+            // client-controlled, though, and an icon SOURCE that looks like a
+            // path is loaded as a file, so only pass through theme-name
+            // shaped values.
+            r.iconName = (appId.contains(u'/') || QDir::isAbsolutePath(appId)) ? QString() : appId;
             r.score = score;
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Switch to");
             m_results.append(std::move(r));
@@ -146,6 +165,11 @@ void WindowsProvider::recompute()
             std::stable_sort(m_results.begin(), m_results.end(), [](const LauncherResult& a, const LauncherResult& b) {
                 return a.score > b.score;
             });
+        }
+        // Truncate after ranking, never before: capping the scan would drop
+        // a better match that happened to sit later in the model.
+        if (m_results.size() > kMaximumResults) {
+            m_results.resize(kMaximumResults);
         }
     }
     Q_EMIT resultsChanged();

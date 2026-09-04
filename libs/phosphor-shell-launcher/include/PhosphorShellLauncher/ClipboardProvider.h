@@ -62,6 +62,12 @@ private:
     QPointer<QAbstractItemModel> m_history;
     QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
+    // Resolved once at construction. role() walks the model's roleNames()
+    // hash, and recompute() needed three of them per rebuild plus one more
+    // per activation, on a path that runs for every keystroke.
+    int m_previewRole = -1;
+    int m_mimeRole = -1;
+    int m_timestampRole = -1;
     int m_maximumResults = 24;
 };
 

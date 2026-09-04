@@ -3,9 +3,17 @@
 
 #include <PhosphorShellLauncher/LauncherModel.h>
 
+#include <QLoggingCategory>
 #include <QVariantMap>
 
 #include <algorithm>
+
+namespace {
+// Every provider logs its own activation refusals; without this the model's
+// own refusals were the one silent branch in the chain, so a user pressing
+// Enter and seeing nothing happen left no trace anywhere.
+Q_LOGGING_CATEGORY(lcLauncherModel, "phosphor.launcher.model")
+} // namespace
 
 namespace PhosphorShellLauncher {
 
@@ -93,9 +101,17 @@ void LauncherModel::cycleProviderFilter(int direction)
         setProviderFilter(QString());
         return;
     }
-    int at = ring.indexOf(m_providerFilter);
+    const int at = ring.indexOf(m_providerFilter);
     if (at < 0) {
-        at = 0;
+        // Defensive. rebuild() clears a filter whose provider has no rows,
+        // and the ring is built from the same counts, so the two agree and
+        // this should be unreachable through the public API. Kept because
+        // the alternative, treating a missing filter as position 0, steps to
+        // the FIRST provider on Tab and the LAST on Shift+Tab, skipping
+        // "all" in both directions, which is a silent wrong answer rather
+        // than an obvious one.
+        setProviderFilter(QString());
+        return;
     }
     const int step = direction < 0 ? -1 : 1;
     const int n = static_cast<int>(ring.size());
@@ -153,6 +169,15 @@ void LauncherModel::rebuild()
         return a.order < b.order;
     });
 
+    // A filter pinned to a provider that no longer has rows would show an
+    // empty list with no way to tell why, and nothing would clear it. Drop
+    // it here, before assembling rows, so the surface falls back to "all".
+    bool filterCleared = false;
+    if (!m_providerFilter.isEmpty() && counts.value(m_providerFilter) == 0) {
+        m_providerFilter.clear();
+        filterCleared = true;
+    }
+
     QList<Row> rows;
     for (Group& group : groups) {
         if (!m_providerFilter.isEmpty() && group.provider->id() != m_providerFilter) {
@@ -174,6 +199,9 @@ void LauncherModel::rebuild()
     }
     if (countsChanged) {
         Q_EMIT providersChanged();
+    }
+    if (filterCleared) {
+        Q_EMIT providerFilterChanged();
     }
 }
 
@@ -235,17 +263,19 @@ QHash<int, QByteArray> LauncherModel::roleNames() const
 
 bool LauncherModel::activate(int row, bool alternate)
 {
-    if (row < 0 || row >= m_rows.size()) {
-        return false;
-    }
     // Copy out before calling. A provider's activate can drive its source
     // model synchronously (the clipboard's remove does), which re-enters
     // rebuild() and reassigns m_rows, destroying the row this reference and
     // its id point into while the call is still on the stack.
+    if (row < 0 || row >= m_rows.size()) {
+        qCDebug(lcLauncherModel) << "activate: row" << row << "out of range (" << m_rows.size() << "rows )";
+        return false;
+    }
     ILauncherProvider* const provider = m_rows.at(row).provider;
     const QString resultId = m_rows.at(row).result.id;
     const bool hasAlternate = m_rows.at(row).result.hasAlternateAction();
     if (alternate && !hasAlternate) {
+        qCDebug(lcLauncherModel) << "activate: row" << row << "offers no alternate action";
         return false;
     }
     return provider->activate(

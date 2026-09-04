@@ -32,6 +32,19 @@ ClipboardProvider::ClipboardProvider(QObject* service, QObject* parent)
         qCWarning(lcClipboard) << "no clipboard history model; provider is inert";
         return;
     }
+    m_previewRole = role("preview");
+    m_mimeRole = role("mimeType");
+    m_timestampRole = role("timestamp");
+    // The role names are the whole duck-typed contract with the service. A
+    // model missing any of them would yield invalid data for every row, and
+    // an empty result id in particular would make an activation act on the
+    // wrong entry. Go inert loudly instead, matching WindowsProvider.
+    if (m_previewRole < 0 || m_mimeRole < 0 || m_timestampRole < 0) {
+        qCWarning(lcClipboard) << "clipboard history model does not expose the preview/mimeType/timestamp roles; "
+                                  "provider is inert";
+        m_history = nullptr;
+        return;
+    }
     // Any change to history changes the answer to the current query, most
     // visibly for the empty query that lists everything.
     const auto refresh = [this] {
@@ -101,13 +114,15 @@ void ClipboardProvider::recompute()
 {
     m_results.clear();
     if (m_history) {
-        const int previewRole = role("preview");
-        const int mimeRole = role("mimeType");
-        const int timestampRole = role("timestamp");
         const int rows = m_history->rowCount();
-        for (int row = 0; row < rows && m_results.size() < m_maximumResults; ++row) {
+        // Every row is scored; the cap is applied after ranking below.
+        // Stopping the scan at the cap would keep the first N matches in
+        // history order and discard a better match further back, which is the
+        // opposite of what a ranked list should do, and differs from how the
+        // sibling providers treat the same constant.
+        for (int row = 0; row < rows; ++row) {
             const QModelIndex idx = m_history->index(row, 0);
-            const QString preview = m_history->data(idx, previewRole).toString();
+            const QString preview = m_history->data(idx, m_previewRole).toString();
             int score = 0;
             if (!m_query.isEmpty()) {
                 const auto m = FuzzyMatcher::match(m_query, preview);
@@ -117,10 +132,10 @@ void ClipboardProvider::recompute()
                 score = m->score;
             }
             LauncherResult r;
-            r.id = m_history->data(idx, timestampRole).toString();
+            r.id = m_history->data(idx, m_timestampRole).toString();
             // A single line for the row; the entry itself keeps its newlines.
             r.title = preview.simplified();
-            r.subtitle = m_history->data(idx, mimeRole).toString();
+            r.subtitle = m_history->data(idx, m_mimeRole).toString();
             r.iconName = iconName();
             r.score = score;
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Copy");
@@ -131,6 +146,9 @@ void ClipboardProvider::recompute()
             std::stable_sort(m_results.begin(), m_results.end(), [](const LauncherResult& a, const LauncherResult& b) {
                 return a.score > b.score;
             });
+        }
+        if (m_results.size() > m_maximumResults) {
+            m_results.resize(m_maximumResults);
         }
     }
     Q_EMIT resultsChanged();
@@ -146,10 +164,9 @@ int ClipboardProvider::rowFor(const QString& resultId) const
     if (!m_history) {
         return -1;
     }
-    const int timestampRole = role("timestamp");
     const int rows = m_history->rowCount();
     for (int row = 0; row < rows; ++row) {
-        if (m_history->data(m_history->index(row, 0), timestampRole).toString() == resultId) {
+        if (m_history->data(m_history->index(row, 0), m_timestampRole).toString() == resultId) {
             return row;
         }
     }

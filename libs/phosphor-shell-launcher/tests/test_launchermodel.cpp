@@ -106,7 +106,112 @@ private Q_SLOTS:
     void activateRoutesToTheOwningProviderAndRefusesMissingAlternate();
     void providersPropertyReportsUnfilteredCounts();
     void aDestroyedProviderDropsOut();
+    void aFilterOnAProviderThatGoesEmptyIsCleared();
+    void countAndProvidersNotifyOnRealChangesOnly();
+    void aProviderAddedAfterAQueryIsGivenIt();
+    void addingTheSameProviderTwiceIsRefused();
+    void roleNamesCoverEveryRoleTheSurfaceBinds();
 };
+
+// A filter is the only piece of model state the user cannot see the cause of
+// when it goes wrong: the pill for an empty provider hides, so a stale filter
+// shows an empty list with nothing explaining it and no way to recover.
+void TestLauncherModel::aFilterOnAProviderThatGoesEmptyIsCleared()
+{
+    LauncherModel model;
+    auto* a = new FakeProvider(QStringLiteral("a"), false, &model);
+    auto* b = new FakeProvider(QStringLiteral("b"), false, &model);
+    a->rows = {FakeProvider::row(QStringLiteral("a1"), 10)};
+    b->rows = {FakeProvider::row(QStringLiteral("b1"), 5)};
+    model.addProvider(a);
+    model.addProvider(b);
+    model.setQuery(QStringLiteral("x"));
+    model.setProviderFilter(QStringLiteral("b"));
+    QCOMPARE(titles(model), QStringList{QStringLiteral("b1")});
+
+    QSignalSpy filterSpy(&model, &LauncherModel::providerFilterChanged);
+    // The next keystroke eliminates b's only row.
+    b->rows.clear();
+    model.setQuery(QStringLiteral("xy"));
+
+    QCOMPARE(model.providerFilter(), QString());
+    QCOMPARE(filterSpy.count(), 1);
+    QCOMPARE(titles(model), QStringList{QStringLiteral("a1")});
+}
+
+// Both are Q_PROPERTY NOTIFY signals the surface binds. Without a spy, an
+// emission deleted from rebuild() leaves rowCount() and providers() correct
+// while a bound view freezes at its first value, which no other assertion
+// in this file would catch.
+void TestLauncherModel::countAndProvidersNotifyOnRealChangesOnly()
+{
+    LauncherModel model;
+    auto* a = new FakeProvider(QStringLiteral("a"), false, &model);
+    a->rows = {FakeProvider::row(QStringLiteral("a1"), 10)};
+    model.addProvider(a);
+
+    QSignalSpy countSpy(&model, &LauncherModel::countChanged);
+    QSignalSpy providersSpy(&model, &LauncherModel::providersChanged);
+
+    model.setQuery(QStringLiteral("x"));
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(countSpy.count(), 1);
+    QCOMPARE(providersSpy.count(), 1);
+
+    // Same query, same rows: nothing changed, so neither may fire again.
+    model.setQuery(QStringLiteral("x"));
+    QCOMPARE(countSpy.count(), 1);
+    QCOMPARE(providersSpy.count(), 1);
+
+    a->rows.append(FakeProvider::row(QStringLiteral("a2"), 8));
+    model.setQuery(QStringLiteral("y"));
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(countSpy.count(), 2);
+    QCOMPARE(providersSpy.count(), 2);
+}
+
+// Every other case adds providers before the first query, so a provider
+// registered later never being told the current query was invisible.
+void TestLauncherModel::aProviderAddedAfterAQueryIsGivenIt()
+{
+    LauncherModel model;
+    model.setQuery(QStringLiteral("fire"));
+    auto* late = new FakeProvider(QStringLiteral("late"), false, &model);
+    model.addProvider(late);
+    QCOMPARE(late->lastQuery, QStringLiteral("fire"));
+}
+
+void TestLauncherModel::addingTheSameProviderTwiceIsRefused()
+{
+    LauncherModel model;
+    auto* a = new FakeProvider(QStringLiteral("a"), false, &model);
+    a->rows = {FakeProvider::row(QStringLiteral("a1"), 10)};
+    model.addProvider(a);
+    model.addProvider(a);
+    model.setQuery(QStringLiteral("x"));
+    // A second registration would duplicate the row source and install a
+    // second resultsChanged connection, doubling every rebuild.
+    QCOMPARE(titles(model), QStringList{QStringLiteral("a1")});
+}
+
+// The C++ suite reaches every role through the enum, so a wrong or missing
+// role NAME breaks every QML binding on the surface while staying green.
+void TestLauncherModel::roleNamesCoverEveryRoleTheSurfaceBinds()
+{
+    LauncherModel model;
+    const QHash<int, QByteArray> names = model.roleNames();
+    QCOMPARE(names.value(LauncherModel::TitleRole), QByteArrayLiteral("title"));
+    QCOMPARE(names.value(LauncherModel::SubtitleRole), QByteArrayLiteral("subtitle"));
+    QCOMPARE(names.value(LauncherModel::IconNameRole), QByteArrayLiteral("iconName"));
+    QCOMPARE(names.value(LauncherModel::ProviderIdRole), QByteArrayLiteral("providerId"));
+    QCOMPARE(names.value(LauncherModel::ProviderNameRole), QByteArrayLiteral("providerName"));
+    QCOMPARE(names.value(LauncherModel::ProviderIconRole), QByteArrayLiteral("providerIcon"));
+    QCOMPARE(names.value(LauncherModel::ResultIdRole), QByteArrayLiteral("resultId"));
+    QCOMPARE(names.value(LauncherModel::PrimaryActionLabelRole), QByteArrayLiteral("primaryActionLabel"));
+    QCOMPARE(names.value(LauncherModel::AlternateActionLabelRole), QByteArrayLiteral("alternateActionLabel"));
+    QCOMPARE(names.value(LauncherModel::HasAlternateActionRole), QByteArrayLiteral("hasAlternateAction"));
+    QCOMPARE(names.value(LauncherModel::ScoreRole), QByteArrayLiteral("score"));
+}
 
 void TestLauncherModel::queryIsPushedToEveryProvider()
 {
