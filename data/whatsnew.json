@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.4.11",
+            "date": "2026-09-04",
+            "highlights": [
+                "New: scrolling window heights have the same four shortcuts column widths have. Maximize Window Height, Grow Window into Empty Space and Minimize Window Height are their width chord with Ctrl added, and Reset Window Heights is now Equalize Window Heights (#1060)",
+                "Changed: the shortcut cheatsheet has a filter field that matches actions, categories and key sequences, and each category stays whole under one heading instead of being split across columns (#1059)",
+                "Changed: the new shortcut and cheatsheet text is translated in all seven languages (#1061)",
+                "Fixed: restoring a maximized window on a scrolling screen plays the Released animation instead of Placed (#1058)"
+            ]
+        },
+        {
             "version": "3.4.10",
             "date": "2026-09-04",
             "highlights": [
