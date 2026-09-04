@@ -144,13 +144,29 @@ Item {
         // marks it CppOwnership before returning, so the JS GC cannot
         // delete the live screen when this wrapper is collected. Do not
         // reach for a QScreen any other way from QML.
-        Popouts.toggle({
+        const target = ControlCenterRegistry.screenOf(source);
+        const request = {
             "popoutId": "control-center",
-            "targetScreen": ControlCenterRegistry.screenOf(source),
+            "targetScreen": target,
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             "keyboardFocus": false,
             "dismissOnFocusLoss": false
-        });
+        };
+        // The arbiter keys on the popout id alone, which is right for the
+        // launcher and the power menu but not for a pocket that belongs to
+        // one bar. Without this check, pressing the button on a SECOND
+        // monitor while the panel is open on the first just closes it, and
+        // the screen this call went to the trouble of resolving is thrown
+        // away. Move it instead: close there, open here.
+        const openOn = ControlCenterRegistry.openScreen;
+        if (openOn !== "" && target && openOn !== target.name) {
+            const handle = Popouts.handleFor("control-center");
+            if (handle !== "")
+                Popouts.close(handle);
+            Popouts.open(request);
+            return;
+        }
+        Popouts.toggle(request);
     }
 
     function togglePowerMenu(): void {
@@ -188,6 +204,12 @@ Item {
         // a bar, so it uses the widget's window to pick which output's
         // capsule to grow out of.
         function onWidgetActivated(id: string, source: Item): void {
+            // A Cooperative open is refused outright while a Modal popout is
+            // up, and the refusal is silent: the user would press the button
+            // and see nothing happen, with nothing logged. The power menu is
+            // itself Modal and toggles, so it stays reachable.
+            if (Popouts.modalActive && id !== "power")
+                return;
             if (id === "power")
                 root.togglePowerMenu();
             else if (id === "controlcenter")

@@ -78,13 +78,24 @@ PanelWindow {
     // these to whatever it is mounting.
     property int socketWidth: 380
     property int socketDepth: 420
+    // What the pocket can actually take on THIS output, which is the
+    // requested depth or whatever is left below the bar, whichever is less.
+    // A short display (a 1366x768 panel, or any output at a fractional scale
+    // that shrinks the logical size) would otherwise get a surface deeper
+    // than the screen, and the compositor simply clips the bottom off the
+    // pocket. Everything that positions or reserves for the pocket derives
+    // from this rather than from the raw request.
+    readonly property int _usableSocketDepth: {
+        const available = (panel.screen ? panel.screen.height : 0) - panel.screenInset - panel.barThickness - Tokens.spacing_xl;
+        return available > 0 ? Math.min(panel.socketDepth, available) : panel.socketDepth;
+    }
     // How much surface to reserve below the capsule for the open pocket.
     // Reserved ONCE, at materialization: ShellEngine snapshots
     // `thickness + shadowSize` when it creates the layer surface and never
     // resizes it, so a pocket that needs room later must have it reserved
     // now. Costs nothing while closed — the strip is transparent and, by
     // default, outside the input region.
-    property int socketReserve: panel.socketDepth
+    property int socketReserve: panel._usableSocketDepth
 
     // Emitted when the pocket has finished closing, so a host can tear its
     // content down (or release a grab) only once nothing is visible.
@@ -92,7 +103,7 @@ PanelWindow {
 
     // Animated pocket depth. The socket descriptor and the content clip
     // both derive from this, so one animation drives the whole growth.
-    property real _socketDepth: panel.socketOpen ? panel.socketDepth : 0
+    property real _socketDepth: panel.socketOpen ? panel._usableSocketDepth : 0
 
     Behavior on _socketDepth {
         NumberAnimation {
@@ -175,11 +186,15 @@ PanelWindow {
         // flat edge, so dropping the descriptor entirely there means the
         // pocket grows out of nothing and leaves nothing behind. Same
         // threshold the bar-canvas demo uses.
-        readonly property real socketX: (width - panel.socketWidth) / 2
+        // Clamped, and the width with it: on an output narrower than the
+        // pocket plus its insets this would go negative and hang the socket
+        // and its content off the left edge of the capsule.
+        readonly property real socketW: Math.min(panel.socketWidth, width)
+        readonly property real socketX: Math.max(0, (width - socketW) / 2)
         sockets: panel._socketDepth > 0.5 ? [
             {
                 "x": canvas.socketX,
-                "width": panel.socketWidth,
+                "width": canvas.socketW,
                 "depth": panel._socketDepth
             }
         ] : []
