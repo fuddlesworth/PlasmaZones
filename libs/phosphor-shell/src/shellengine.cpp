@@ -750,6 +750,12 @@ bool ShellEngine::materializePanels(QString* failureReason)
         // referring to it. The surface has already adopted the panel as its
         // content item, so destroying it takes the panel with it.
         std::unique_ptr<PhosphorLayer::Surface> ownedSurface(m_deps.surfaceFactory->create(std::move(cfg), nullptr));
+        // The two failures below are NOT the same event and the diagnostics
+        // must not read as though they are: a null factory result never
+        // reached the compositor, while a surface that reaches Failed after
+        // show() has already committed a wl_surface and been rejected. The
+        // first points at configuration, the second at the compositor.
+        bool failedAfterShow = false;
         if (ownedSurface) {
             ownedSurface->setParent(nullptr);
             ownedSurface->show();
@@ -766,7 +772,7 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // root panel, the whole QML root) — with m_rootRef non-null, so
             // the fail-loud branch below would not even fire correctly.
             if (ownedSurface->state() == PhosphorLayer::Surface::State::Failed) {
-                qCWarning(lcShellEngine) << "Panel surface reached Failed state after show()";
+                failedAfterShow = true;
                 ownedSurface.reset();
             }
         }
@@ -805,7 +811,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // and Qt never re-applies it.
             installInputRegion(panel, surface);
         } else {
-            qCWarning(lcShellEngine) << "Failed to create surface for PanelWindow";
+            qCWarning(lcShellEngine) << (failedAfterShow
+                                             ? "PanelWindow surface was rejected by the compositor after show()"
+                                             : "PanelWindow surface could not be created at all");
             // For child panels we soldier on — losing one panel still
             // leaves a usable shell. For the ROOT panel, the cfg.contentItem
             // destructor has already deleted the QML root and m_rootRef
@@ -829,7 +837,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
                 // would have its fresh engine destroyed by the teardown that
                 // runs when this returns.
                 if (failureReason) {
-                    *failureReason = QStringLiteral("Failed to create surface for root PanelWindow");
+                    *failureReason = failedAfterShow
+                        ? QStringLiteral("The compositor rejected the root PanelWindow's surface")
+                        : QStringLiteral("The root PanelWindow's surface could not be created");
                 }
                 return false;
             }
