@@ -119,6 +119,17 @@ int main(int argc, char* argv[])
     //                                            registered as
     //                                            uncreatable for type
     //                                            visibility)
+    //   Notifications Phosphor.Service.Notifications 1.0
+    //   Polkit    Phosphor.Service.Polkit 1.0
+    //   Idle      Phosphor.Service.Idle 1.0
+    //   Clipboard Phosphor.Service.Clipboard 1.0
+    //   Lock      Phosphor.Service.Lock 1.0
+    //   Session   Phosphor.Service.Session 1.0
+    //
+    // Fourteen services, one call each below. The six above carry no
+    // per-type notes because they register a single host plus its models,
+    // with no uncreatable-for-visibility exceptions worth spelling out.
+    //
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that

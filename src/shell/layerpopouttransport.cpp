@@ -324,6 +324,23 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!hostItem->setProperty("reservedTop", reservedTop)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the reservedTop write";
     }
+    // The inset is a one-shot write, so a popout open across an output
+    // geometry change kept hanging at the offset the bar had when it opened.
+    // Re-push it while this host is alive; the guarded QPointer means a
+    // surface torn down in the meantime simply stops being updated. The
+    // connection dies with the host item, which is what owns the context.
+    if (m_reservedMargins) {
+        QPointer<QQuickItem> guardedHost(hostItem);
+        const QString popoutId = request.popoutId;
+        connect(screen, &QScreen::geometryChanged, hostItem, [this, guardedHost, screen, popoutId] {
+            if (!guardedHost || !m_reservedMargins) {
+                return;
+            }
+            if (!guardedHost->setProperty("reservedTop", m_reservedMargins(screen).top())) {
+                qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
+            }
+        });
+    }
     if (request.anchor == PhosphorPopout::Anchor::Custom) {
         // Both writes always run. Short-circuiting on the first would leave a
         // Custom-anchored popout at a half-applied position, keeping the
