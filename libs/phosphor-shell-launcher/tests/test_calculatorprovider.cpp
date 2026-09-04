@@ -28,7 +28,48 @@ private Q_SLOTS:
     void formatsIntegersAndReals();
     void yieldsOneRowThatOutranksAnyFuzzyMatch();
     void copyRefusesWithoutAGuiClipboard();
+    void deeplyNestedInputIsRejectedRatherThanCrashing();
+    void functionNamesAreCaseInsensitive();
+    void nonAsciiDigitsAreNotNumbers();
 };
+
+// The query comes straight from a text field, so the parse depth is
+// attacker-controlled in the ordinary sense that a paste can be any length.
+// Without the depth guard in calculatorprovider.cpp this recursion overflows
+// the stack and takes the whole shell process down; verified by raising the
+// limit and watching this input segfault. Keep both halves: the deep input
+// must be refused, and ordinary nesting must still evaluate, or a "fix" that
+// simply rejects all parentheses would pass.
+void TestCalculatorProvider::deeplyNestedInputIsRejectedRatherThanCrashing()
+{
+    const QString deep(200000, u'(');
+    QVERIFY(!CalculatorProvider::evaluate(deep).has_value());
+
+    const QString deepButClosed = QString(50000, u'(') + QStringLiteral("1") + QString(50000, u')');
+    QVERIFY(!CalculatorProvider::evaluate(deepButClosed).has_value());
+
+    // Nesting a person might actually type still works.
+    QCOMPARE(CalculatorProvider::evaluate(QStringLiteral("((((1+1))))")).value(), 2.0);
+}
+
+void TestCalculatorProvider::functionNamesAreCaseInsensitive()
+{
+    // Every other match in the launcher is case-insensitive, so a capitalised
+    // function name must not be a parse error.
+    QCOMPARE(CalculatorProvider::evaluate(QStringLiteral("SQRT(9)")).value(), 3.0);
+    QCOMPARE(CalculatorProvider::evaluate(QStringLiteral("Abs(-4)")).value(), 4.0);
+    QCOMPARE(CalculatorProvider::evaluate(QStringLiteral("sQrT(16)+ABS(-2)")).value(), 6.0);
+}
+
+void TestCalculatorProvider::nonAsciiDigitsAreNotNumbers()
+{
+    // QChar::isDigit() accepts these, but the C-locale conversion does not.
+    // Scanning them as digits consumed the literal and then failed the whole
+    // expression; refusing them up front is the same answer for a simpler
+    // reason. Arabic-Indic and fullwidth digits.
+    QVERIFY(!CalculatorProvider::evaluate(QString::fromUtf8("١+١")).has_value());
+    QVERIFY(!CalculatorProvider::evaluate(QString::fromUtf8("１+１")).has_value());
+}
 
 void TestCalculatorProvider::evaluatesWithPrecedenceAndAssociativity()
 {

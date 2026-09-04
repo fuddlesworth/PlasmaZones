@@ -18,6 +18,22 @@ using PhosphorRegistry::LauncherResult;
 
 namespace {
 
+// The number scanner and the C-locale conversion must agree on what a digit
+// is. QChar::isDigit() is true for Arabic-Indic, Devanagari and fullwidth
+// digits, which QLocale::c().toDouble() then rejects, so the literal would be
+// consumed and the whole expression thrown away.
+bool isAsciiDigit(QChar c)
+{
+    return c >= u'0' && c <= u'9';
+}
+
+// Bound on nested sub-expressions. The query comes from a text field with no
+// length cap, and each nesting level costs several stack frames across
+// expr/term/factor/unary/primary, so an unbounded parse of a pasted string of
+// open parens would overflow the stack of a shell process that is expected to
+// live for the whole session. Far beyond any expression a person types.
+constexpr int kMaxParseDepth = 128;
+
 // Recursive descent over:
 //   expr    := term (('+' | '-') term)*
 //   term    := factor (('*' | '/' | '%') factor)*
@@ -51,6 +67,24 @@ public:
     }
 
 private:
+    // Decrements on every exit path, of which expr() has several.
+    struct DepthGuard
+    {
+        explicit DepthGuard(int& d)
+            : depth(d)
+        {
+        }
+        ~DepthGuard()
+        {
+            --depth;
+        }
+        DepthGuard(const DepthGuard&) = delete;
+        DepthGuard& operator=(const DepthGuard&) = delete;
+        DepthGuard(DepthGuard&&) = delete;
+        DepthGuard& operator=(DepthGuard&&) = delete;
+        int& depth;
+    };
+
     void skipSpace()
     {
         while (m_pos < m_text.size() && m_text[m_pos].isSpace()) {
@@ -70,6 +104,15 @@ private:
 
     std::optional<double> expr()
     {
+        // Every nesting cycle passes through here, so one guard bounds the
+        // whole grammar. Past the limit the input is simply not an
+        // expression, which is the same answer the parser gives any other
+        // malformed query.
+        if (m_depth >= kMaxParseDepth) {
+            return std::nullopt;
+        }
+        ++m_depth;
+        const DepthGuard guard(m_depth);
         auto left = term();
         if (!left) {
             return std::nullopt;
@@ -193,10 +236,13 @@ private:
             return std::nullopt;
         }
         ++m_operators;
-        if (name == u"sqrt") {
+        // Case-insensitive, because every other part of the launcher is.
+        // "SQRT(4)" being a parse error while "sqrt(4)" works is a
+        // distinction the user has no way to predict.
+        if (name.compare(u"sqrt", Qt::CaseInsensitive) == 0) {
             return *arg < 0 ? std::nullopt : std::optional<double>(std::sqrt(*arg));
         }
-        if (name == u"abs") {
+        if (name.compare(u"abs", Qt::CaseInsensitive) == 0) {
             return std::abs(*arg);
         }
         return std::nullopt;
@@ -206,13 +252,13 @@ private:
     {
         const qsizetype start = m_pos;
         bool digits = false;
-        while (m_pos < m_text.size() && m_text[m_pos].isDigit()) {
+        while (m_pos < m_text.size() && isAsciiDigit(m_text[m_pos])) {
             ++m_pos;
             digits = true;
         }
         if (m_pos < m_text.size() && m_text[m_pos] == u'.') {
             ++m_pos;
-            while (m_pos < m_text.size() && m_text[m_pos].isDigit()) {
+            while (m_pos < m_text.size() && isAsciiDigit(m_text[m_pos])) {
                 ++m_pos;
                 digits = true;
             }
@@ -227,9 +273,9 @@ private:
             if (p < m_text.size() && (m_text[p] == u'+' || m_text[p] == u'-')) {
                 ++p;
             }
-            if (p < m_text.size() && m_text[p].isDigit()) {
+            if (p < m_text.size() && isAsciiDigit(m_text[p])) {
                 m_pos = p;
-                while (m_pos < m_text.size() && m_text[m_pos].isDigit()) {
+                while (m_pos < m_text.size() && isAsciiDigit(m_text[m_pos])) {
                     ++m_pos;
                 }
             }
@@ -246,6 +292,7 @@ private:
     QStringView m_text;
     qsizetype m_pos = 0;
     int m_operators = 0;
+    int m_depth = 0;
 };
 
 } // namespace

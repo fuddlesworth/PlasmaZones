@@ -11,3 +11,4 @@ Terminal=true
 Keywords=term;
 Keywords[de]=terminal;a\;b;
 Categories=System;TerminalEmulator;
+Keywords[fr]=a\\;b;

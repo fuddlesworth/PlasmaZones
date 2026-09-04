@@ -67,6 +67,14 @@ void TestDesktopEntry::localisesWithTheSpecFallbackOrder()
     // Keywords localise the same way, and the list keeps an escaped
     // semicolon inside an item.
     QCOMPARE(de->keywords, (QStringList{QStringLiteral("terminal"), QStringLiteral("a;b")}));
+    // An ESCAPED BACKSLASH before the separator is a different case, and the
+    // one that a double unescape got wrong: `a\\;b;` is a keyword ending in a
+    // backslash, then a separator, then "b". Reading the second backslash as
+    // escaping the separator merges them into a single wrong keyword, and the
+    // `a\;b` case above passes either way, so it cannot catch that.
+    auto fr_kw = DesktopEntry::parse(path, QStringLiteral("fr_FR"));
+    QVERIFY(fr_kw.has_value());
+    QCOMPARE(fr_kw->keywords, (QStringList{QStringLiteral("a\\"), QStringLiteral("b")}));
     // An unrelated locale falls through to the unlocalised value.
     auto fr = DesktopEntry::parse(path, QStringLiteral("fr_FR"));
     QVERIFY(fr.has_value());

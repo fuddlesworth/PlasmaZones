@@ -8,9 +8,19 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTextStream>
+
+namespace {
+// The scan is deliberately lenient: one packager's malformed file must not
+// stop the launcher listing everything else. But "do not fail" and "leave no
+// trace" are different decisions, and without a category an application that
+// never appears in the launcher gives the user no row, no log line and
+// nothing to grep.
+Q_LOGGING_CATEGORY(lcDesktopEntry, "phosphorshelllauncher.desktopentry")
+} // namespace
 
 namespace PhosphorShellLauncher {
 
@@ -44,6 +54,12 @@ QString unescape(QStringView raw)
         case u'\\':
             out.append(u'\\');
             break;
+        case u';':
+            // The list-separator escape. Only meaningful inside a list
+            // value, but harmless elsewhere, and handling it here keeps
+            // splitList's scan to one job: finding unescaped separators.
+            out.append(u';');
+            break;
         default:
             // Unknown escape: keep both characters, the spec does not say
             // to drop them and a launcher should show something.
@@ -55,16 +71,23 @@ QString unescape(QStringView raw)
     return out;
 }
 
-// A `;`-separated list value. `\;` is a literal semicolon. A trailing
-// separator (the spec's convention) yields no empty final element.
+// A `;`-separated list value. `\;` is a literal semicolon. Empty elements
+// are dropped wherever they occur, not only the trailing one the spec's
+// convention produces, so `A;;B;` and `A;B;` parse alike.
 QStringList splitList(QStringView raw)
 {
     QStringList out;
     QString current;
     for (qsizetype i = 0; i < raw.size(); ++i) {
         const QChar c = raw[i];
-        if (c == u'\\' && i + 1 < raw.size() && raw[i + 1] == u';') {
-            current.append(u';');
+        // A backslash escapes whatever follows, so carry the PAIR through
+        // verbatim and let the single unescape below resolve it. Consuming
+        // only `\;` here would misread the second backslash of an escaped
+        // backslash as escaping a following separator, merging two list
+        // elements into one: raw `a\\;b;` is "a\" and "b", not "a\;b".
+        if (c == u'\\' && i + 1 < raw.size()) {
+            current.append(c);
+            current.append(raw[i + 1]);
             ++i;
             continue;
         }
@@ -160,9 +183,10 @@ QString localised(const QHash<QString, QString>& group, const QString& key, cons
 // suffix stripped.
 QString idFor(const QDir& root, const QString& filePath)
 {
+    static constexpr QLatin1String kSuffix(".desktop");
     QString rel = root.relativeFilePath(filePath);
-    if (rel.endsWith(QLatin1String(".desktop"))) {
-        rel.chop(8);
+    if (rel.endsWith(kSuffix)) {
+        rel.chop(kSuffix.size());
     }
     rel.replace(u'/', u'-');
     return rel;
@@ -189,7 +213,14 @@ std::optional<DesktopEntry> DesktopEntry::parse(const QString& filePath, const Q
         if (view.isEmpty() || view.startsWith(u'#')) {
             continue;
         }
+        // A group header is `[` name `]`. Treating any line that merely
+        // STARTS with '[' as a header would let a malformed line silently
+        // end the [Desktop Entry] group and drop every key after it.
         if (view.startsWith(u'[')) {
+            if (!view.endsWith(u']')) {
+                qCDebug(lcDesktopEntry) << "ignoring malformed group header in" << filePath << ":" << line;
+                continue;
+            }
             inEntryGroup = (view == u"[Desktop Entry]");
             sawEntryGroup = sawEntryGroup || inEntryGroup;
             continue;
@@ -222,6 +253,12 @@ std::optional<DesktopEntry> DesktopEntry::parse(const QString& filePath, const Q
     entry.comment = localised(group, QStringLiteral("Comment"), locales);
     entry.icon = unescape(group.value(QStringLiteral("Icon")));
     entry.exec = unescape(group.value(QStringLiteral("Exec")));
+    // The spec requires Exec on a Type=Application entry unless it is
+    // DBusActivatable. Without one there is nothing to launch, and keeping
+    // the entry would list a row that silently does nothing when activated.
+    if (entry.exec.isEmpty() && !parseBool(group.value(QStringLiteral("DBusActivatable")))) {
+        return std::nullopt;
+    }
     entry.path = unescape(group.value(QStringLiteral("Path")));
     entry.keywords = splitList(localisedRaw(group, QStringLiteral("Keywords"), locales));
     entry.categories = splitList(group.value(QStringLiteral("Categories")));
@@ -305,12 +342,11 @@ QStringList DesktopEntry::execArgs() const
             }
             // Every other code (f u F U d D n N i c k v m) is dropped.
         }
+        // An argument that was ONLY a field code contributes nothing; an
+        // argument that was empty to begin with ("") is kept. The two
+        // conditions are the same predicate, so one test says it.
         if (!cleaned.isEmpty() || arg.isEmpty()) {
-            // An argument that was ONLY a field code contributes nothing;
-            // an argument that was empty to begin with ("") is kept.
-            if (!(cleaned.isEmpty() && !arg.isEmpty())) {
-                out.append(cleaned);
-            }
+            out.append(cleaned);
         }
     }
     return out;
@@ -361,14 +397,25 @@ QList<DesktopEntry> DesktopEntryScanner::scan(const QStringList& directories, co
             // parsing so a user's deliberately broken override still
             // shadows the system entry rather than letting it through.
             if (seen.contains(id)) {
+                // Across roots this is the spec's precedence rule and is
+                // expected. Within one root it means two files fold to the
+                // same id (a `vendor/tool.desktop` and a
+                // `vendor-tool.desktop`), where which one wins is iteration
+                // order, so make the collision diagnosable.
+                qCDebug(lcDesktopEntry) << "id" << id << "already claimed; ignoring" << filePath;
                 continue;
             }
             seen.insert(id);
             auto entry = DesktopEntry::parse(filePath, locale, id);
             if (!entry) {
+                qCDebug(lcDesktopEntry) << "skipping" << filePath
+                                        << "— unreadable, not a Type=Application entry, or missing Name or Exec";
                 continue;
             }
             if (entry->noDisplay || entry->hidden || !entry->showsOn(currentDesktop)) {
+                qCDebug(lcDesktopEntry) << "hiding" << filePath << "— NoDisplay" << entry->noDisplay << "Hidden"
+                                        << entry->hidden << "shows on" << currentDesktop
+                                        << entry->showsOn(currentDesktop);
                 continue;
             }
             out.append(std::move(*entry));
