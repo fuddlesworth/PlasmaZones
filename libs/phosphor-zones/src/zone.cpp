@@ -25,11 +25,16 @@ namespace PhosphorZones {
         }                                                                                                              \
     }
 
-// Clamped int setter with minimum of 0
-#define ZONE_SETTER_MIN_ZERO(name, member, signal)                                                                     \
+// Clamped int setter bounded to [0, max]. The ceiling matters because the
+// per-zone override draws the SAME overlay border the global setting and the
+// zone-overlay rule actions drive, and both of those already reject anything
+// past ZoneDefaults' bounds — a per-zone value outside them would be a width
+// no other surface can express. fromJson deliberately does NOT clamp, so
+// opening a layout file never silently rewrites a value the user stored.
+#define ZONE_SETTER_BOUNDED(name, member, signal, maxValue)                                                            \
     void Zone::set##name(int value)                                                                                    \
     {                                                                                                                  \
-        value = qMax(0, value);                                                                                        \
+        value = qBound(0, value, maxValue);                                                                            \
         if (member != value) {                                                                                         \
             member = value;                                                                                            \
             Q_EMIT signal();                                                                                           \
@@ -107,9 +112,9 @@ ZONE_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
 ZONE_SETTER_OPACITY(ActiveOpacity, m_activeOpacity, activeOpacityChanged)
 ZONE_SETTER_OPACITY(InactiveOpacity, m_inactiveOpacity, inactiveOpacityChanged)
 
-// Border setters (clamped min 0)
-ZONE_SETTER_MIN_ZERO(BorderWidth, m_borderWidth, borderWidthChanged)
-ZONE_SETTER_MIN_ZERO(BorderRadius, m_borderRadius, borderRadiusChanged)
+// Border setters (clamped to the shared zone-overlay bounds)
+ZONE_SETTER_BOUNDED(BorderWidth, m_borderWidth, borderWidthChanged, ::PhosphorZones::ZoneDefaults::BorderWidthMax)
+ZONE_SETTER_BOUNDED(BorderRadius, m_borderRadius, borderRadiusChanged, ::PhosphorZones::ZoneDefaults::BorderRadiusMax)
 
 // Bool setters
 ZONE_SETTER(bool, Highlighted, m_isHighlighted, highlightedChanged)

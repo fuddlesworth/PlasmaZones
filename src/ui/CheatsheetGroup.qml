@@ -1,0 +1,262 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+
+/**
+ * One category block on the cheatsheet: a heading, the category's bound rows,
+ * and a disclosure line standing in for its unbound ones.
+ *
+ * Groups are never split across columns (see the packer in
+ * CheatsheetContent), so a block is always whole and its heading always
+ * introduces the rows directly beneath it.
+ */
+Column {
+    id: root
+
+    /// Translated category name.
+    required property string name
+    /// Catalog rows in this category that have at least one binding.
+    required property var assignedRows
+    /// Catalog rows in this category with no binding. Collapsed behind a
+    /// count line unless `expanded`.
+    required property var unassignedRows
+    /// Whether the unassigned rows are currently disclosed.
+    property bool expanded: false
+    /// Catalog id of the row whose tooltip the sheet has latched open.
+    property string latchedRowId: ""
+    property list<string> queryTerms: []
+    /// True while the sheet has a filter typed into it. Splits "everything is
+    /// relevant" from "this row happens to match", which look identical from a
+    /// row's own point of view but should not render the same. Derived rather
+    /// than passed in alongside the terms, so a caller cannot set the two
+    /// inconsistently and leave the heading disagreeing with its own rows.
+    readonly property bool queryActive: root.queryTerms.length > 0
+    /// How many of this category's collapsed unassigned rows answer the query.
+    /// The disclosure line reports them, so a match hidden behind it is still
+    /// announced without the sheet resizing itself to reveal it.
+    property int unassignedMatches: 0
+    /// The sheet's row-matching predicate, borrowed rather than reimplemented
+    /// so the heading, the rows and the counter can never disagree about what
+    /// counts as a match.
+    property var matcher: null
+    property bool scrollerMoving: false
+    property bool layoutsAreTemplates: false
+    property string fontFamily: ""
+    property real fontSizeScale: 1
+
+    signal expandToggled
+    signal latchRequested(string rowId)
+    signal latchCleared
+    /// Emitted when an item inside this group takes keyboard focus, so the
+    /// sheet can scroll it into view. The group cannot do it itself: the
+    /// Flickable that clips it belongs to the sheet.
+    signal focusScrollRequested(Item target)
+
+    readonly property string effectiveFamily: fontFamily.length > 0 ? fontFamily : Kirigami.Theme.defaultFont.family
+    readonly property int rowFontSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * fontSizeScale)
+
+    /// True when this row answers the query, or when there is no query. Rows
+    /// that do not are dimmed rather than dropped.
+    function rowMatched(row) {
+        if (!root.queryActive)
+            return true;
+        // A query with no matcher would silently mark every row as answering
+        // it, while the sheet's own counter said zero. Treat it as the setup
+        // error it is rather than rendering a lie.
+        if (!root.matcher) {
+            console.warn("CheatsheetGroup: query active with no matcher; category", root.name);
+            return false;
+        }
+        return root.matcher(row);
+    }
+
+    /// Whether anything in this category answers the query. Drives the
+    /// heading, so a category with nothing to offer recedes as a block
+    /// instead of standing at full accent over a wall of dimmed rows.
+    readonly property bool hasMatch: {
+        if (!root.queryActive)
+            return true;
+        if (root.unassignedMatches > 0)
+            return true;
+        for (let i = 0; i < root.assignedRows.length; ++i) {
+            if (root.rowMatched(root.assignedRows[i]))
+                return true;
+        }
+        return false;
+    }
+
+    spacing: Kirigami.Units.smallSpacing
+
+    // Heading — a rule running to the column edge, so a two-row category
+    // reads as a block rather than dissolving into its neighbours. The
+    // previous heading was a 0.7-opacity Label with nothing but vertical gap
+    // separating one group from the next, which left short groups invisible.
+    Item {
+        width: root.width
+        height: headingLabel.implicitHeight
+
+        Label {
+            id: headingLabel
+
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            // Sized to its text, but capped so a long translated category
+            // cannot run past its column and paint over the neighbouring one.
+            // Width tracks the text rather than filling the row, because the
+            // rule anchors to this label's right edge and is what makes the
+            // heading read as the top of a block. The reserve keeps the rule
+            // visible even at the cap. Floored at 0 for the first frame,
+            // before the column has a width to subtract from.
+            width: Math.max(0, Math.min(implicitWidth, parent.width - Kirigami.Units.gridUnit))
+            elide: Text.ElideRight
+            text: root.name
+            // Capitalisation as a FONT property, not text.toUpperCase(): the
+            // string stays intact for accessibility and for locales whose
+            // case mapping is not a round trip.
+            font.capitalization: Font.AllUppercase
+            font.family: root.effectiveFamily
+            font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.85 * root.fontSizeScale)
+            font.bold: true
+            // Uppercase set solid needs the tracking back; without it the
+            // caps crowd at small sizes.
+            font.letterSpacing: 0.8
+            color: Kirigami.Theme.highlightColor
+            opacity: root.hasMatch ? 1 : 0.3
+            Accessible.role: Accessible.Heading
+            Accessible.name: root.name
+        }
+
+        Rectangle {
+            anchors.left: headingLabel.right
+            anchors.leftMargin: Kirigami.Units.smallSpacing
+            anchors.right: parent.right
+            anchors.verticalCenter: headingLabel.verticalCenter
+            height: 1
+            color: Qt.alpha(Kirigami.Theme.textColor, 0.15)
+            opacity: root.hasMatch ? 1 : 0.3
+            // Purely a rule; the heading label carries the announcement.
+            Accessible.ignored: true
+            // A very long translated category can consume the whole column
+            // width, at which point the rule has nowhere to go.
+            visible: width > 0
+        }
+    }
+
+    Repeater {
+        model: root.assignedRows
+
+        delegate: CheatsheetRow {
+            // `modelData` is CheatsheetRow's own required property; the
+            // Repeater fills it. Re-declaring it here would shadow the row's
+            // and self-assign.
+            width: root.width
+            queryTerms: root.queryTerms
+            matched: root.rowMatched(modelData)
+            latched: root.latchedRowId.length > 0 && root.latchedRowId === modelData.id
+            scrollerMoving: root.scrollerMoving
+            layoutsAreTemplates: root.layoutsAreTemplates
+            fontFamily: root.fontFamily
+            fontSizeScale: root.fontSizeScale
+            onLatchRequested: root.latchRequested(modelData.id)
+            onLatchCleared: root.latchCleared()
+        }
+    }
+
+    // Unassigned disclosure. Six italic "Unassigned" rows at the same weight
+    // as bound ones padded the Scrolling column while telling the reader
+    // nothing, but hiding them outright would lose the answer to "is there a
+    // key for this?" — so they collapse to one line and open on click.
+    Label {
+        id: disclosure
+
+        visible: root.unassignedRows.length > 0
+        width: root.width
+        wrapMode: Text.Wrap
+        // With a query up, the line reports its own hidden matches instead of
+        // its total, so the one thing worth clicking says so.
+        text: root.expanded ? i18n("Hide unassigned actions") : (root.queryActive && root.unassignedMatches > 0 ? i18np("%n unassigned action matches", "%n unassigned actions match", root.unassignedMatches) : i18np("%n unassigned action", "%n unassigned actions", root.unassignedRows.length))
+        // Hover and keyboard focus both brighten it. The highlight state has
+        // its own hovered shade rather than dropping the feedback, since that
+        // is exactly the state where the line is worth activating.
+        readonly property bool disclosureHot: disclosureArea.containsMouse || disclosure.activeFocus
+        // Highlighted only while it is standing in for matches the reader
+        // cannot see. Once the rollup is open those rows are on screen and
+        // carry their own emphasis, so a highlighted "Hide unassigned actions"
+        // would be claiming to be a match itself.
+        readonly property bool disclosureStandsInForMatches: !root.expanded && root.queryActive && root.unassignedMatches > 0
+        color: disclosure.disclosureStandsInForMatches ? (disclosure.disclosureHot ? Qt.lighter(Kirigami.Theme.highlightColor, 1.25) : Kirigami.Theme.highlightColor) : (disclosure.disclosureHot ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor)
+        // Dimmed along with the rest of a category that has nothing to offer
+        // the query, but never below the rows it stands in for.
+        opacity: !root.queryActive || root.unassignedMatches > 0 ? 1 : 0.35
+        font.family: root.effectiveFamily
+        font.pixelSize: Math.round(root.rowFontSize * 0.9)
+        Accessible.role: Accessible.Button
+        Accessible.name: disclosure.text
+        Accessible.onPressAction: root.expandToggled()
+
+        // The rows behind this line are otherwise pointer-only. The sheet's
+        // search field takes focus on open and is the only other tab stop, so
+        // Tab walks field -> each disclosure in column order, which is also
+        // reading order. Space and Return activate, matching the button role
+        // already declared above.
+        activeFocusOnTab: true
+        // A Flickable does not bring a focused descendant into view, and these
+        // sit inside the clipped column strip. Without this, Tab on a short
+        // screen can land on a focus ring below the fold and nothing appears
+        // to happen. The sheet owns the scroller, so ask rather than reach.
+        onActiveFocusChanged: {
+            if (disclosure.activeFocus)
+                root.focusScrollRequested(disclosure);
+        }
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.expandToggled();
+                event.accepted = true;
+            }
+        }
+
+        // Focus needs to be visible, since the colour shift alone is easy to
+        // miss on a line that is already dim.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing / 2
+            visible: disclosure.activeFocus
+            color: "transparent"
+            border.width: 1
+            border.color: Kirigami.Theme.highlightColor
+            radius: Kirigami.Units.smallSpacing / 2
+        }
+
+        MouseArea {
+            id: disclosureArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.expandToggled()
+        }
+    }
+
+    Repeater {
+        model: root.expanded ? root.unassignedRows : []
+
+        delegate: CheatsheetRow {
+            // `modelData` is CheatsheetRow's own required property; the
+            // Repeater fills it. Re-declaring it here would shadow the row's
+            // and self-assign.
+            width: root.width
+            queryTerms: root.queryTerms
+            matched: root.rowMatched(modelData)
+            latched: root.latchedRowId.length > 0 && root.latchedRowId === modelData.id
+            scrollerMoving: root.scrollerMoving
+            layoutsAreTemplates: root.layoutsAreTemplates
+            fontFamily: root.fontFamily
+            fontSizeScale: root.fontSizeScale
+            onLatchRequested: root.latchRequested(modelData.id)
+            onLatchCleared: root.latchCleared()
+        }
+    }
+}

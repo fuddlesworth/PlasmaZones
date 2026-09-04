@@ -220,7 +220,7 @@ inline QStringList collectParamsOnlyDescendants(const PhosphorAnimationShaders::
     return out;
 }
 
-/// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
+/// Title-case a single camelCase segment: "placeIn" → "Place In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
 /// for single-word segments.
 ///

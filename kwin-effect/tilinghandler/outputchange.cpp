@@ -647,14 +647,14 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         // makes hasAnimation() true, and applyWindowGeometry's
                         // already-at-target no-op skip requires it false, so the
                         // next apply for this window pays a redundant moveResize
-                        // and retarget. Worse, a WindowSnapOut transition installing
+                        // and retarget. Worse, a WindowPlaceOut transition installing
                         // makes m_shaderManager non-empty, which flips vertex
                         // snapping to None DESKTOP-WIDE for its duration — a global
                         // rendering side effect sourced from a window nobody can
                         // see.
                         m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false,
                                                       /*skipAnimation=*/safeW->isMinimized(),
-                                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                                      PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                         return;
                     }
 
@@ -710,7 +710,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                                     // Snap-out: leaving tile-managed sizing.
                                     m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false,
                                                                   /*skipAnimation=*/false,
-                                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                                 });
                     m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });

@@ -289,25 +289,8 @@ Item {
                             // inside transparent room — the sub-rect the
                             // anchor fold describes.
                             anchors.margins: field.canvasPad
-                            title: root._class === "tab" ? i18nc("@title arriving tab in the animation preview", "New Tab") : i18nc("@title sample window in the animation preview", "Sample Window")
+                            title: root._class === "tab" ? i18nc("@title arriving tab in the animation preview", "New Tab") : i18nc("@title sample window in a shader preview", "Sample Window")
                         }
-                    }
-
-                    // The stand-in taskbar entry the minimize collapses
-                    // into. Drawn as real pixels (not just fed to the
-                    // shader) so the funnel visibly lands ON something; a
-                    // faint slot when the card is up, tinted while
-                    // swallowed.
-                    Rectangle {
-                        visible: field.iconPhase && root._class === "appearance"
-                        x: field.iconRect.x
-                        y: field.iconRect.y
-                        width: field.iconRect.width
-                        height: field.iconRect.height
-                        radius: Kirigami.Units.smallSpacing
-                        color: Qt.alpha(Kirigami.Theme.highlightColor, 0.35)
-                        border.width: 1
-                        border.color: Kirigami.Theme.highlightColor
                     }
 
                     // Live capture of the card for uTexture0 — the same
@@ -641,7 +624,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 1
                 visible: !root._previewable || !previewLoader.item || !previewLoader.item.configured || previewLoader.item.shaderItem.status === AnimationShaderItem.Error || previewLoader.item.shaderItem.status === AnimationShaderItem.Loading
-                text: (previewLoader.item && previewLoader.item.configured && previewLoader.item.shaderItem.status === AnimationShaderItem.Error) ? i18nc("@info:placeholder animation preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+                text: (previewLoader.item && previewLoader.item.configured && previewLoader.item.shaderItem.status === AnimationShaderItem.Error) ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 backgroundColor: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing
             }
@@ -679,7 +662,7 @@ Item {
             // DecorationPreviewPane's twin notice.
             visible: root._isAudioPack && root.previewController !== null && !root.previewController.audioVisualizerEnabled
             type: Kirigami.MessageType.Information
-            text: i18nc("@info animation preview limitation", "This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.")
+            text: i18nc("@info shader preview limitation", "This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.")
         }
     }
 }

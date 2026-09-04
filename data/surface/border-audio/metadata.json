@@ -16,7 +16,7 @@
             "type": "int",
             "default": 3,
             "min": 0,
-            "max": 12,
+            "max": 20,
             "description": "Thickness of the coloured border (px)"
         },
         {

@@ -64,9 +64,11 @@ public:
         return m_shellSurface;
     }
 
-    /// The QQuickWindow hosting the shell's QML scene tree. Cached at
-    /// create-time to avoid repeated `shellSurface->window()` calls in
-    /// the hot per-show path.
+    /// The QQuickWindow hosting the shell's QML scene tree. Cached to avoid
+    /// repeated `shellSurface->window()` calls in the hot per-show path. Set
+    /// at create-time and re-read from the surface on every cached-live
+    /// `ShellHost::ensureShell`, so a future Surface that swapped its window
+    /// across a transport reattach would not strand a stale one here.
     QQuickWindow* shellWindow() const
     {
         return m_shellWindow;
@@ -93,6 +95,11 @@ public:
 
 private:
     friend class ShellHost;
+    /// Raw, not QPointer, and the host nulls them explicitly in
+    /// `ShellHost::destroyShell`. That is the whole ownership story, so the
+    /// consumer owes the host one rule: a Surface handed to the SurfaceFactory
+    /// must not be destroyed behind the host's back. Route every teardown
+    /// through destroyShell / removeState, and the fields can never be stale.
     PhosphorLayer::Surface* m_shellSurface = nullptr;
     QQuickWindow* m_shellWindow = nullptr;
     QScreen* m_physScreen = nullptr;

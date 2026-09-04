@@ -92,11 +92,17 @@ public:
     /// effect itself authored (TilingHandler::demoteMaximizeForSnapPlacement):
     /// stamps the window not-fully-maximized so the demote's committed
     /// Wayland echo reads as no-edge in the maximize lambda instead of
-    /// replaying a WindowMaximize morph over the snap-in leg, and drops any
+    /// replaying a placeOut morph over the batch's placeIn leg, and drops any
     /// pending morph a just-prior genuine edge armed so the zone-rect commit
     /// cannot complete it through the geometry hook.
     void noteMaximizeDemotedForSnap(KWin::EffectWindow* w)
     {
+        // Null-guarded like every sibling in this family. A null key would
+        // insert an entry no sweep can ever reach, since every remover is
+        // keyed by a live window.
+        if (!w) {
+            return;
+        }
         m_lastFullyMaximized.insert(w, false);
         m_pendingMaximizeMorph.remove(w);
     }
@@ -349,12 +355,12 @@ public:
     // → ResolvedActions assembly) per visible window per frame —
     // paying 2× the cost the cascade was designed for.
     //
-    // Cache layout:
-    //   `m_frameOpacityComputed.contains(w)` → "lookup already done this
-    //                                           frame"; value is the
-    //                                           resolved std::optional<qreal>
-    //                                           (nullopt = no SetOpacity
-    //                                           rule matched).
+    // Cache layout: ONE map, `m_frameOpacityCache`, where PRESENCE of the key
+    // means "lookup already done this frame" and the value is the resolved
+    // std::optional<qreal> (nullopt = no SetOpacity rule matched). The
+    // presence/value split is what lets a no-match be cached as cheaply as a
+    // match, which is the common case and the one the per-frame cost is paid
+    // for.
     //
     // Lifetime: populated by prePaintWindow's resolve, consumed by
     // paintWindow's resolve, cleared at postPaintScreen so the next frame

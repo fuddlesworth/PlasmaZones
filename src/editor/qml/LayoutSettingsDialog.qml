@@ -181,7 +181,7 @@ Kirigami.Dialog {
                     id: zonePaddingSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.zonePaddingMax
                     value: root.editorController ? root.editorController.gaps.globalZonePadding : 0
                     enabled: zonePaddingOverrideCheck.checked
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
@@ -219,7 +219,7 @@ Kirigami.Dialog {
                     id: outerGapSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.outerGapMax
                     value: root.editorController ? root.editorController.gaps.globalOuterGap : 0
                     enabled: outerGapOverrideCheck.checked
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
@@ -282,7 +282,7 @@ Kirigami.Dialog {
                     id: perSideTopSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.outerGapMax
                     value: root.editorController ? (root.editorController.gaps.outerGapTop >= 0 ? root.editorController.gaps.outerGapTop : root.editorController.gaps.globalOuterGapTop) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Top edge gap override")
@@ -304,7 +304,7 @@ Kirigami.Dialog {
                     id: perSideBottomSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.outerGapMax
                     value: root.editorController ? (root.editorController.gaps.outerGapBottom >= 0 ? root.editorController.gaps.outerGapBottom : root.editorController.gaps.globalOuterGapBottom) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Bottom edge gap override")
@@ -326,7 +326,7 @@ Kirigami.Dialog {
                     id: perSideLeftSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.outerGapMax
                     value: root.editorController ? (root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Left edge gap override")
@@ -348,7 +348,7 @@ Kirigami.Dialog {
                     id: perSideRightSpin
 
                     from: 0
-                    to: 100
+                    to: root.editorController.gaps.outerGapMax
                     value: root.editorController ? (root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Right edge gap override")

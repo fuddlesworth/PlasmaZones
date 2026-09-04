@@ -704,8 +704,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // Capture the just-installed transition's generation so the deferred
     // teardown bails if a successor has replaced us by the time the timer
     // fires. Without this, two events overlapping on the same window
-    // (window.move during window.snapIn, window.focus interrupting
-    // window.maximize) leave a stale timer that tears down the SUCCESSOR
+    // (window.move during placeIn, window.focus interrupting placeOut)
+    // leave a stale timer that tears down the SUCCESSOR
     // when its own timer hasn't fired yet.
     scheduleShaderTransitionTeardown(window, transition->generation, effectiveDurationMs);
 }

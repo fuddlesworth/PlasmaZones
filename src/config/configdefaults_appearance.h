@@ -131,7 +131,7 @@ public:
     }
     static constexpr int borderWidthMax()
     {
-        return 10;
+        return ::PhosphorZones::ZoneDefaults::BorderWidthMax;
     }
     static int borderRadius()
     {
@@ -143,7 +143,7 @@ public:
     }
     static constexpr int borderRadiusMax()
     {
-        return 50;
+        return ::PhosphorZones::ZoneDefaults::BorderRadiusMax;
     }
     static QString labelFontFamily()
     {

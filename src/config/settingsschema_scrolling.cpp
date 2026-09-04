@@ -144,6 +144,18 @@ static_assert(ConfigDefaults::scrollingStripAxisHorizontal()
 // hold could never resolve.
 static_assert(ConfigDefaults::scrollingPresetIndexMax() == SchemaValidators::kMaxPresetEntries - 1,
               "scrollingPresetIndexMax drifted from the preset-list length cap in settingsschema_p.h");
+// The config layer's proportion FLOOR is hand-mirrored from the engine's own
+// (ScrollTypes.h), which the config headers cannot include: the KWin effect
+// includes those headers but does not link PhosphorScrollEngine. This
+// translation unit does see both, so the pair is pinned here. The engine keeps
+// the height floor as its own constant deliberately, so it gets its own
+// assertion — note the CONFIG side currently delegates height to width, so a
+// height-only retune of the engine needs a config-side split first.
+static_assert(ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+                  == PhosphorScrollEngine::MinColumnWidthFraction,
+              "Config and engine disagree on the minimum column-width fraction");
+static_assert(ConfigDefaults::scrollingWindowHeightProportionMin() == PhosphorScrollEngine::MinWindowHeightFraction,
+              "Config and engine disagree on the minimum window-height fraction");
 
 // ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
@@ -657,9 +669,12 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Grows the focused window within its column by the configured step.")},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused window within its column by the configured step.")},
-        {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString,
-         QStringLiteral("Clears manual window sizes in the focused column so its windows share the column's space "
-                        "evenly.")},
+        {CD::maximizeWindowHeightKey(), CD::scrollingMaximizeWindowHeightShortcut(), QMetaType::QString,
+         QStringLiteral("Toggles the focused window between filling its column and the height it had before, or an "
+                        "even share with the other windows there if it had none.")},
+        {CD::expandWindowKey(), CD::scrollingExpandWindowShortcut(), QMetaType::QString,
+         QStringLiteral("Grows the focused window to fill the empty space left in its column. The other windows there "
+                        "keep their size.")},
         {CD::centerVisibleColumnsKey(), CD::scrollingCenterVisibleColumnsShortcut(), QMetaType::QString,
          QStringLiteral("Scrolls the view so the fully visible columns sit centered as a group.")},
         {CD::focusWindowTopKey(), CD::scrollingFocusWindowTopShortcut(), QMetaType::QString,
@@ -692,6 +707,10 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
                         "are left alone.")},
         {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused column to the smallest size preset.")},
+        {CD::equalizeWindowHeightsKey(), CD::scrollingEqualizeWindowHeightsShortcut(), QMetaType::QString,
+         QStringLiteral("Gives every window in the focused column an equal share of it.")},
+        {CD::minimizeWindowHeightKey(), CD::scrollingMinimizeWindowHeightShortcut(), QMetaType::QString,
+         QStringLiteral("Shrinks the focused window to the smallest size preset.")},
     };
 }
 

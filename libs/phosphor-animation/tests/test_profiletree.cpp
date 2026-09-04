@@ -68,8 +68,8 @@ private Q_SLOTS:
     {
         QCOMPARE(PP::eventClassForPath(PP::WindowMove), PP::EventClassMove);
         QCOMPARE(PP::eventClassForPath(PP::WindowMovement), PP::EventClassGeometry);
-        QCOMPARE(PP::eventClassForPath(PP::WindowSnapIn), PP::EventClassGeometry);
-        QCOMPARE(PP::eventClassForPath(PP::WindowMaximize), PP::EventClassGeometry);
+        QCOMPARE(PP::eventClassForPath(PP::WindowPlaceIn), PP::EventClassGeometry);
+        QCOMPARE(PP::eventClassForPath(PP::WindowPlaceOut), PP::EventClassGeometry);
     }
 
     // The strip classifier underpins the scrolling opt-in policy: the
@@ -195,11 +195,11 @@ private Q_SLOTS:
     /// addition that silently defaulted either way would either hand a new
     /// event a rule tier it cannot use or hide one that works. Failing here
     /// forces the author to make the call.
-    void testEventPathResolvesPerWindowIsExactlyTheTenLiveLegs()
+    void testEventPathResolvesPerWindowIsExactlyTheNineLiveLegs()
     {
         const QStringList expected{
-            PP::WindowOpen, PP::WindowClose,  PP::WindowMinimize, PP::WindowFocus,        PP::WindowMaximize,
-            PP::WindowMove, PP::WindowSnapIn, PP::WindowSnapOut,  PP::WindowLayoutSwitch, PP::ScrollingTabSwitch,
+            PP::WindowOpen,    PP::WindowClose,    PP::WindowMinimize,     PP::WindowFocus,        PP::WindowMove,
+            PP::WindowPlaceIn, PP::WindowPlaceOut, PP::WindowLayoutSwitch, PP::ScrollingTabSwitch,
         };
 
         QStringList actual;
@@ -222,7 +222,9 @@ private Q_SLOTS:
         // the taxonomy's size means any addition fails one of the two, which is
         // what forces the author to decide which side the new path belongs on.
         // Bump this deliberately, together with that decision.
-        QCOMPARE(PP::allBuiltInPaths().size(), qsizetype(76));
+        // 76 -> 75 at schema v7: window.movement.maximize retired into the
+        // placement nodes (its per-window side moved with them).
+        QCOMPARE(PP::allBuiltInPaths().size(), qsizetype(75));
 
         // The near misses that make the boundary a real decision rather than a
         // family rule: tabSwitch is per-window while its own sibling is not,
@@ -286,12 +288,16 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::EditorSnapIn));
         QVERIFY(paths.contains(PP::EditorSnapOut));
         QVERIFY(paths.contains(PP::EditorSnapResize));
-        // Window snap family (kwin-effect window-quad animations). There are
-        // deliberately NO resize paths — window.movement.resize and
-        // window.movement.snapResize were dropped from the taxonomy.
-        QVERIFY(paths.contains(PP::WindowSnapIn));
-        QVERIFY(paths.contains(PP::WindowSnapOut));
+        // Window placement family (kwin-effect window-quad animations). There
+        // are deliberately NO resize paths — window.movement.resize and
+        // window.movement.snapResize were dropped from the taxonomy — and no
+        // maximize path: the native maximize rides placeIn / placeOut.
+        QVERIFY(paths.contains(PP::WindowPlaceIn));
+        QVERIFY(paths.contains(PP::WindowPlaceOut));
         QVERIFY(paths.contains(PP::WindowLayoutSwitch));
+        QVERIFY(!paths.contains(QStringLiteral("window.movement.maximize")));
+        QVERIFY(!paths.contains(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(!paths.contains(QStringLiteral("window.movement.snapOut")));
         QVERIFY(!paths.contains(QStringLiteral("window.movement.resize")));
         QVERIFY(!paths.contains(QStringLiteral("window.movement.snapResize")));
         // Widget zone-rect highlight family.
@@ -435,7 +441,7 @@ private Q_SLOTS:
     // WindowAnimator and needs only the per-event OVERRIDES layered on top —
     // NOT the tree's own baseline. This is the movement-duration regression:
     // a `window.movement` "All" override (curve + duration) must reach a
-    // `window.movement.snapIn` geometry animation.
+    // `window.movement.placeIn` geometry animation.
     void testOverlayChainOntoAppliesMovementAllToLeaf()
     {
         ProfileTree tree;
@@ -457,7 +463,7 @@ private Q_SLOTS:
         animatorGlobal.duration = 300.0;
         animatorGlobal.curve = std::make_shared<Easing>();
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         // Both axes come from the movement "All" node, NOT the tree baseline
         // and NOT the caller's global.
         QCOMPARE(*composed.duration, 500.0);
@@ -568,13 +574,13 @@ private Q_SLOTS:
 
         Profile leaf;
         leaf.duration = 80.0; // leaf wins on duration
-        tree.setOverride(PP::WindowSnapIn, leaf);
+        tree.setOverride(PP::WindowPlaceIn, leaf);
 
         Profile animatorGlobal;
         animatorGlobal.duration = 300.0;
         animatorGlobal.minDistance = 25; // set by nobody in the chain
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QCOMPARE(*composed.duration, 80.0); // leaf
         QCOMPARE(*composed.staggerInterval, 60); // parent "All"
         QCOMPARE(*composed.minDistance, 25); // untouched caller base
@@ -588,13 +594,13 @@ private Q_SLOTS:
 
         Profile leaf;
         leaf.duration = 80.0;
-        tree.setOverride(PP::WindowSnapIn, leaf); // only the leaf, no "All"
+        tree.setOverride(PP::WindowPlaceIn, leaf); // only the leaf, no "All"
 
         Profile animatorGlobal;
         animatorGlobal.duration = 300.0;
         animatorGlobal.staggerInterval = 40; // untouched by the leaf
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QCOMPARE(*composed.duration, 80.0); // leaf
         QCOMPARE(*composed.staggerInterval, 40); // base
     }
@@ -621,7 +627,7 @@ private Q_SLOTS:
         animatorGlobal.duration = 300.0;
         animatorGlobal.curve = std::make_shared<Easing>();
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QVERIFY(composed.curve != nullptr);
         QCOMPARE(composed.curve->typeId(), QStringLiteral("spring")); // the override's curve
         QCOMPARE(*composed.duration, 300.0); // the caller's base, NOT the library default
@@ -641,7 +647,7 @@ private Q_SLOTS:
         Profile animatorGlobal;
         animatorGlobal.duration = 300.0; // kept — no override touches it
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QCOMPARE(*composed.presetName, QStringLiteral("snappy"));
         QCOMPARE(*composed.sequenceMode, SequenceMode::Cascade);
         QCOMPARE(*composed.duration, 300.0); // base
@@ -667,7 +673,7 @@ private Q_SLOTS:
         animatorGlobal.staggerInterval = 40;
 
         // Baseline ignored: the caller's base survives untouched.
-        const Profile noOverride = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile noOverride = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QVERIFY(noOverride == animatorGlobal);
 
         // An override AT `global` is part of the chain and does apply.
@@ -675,7 +681,7 @@ private Q_SLOTS:
         globalOverride.duration = 700.0;
         tree.setOverride(PP::Global, globalOverride);
 
-        const Profile withGlobal = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile withGlobal = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QCOMPARE(*withGlobal.duration, 700.0); // from the `global` override
         QCOMPARE(*withGlobal.staggerInterval, 40); // still the caller's base, not the baseline's 99
     }
@@ -696,7 +702,7 @@ private Q_SLOTS:
         animatorGlobal.duration = 300.0;
         animatorGlobal.curve = std::make_shared<Easing>();
 
-        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        const Profile composed = tree.overlayChainOnto(PP::WindowPlaceIn, animatorGlobal);
         QVERIFY(composed == animatorGlobal);
     }
 
@@ -771,14 +777,14 @@ private Q_SLOTS:
 
         Profile p;
         p.duration = 400.0;
-        tree.setOverride(PP::WindowSnapIn, p);
+        tree.setOverride(PP::WindowPlaceIn, p);
         QVERIFY(tree.hasAnyOverride());
         QCOMPARE(tree.hasAnyOverride(), !tree.overriddenPaths().isEmpty()); // agrees with the slow form
 
-        tree.clearOverride(PP::WindowSnapIn);
+        tree.clearOverride(PP::WindowPlaceIn);
         QVERIFY(!tree.hasAnyOverride());
 
-        tree.setOverride(PP::WindowSnapIn, p);
+        tree.setOverride(PP::WindowPlaceIn, p);
         tree.setOverride(PP::Osd, p);
         tree.clearAllOverrides();
         QVERIFY(!tree.hasAnyOverride());

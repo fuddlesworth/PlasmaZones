@@ -81,10 +81,10 @@ private Q_SLOTS:
 
         // Every card the page binds is in scope, including the movement parent
         // and the .move leaf it shows alongside it (no carve-out here).
-        // window.movement.maximize rides the parent card, as intended.
+        // window.movement.placeIn rides the parent card, as intended.
         for (const auto* path :
              {"window.appearance.open", "window.appearance.close", "window.appearance.minimize", "window.movement",
-              "window.movement.move", "window.movement.maximize", "desktop.switch"}) {
+              "window.movement.move", "window.movement.placeIn", "desktop.switch"}) {
             QVERIFY2(animationPathInScope(QLatin1String(path), simple), path);
         }
 
@@ -170,13 +170,13 @@ private Q_SLOTS:
         QCOMPARE(motion.exclude, QStringList{QStringLiteral("window.movement.move")});
 
         QVERIFY(animationPathInScope(QStringLiteral("window.movement"), motion));
-        QVERIFY(animationPathInScope(QStringLiteral("window.movement.maximize"), motion));
-        QVERIFY(animationPathInScope(QStringLiteral("window.movement.snapIn"), motion));
+        QVERIFY(animationPathInScope(QStringLiteral("window.movement.placeOut"), motion));
+        QVERIFY(animationPathInScope(QStringLiteral("window.movement.placeIn"), motion));
         QVERIFY(!animationPathInScope(QStringLiteral("window.movement.move"), motion));
 
         const AnimationPageScope dragging = animationPageScope(QStringLiteral("animations-window-dragging"));
         QVERIFY(animationPathInScope(QStringLiteral("window.movement.move"), dragging));
-        QVERIFY(!animationPathInScope(QStringLiteral("window.movement.maximize"), dragging));
+        QVERIFY(!animationPathInScope(QStringLiteral("window.movement.placeOut"), dragging));
         // The parent itself belongs to Motion, never to Dragging.
         QVERIFY(!animationPathInScope(QStringLiteral("window.movement"), dragging));
     }
@@ -187,7 +187,7 @@ private Q_SLOTS:
         // bare startsWith without the dot separator would leak it in.
         const QStringList roots{QStringLiteral("window.movement")};
         QVERIFY(animationPathUnderAny(QStringLiteral("window.movement"), roots));
-        QVERIFY(animationPathUnderAny(QStringLiteral("window.movement.snapIn"), roots));
+        QVERIFY(animationPathUnderAny(QStringLiteral("window.movement.placeIn"), roots));
         QVERIFY(!animationPathUnderAny(QStringLiteral("window.movementX"), roots));
         QVERIFY(!animationPathUnderAny(QStringLiteral("window.appearance.open"), roots));
         QVERIFY(!animationPathUnderAny(QStringLiteral("window.movement"), QStringList{}));
@@ -198,7 +198,7 @@ private Q_SLOTS:
         const QStringList motion =
             animationScopedBuiltInPaths(animationPageScope(QStringLiteral("animations-window-motion")));
         QVERIFY(!motion.isEmpty());
-        QVERIFY(motion.contains(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(motion.contains(QStringLiteral("window.movement.placeIn")));
         QVERIFY(!motion.contains(QStringLiteral("window.movement.move")));
         for (const QString& path : motion) {
             QVERIFY2(path.startsWith(QStringLiteral("window.movement")), qPrintable(path));
@@ -229,7 +229,7 @@ private Q_SLOTS:
                                        animationPageScope(QStringLiteral("animations-window-dragging"))));
 
         // An edit INSIDE the scope does register.
-        current.setOverride(QStringLiteral("window.movement.snapIn"), effectProfile(QStringLiteral("slide")));
+        current.setOverride(QStringLiteral("window.movement.placeIn"), effectProfile(QStringLiteral("slide")));
         QVERIFY(shaderTreeScopeDiffers(current, baseline, motion));
     }
 
@@ -240,7 +240,7 @@ private Q_SLOTS:
         // otherwise a cleared override would read as clean.
         const AnimationPageScope motion = animationPageScope(QStringLiteral("animations-window-motion"));
         ShaderProfileTree baseline;
-        baseline.setOverride(QStringLiteral("window.movement.snapIn"), effectProfile(QStringLiteral("slide")));
+        baseline.setOverride(QStringLiteral("window.movement.placeIn"), effectProfile(QStringLiteral("slide")));
         const ShaderProfileTree current;
         QVERIFY(shaderTreeScopeDiffers(current, baseline, motion));
     }
@@ -259,7 +259,7 @@ private Q_SLOTS:
         QVERIFY(animationScopedBuiltInPaths(whole).isEmpty());
 
         ShaderProfileTree current;
-        current.setOverride(QStringLiteral("window.movement.snapIn"), effectProfile(QStringLiteral("slide")));
+        current.setOverride(QStringLiteral("window.movement.placeIn"), effectProfile(QStringLiteral("slide")));
         const ShaderProfileTree baseline;
         // Trees plainly differ, yet a WholeTree scope reports no difference.
         QVERIFY(!shaderTreeScopeDiffers(current, baseline, whole));

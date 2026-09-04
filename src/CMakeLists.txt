@@ -134,6 +134,7 @@ set(plasmazones_core_SRCS
     config/configmigration_v4finalize.cpp
     config/configmigration_v5.cpp
     config/configmigration_v6.cpp
+    config/configmigration_v7.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp

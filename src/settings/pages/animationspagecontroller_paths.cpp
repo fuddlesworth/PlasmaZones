@@ -192,6 +192,12 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("slow")) {
         return PhosphorI18n::tr("Slow", "animation event or section");
     }
+    if (segment == QLatin1String("placeIn")) {
+        return PhosphorI18n::tr("Placed", "animation event or section");
+    }
+    if (segment == QLatin1String("placeOut")) {
+        return PhosphorI18n::tr("Released", "animation event or section");
+    }
     if (segment == QLatin1String("snapAssist")) {
         return PhosphorI18n::tr("Snap Assist", "animation event or section");
     }

@@ -58,6 +58,10 @@ QJsonObject baseDefaults()
         {QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 1}, {QStringLiteral("k2"), QStringLiteral("x")}}},
         {QStringLiteral("GroupB"), QJsonObject{{QStringLiteral("b"), false}}},
         {QStringLiteral("Rendering"), QJsonObject{{QStringLiteral("Gpu"), QStringLiteral("auto")}}},
+        // Animations.ShaderProfileTree is declared for the same reason: the
+        // migrated-delta filter keeps only schema-declared keys, so the v6→v7
+        // profile test would silently pass on a dropped blob without it.
+        {QStringLiteral("Animations"), QJsonObject{{QStringLiteral("ShaderProfileTree"), QJsonObject()}}},
         {QStringLiteral("_version"), 5},
     };
 }
@@ -647,7 +651,9 @@ private Q_SLOTS:
     /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        QCOMPARE(ConfigSchemaVersion, 6);
+        // v7 qualifies: migrateV6ToV7 rewrites only the Animations group's
+        // ShaderProfileTree blob in place (see olderProfileFileV6RenamesPlacementNodes).
+        QCOMPARE(ConfigSchemaVersion, 7);
     }
 
     /// A profile file stamped v5 whose delta carries the old zone-colour
@@ -742,6 +748,42 @@ private Q_SLOTS:
         // delta's version key after migrating. This pins the seed's stamp,
         // not the migration.
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
+    /// A profile file stamped v6 whose delta carries a shader override on a
+    /// retired placement node loads through migrateV6ToV7: the override is
+    /// served under its v7 path with its profile intact.
+    void olderProfileFileV6RenamesPlacementNodes()
+    {
+        const QUuid id = QUuid::createUuid();
+        QJsonObject profile;
+        profile.insert(QStringLiteral("effectId"), QStringLiteral("slide"));
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.movement.snapIn"));
+        entry.insert(QStringLiteral("profile"), profile);
+        QJsonObject tree;
+        tree.insert(QStringLiteral("baseline"), QJsonObject());
+        tree.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        QJsonObject animations;
+        animations.insert(QStringLiteral("ShaderProfileTree"), tree);
+        QJsonObject delta;
+        delta.insert(QStringLiteral("Animations"), animations);
+        QVERIFY(writeProfileFileFixture(id, 6, delta));
+
+        ProfileStore store(makeCurrentVersionConfig());
+        QCOMPARE(store.availableProfiles().size(), 1);
+        QVERIFY(store.activateProfile(id.toString()));
+        const QJsonArray overrides = m_lastApplied.value(QStringLiteral("Animations"))
+                                         .toObject()
+                                         .value(QStringLiteral("ShaderProfileTree"))
+                                         .toObject()
+                                         .value(QStringLiteral("overrides"))
+                                         .toArray();
+        QCOMPARE(overrides.size(), 1);
+        const QJsonObject served = overrides.first().toObject();
+        QCOMPARE(served.value(QStringLiteral("path")).toString(), QStringLiteral("window.movement.placeIn"));
+        QCOMPARE(served.value(QStringLiteral("profile")).toObject().value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("slide"));
     }
 
     /// The version guards around the forward migration: a file older than

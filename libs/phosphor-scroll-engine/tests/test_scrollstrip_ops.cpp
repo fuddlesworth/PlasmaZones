@@ -77,7 +77,8 @@ private Q_SLOTS:
     void maximizeColumnToggle();
     void expandToAvailableWidth();
     void windowHeights();
-    void heightAdjustAndReset();
+    void heightAdjustAndEqualize();
+    void heightMaximizeMinimizeAndExpand();
     void tabbedColumnLayout();
     void tabbedColumnBehavesLikeNormalStructurally();
     void reconcileAppResize();
@@ -228,7 +229,7 @@ void TestScrollStripOps::widthPresetCycling()
     ScrollStrip strip;
     // Value-anchored preset intent: the anchor is the picked FRACTION and
     // cycling steps between vocabulary entries by value (the default list is
-    // 1/3, 1/2, 2/3).
+    // 1/3, 1/2, 2/3, 3/4, 1).
     const QList<qreal>& presets = params.presetColumnWidths;
     QVERIFY(
         strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(presets.at(1)), ColumnDisplay::Normal, params));
@@ -239,13 +240,13 @@ void TestScrollStripOps::widthPresetCycling()
     // suite's results rather than failing this one test.
     QVERIFY(strip.activeColumn());
 
-    // Anchor 1/2 → cycle forward → 2/3 → wraps to 1/3 → back to 2/3.
+    // Anchor 1/2 → cycle forward → 2/3 → 3/4 → back to 2/3.
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
-    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(3));
     QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
@@ -274,11 +275,20 @@ void TestScrollStripOps::widthPresetCycling()
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
 
     // Both ends WRAP rather than dead-ending: nothing is wider than the
-    // widest preset, so a forward press from it lands on the narrowest.
-    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makePreset(presets.at(2))));
+    // widest preset (the full width), so a forward press from it lands on
+    // the narrowest.
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makePreset(presets.last())));
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
+
+    // The mirror of that wrap: nothing is narrower than the narrowest entry,
+    // so a backward press from it lands on the widest. Covers the direction
+    // the forward case above cannot, and pins the full-width entry as the
+    // widest rather than assuming the list's order.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
+    QVERIFY(strip.activeColumn());
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.last());
 }
 
 void TestScrollStripOps::widthAdjustByPercent()
@@ -442,9 +452,17 @@ void TestScrollStripOps::windowHeights()
     QCOMPARE(presetPx, 530);
     // a absorbs the remainder.
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - presetPx);
+
+    // One more forward press reaches the three-quarters entry, the stop the
+    // widened vocabulary added between 2/3 and full. Literal again: 3/4 of the
+    // gap-aware 810 span is 608 (rounded), minus the 10px gap = 598.
+    QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 598);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 598);
 }
 
-void TestScrollStripOps::heightAdjustAndReset()
+void TestScrollStripOps::heightAdjustAndEqualize()
 {
     const auto params = defaultParams();
     ScrollStrip strip;
@@ -456,11 +474,74 @@ void TestScrollStripOps::heightAdjustAndReset()
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 475);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 475);
 
-    QVERIFY(strip.resetActiveColumnHeights());
+    QVERIFY(strip.equalizeActiveColumnHeights());
     r = strip.relayout(params);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 395);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 395);
-    QVERIFY(!strip.resetActiveColumnHeights()); // already even
+    QVERIFY(!strip.equalizeActiveColumnHeights()); // already even
+}
+
+void TestScrollStripOps::heightMaximizeMinimizeAndExpand()
+{
+    const auto params = defaultParams();
+    // Cross budget: the 800px cross extent less the one 10px inner gap the
+    // two-tile stack spends, so 790, and the even split is 395 each.
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // ── Maximize ──
+    // b takes the whole budget as Fixed(790). It cannot RENDER at 790: the
+    // Auto sibling keeps a one-pixel floor, so the Fixed/Preset budget is
+    // 789 and b is renormalized down to it. That gap between intent and
+    // pixels is exactly why the toggle tests the intent too.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 789);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 1);
+
+    // The second press must UN-maximize even though b renders a pixel short
+    // of the budget. On a pixel-only test this press would maximize again,
+    // forever.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 395);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 395);
+
+    // ── Minimize ──
+    // The smallest preset is 1/3, which resolves the way relayout resolves a
+    // Preset: 1/3 of the gap-aware 810 span is 270, less the 10px gap = 260.
+    QVERIFY(strip.minimizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 260);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 260);
+    // Already there: the second press refuses rather than reporting a no-op
+    // as success, its width twin's rule.
+    QVERIFY(!strip.minimizeActiveWindowHeight(params));
+
+    // ── Grow into empty space ──
+    // Refused while a sibling is AUTO. The Auto tile is resolved as a weighted
+    // share of whatever the fixed tiles leave, so the column's tiles already
+    // sum to the whole budget and the leftover test finds nothing to claim.
+    QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
+
+    // With BOTH tiles at the smallest preset the column leaves
+    // 790 - (260 + 260) = 270 empty, and the verb claims all of it. The gap is
+    // NOT subtracted here: the budget activeColumnCrossBudgetPx answers has
+    // already paid for it, and relayout keeps the gaps outside the tile rects.
+    QVERIFY(strip.setWindowHeightIntent(QStringLiteral("a"), WindowHeight::makePreset(1.0 / 3.0)));
+    QVERIFY(strip.expandActiveWindowToAvailableHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 530);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 260);
+    // Spelled out rather than left to the two literals above: grown + sibling
+    // + the one inner gap is the whole cross extent, so nothing is stranded.
+    // The 530 is what actually catches a gap counted on both sides; this line
+    // says why 530 is the right number.
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))) + Ax::crossLen(rectOf(r, QStringLiteral("a"))) + params.gap,
+             Ax::crossLen(params.workArea));
+    // Nothing left over now.
+    QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
 }
 
 void TestScrollStripOps::tabbedColumnLayout()
@@ -649,21 +730,30 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     const Column& col = strip.columns().at(0);
     QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Fixed);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 300);
-    // Reset returns the lone tile to Auto and the column's full cross extent.
-    QVERIFY(strip.resetActiveColumnHeights());
+    // Equalize returns the lone tile to Auto and the column's full cross extent.
+    QVERIFY(strip.equalizeActiveColumnHeights());
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 800);
     // The height verbs work on a lone tile too (the old refusal spammed a
     // failure OSD per press): shrink by 10% of the 800px cross extent.
     QVERIFY(strip.adjustActiveWindowHeight(-10.0, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 720);
-    // Preset cycle from 720px: no preset is TALLER than that (the tallest,
-    // 2/3 of the gap-aware 810 span, is 530), so the forward press wraps to
-    // the narrowest entry — 1/3 of that span is 270, minus the 10px gap.
+    // Preset cycle from 720px: the nearest TALLER preset is the full-height
+    // entry (the gap-aware 810 span minus the 10px gap), not 3/4, which
+    // resolves below 720. THIS assertion is what pins the five-entry
+    // vocabulary: under the old three-entry list nothing is taller than 720,
+    // so the press would wrap to the shortest entry instead. Do not relax it.
+    QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 800);
+    // ...and it is the PRESET entry that was recorded, not a fall back to Auto,
+    // which would resolve to the same 800 on a lone tile.
+    QCOMPARE(strip.columns().at(0).tiles.at(0).height.kind, WindowHeight::Preset);
+    // Nothing is taller than the full entry, so the next forward press wraps
+    // to the shortest one — 1/3 of that span is 270, minus the 10px gap.
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 260);
     // And back down from 260 wraps the other way, to the tallest entry.
     QVERIFY(strip.cycleActiveWindowPresetHeight(-1, params));
-    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 530);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 800);
 }
 
 void TestScrollStripOps::degenerateWorkAreaNeverAsserts()

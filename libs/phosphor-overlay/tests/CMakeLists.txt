@@ -12,6 +12,13 @@ add_executable(test_overlay_smoke
     test_overlay_smoke.cpp
 )
 
+# Reuse the in-tree phosphor-layer test mocks, so the syncSurfaceState cases
+# can drive a real PhosphorLayer::Surface over a recording transport instead
+# of needing a live Wayland connection.
+target_include_directories(test_overlay_smoke
+    PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-layer/tests
+)
+
 target_link_libraries(test_overlay_smoke
     PRIVATE
         PhosphorOverlay::PhosphorOverlay

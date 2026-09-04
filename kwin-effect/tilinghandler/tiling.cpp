@@ -325,7 +325,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                     // Re-seed the tracked screen: the comment above names
                     // the exact precondition (the restored rect may lie in
                     // a different virtual screen than the tiled rect), the
@@ -409,37 +409,39 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
-        if (indices.size() <= 1) {
+        // == 1, not <= 1: the map is append-only, so a bucket that exists has
+        // at least one index and the two tests are the same test. It was
+        // written as a <= 1 outer with an == 1 inner, which read as if an empty
+        // bucket were reachable.
+        if (indices.size() == 1) {
             // No candidates.size() > 1 term: the map only admits entries with
             // a non-empty candidate vector, and Entry::candidates is only ever
             // assigned when that vector already has more than one element, so
             // the test could never be false here.
-            if (indices.size() == 1) {
-                Entry& e = entries[indices[0]];
-                QPoint targetCenter = e.geometry.center();
-                KWin::EffectWindow* best = nullptr;
-                qreal bestDist = 1e9;
-                for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
-                    if (claimedByExact.contains(c)) {
-                        continue;
-                    }
-                    QPointF cf = c->frameGeometry().center();
-                    qreal d = QPointF(targetCenter - cf).manhattanLength();
-                    if (d < bestDist) {
-                        bestDist = d;
-                        best = c;
-                    }
+            Entry& e = entries[indices[0]];
+            QPoint targetCenter = e.geometry.center();
+            KWin::EffectWindow* best = nullptr;
+            qreal bestDist = 1e9;
+            for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
+                if (claimedByExact.contains(c)) {
+                    continue;
                 }
-                if (best) {
-                    e.window = best;
-                } else {
-                    // Every candidate was claimed by an exact entry: the drop
-                    // is correct (the alternative is a double-apply) but must
-                    // not be silent — this is the "window never tiled" outcome
-                    // the claimed-set diagnostics exist to surface.
-                    qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
-                                        << "claimed by exact entries — dropping";
+                QPointF cf = c->frameGeometry().center();
+                qreal d = QPointF(targetCenter - cf).manhattanLength();
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = c;
                 }
+            }
+            if (best) {
+                e.window = best;
+            } else {
+                // Every candidate was claimed by an exact entry: the drop
+                // is correct (the alternative is a double-apply) but must
+                // not be silent — this is the "window never tiled" outcome
+                // the claimed-set diagnostics exist to surface.
+                qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
+                                    << "claimed by exact entries — dropping";
             }
             continue;
         }
@@ -1813,6 +1815,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // skip has the same shape in the other direction: it takes
             // membership without calling maximize().
             bool maximizeBitWrittenThisBatch = false;
+            // DIRECTION of that write, for the placement node the geometry
+            // apply below rides. Written only on the Release arm, so it is
+            // false for the Apply arm and for every batch that touched no
+            // maximize bit at all.
+            bool maximizeBitReleasedThisBatch = false;
             if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
@@ -1889,6 +1896,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
                     maximizeBitWrittenThisBatch = releaseMaximizedToEdges(snap.windowId, snap.window);
+                    maximizeBitReleasedThisBatch = maximizeBitWrittenThisBatch;
                 }
             }
 
@@ -1901,13 +1909,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // for a bit the effect never set, and later hands back a
                     // maximize it never owned.
                     const bool wasAlreadyMaximized = (kw->requestedMaximizeMode() == KWin::MaximizeFull);
-                    // RAII rather than a bare ++/--, the last hand-rolled copy
-                    // of this bracket in the file. The counter's own contract
-                    // note spells out why it matters: leak one increment and
-                    // isSuppressingMaximizeChanged() stays true for the
-                    // session, so the interception never fires again. Nothing
-                    // returns between the two today, which is exactly what
-                    // makes an added early return a silent, permanent break.
+                    // SUPPRESSION HELD ACROSS THE WHOLE ARM, not merely across
+                    // the maximize write inside applyMaximizeSuppressed below.
+                    // The bracket this replaces was a hand-rolled ++/-- with a
+                    // qScopeGuard declared here, so it spanned the membership
+                    // insert, the departure-rect read and the terminal geometry
+                    // apply as well; narrowing it to the write alone would let
+                    // anything that apply emits reach the maximize lambda
+                    // unsuppressed, and be answered there as a user's request:
+                    // a dispatched interception toggle, and a second shader
+                    // install over the leg this arm is placing. The counter is a
+                    // counter, so the helper's own bracket nests inside this one
+                    // harmlessly.
                     ++m_suppressMaximizeChanged;
                     const auto maxSuppressGuard = qScopeGuard([this] {
                         --m_suppressMaximizeChanged;
@@ -1924,14 +1937,27 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // bit is not yet held, so a later batch can pay it, and
                     // unmaximizeMonocleWindow is itself guarded and cannot hand
                     // back a bit it never took.
+                    //
+                    // Through applyMaximizeSuppressed rather than a hand-rolled
+                    // ++/-- around a bare maximize(), which is what this arm
+                    // used to hold. That helper owns the suppression bracket
+                    // (leak one increment and isSuppressingMaximizeChanged()
+                    // stays true for the session, so the interception never
+                    // fires again) and the requested-mode early return, so
+                    // every authored write in the tree goes through one door.
                     bool monocleBitWritten = false;
                     if (!kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
-                        kw->maximize(KWin::MaximizeFull);
+                        applyMaximizeSuppressed(kw, KWin::MaximizeFull);
                         monocleBitWritten = !wasAlreadyMaximized;
                     }
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
+                    // A batch that re-asserts monocle for this window owes it a
+                    // MAXIMIZE again, whatever a mid-drag release recorded
+                    // earlier — the engine has changed its mind inside the
+                    // gesture, and the gesture end must re-drive, not restore.
+                    m_monocleRestoreOwed.remove(snap.windowId);
                     // Same departure-rect fix the column arm takes, for the
                     // same reason and by the same mechanism. maximize() above
                     // has already moved the window to KWin's maximize area, so
@@ -1951,31 +1977,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             monocleOrigin = preMaximize;
                         }
                     }
-                    // The leg that MAXIMIZES the tile is the user's maximize
-                    // event, not a snap: it rides window.movement.maximize so
-                    // the pack assigned there plays, the same node the
-                    // KWin-native path (beginMaximizeShaderMorph) uses for an
-                    // unmanaged window. The two never double-install: on X11
-                    // the native handler skips this window under the
-                    // suppression counter (isSuppressingMaximizeChanged), and
-                    // on Wayland its later echo short-circuits onto this very
-                    // leg (window_connections.cpp spells out the absorb). A
-                    // batch that re-asserts an already-maximized monocle tile
-                    // is a plain placement and stays on snapIn.
+                    // A PLACEMENT, on the placement node, like every other
+                    // geometry this batch commits. Setting KWin's maximize bit
+                    // is how monocle gets the work-area rect, borderless
+                    // handling and a sane restore rect; it is a mechanism, not
+                    // a statement that the user maximized anything, and the node
+                    // a user assigns "Maximized" to must not play for a retile.
+                    // What the bit write DOES change is the departure rect,
+                    // anchored above at the captured pre-maximize frame when
+                    // this arm wrote it, because maximize() has already moved
+                    // the window and a leg from the live frame would animate
+                    // nothing.
                     m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
-                                                  monocleBitWritten ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                                    : PhosphorAnimation::ProfilePaths::WindowSnapIn,
-                                                  monocleOrigin);
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceIn, monocleOrigin);
                 } else {
                     m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
             } else {
                 // True only when THIS call handed KWin's maximize bit back for
-                // a window PlasmaZones itself maximized for monocle. It routes
-                // the geometry apply below onto window.movement.maximize and
-                // anchors its departure at the captured pre-restore rect, the
-                // same pairing the column Release arm gets through
+                // a window PlasmaZones itself maximized for monocle. It anchors
+                // the geometry apply below at the captured pre-restore rect, the
+                // same departure the column Release arm gets through
                 // maximizeBitWrittenThisBatch.
                 const bool monocleBitReleased = unmaximizeMonocleWindow(snap.windowId);
                 // Clear any KWin maximize state before tiling. A user-
@@ -2036,9 +2059,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // logical-geometry change of 1600x900 to 1280x720: both tiles
                 // held their stacked column rects and neither took KWin's
                 // maximize area. The engine's apply lands last and wins.
+                //
+                // The gesture pair, which this arm was the one member of its
+                // family to omit. Its three twins all carry it and all name the
+                // same failure (pretilegeometry, and both screenschanged
+                // copies): maximize() moveResizes, and the geometry apply below
+                // defers during a drag, so a batch landing mid-gesture snapped
+                // the window to its restore rect under the pointer with nothing
+                // committed behind it until the gesture ended.
+                //
+                // Skipping is a trade, not free, because this arm is not
+                // ledger-backed and nothing re-drives it at the gesture end.
+                // The condition is recomputed per entry from the live maximize
+                // mode, so the NEXT batch carrying this window pays it; a drag
+                // that changes no layout schedules no batch, and the window
+                // keeps a stray maximize bit against its tile rect until one
+                // arrives. That is the same bounded staleness the column Apply
+                // arm and both screenschanged twins already accept in writing.
                 if (KWin::Window* kw = snap.window->window(); kw && !snap.isMaximizedToEdges
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
-                    && !kw->isRequestedFullScreen()) {
+                    && !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 QRect geo = snap.geometry;
@@ -2654,9 +2694,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // only place the maximized rect still exists. It is not
                     // screen-gated, because monocle is not a scrolling-only
                     // claim; the per-iteration flag is what keeps it fresh.
-                    const bool maximizeLegThisBatch =
+                    //
+                    const bool departsFromPreMaximizeRect =
                         (maximizeBitWrittenThisBatch && isScrollingScreen(snap.screenId)) || monocleBitReleased;
-                    if (!originOverride.isValid() && maximizeLegThisBatch) {
+                    if (!originOverride.isValid() && departsFromPreMaximizeRect) {
                         const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
                         if (preMaximize.isValid() && !preMaximize.isEmpty()) {
                             originOverride = preMaximize;
@@ -2682,20 +2723,41 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         skipScrollAnimation = true;
                         originOverride = QRectF();
                     }
-                    // A leg that this iteration MADE a maximize or a restore
-                    // (column maximize-to-edges either way, monocle release)
-                    // is the user's maximize event and rides
-                    // window.movement.maximize, so the pack assigned there
-                    // plays; every other placement is a snap. This apply is the
-                    // single owner of the maximize leg: the KWin-native handler
-                    // in window_connections.cpp skips the column echo
-                    // (interceptMaximizeRequest) and the X11 monocle echo
-                    // (isSuppressingMaximizeChanged), and the Wayland monocle
-                    // echo is absorbed by the same-effect short-circuit onto
-                    // the leg installed here.
+                    // ALWAYS a placement node, never a maximize node of its own:
+                    // a window this batch maximized or restored on the way is
+                    // still a window this batch PLACED, and the retired
+                    // "Maximized" node does not come back for it. The
+                    // KWin-native path (beginMaximizeShaderMorph) is what
+                    // answers a maximize the engine had no part in.
+                    //
+                    // WHICH of the two placement legs is the direction of the
+                    // maximize bit this iteration wrote. A window growing to
+                    // the maximize area is arriving somewhere and rides
+                    // placeIn; handing the bit back is a window let go and
+                    // rides placeOut — the same pairing beginMaximizeShaderMorph
+                    // makes for the KWin-native maximize, and the reason a user
+                    // who assigns a pack to "Released" sees it play when they
+                    // un-maximize a scroll-managed tile. Both the column
+                    // release arm and the monocle release reach here; every
+                    // other placement (a plain retile, a maximize apply) is an
+                    // arrival and keeps placeIn. Same evidence the departure
+                    // rect is anchored on above, so the two cannot disagree.
+                    //
+                    // The THIRD bit-clearing site in this iteration — the
+                    // user-maximize demote near the top of this else arm, which
+                    // calls MaximizeRestore on a window carrying a maximize
+                    // this handler never claimed — deliberately does NOT count
+                    // as a release. Nothing there asked for an un-maximize: the
+                    // batch is placing the window into a tile and clearing a
+                    // stray bit that would otherwise fight the tile rect
+                    // (discussion #461), so the leg it owes is the arrival it
+                    // is. A user who un-maximizes such a window does it through
+                    // KWin, which answers on the native path with its own
+                    // placeOut.
+                    const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
-                                                  maximizeLegThisBatch ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                                       : PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                                                  releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
+                                                                    : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                                                   originOverride, visualTargetOverride);
                 }
             }

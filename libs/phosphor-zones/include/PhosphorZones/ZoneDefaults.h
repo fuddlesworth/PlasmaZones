@@ -36,6 +36,18 @@ constexpr qreal Opacity = 0.5;
 constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
+/// Ceilings for the zone-overlay border, in logical px. These are the OVERLAY
+/// bounds, deliberately distinct from the window-decoration ones in
+/// PhosphorCompositor::DecorationDefaults (width 20, radius 50): the overlay
+/// border is drawn on a transient highlight, not on a real window, and its
+/// width stays narrower. Every surface that offers the value reads these —
+/// ConfigDefaults::borderWidthMax()/borderRadiusMax() (and through them the
+/// settings schema clamp and the settings slider), the Zone setters, and the
+/// layout editor's per-zone spin boxes. The rule-side validator mirrors them
+/// as kMaxOverlayBorderWidth / kMaxOverlayBorderRadius, which phosphor-rules
+/// cannot reach from here because it does not link phosphor-zones.
+constexpr int BorderWidthMax = 10;
+constexpr int BorderRadiusMax = 50;
 
 // Zone-detection defaults.
 constexpr int AdjacentThreshold = 20; ///< Pixel distance considered "adjacent" for multi-zone span detection.
