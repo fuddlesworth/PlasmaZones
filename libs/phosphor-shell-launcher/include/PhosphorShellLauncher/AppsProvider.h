@@ -67,6 +67,10 @@ public:
 
     // How many rows a query may yield; the rest are dropped after ranking.
     // Public so a host can retune it, and so tests can pin the cap.
+    /// Retunable by a host, though no host in this repo does: the default
+    /// is what the shell ships with. Each provider carries its own,
+    /// because a launcher wants more windows in view than clipboard
+    /// entries, so there is no single number to hoist.
     void setMaximumResults(int count);
     [[nodiscard]] int maximumResults() const;
 

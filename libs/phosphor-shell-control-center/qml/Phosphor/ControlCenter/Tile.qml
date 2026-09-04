@@ -141,6 +141,10 @@ Item {
 
         readonly property color contentColor: root.active ? Theme.on_primary : Theme.on_surface
 
+        // duration_short_3, where the launcher row uses short_2 and the
+        // detail panel short_4. Not an oversight: a tile's fill is the
+        // largest colour change of the three and reads as sluggish at the
+        // row's speed, while the panel is a whole view arriving.
         Behavior on color {
             ColorAnimation {
                 duration: Motion.duration_short_3

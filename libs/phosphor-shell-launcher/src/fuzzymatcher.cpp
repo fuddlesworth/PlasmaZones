@@ -144,6 +144,16 @@ std::optional<FuzzyMatch> FuzzyMatcher::match(QStringView pattern, QStringView c
 
     // Fold case once up front. Comparing folded copies is cheaper than
     // folding inside the O(n*m) loop, and keeps the equality test trivial.
+    //
+    // KNOWN UNICODE LIMITS, both per-code-unit rather than per-character.
+    // Nothing normalises first, so a name stored decomposed does not match
+    // the precomposed form a keyboard produces. Folding is simple, so the
+    // German sharp s never matches a double S. And a character outside the
+    // basic plane, an emoji in a window title say, is two surrogate halves
+    // that both classify as non-word, which skews the boundary bonus
+    // around it. Fixing the first means normalising both sides to NFC
+    // before folding, which is a per-candidate allocation on a
+    // per-keystroke path and needs measuring before it goes in.
     const auto fold = [caseSensitive](QChar c) {
         return caseSensitive ? c : c.toLower();
     };

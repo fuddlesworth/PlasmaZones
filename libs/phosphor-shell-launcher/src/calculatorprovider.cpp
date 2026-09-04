@@ -450,6 +450,13 @@ bool CalculatorProvider::activate(const QString& resultId, Activation activation
     // QCoreApplication it is non-null and ->clipboard() dereferences
     // GUI-private state that does not exist. That segfaulted the
     // headless test the first time this was written the "obvious" way.
+    // QGuiApplication's clipboard, NOT the clipboard service the sibling
+    // provider uses. Deliberate: this library must not depend on
+    // phosphor-service-clipboard (a host without one still gets a working
+    // calculator), and both routes end at the same X11 or Wayland
+    // selection, so the copy lands in the same place either way. The only
+    // visible difference is that a copy made here appears in the service's
+    // history through its own watcher rather than being written into it.
     auto* gui = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
     QClipboard* clipboard = gui ? gui->clipboard() : nullptr;
     if (!clipboard) {

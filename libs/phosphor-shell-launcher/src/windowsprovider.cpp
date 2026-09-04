@@ -205,7 +205,11 @@ void WindowsProvider::recompute()
             });
         }
         // Truncate after ranking, never before: capping the scan would drop
-        // a better match that happened to sit later in the model.
+        // a better match that happened to sit later in the model. The
+        // applications and clipboard providers do the same, and the
+        // calculator has no cap because it answers with exactly one row.
+        // The three caps are separate numbers on purpose: a launcher wants
+        // more windows than clipboard entries in view at once.
         if (m_results.size() > kMaximumResults) {
             m_results.resize(kMaximumResults);
         }

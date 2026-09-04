@@ -87,6 +87,14 @@ public:
 // was just set. A synchronous provider emits it from inside setQuery.
 // The surface reads results() on that signal and never caches across
 // queries.
+// THREAD AFFINITY. Every provider lives on the thread that constructed
+// it, and the surface drives them from the GUI thread. That is not
+// incidental: one implementation owns a QFileSystemWatcher whose
+// notifications are delivered on its own thread, and another reaches
+// QGuiApplication::clipboard(), which is GUI-thread-only. A host must
+// construct and drive providers from one thread, and a provider that
+// wants to work off it has to marshal back before touching results().
+//
 // id() MUST be unique across the providers a host registers, and stable for
 // the life of the process: the model buckets rows and counts by it, so two
 // providers sharing an id collapse into one bucket and the pill for it
