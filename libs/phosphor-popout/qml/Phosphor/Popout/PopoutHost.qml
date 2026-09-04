@@ -655,6 +655,9 @@ FocusScope {
     Timer {
         id: contentDiagnosticTimer
 
+        // One short beat, not a motion duration: this is a diagnostic
+        // deadline for a two-step construction, not something the user sees,
+        // so it deliberately does not scale with the animation tokens.
         interval: 50
         repeat: false
         onTriggered: {

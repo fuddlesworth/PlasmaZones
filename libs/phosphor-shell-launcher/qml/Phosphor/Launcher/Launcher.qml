@@ -63,6 +63,15 @@ FocusScope {
     implicitWidth: Math.min(640, Screen.width - 2 * Tokens.spacing_xl)
     implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 
+    // The list's own row metrics, in one place. The height cap below and the
+    // section header both derived from these independently, so changing a
+    // row's height silently desynced the cap from what it was capping.
+    readonly property int _rowHeight: 56
+    readonly property int _sectionHeight: 28
+    // How many rows the card shows before the list scrolls. Eight is about a
+    // screenful without the card dominating a small output.
+    readonly property int _visibleRows: 8
+
     // What the user has typed. Read-only: the field is the only writer,
     // and the model's query follows it. Exposed so a host (or a test) can
     // see the two agree without reaching into the field.
@@ -227,7 +236,10 @@ FocusScope {
             id: list
 
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, 8 * 56 + 4 * 28)
+            // Capped at a screenful, derived from the same metrics the rows
+            // and section headers use. Four section headers is the worst
+            // case, one per provider.
+            Layout.preferredHeight: Math.min(contentHeight, root._visibleRows * root._rowHeight + 4 * root._sectionHeight)
             clip: true
             model: root.results
             currentIndex: 0
@@ -245,7 +257,7 @@ FocusScope {
                 required property string section
 
                 width: ListView.view.width
-                height: 28
+                height: root._sectionHeight
 
                 Text {
                     anchors.left: parent.left

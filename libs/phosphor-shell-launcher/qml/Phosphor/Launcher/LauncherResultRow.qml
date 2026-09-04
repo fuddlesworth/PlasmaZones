@@ -33,6 +33,8 @@ Item {
 
     signal clicked
 
+    // Kept in step with the launcher's own _rowHeight, which derives the
+    // list's height cap from it.
     implicitHeight: 56
 
     Accessible.role: Accessible.ListItem
