@@ -213,19 +213,21 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // that here looked like the same correspondence the rest of this gate is
     // built on. It is not: the consumer evaluates those flags when the ECHO
     // lands, and this evaluates them when the WRITE is issued, and on Wayland a
-    // client round trip sits between the two. A write made during a drag whose
-    // drag ends before its echo therefore went out unstamped and came back to a
+    // client round trip sits between the two. A write made during a drag that
+    // ended before its echo therefore went out unstamped and came back to a
     // consumer that was arming again — arming the user-maximize marker for a
     // write the effect made, which is the one thing this stamp exists to
-    // prevent. Stamping unconditionally closes that: authorship is a property
-    // of the write, not of what the pointer is doing a round trip later.
+    // prevent. Authorship is a property of the write, so it is recorded for
+    // every write, unconditionally.
     //
-    // The reverse case is the cost, and it is the cheaper one. A write whose
-    // gesture is STILL running when the echo lands meets a consumer that skips
-    // arming, so the stamp goes unconsumed and sits until the deadline, where
-    // it could swallow one genuine maximize. That needs the user to press
-    // maximize within a second of ending the drag; a false marker needs
-    // nothing, and mis-animates a placement they did not ask for.
+    // That leaves no reverse exposure, because the consumer was fixed to match:
+    // noteMaximizeEdge CONSUMES the stamp before it consults its arming
+    // permission, so a stamp is answered by its own edge whether or not a
+    // gesture is running when that edge lands. Gate the consumption instead and
+    // a mid-gesture write strands its stamp — on X11 for every such write,
+    // since there the echo is synchronous and the gesture is still running by
+    // construction — where it would swallow the user's next genuine maximize
+    // inside the deadline.
     //
     // Read from the consumer's OWN state, `lastFullyMaximized`, and not from
     // this window's requested or committed mode. The sibling maximize

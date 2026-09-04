@@ -70,7 +70,7 @@ void ShaderTransitionManager::noteEffectAuthoredMaximizeWrite(KWin::EffectWindow
     m_effectAuthoredMaximizeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
 }
 
-bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
+bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w, bool armingAllowed)
 {
     if (!w) {
         return false;
@@ -78,6 +78,15 @@ bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
     // The effect's own write, not the user's. Consumed here rather than merely
     // tested, so one stamp answers for exactly one edge: a bracketed write that
     // toggles the bit twice must not have its second edge swallowed as well.
+    //
+    // CONSUMED BEFORE the arming gate, not after, so every stamp is answered by
+    // the edge it belongs to whatever the pointer is doing. The write site
+    // cannot predict that: it stamps when the write is issued, and the caller
+    // decides arming when the edge lands, which on Wayland is a client round
+    // trip later and on X11 is the same instant. Gate the consumption on
+    // arming and a write issued during a drag leaves a stamp nothing takes —
+    // on X11 for every such write — which then swallows the user's next
+    // genuine maximize inside the deadline. Take it always; arm conditionally.
     //
     // Any marker a PRIOR genuine user edge armed is deliberately LEFT standing,
     // which is the opposite of what noteMaximizeDemotedForSnap does, and the
@@ -89,7 +98,12 @@ bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
     if (takeFreshStamp(m_effectAuthoredMaximizeAtMs, w)) {
         return true;
     }
-    m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+    // Not the effect's, so it is the user's — but arming is still the caller's
+    // call. An interactive drag-restore is a genuine user edge that no
+    // placement should claim, and the caller says so through @p armingAllowed.
+    if (armingAllowed) {
+        m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+    }
     return false;
 }
 

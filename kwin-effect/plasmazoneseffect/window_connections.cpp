@@ -918,15 +918,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // The answer is kept, not discarded: noteMaximizeEdge consumes
                 // the authorship stamp, so this is the last point at which the
                 // effect's own committed echo can be told apart from a user's
-                // press. The interception's already-agrees arm needs exactly
-                // that distinction and is handed it below. Left false on the
-                // gesture path, which is sound because interceptMaximizeRequest
-                // declines outright for a window under an interactive move or
-                // resize and never reaches that arm.
-                bool effectAuthoredEdge = false;
-                if (!window->isUserMove() && !window->isUserResize()) {
-                    effectAuthoredEdge = m_shaderManager.noteMaximizeEdge(window);
-                }
+                // press. The interception is handed it below.
+                //
+                // The gesture flags go IN as the arming permission rather than
+                // guarding the call. They are the drag-restore exclusion —
+                // pulling a maximized window off its titlebar is a drag, and
+                // the drag owns those visuals — but they must not gate the
+                // stamp consumption, which belongs to the write that armed it
+                // and not to what the pointer is doing when its echo lands. An
+                // authored edge is still reported as authored during a drag,
+                // which is also what the interception wants to hear.
+                const bool effectAuthoredEdge =
+                    m_shaderManager.noteMaximizeEdge(window, !window->isUserMove() && !window->isUserResize());
                 // IsMaximized is a matchable rule field with the same
                 // cache-key staleness as IsMinimized (see the minimizedChanged
                 // metadata lambda below) — invalidate on the genuine
@@ -1060,8 +1063,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // onto the rect the client actually committed (Body -1), the offered-column
     // centring for a client that would not take its column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
-    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two as separate
-    // connections (which they were originally) doubled the per-geometry-
+    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two
+    // as separate connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
     // hop per tick instead of two. The autotile-handler connection
@@ -1088,17 +1091,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // isDeleted() alongside the null test, as the other lambdas
                 // over this signal and its maximize siblings do. A window held
                 // alive under WindowClosedGrabRole still emits this, and no body
-                // below is owed anything for a corpse — but this is an EARLY-OUT,
-                // not a hazard fix, and it is worth being exact about that so
-                // nobody later removes a real guard believing this one covers
-                // it. Each body already declined on its own: the two scroll
-                // bodies sit behind scrollManagedOutputFor, which refuses a
-                // deleted window; the maximize completion's pending entry
-                // belongs to the windowDeleted sweep; the suppression entry was
-                // dropped by slotWindowClosed; and flushPendingFrameGeometry
-                // skips a deleted window. What this adds is stopping the work
-                // at the top, and putting the guard where its siblings keep
-                // theirs.
+                // below is owed anything for a corpse.
+                //
+                // It is a HAZARD guard, not merely an early-out, and the hazard
+                // is the same one the maximize lambda's guard names: Body -0.5
+                // and Body 2 both call getWindowId BEFORE the checks that would
+                // decline for them, and getWindowId re-populates the id caches
+                // on a miss — the caches slotWindowClosed has just scrubbed for
+                // a window not riding a close animation. The re-populated
+                // mapping then waits for the windowDeleted backstop. The moves
+                // and the daemon flush themselves do decline on their own
+                // (scrollManagedOutputFor and flushPendingFrameGeometry both
+                // refuse a deleted window); what they do not do is decline
+                // before the lookup.
                 if (!safeW || safeW->isDeleted()) {
                     return;
                 }

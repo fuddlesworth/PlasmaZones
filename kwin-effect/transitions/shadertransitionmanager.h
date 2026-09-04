@@ -175,8 +175,9 @@ public:
     ///    which routes the geometry onto `window.movement.maximize` from its
     ///    own per-iteration flag — so arming here would only leave a marker
     ///    nothing needs, to be claimed by the next unrelated placement.
-    ///  • The interactive drag-restore, excluded at the call site: KWin
-    ///    unmaximizes a window when the user pulls its titlebar, and that
+    ///  • The interactive drag-restore, excluded by the caller through
+    ///    @p armingAllowed: KWin unmaximizes a window when the user pulls its
+    ///    titlebar, and that
     ///    gesture's visuals belong to the held move pack.
     ///
     /// Returns whether this edge was the EFFECT'S OWN — i.e. a stamp was found
@@ -186,7 +187,12 @@ public:
     /// as though it were a user's press. This is the only place that
     /// distinction is available: the stamp is one-shot and is consumed here,
     /// before the interception runs.
-    bool noteMaximizeEdge(KWin::EffectWindow* w);
+    /// @p armingAllowed gates ONLY the arming. The authorship stamp is
+    /// consumed either way, because the write site stamps when the write is
+    /// issued while this is decided when the edge lands — a client round trip
+    /// apart on Wayland — so making the consumption conditional would strand a
+    /// stamp for every write issued during a gesture.
+    bool noteMaximizeEdge(KWin::EffectWindow* w, bool armingAllowed);
 
     /// Whether @p w took a genuine maximize OR restore edge of its own within
     /// the freshness window, CONSUMING the marker either way.
