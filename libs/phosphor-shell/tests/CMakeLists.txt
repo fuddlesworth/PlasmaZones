@@ -202,3 +202,21 @@ set_tests_properties(test_phosphorshell_persistentproperties_scan PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 60
 )
+
+# The input-region re-arm on interactiveThickness. Needs a materialized
+# panel, so it builds a real shell against the mock layer-shell transport.
+add_executable(test_phosphorshell_inputregion_rearm test_inputregion_rearm.cpp)
+target_link_libraries(test_phosphorshell_inputregion_rearm
+    PRIVATE
+        Qt6::Test
+        Qt6::Qml
+        Qt6::Quick
+        PhosphorShell::PhosphorShell
+        PhosphorLayer::PhosphorLayer
+)
+add_test(NAME test_phosphorshell_inputregion_rearm COMMAND test_phosphorshell_inputregion_rearm)
+phosphorshell_isolate_test(test_phosphorshell_inputregion_rearm "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_inputregion_rearm PROPERTIES
+    LABELS "phosphorshell"
+    TIMEOUT 60
+)
