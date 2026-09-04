@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Hidden=true, which the spec calls "deleted": the entry exists on disk but
+# the user removed it, and a launcher must act as though it is not there.
+# Distinct from NoDisplay, which hidden-tool.desktop covers. Both legs of the
+# scan filter need a fixture, or either can be deleted with the suite green.
+[Desktop Entry]
+Type=Application
+Name=Deleted Tool
+Exec=deleted-tool
+Hidden=true

@@ -75,6 +75,32 @@ FocusScope {
     // backdropShown check.
     property color backdropColor: "transparent"
 
+    // Where the content frame sits on the (full-bleed) surface. The
+    // transport sets these from PopoutRequest.anchor:
+    //   "center"     centred on the surface (ScreenCenter, and AtPointer
+    //                until a transport can supply a pointer position)
+    //   "barLeft" / "barCenter" / "barRight"
+    //                hung just below the top reserved band — the bar's
+    //                exclusive zone on this screen, in reservedTop — and
+    //                aligned to the bar capsule's inset edges
+    //   "custom"     top-left at (customX, customY) in surface coordinates
+    // Placement is the host's job, not the surface's: keeping the surface
+    // full-bleed is what keeps the scrim, click-outside dismissal and the
+    // keyboard grab exactly as they are for every placement.
+    property string placement: "center"
+    property int reservedTop: 0
+
+    // The horizontal inset a bar-anchored popout aligns to, matching the bar
+    // capsule's own inset from the screen edge.
+    //
+    // A property rather than a constant because BarHost exposes
+    // `screenInset` as settable and invites overriding it: a host that moves
+    // its capsule in from the edge has to move its popouts with it, or the
+    // two stop lining up. The default is the token both sides use.
+    property int barInset: Tokens.spacing_xl
+    property real customX: 0
+    property real customY: 0
+
     // Internal: duration token shared by the content frame's
     // opacity/scale Behaviors. Exposed as a property so the Behaviors
     // and any future timer/Animation referencing the content fade-out
@@ -392,7 +418,7 @@ FocusScope {
         // a delegate the host may never display.
         //
         // The `??` (nullish coalescing) operator requires Qt 6.4+ in
-        // QML's JS engine. The project pins QT_MIN_VERSION 6.6.0 (top-
+        // QML's JS engine. The project pins QT_MIN_VERSION 6.10.0 (top-
         // level CMakeLists.txt), so the operator is safe to use here.
         //
         // `Loader.item` is typed QObject, so the cast is what keeps this an
@@ -483,7 +509,41 @@ FocusScope {
             _lastBound = root.contentItem;
         }
 
-        anchors.centerIn: parent
+        // Explicit x/y rather than anchors.centerIn: an anchor would fight
+        // every placement but "center". The bar placements align to the
+        // capsule's inset (`barInset`, defaulting to the token BarHost uses)
+        // and hang one spacing_m below the reserved band, so the popout
+        // reads as belonging to the bar without knowing the bar's shape.
+        // Every arm rounds to a whole pixel. These bindings replaced an
+        // `anchors.centerIn`, whose alignWhenCentered default did that
+        // rounding for us; without it an odd difference between the surface
+        // and the frame lands the content on a half pixel and blurs its text.
+        // Also clamped to zero, so a frame that is somehow still wider than
+        // the surface starts at the edge rather than off it.
+        x: {
+            switch (root.placement) {
+            case "barLeft":
+                return root.barInset;
+            case "barRight":
+                return Math.max(0, Math.round(root.width - width - root.barInset));
+            case "custom":
+                return Math.round(root.customX);
+            default:
+                return Math.max(0, Math.round((root.width - width) / 2));
+            }
+        }
+        y: {
+            switch (root.placement) {
+            case "barLeft":
+            case "barCenter":
+            case "barRight":
+                return Math.round(root.reservedTop + Tokens.spacing_m);
+            case "custom":
+                return Math.round(root.customY);
+            default:
+                return Math.max(0, Math.round((root.height - height) / 2));
+            }
+        }
         // Bind to the visible delegate's intrinsic size. childrenRect
         // would include invisible children, and a preloaded but
         // hidden contentItem would inflate the frame.
@@ -498,8 +558,14 @@ FocusScope {
         // > 0 would require an extra state machine and trade one
         // hidden transient for another; the opacity-gated transient
         // is preferable.
-        width: _visibleDelegate ? _visibleDelegate.implicitWidth : 0
-        height: _visibleDelegate ? _visibleDelegate.implicitHeight : 0
+        // Clamped to the surface. The host fills the output, and a delegate
+        // that reports an implicit size larger than the screen would be
+        // centred with a negative offset and cut off on BOTH sides at once,
+        // with no clip, scroll or shrink anywhere on the path. A short or
+        // portrait output, or a fractional scale that shrinks the logical
+        // size, reaches this with content that is fine on a typical display.
+        width: _visibleDelegate ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : 0
+        height: _visibleDelegate ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : 0
         opacity: root.open ? 1 : 0
         scale: root.open ? 1 : 0.96
 
@@ -598,6 +664,9 @@ FocusScope {
     Timer {
         id: contentDiagnosticTimer
 
+        // One short beat, not a motion duration: this is a diagnostic
+        // deadline for a two-step construction, not something the user sees,
+        // so it deliberately does not scale with the animation tokens.
         interval: 50
         repeat: false
         onTriggered: {

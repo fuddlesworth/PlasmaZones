@@ -68,7 +68,7 @@ TestCase {
 
     function test_button_clicked_signal() {
         const b = createTemporaryObject(buttonComp, testCase);
-        const spy = signalSpyComp.createObject(testCase, {
+        const spy = createTemporaryObject(signalSpyComp, testCase, {
             "target": b,
             "signalName": "clicked"
         });
@@ -131,6 +131,26 @@ TestCase {
         compare(r.interactive, true, "interactive by default");
         compare(r.down, false, "not pressed at rest");
         compare(r.hovered, false, "not hovered at rest");
+        compare(r.radius, 0, "square by default");
+        compare(r.rippling, false, "no sweep at rest");
+    }
+
+    function test_ripple_sweep_lifecycle() {
+        const r = createTemporaryObject(rippleComp, testCase, {
+            "width": 120,
+            "height": 40,
+            "radius": 20
+        });
+        verify(r, "PhosphorRipple instantiates");
+        r.start(10, 20);
+        compare(r.rippling, true, "start() begins the sweep");
+        // The sweep clears on its own; a second press restarts it from
+        // the new point rather than stacking on the in-flight one.
+        r.start(110, 20);
+        compare(r.rippling, true, "a second press restarts the sweep");
+        tryVerify(function () {
+            return !r.rippling;
+        }, 3000, "the sweep finishes");
     }
 
     function test_shadow_level_clamps() {
@@ -148,7 +168,7 @@ TestCase {
         const b = createTemporaryObject(buttonComp, testCase, {
             "text": "Go"
         });
-        const spy = signalSpyComp.createObject(testCase, {
+        const spy = createTemporaryObject(signalSpyComp, testCase, {
             "target": b,
             "signalName": "clicked"
         });
@@ -171,11 +191,11 @@ TestCase {
         const p = createTemporaryObject(pillComp, testCase, {
             "text": "Wi-Fi"
         });
-        const clickSpy = signalSpyComp.createObject(testCase, {
+        const clickSpy = createTemporaryObject(signalSpyComp, testCase, {
             "target": p,
             "signalName": "clicked"
         });
-        const toggleSpy = signalSpyComp.createObject(testCase, {
+        const toggleSpy = createTemporaryObject(signalSpyComp, testCase, {
             "target": p,
             "signalName": "toggled"
         });
@@ -186,34 +206,81 @@ TestCase {
         compare(toggleSpy.count, 1, "Space emits toggled");
     }
 
-    function test_slider_arrow_keys_move_value() {
+    // The keys REQUEST a value; they do not set one. The slider does not
+    // assign its own `value`, because a host binds that to the service's echo
+    // and a JS assignment here would sever the binding on the first key
+    // press, after which the handle would stop following the service. So the
+    // assertions are on `moved`'s payload, and on `value` staying put until
+    // something answers.
+    function test_slider_arrow_keys_request_a_new_value() {
         const s = createTemporaryObject(sliderComp, testCase, {
             "from": 0,
             "to": 100,
             "value": 50,
             "width": 200
         });
-        const spy = signalSpyComp.createObject(testCase, {
+        const spy = createTemporaryObject(signalSpyComp, testCase, {
             "target": s,
             "signalName": "moved"
         });
         s.forceActiveFocus();
         verify(s.activeFocus, "slider takes keyboard focus");
         compare(s._step, 5, "default step is a twentieth of the range");
+
         keyClick(Qt.Key_Right);
-        compare(s.value, 55, "Right arrow nudges up one step");
         compare(spy.count, 1, "moved emitted on the arrow nudge");
+        compare(spy.signalArguments[0][0], 55, "Right arrow requests one step up");
+        compare(s.value, 50, "value is unchanged until the host answers");
+
+        // The host answers, the way a service echo would.
+        s.value = 55;
         keyClick(Qt.Key_Left);
-        compare(s.value, 50, "Left arrow nudges down one step");
+        compare(spy.signalArguments[1][0], 50, "Left arrow requests one step down");
         keyClick(Qt.Key_Home);
-        compare(s.value, 0, "Home jumps to from");
+        compare(spy.signalArguments[2][0], 0, "Home requests from");
         keyClick(Qt.Key_End);
-        compare(s.value, 100, "End jumps to to");
+        compare(spy.signalArguments[3][0], 100, "End requests to");
+    }
+
+    // The binding this component exists to protect. A host binds `value` to a
+    // service echo; after any interaction that binding must still be live, or
+    // a change made elsewhere stops moving the handle.
+    function test_slider_value_binding_survives_interaction() {
+        const holder = createTemporaryObject(sliderBindingHolderComp, testCase);
+        const s = holder.slider;
+        s.forceActiveFocus();
+
+        compare(s.value, 30, "starts at the bound value");
+        keyClick(Qt.Key_Right);
+        // The service moves on its own, as it would after a media key or
+        // another client's change.
+        holder.serviceValue = 80;
+        compare(s.value, 80, "the handle still follows the service after a key press");
     }
 
     Component {
         id: signalSpyComp
 
         SignalSpy {}
+    }
+
+    // A host in miniature: a slider whose `value` is BOUND to a separate
+    // property standing in for the service's echo.
+    Component {
+        id: sliderBindingHolderComp
+
+        Item {
+            property real serviceValue: 30
+            property alias slider: inner
+
+            PhosphorSlider {
+                id: inner
+
+                from: 0
+                to: 100
+                width: 200
+                value: parent.serviceValue
+            }
+        }
     }
 }

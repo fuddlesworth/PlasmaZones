@@ -709,6 +709,22 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/layerpopouttransport.cpp
         shell/QmlComponentBarWidgetFactory.h
         shell/qmlcomponentbarwidgetfactory.cpp
+        shell/ControlCenterController.h
+        shell/controlcentercontroller.cpp
+        shell/QmlComponentTileFactory.h
+        shell/qmlcomponenttilefactory.cpp
+        # The popout transport stack: one router in front of the layer
+        # transport and the bar-socket transport, so PopoutController
+        # arbitrates both presentation paths.
+        shell/RoutingPopoutTransport.h
+        shell/routingpopouttransport.cpp
+        shell/SocketPopoutTransport.h
+        shell/socketpopouttransport.cpp
+        # The launcher's registry owner: built-in providers, the model the
+        # launcher popout binds, and the clipboard + Toplevels services the
+        # providers read that nothing else in the shell owns yet.
+        shell/LauncherController.h
+        shell/launchercontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -722,6 +738,20 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShellBarQmlplugin
             PhosphorShellPower::PhosphorShellPowerQml
             PhosphorShellPowerQmlplugin
+            # Phosphor.ControlCenter + its registrar, so shell.qml's
+            # control-center popout resolves the surface and its tiles.
+            # The tiles import Phosphor.Service.* modules, which the
+            # registerQmlTypes() block in shell/main.cpp already publishes.
+            PhosphorShellControlCenter::PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
+            # The launcher: its core (LauncherModel + the built-in providers
+            # LauncherController materialises), the Phosphor.Launcher module
+            # + registrar for shell.qml's launcher popout. The clipboard
+            # service the controller owns for the clipboard provider is
+            # already listed with the other services below.
+            PhosphorShellLauncher::PhosphorShellLauncher
+            PhosphorShellLauncher::PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.

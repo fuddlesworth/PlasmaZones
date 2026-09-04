@@ -27,7 +27,11 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_AUTOMOC ON)
 endif()
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+# QuickShapes has to be found in THIS directory scope, not merely inherited
+# from a parent: PowerTile carries a PhosphorRipple, which paints with a
+# QtQuick.Shapes Shape, so the static qml plugin's dependency walk resolves
+# Qt6::QuickShapes here and warns at configure time without it.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # Kirigami.Icon resolves freedesktop icon NAMES through QIcon::fromTheme; the
 # shell's own image provider only serves the pixmaps tray items push, so it

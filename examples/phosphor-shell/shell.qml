@@ -10,10 +10,13 @@
 // — every bar and the power menu silently fail to create.
 
 import Phosphor.Bar
+import Phosphor.ControlCenter
 import Phosphor.Ipc
+import Phosphor.Launcher
 import Phosphor.Popout
 import Phosphor.Power
 import Phosphor.Shell
+import Phosphor.Theme
 import QtQuick
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
@@ -48,7 +51,55 @@ Item {
 
         model: PhosphorShell.screens
 
-        delegate: BarHost {}
+        // The control center grows out of THIS bar's capsule as one
+        // continuous painted surface (the connected-corner design), rather
+        // than opening as a separate centred popout.
+        //
+        // Everything the delegate reads must come from a CONTEXT PROPERTY,
+        // never an id in this file: PerScreenPanels builds each delegate
+        // with a fresh QQmlContext carrying `modelData`, so shell.qml's ids
+        // do not resolve inside one. Hence the open state lives on
+        // ControlCenterRegistry and the socket content is declared inline
+        // here, in the delegate's own scope.
+        delegate: BarHost {
+            id: bar
+
+            socketWidth: 380
+            socketDepth: 460
+            // Open only on the screen the registry says owns it, so a
+            // multi-head setup shows one panel, on the bar that summoned it.
+            //
+            // Read through PanelWindow.screen, NOT modelData.screen:
+            // PerScreenPanels deliberately withholds the screen role from
+            // modelData because that map snapshots a raw QScreen* which
+            // dangles on hot-unplug, while this property is QPointer-backed
+            // and simply reads null once the output dies. Hence the guard.
+            socketOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
+
+            // ONE CONTROL CENTER PER SCREEN, built on that screen's first
+            // open and kept: the bar's pocket Loader latches active, and
+            // the tiles hold live service connections that would be torn
+            // down and re-enumerated on every close. On a multi-head
+            // setup that means one NetworkManager, BlueZ and PipeWire
+            // host per output the user has opened the panel on. Sharing
+            // one instance across bars would mean reparenting a live
+            // surface between outputs, which the socket transport's
+            // one-at-a-time invariant already forbids.
+            //
+            // The pocket depth is a constant on the bar, and the pocket
+            // CLIPS: a tile set taller than the depth is cut off with no
+            // scroll and nothing to say so. Three toggles and two sliders
+            // fit the default comfortably, but adding tiles here means
+            // raising BarHost.socketDepth to match, since the surface
+            // reservation cannot grow after materialization.
+            socketContent: Component {
+                ControlCenter {
+                    provider: ControlCenterRegistry
+                    tileIds: ControlCenterRegistry.tileIds
+                    columns: 2
+                }
+            }
+        }
     }
 
     // The one live SessionHost in the process. It must be a singleton in
@@ -69,15 +120,81 @@ Item {
     // a screen-centred Modal popout over a dimmed scrim, which is what
     // PhosphorPopout.ExclusiveMode.Modal means to the controller. It closes
     // every cooperative popout and suppresses new ones while it is up.
+    //
+    // `session` is NOT bound here. LayerPopoutTransport builds this
+    // component against the ENGINE'S ROOT CONTEXT, where `sessionCoordinator`
+    // — an id belonging to this file's scope — does not resolve, so the
+    // binding threw "ReferenceError: sessionCoordinator is not defined" on
+    // every open and the menu ran with an undefined session. It is handed
+    // in through the request's `props` instead (see togglePowerMenu), which
+    // the transport applies with setInitialProperties inside its
+    // beginCreate/completeCreate window. That path also warns on a name the
+    // delegate does not declare, where a stray binding fails silently.
+    //
+    // The same constraint is why this file must never gain
+    // `pragma ComponentBehavior: Bound` (see the header): both inline
+    // Components here are instantiated from C++ against a foreign context.
     Component {
         id: powerMenuComponent
 
-        PowerMenu {
-            session: sessionCoordinator.session
+        PowerMenu {}
+    }
+
+    // The control center grows out of the bar's own capsule (the
+    // connected-corner socket). There is no surface to place — BarHost
+    // paints the body as part of the bar's Shape and the delegate above
+    // mounts the content — but it IS still a popout to the controller:
+    // main.cpp routes the "control-center" id to a SocketPopoutTransport
+    // that drives ControlCenterRegistry.openScreen. Going through
+    // Popouts rather than writing that property directly is what makes
+    // the Modal power menu close it, refuses it while a modal is up, and
+    // drains it on reload, all without this file remembering to.
+    //
+    // No `content`: the socket transport creates nothing, and the
+    // controller never reads it. `targetScreen` is the output whose bar
+    // button fired, so a multi-head setup grows the pocket on that bar.
+    // No keyboard focus: a bar-painted pocket is not a surface that can
+    // take a layer-shell grab.
+    // The control center and the launcher share the default popout
+    // scope, so opening one CLOSES the other. That is the intended
+    // behaviour for two full-attention surfaces triggered from the same
+    // bar, and it is worth stating because nothing at either call site
+    // hints at it: give one of them its own scope and they would happily
+    // sit open together.
+    function toggleControlCenter(source: Item): void {
+        // screenOf hands back a QScreen the C++ side owns; the controller
+        // marks it CppOwnership before returning, so the JS GC cannot
+        // delete the live screen when this wrapper is collected. Do not
+        // reach for a QScreen any other way from QML.
+        const target = ControlCenterRegistry.screenOf(source);
+        const request = {
+            "popoutId": "control-center",
+            "targetScreen": target,
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            "keyboardFocus": false,
+            "dismissOnFocusLoss": false
+        };
+        // The arbiter keys on the popout id alone, which is right for the
+        // launcher and the power menu but not for a pocket that belongs to
+        // one bar. Without this check, pressing the button on a SECOND
+        // monitor while the panel is open on the first just closes it, and
+        // the screen this call went to the trouble of resolving is thrown
+        // away. Move it instead: close there, open here.
+        const openOn = ControlCenterRegistry.openScreen;
+        if (openOn !== "" && target && openOn !== target.name) {
+            const handle = Popouts.handleFor("control-center");
+            if (handle !== "")
+                Popouts.close(handle);
+            Popouts.open(request);
+            return;
         }
+        Popouts.toggle(request);
     }
 
     function togglePowerMenu(): void {
+        // Nothing to do about the control center here: it is a Cooperative
+        // popout on the same controller, so opening this Modal one closes
+        // it through the controller's own arbitration.
         // toggle rather than open: pressing the bar button (or Ctrl+Alt+Del)
         // a second time should put the menu away, and the controller rejects
         // a plain open for an id that is already showing.
@@ -88,6 +205,12 @@ Item {
         Popouts.toggle({
             "popoutId": "power",
             "content": powerMenuComponent,
+            // The session the menu acts on, passed as a prop rather than
+            // bound in the Component: ids from this file do not resolve in
+            // the root context the transport builds the delegate against.
+            "props": {
+                "session": sessionCoordinator.session
+            },
             "anchor": PhosphorPopout.Anchor.ScreenCenter,
             "exclusive": PhosphorPopout.ExclusiveMode.Modal,
             "keyboardFocus": true,
@@ -98,13 +221,23 @@ Item {
     Connections {
         target: BarRegistry
 
-        // The signal also carries `source` (the bar widget that fired),
-        // dropped from this handler's signature because the session menu is
-        // screen-centred; a bar-anchored surface takes it to pick which
-        // output's bar it hangs from.
-        function onWidgetActivated(id: string): void {
+        // `source` is the bar widget that fired. The session menu is
+        // screen-centred and ignores it; the control center is anchored to
+        // a bar, so it uses the widget's window to pick which output's
+        // capsule to grow out of.
+        function onWidgetActivated(id: string, source: Item): void {
+            // A Cooperative open is refused outright while a Modal popout is
+            // up, and the refusal is silent: the user would press the button
+            // and see nothing happen, with nothing logged. The power menu is
+            // itself Modal and toggles, so it stays reachable.
+            if (Popouts.modalActive && id !== "power")
+                return;
             if (id === "power")
                 root.togglePowerMenu();
+            else if (id === "controlcenter")
+                // "controlcenter" is the bar widget's registered id
+                // (barcontroller.cpp), not the IPC target name below.
+                root.toggleControlCenter(source);
         }
     }
 
@@ -116,6 +249,10 @@ Item {
     // `show` and `toggle` are separate because a method named show that hides
     // on the second call is a trap for anything scripting it. Bind a key to
     // toggle; call show from a script that wants the menu up regardless.
+    // No hide() on this one, unlike the control center and the launcher.
+    // The power menu is Modal and its own toggle() is the way back out,
+    // so a caller that wants it gone calls that. A hide() would give two
+    // ways to close one surface whose open state is already single-valued.
     IpcTarget {
         target: "power"
 
@@ -126,6 +263,93 @@ Item {
 
         function toggle(): void {
             root.togglePowerMenu();
+        }
+    }
+
+    // The control center's wire surface, per the mockup's
+    // `phosphorctl call control-center.open`. Same show/toggle split as the
+    // power menu, and the same reason: bind a compositor key to toggle, and
+    // call show from a script that wants the panel up regardless.
+    //
+    // All three are argument-free, which is the form a keybind uses:
+    // IpcTarget arity is strict, so a `toggle(screen)` would reject a bare
+    // `phosphorctl call control-center.toggle` with "argument count
+    // mismatch". A null source resolves to the primary output's bar.
+    IpcTarget {
+        target: "control-center"
+
+        function show(): void {
+            if (!Popouts.isOpen("control-center"))
+                root.toggleControlCenter(null);
+        }
+
+        function toggle(): void {
+            root.toggleControlCenter(null);
+        }
+
+        function hide(): void {
+            // close() on an empty handle is a no-op, so this is safe when
+            // nothing is open.
+            Popouts.close(Popouts.handleFor("control-center"));
+        }
+    }
+
+    // The launcher, per docs/phosphor-shell-design/mockups/launcher-spotlight.svg:
+    // a screen-centred Cooperative popout that takes keyboard focus (it is
+    // a search field) and goes away on focus loss. Cooperative, not Modal:
+    // it should close when you click away, not dim the screen and
+    // suppress every other popout; and being Cooperative is what lets the
+    // Modal power menu close it.
+    //
+    // Launcher paints its own card, so unlike the control center it needs
+    // no panel wrapped around it. Everything it reads comes from the
+    // LauncherResults context property src/shell/main.cpp installs on
+    // every engine, and Popouts is a context property too, so this
+    // Component is safe to build against the root context the transport
+    // uses (the constraint that bit the power menu).
+    Component {
+        id: launcherComponent
+
+        Launcher {
+            results: LauncherResults
+            // Built fresh on every open by the transport, so the reset that
+            // clears the query and takes focus belongs here; the providers
+            // behind the model are process-global and keep their state.
+            Component.onCompleted: reset()
+            onActivated: Popouts.close(Popouts.handleFor("launcher"))
+            onDismissed: Popouts.close(Popouts.handleFor("launcher"))
+        }
+    }
+
+    function toggleLauncher(): void {
+        Popouts.toggle({
+            "popoutId": "launcher",
+            "content": launcherComponent,
+            "anchor": PhosphorPopout.Anchor.ScreenCenter,
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            "keyboardFocus": true,
+            "dismissOnFocusLoss": true
+        });
+    }
+
+    // The launcher's wire surface, per the mockup's
+    // `phosphorctl call launcher.toggle`. Argument-free, the form a
+    // compositor keybind uses (Meta / Alt+Space bound to
+    // `phosphorctl call launcher.toggle`).
+    IpcTarget {
+        target: "launcher"
+
+        function show(): void {
+            if (!Popouts.isOpen("launcher"))
+                root.toggleLauncher();
+        }
+
+        function toggle(): void {
+            root.toggleLauncher();
+        }
+
+        function hide(): void {
+            Popouts.close(Popouts.handleFor("launcher"));
         }
     }
 }

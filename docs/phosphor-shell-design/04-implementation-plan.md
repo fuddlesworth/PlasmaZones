@@ -906,7 +906,7 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 - [x] Accent cycle retints every atom live (confirmed on a live session)
 - [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
 
-**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular). The resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
+**Known limitation (closed):** `PhosphorRipple`'s expanding circle was not rounded-clipped, because `Item.clip` is a rectangular scissor, so on a pill the sweep squared off the rounded ends mid-animation. 3.2 shipped painters (`ConnectedShape` / `ConnectedCorner`), not the shared clip primitive this was waiting on, so the fix went the other way: the ripple is now a radial gradient painted inside a rounded-rect `Shape` whose outline is the host's own rounded rect, making the corners exact by construction with no mask and no offscreen render target. Chosen over `MultiEffect`/`OpacityMask` because a layer effect costs an FBO per control and does not render under the headless path CI uses (see the 3.3 / 3.4 notes). Pinned by `tests/tst_ripple_clip.qml`, a pixel regression verified non-vacuous against a squared-off outline.
 
 **Effort:** M (~2 weeks)
 
@@ -997,13 +997,35 @@ Order is rough, each surface is independent enough to slip. Recommended sequence
 
 Visible win: bar feels alive and distinct.
 
-### 4.2: Launcher (M2)
+### 4.2: Launcher (M2) *(shipped; Connected/Standalone skins and Emoji later)*
 
-| Deliverable                                                                                | Effort  |
-|--------------------------------------------------------------------------------------------|---------|
-| `qml/Phosphor/Launcher/Launcher.qml` (Spotlight skin first; Connected + Standalone later) | L       |
-| Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.8) | L |
-| Fuzzy match, port `fzf` scoring to C++                                                   | S       |
+Lives in `libs/phosphor-shell-launcher/`: a C++ core library
+(`PhosphorShellLauncher`, linkable without the UI) and the
+`Phosphor.Launcher` QML module, depending on registry + theme + widgets +
+Kirigami.
+
+| Deliverable                                                                                | Status | Notes |
+|--------------------------------------------------------------------------------------------|--------|-------|
+| `ILauncherProvider` contract in phosphor-registry                                          | ✓ shipped | The concrete type the Phase 1.3 seam promised; `createProvider()` now returns it instead of `QObject*`. Query in, rows out, `activate(id, Primary\|Alternate)`. |
+| `FuzzyMatcher`, fzf scoring ported to C++                                                   | ✓ shipped | fzf's `FuzzyMatchV2` with its own constants and bonus table, so orderings match fzf's — including the one the first tests got wrong: "axbxc" outranks "xabcx" for "abc". |
+| `DesktopEntry` parser + `DesktopEntryScanner`                                              | ✓ shipped | Hand-parsed (QSettings mangles lists, localised keys and escapes; KService is not a dependency). First-directory-wins per id. |
+| `LauncherModel`                                                                            | ✓ shipped | Rows sorted within a provider, providers ordered by their best row, filterable to one, Tab cycles providers that have rows. |
+| Providers: Apps, Calculator, Command, Windows, Clipboard                                   | ✓ shipped | C++, not the `.qml` files the component map sketched: fzf scoring, `.desktop` parsing and an expression evaluator are C++ concerns. Windows is duck-typed over any model with a `toplevel` role (keeps Wayland out of the library); inert on a compositor without foreign-toplevel. |
+| `EmojiProvider`                                                                            | deferred | No emoji dataset in the tree; bundling one is a data decision (subset vs. full CLDR-annotated set). |
+| `qml/Phosphor/Launcher/Launcher.qml` + `LauncherResultRow.qml` (Spotlight skin)          | ✓ shipped | Renders into whatever it is parented to. Keyboard entirely from the field: ↑↓, ↵, ⌥↵, Tab/⇧Tab, Esc. A refused activation keeps it open. |
+| `examples/phosphor-launcher-demo/`                                                         | ✓ shipped | The surface over this machine's real applications, clipboard and PATH, providers supplied by a `Registry<ILauncherProviderFactory>`. |
+| Connected and Standalone skins                                                             | later  | The plan's own sequencing. |
+| Shell mount (`LauncherController` in `src/shell`, `launcher.{show,toggle,hide}` IPC, popout) | ✓ shipped | A screen-centred Cooperative popout with keyboard focus, so the Modal power menu closes it and it goes on focus loss. The controller is process-global and owns the clipboard service and a second `Toplevels` instance (the QML singleton dies with its engine on reload; a provider bound to it would go inert). Live-verified: open, Modal closes it, reopen under the modal refused, reopen + hide, and a hot reload with it open. |
+
+Tests: seven suites (matcher, parser/scanner over fixtures, each provider's
+gate and ranking, the model over fakes, and a QtQuickTest of the surface's
+keyboard contract). Six behaviours were mutation-verified; the apps
+secondary-field penalty passed its first mutation run because no fixture
+tied a keyword to a name, and two fixtures were added to make it real.
+
+One bug caught in review: the calculator's copy used the `qGuiApp` macro,
+which is an unchecked `static_cast` of `QCoreApplication::instance()` and
+segfaults under a plain `QCoreApplication`. It is a `qobject_cast` now.
 
 ### 4.3: Notification center (M2)
 
@@ -1013,13 +1035,77 @@ Visible win: bar feels alive and distinct.
 | Rich text (`markdown2html` port)                                                           | S       |
 | Per-app rules editor                                                                       | S       |
 
-### 4.4: Control center (M3)
+### 4.4: Control center (M3) *(surface + first five tiles shipped)*
 
-| Deliverable                                                                                | Effort  |
-|--------------------------------------------------------------------------------------------|---------|
-| `qml/Phosphor/ControlCenter/ControlCenter.qml` + `Tile.qml` + `DetailPanel.qml`           | M       |
-| Tile catalog: Network / Bluetooth / Audio / Brightness / NightMode / DarkMode / Airplane / Idle / PowerProfile / Wallpaper (each ~1-2 days, depend on Phase 2 services) | L |
-| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | M |
+Lives in `libs/phosphor-shell-control-center/` (module `Phosphor.ControlCenter`),
+depending on theme + widgets + Kirigami.
+
+| Deliverable                                                                                | Status | Notes |
+|--------------------------------------------------------------------------------------------|--------|-------|
+| `qml/Phosphor/ControlCenter/ControlCenter.qml` + `Tile.qml` + `SliderTile.qml` + `DetailPanel.qml` | ✓ shipped | `SliderTile` was not in the original list; Audio and Brightness are ranges, not toggles, and the toggle chrome could not carry them. Tiles declare `spansRow` and the host turns it into a column span. |
+| Tile catalog, first five: Network / Bluetooth / Idle / Audio / Brightness                   | ✓ shipped | Each binds a Phase 2 service. None latches locally: the tile asks, and its state follows the service's echo. |
+| `examples/phosphor-control-center-demo/`                                                     | ✓ shipped | The grid driven by real NetworkManager / BlueZ / PipeWire / logind state, tiles supplied by a `Registry<IControlCenterTileFactory>`. |
+| Remaining catalog: DarkMode / Airplane / PowerProfile / Wallpaper / **NightMode**            | deferred | Each needs a decision first, not just code. See below. |
+| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | deferred | The Dashboard is an open question in `03-component-map.md`; building cards "reusable in Dashboard" pre-empts that call. |
+
+**`IControlCenterTileFactory` was not written here.** It shipped in Phase
+1.3 as a documented header waiting for this surface, so 4.4 consumes the
+seam rather than defining it.
+
+**Presentation: the connected-corner socket, arbitrated like a popout.**
+The control center grows out of the bar's capsule as one painted shape
+(`BarHost.socketContent` / `socketOpen`; `PanelWindow.interactiveThickness`
+makes the pocket clickable without moving the exclusive zone). It has no
+surface of its own, but it still goes through `PopoutController`:
+`src/shell/RoutingPopoutTransport` fronts the layer transport and a
+`SocketPopoutTransport` that is the sole writer of
+`ControlCenterController.openScreen`, routed by popout id (never by anchor,
+because `BarCenter` is the request default). That is what lets the Modal
+power menu close it and refuses it while a modal is up, with no per-surface
+bookkeeping in shell.qml. `LayerPopoutTransport` now maps a request's
+anchor onto a `PopoutHost` placement, so a bar-anchored popout hangs below
+the reserved top band that `ShellEngine::reservedMarginsFor()` reports.
+Centring is the fallback rather than the only behaviour: `AtPointer` still
+centres with a warning, and so does any bar anchor when no reserved-margins
+provider is installed, which is warned once per open.
+
+**Known limitation: the panel's keyboard layer is inert.** The tiles are
+tab-reachable and announce themselves, the detail panel takes focus while
+open and handles Escape, and none of it fires on a real screen. A
+socket-hosted control center has no surface of its own: it lives inside the
+bar's, and `BarHost` requests `keyboardFocus: PanelWindow.None`, which is
+deliberate Plasma-panel behaviour. The compositor therefore never routes a
+key to it. Pointer interaction is unaffected, and everything the keyboard
+layer would drive is reachable by clicking.
+
+Closing this is a bar-surface policy decision, not a QML fix, and it is not
+free. Granting the bar keyboard interactivity would let it take focus from
+whatever the user is typing into, for every bar, whether or not a popout is
+open. The alternatives are on-demand interactivity, which means the bar
+surface changing its keyboard mode as the pocket opens and closes, or
+hosting the control center on its own layer surface the way the launcher
+and the power menu already are, which trades the connected-corner join for
+a working keyboard. The join is the reason the socket exists, so the choice
+is a real one.
+
+**A trap worth recording:** `screenOf()` returns a `QScreen*` to QML and a
+`QScreen` has no QObject parent, so QML's default for an invokable return is
+JavaScriptOwnership and the GC deleted the live screen (five crashes on
+2026-09-03 that presented as three different bugs). The controller marks
+it `CppOwnership`; `tests/unit/shell/test_control_center_controller.cpp`
+pins that through a real `QQmlEngine`, because the transfer only happens
+in the engine's wrapper path and a plain C++ call cannot detect it.
+
+**Why the last five are deferred, individually:**
+- **NightMode** has no backing service at all. Nothing in `libs/phosphor-service-*`
+  does gamma or colour temperature, and on a standalone compositor that is
+  compositor-side work in `phosphor-compositor`. It was grouped with the
+  ready tiles by mistake; it is the least ready of the ten.
+- **DarkMode** and **PowerProfile** need an owner for the setting. Neither
+  is a hardware toggle, and both are state something else may also write.
+- **Airplane** needs an rfkill wrapper, which no shipped service provides.
+- **Wallpaper** overlaps 4.7's picker; building a tile first risks two
+  owners for one surface.
 
 ### 4.5: Lockscreen (M5)
 

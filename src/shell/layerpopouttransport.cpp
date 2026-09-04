@@ -21,6 +21,18 @@
 
 namespace {
 Q_LOGGING_CATEGORY(lcPopoutTransport, "phosphorshell.popout.transport")
+
+// The scrim is the only thing that distinguishes a modal popout from a
+// cooperative one visually, so the two alphas are a designed pair rather than
+// two independent numbers: the modal reads as "the rest is unavailable", the
+// cooperative as "this is on top of, not instead of".
+constexpr int kModalScrimAlpha = 160;
+constexpr int kCooperativeScrimAlpha = 60;
+
+// Handle prefix. RoutingPopoutTransport keys close-routing on the handle
+// string and documents these as disjoint by construction, so this must not
+// collide with the socket transport's own prefix.
+constexpr QLatin1String kLayerHandlePrefix("popout-");
 } // namespace
 
 namespace PhosphorShellApp {
@@ -49,6 +61,11 @@ LayerPopoutTransport::~LayerPopoutTransport()
 void LayerPopoutTransport::setEngine(QQmlEngine* engine)
 {
     m_engine = engine;
+}
+
+void LayerPopoutTransport::setReservedMarginsProvider(ReservedMarginsProvider provider)
+{
+    m_reservedMargins = std::move(provider);
 }
 
 void LayerPopoutTransport::drain()
@@ -98,6 +115,27 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         return {};
     }
 
+    // Retire any surface for this popout that is still draining. The
+    // controller frees its own row before asking us to close, and our close
+    // only sets `open` false and waits for the host's dismiss animation, so
+    // a caller toggling faster than that animation would otherwise stack a
+    // fresh full-screen surface on top of each one still on its way out,
+    // several of them holding an exclusive keyboard grab. Bounded by the
+    // animation rather than unbounded, but a local peer can drive it through
+    // the IPC toggle verb as fast as it likes.
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        if (it->closing && it->popoutId == request.popoutId) {
+            const QString staleHandle = it.key();
+            const Entry stale = *it;
+            it = m_entries.erase(it);
+            qCDebug(lcPopoutTransport) << "retiring still-closing surface" << staleHandle << "before reopening"
+                                       << request.popoutId;
+            destroyEntry(staleHandle, stale);
+        } else {
+            ++it;
+        }
+    }
+
     QScreen* screen = request.targetScreen;
     if (!screen && m_screens) {
         // A null targetScreen means "the transport decides". Focused, not
@@ -113,21 +151,54 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         return {};
     }
 
-    // Every popout is full-bleed and centres its content in QML, so an anchor
-    // asking for a specific position has nowhere to apply yet. Warn only for
-    // those. BarCenter is the field's DEFAULT, so treating it as a request
-    // would warn on every open by a caller that never expressed an opinion.
+    // Placement. The surface stays full-bleed for every anchor — the scrim,
+    // click-outside dismissal and keyboard grab all live on it — and
+    // PopoutHost places the content frame within it. The bar anchors hang
+    // the frame below the top reserved band: the exclusive zone this
+    // shell's own panels advertise on that screen, which the surface cannot
+    // ask the compositor for but ShellEngine knows, reached through the
+    // provider main.cpp installs.
+    //
+    // BarCenter is the request's DEFAULT, and with placement implemented it
+    // means what it says: a caller that never expressed an opinion gets
+    // "below the bar, centred", the natural home for a bar-summoned popout.
+    // Anything that wants the middle of the screen (the power menu, the
+    // launcher) asks for ScreenCenter explicitly. AtPointer has no pointer
+    // position to work from and still centres, with a warning, so a caller
+    // asking for it hears that it did not get it.
+    QString placement = QStringLiteral("center");
+    int reservedTop = 0;
     switch (request.anchor) {
     case PhosphorPopout::Anchor::BarLeft:
-    case PhosphorPopout::Anchor::BarRight:
-    case PhosphorPopout::Anchor::AtPointer:
-    case PhosphorPopout::Anchor::Custom:
-        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "asked for a positional anchor"
-                                     << int(request.anchor) << "but this transport only centres on the screen";
+        placement = QStringLiteral("barLeft");
         break;
     case PhosphorPopout::Anchor::BarCenter:
+        placement = QStringLiteral("barCenter");
+        break;
+    case PhosphorPopout::Anchor::BarRight:
+        placement = QStringLiteral("barRight");
+        break;
+    case PhosphorPopout::Anchor::Custom:
+        placement = QStringLiteral("custom");
+        break;
+    case PhosphorPopout::Anchor::AtPointer:
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                     << "asked for AtPointer, which this transport cannot place yet; centring";
+        break;
     case PhosphorPopout::Anchor::ScreenCenter:
         break;
+    }
+    if (placement.startsWith(QLatin1String("bar"))) {
+        if (m_reservedMargins) {
+            reservedTop = m_reservedMargins(screen).top();
+        } else {
+            // Not fatal: the popout still opens, hanging from the screen's
+            // top edge instead of the bar's bottom edge. But that is a
+            // wiring omission in the host, so say so.
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "is bar-anchored but no reserved-margins provider is installed;"
+                                         << "hanging from the screen edge";
+        }
     }
 
     // Build the content from the SHELL engine so it sees the shell's context
@@ -195,8 +266,17 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // renamed or re-typed either would otherwise degrade to an empty,
     // never-opening surface with nothing in the log to say why.
     if (!hostItem->setProperty("contentItem", QVariant::fromValue(contentItem))) {
-        qCWarning(lcPopoutTransport) << "popout" << request.popoutId
-                                     << "— PopoutHost rejected the contentItem write; it will render empty";
+        // Refuse rather than continue. Falling through would build a surface
+        // with no content that still takes the Modal legs below: a full-bleed
+        // scrim with an exclusive keyboard grab and nothing in it, returned
+        // to the caller as a valid handle it cannot distinguish from a real
+        // open. Tear down both halves; the content is not yet QObject-parented
+        // to the host at this point, so it needs its own deleteLater.
+        qCWarning(lcPopoutTransport) << "refusing" << request.popoutId << "— PopoutHost rejected the contentItem write";
+        hostComponent.completeCreate();
+        hostItem->deleteLater();
+        contentItem->deleteLater();
+        return {};
     }
     // QObject-parent the content to the host. PopoutHost's `contentItem.parent
     // = contentFrame` sets the VISUAL parent only: QQuickItem::setParentItem
@@ -223,10 +303,10 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     QColor backdrop;
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Modal:
-        backdrop = QColor(0, 0, 0, 160);
+        backdrop = QColor(0, 0, 0, kModalScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Cooperative:
-        backdrop = QColor(0, 0, 0, 60);
+        backdrop = QColor(0, 0, 0, kCooperativeScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Detached:
         backdrop = QColor(Qt::transparent);
@@ -234,6 +314,45 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     }
     if (!hostItem->setProperty("backdropColor", backdrop)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the backdropColor write";
+    }
+    // Placement, resolved above. Checked like the other host writes: a
+    // rejected write means the host renamed a property and every
+    // bar-anchored popout would silently land mid-screen.
+    if (!hostItem->setProperty("placement", placement)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the placement write";
+    }
+    if (!hostItem->setProperty("reservedTop", reservedTop)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the reservedTop write";
+    }
+    // The inset is a one-shot write, so a popout open across an output
+    // geometry change kept hanging at the offset the bar had when it opened.
+    // Re-push it while this host is alive; the guarded QPointer means a
+    // surface torn down in the meantime simply stops being updated. The
+    // connection dies with the host item, which is what owns the context.
+    if (m_reservedMargins) {
+        QPointer<QQuickItem> guardedHost(hostItem);
+        const QString popoutId = request.popoutId;
+        connect(screen, &QScreen::geometryChanged, hostItem, [this, guardedHost, screen, popoutId] {
+            if (!guardedHost || !m_reservedMargins) {
+                return;
+            }
+            if (!guardedHost->setProperty("reservedTop", m_reservedMargins(screen).top())) {
+                qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
+            }
+        });
+    }
+    if (request.anchor == PhosphorPopout::Anchor::Custom) {
+        // Both writes always run. Short-circuiting on the first would leave a
+        // Custom-anchored popout at a half-applied position, keeping the
+        // previous Y with a new X, and the single warning would not say which
+        // of the two the host rejected.
+        const bool wroteX = hostItem->setProperty("customX", request.customAnchor.x());
+        const bool wroteY = hostItem->setProperty("customY", request.customAnchor.y());
+        if (!wroteX || !wroteY) {
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "— PopoutHost rejected the customAnchor write; customX ok?" << wroteX
+                                         << "customY ok?" << wroteY;
+        }
     }
     // Give the content a way back to its host so a delegate can close itself
     // without walking the parent chain.
@@ -286,12 +405,21 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         return {};
     }
 
-    const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
+    const QString handle = kLayerHandlePrefix + QString::number(++m_counter);
     // String-based connect: `dismissed` is declared in QML and has no
     // compile-time member pointer. Host and transport share the GUI thread, so
     // the default AutoConnection is already direct and the contract's
     // same-thread delivery holds without pinning it.
-    QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()));
+    // Checked like every other host interaction in this function, and this is
+    // the worst one to lose: with no dismissal reaching us the entry never
+    // leaves m_entries, the controller keeps believing the popout is open,
+    // and the surface is stuck on screen for the process lifetime.
+    if (!QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()))) {
+        qCWarning(lcPopoutTransport) << "refusing" << request.popoutId
+                                     << "— PopoutHost has no dismissed() signal to connect";
+        hostItem->deleteLater();
+        return {};
+    }
 
     // A Surface that fails or loses its output does not tear itself down;
     // Surface's own docs put respawn-or-destroy on the consumer. Without these
@@ -306,7 +434,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         onSurfaceGone(handle, QStringLiteral("its output was removed"));
     });
 
-    m_entries.insert(handle, Entry{surface, hostItem, false});
+    m_entries.insert(handle, Entry{surface, hostItem, false, request.popoutId});
 
     surface->show();
     // Only now does the open animation run: PopoutHost keys its entrance off
@@ -334,6 +462,12 @@ void LayerPopoutTransport::closeSurface(const QString& handle)
     if (!it->hostItem) {
         // The host is already gone (surface failed, screen lost). Nothing to
         // animate; tear the entry down now.
+        //
+        // DEFENSIVE, and deliberately untested: every route that destroys a
+        // host emits its `dismissed` on the way out, which retires the entry
+        // through onHostDismissed before any close can reach this. The guard
+        // stays because the alternative, if a route ever does not, is an
+        // entry latched at closing=true that no later close can free.
         const Entry entry = *it;
         m_entries.erase(it);
         destroyEntry(handle, entry);

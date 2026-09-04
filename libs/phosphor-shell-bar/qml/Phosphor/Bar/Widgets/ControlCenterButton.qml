@@ -3,10 +3,10 @@
 // Phosphor.Bar.ControlCenterButton, opens the control center.
 //
 // An icon button whose `activated` signal is the seam the control center
-// popout binds to. The control center surface itself is Phase 4.4; the
-// button is complete and the activation routes there once that surface
-// and the bar-anchored popout wiring land (the BarCanvas socket the
-// popout grows from is already in place).
+// popout binds to. The activation is relayed through
+// BarRegistry.widgetActivated and handled by the shell composer, which
+// opens the control center into the BarCanvas socket this bar already
+// paints.
 
 BarIconButton {
     iconName: "configure"

@@ -104,6 +104,25 @@ void ToplevelListModel::onToplevelAdded(ForeignToplevel* toplevel)
     beginInsertRows({}, row, row);
     m_rows.append(QPointer<ForeignToplevel>(toplevel));
     endInsertRows();
+
+    // Relay the per-toplevel change signals as dataChanged. The model exposes
+    // each toplevel through one role, so a consumer that caches anything READ
+    // off that object (a title, an app id) has no other way to learn it
+    // changed: without this the model only ever announces adds and removes,
+    // and a window renaming itself was invisible until something else moved.
+    // The row is looked up at emit time rather than captured, because rows
+    // shift as windows come and go.
+    const auto announce = [this, toplevel] {
+        for (int i = 0; i < m_rows.size(); ++i) {
+            if (m_rows.at(i).data() == toplevel) {
+                const QModelIndex idx = index(i, 0);
+                Q_EMIT dataChanged(idx, idx, {ToplevelRole});
+                return;
+            }
+        }
+    };
+    connect(toplevel, &PhosphorWayland::ForeignToplevel::titleChanged, this, announce);
+    connect(toplevel, &PhosphorWayland::ForeignToplevel::appIdChanged, this, announce);
 }
 
 void ToplevelListModel::onToplevelRemoved(ForeignToplevel* toplevel)

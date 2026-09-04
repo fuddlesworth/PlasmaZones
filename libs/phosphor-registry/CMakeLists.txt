@@ -82,6 +82,7 @@ set(phosphorregistry_public_HDRS
     include/PhosphorRegistry/IFactoryBase.h
     include/PhosphorRegistry/IBarWidgetFactory.h
     include/PhosphorRegistry/IControlCenterTileFactory.h
+    include/PhosphorRegistry/ILauncherProvider.h
     include/PhosphorRegistry/ILauncherProviderFactory.h
     include/PhosphorRegistry/IOSDFactory.h
     include/PhosphorRegistry/IDesktopWidgetFactory.h
