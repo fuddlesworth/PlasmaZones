@@ -997,13 +997,35 @@ Order is rough, each surface is independent enough to slip. Recommended sequence
 
 Visible win: bar feels alive and distinct.
 
-### 4.2: Launcher (M2)
+### 4.2: Launcher (M2) *(core, providers, surface and demo shipped; shell mount pending)*
 
-| Deliverable                                                                                | Effort  |
-|--------------------------------------------------------------------------------------------|---------|
-| `qml/Phosphor/Launcher/Launcher.qml` (Spotlight skin first; Connected + Standalone later) | L       |
-| Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.8) | L |
-| Fuzzy match, port `fzf` scoring to C++                                                   | S       |
+Lives in `libs/phosphor-shell-launcher/`: a C++ core library
+(`PhosphorShellLauncher`, linkable without the UI) and the
+`Phosphor.Launcher` QML module, depending on registry + theme + widgets +
+Kirigami.
+
+| Deliverable                                                                                | Status | Notes |
+|--------------------------------------------------------------------------------------------|--------|-------|
+| `ILauncherProvider` contract in phosphor-registry                                          | ✓ shipped | The concrete type the Phase 1.3 seam promised; `createProvider()` now returns it instead of `QObject*`. Query in, rows out, `activate(id, Primary\|Alternate)`. |
+| `FuzzyMatcher`, fzf scoring ported to C++                                                   | ✓ shipped | fzf's `FuzzyMatchV2` with its own constants and bonus table, so orderings match fzf's — including the one the first tests got wrong: "axbxc" outranks "xabcx" for "abc". |
+| `DesktopEntry` parser + `DesktopEntryScanner`                                              | ✓ shipped | Hand-parsed (QSettings mangles lists, localised keys and escapes; KService is not a dependency). First-directory-wins per id. |
+| `LauncherModel`                                                                            | ✓ shipped | Rows sorted within a provider, providers ordered by their best row, filterable to one, Tab cycles providers that have rows. |
+| Providers: Apps, Calculator, Command, Windows, Clipboard                                   | ✓ shipped | C++, not the `.qml` files the component map sketched: fzf scoring, `.desktop` parsing and an expression evaluator are C++ concerns. Windows is duck-typed over any model with a `toplevel` role (keeps Wayland out of the library); inert on a compositor without foreign-toplevel. |
+| `EmojiProvider`                                                                            | deferred | No emoji dataset in the tree; bundling one is a data decision (subset vs. full CLDR-annotated set). |
+| `qml/Phosphor/Launcher/Launcher.qml` + `LauncherResultRow.qml` (Spotlight skin)          | ✓ shipped | Renders into whatever it is parented to. Keyboard entirely from the field: ↑↓, ↵, ⌥↵, Tab/⇧Tab, Esc. A refused activation keeps it open. |
+| `examples/phosphor-launcher-demo/`                                                         | ✓ shipped | The surface over this machine's real applications, clipboard and PATH, providers supplied by a `Registry<ILauncherProviderFactory>`. |
+| Connected and Standalone skins                                                             | later  | The plan's own sequencing. |
+| Shell mount (`LauncherController` in `src/shell`, `launcher.{show,toggle,hide}` IPC, popout) | next | |
+
+Tests: seven suites (matcher, parser/scanner over fixtures, each provider's
+gate and ranking, the model over fakes, and a QtQuickTest of the surface's
+keyboard contract). Six behaviours were mutation-verified; the apps
+secondary-field penalty passed its first mutation run because no fixture
+tied a keyword to a name, and two fixtures were added to make it real.
+
+One bug caught in review: the calculator's copy used the `qGuiApp` macro,
+which is an unchecked `static_cast` of `QCoreApplication::instance()` and
+segfaults under a plain `QCoreApplication`. It is a `qobject_cast` now.
 
 ### 4.3: Notification center (M2)
 

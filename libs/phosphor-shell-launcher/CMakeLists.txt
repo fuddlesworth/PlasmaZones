@@ -104,6 +104,105 @@ set_target_properties(PhosphorShellLauncher PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# QML module, STATIC (in-tree linkable): the Phosphor.Launcher surface
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Launcher + LauncherResultRow over the core. Kept a separate target so a
+# host can link the core (providers, model) without the UI, and so the
+# core stays free of Quick.
+
+find_package(Qt6 6.6 REQUIRED COMPONENTS Qml Quick QuickShapes)
+
+# Kirigami.Icon resolves freedesktop icon names through QIcon::fromTheme
+# for the result rows. REQUIRED, not QUIET, for the same reason the bar,
+# power and control-center modules require it: a host without Kirigami
+# should fail at configure rather than draw a launcher with no icons.
+find_package(KF6Kirigami REQUIRED)
+
+if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
+    find_package(PhosphorTheme CONFIG QUIET)
+endif()
+if(NOT TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
+    find_package(PhosphorShellWidgets CONFIG QUIET)
+endif()
+
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
+set(_phosphor_launcher_qml_files
+    qml/Phosphor/Launcher/Launcher.qml
+    qml/Phosphor/Launcher/LauncherResultRow.qml
+)
+
+# Pin each QML file's resource alias to its basename so import resolution
+# doesn't see a doubled path segment. Same pattern as the sibling libs.
+foreach(_qml_file IN LISTS _phosphor_launcher_qml_files)
+    get_filename_component(_qml_basename ${_qml_file} NAME)
+    set_source_files_properties(${_qml_file}
+        PROPERTIES
+            QT_RESOURCE_ALIAS ${_qml_basename}
+    )
+endforeach()
+
+# Directory-scope suppression of -Wmissing-include-dirs for the targets
+# qt_add_qml_module generates here. Full rationale: src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
+qt_add_qml_module(PhosphorShellLauncherQml
+    URI Phosphor.Launcher
+    VERSION 1.0
+    STATIC
+    # DEPENDENCIES, never IMPORTS: IMPORTS injects a module's unqualified
+    # type names into every file here, and Kirigami exports a `Theme` that
+    # would shadow the Phosphor.Theme singleton. Same rule as the bar,
+    # power and control-center modules, learned the hard way on the bar.
+    DEPENDENCIES
+        Phosphor.Theme
+        Phosphor.Widgets
+        QtQuick.Layouts
+        org.kde.kirigami
+    SOURCES
+        src/phosphorshelllauncher_qml_plugin.cpp
+    QML_FILES ${_phosphor_launcher_qml_files}
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Launcher
+)
+
+add_library(PhosphorShellLauncher::PhosphorShellLauncherQml ALIAS PhosphorShellLauncherQml)
+
+target_compile_features(PhosphorShellLauncherQml PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorShellLauncherQml
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        # PhosphorRipple in the rows paints with a QtQuick.Shapes Shape;
+        # found in this scope so the static plugin's dependency walk
+        # resolves it without a configure warning.
+        Qt6::QuickShapes
+        KF6::Kirigami
+        PhosphorShellLauncher::PhosphorShellLauncher
+)
+
+if(TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
+    target_link_libraries(PhosphorShellLauncherQml PUBLIC PhosphorShellWidgets::PhosphorShellWidgetsQml)
+endif()
+if(TARGET PhosphorShellWidgetsQmlplugin)
+    target_link_libraries(PhosphorShellLauncherQml PUBLIC PhosphorShellWidgetsQmlplugin)
+endif()
+if(TARGET PhosphorTheme::PhosphorThemeQml)
+    target_link_libraries(PhosphorShellLauncherQml PUBLIC PhosphorTheme::PhosphorThemeQml)
+endif()
+if(TARGET PhosphorThemeQmlplugin)
+    target_link_libraries(PhosphorShellLauncherQml PUBLIC PhosphorThemeQmlplugin)
+endif()
+
+# No install rules for the STATIC QML module, matching the sibling shell
+# surfaces: it rides in whatever binary links it.
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
