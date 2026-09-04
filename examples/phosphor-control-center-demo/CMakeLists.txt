@@ -74,7 +74,7 @@ target_link_libraries(phosphor-control-center-demo
         # NOT qt_add_qml_module modules and ship no plugin registrar: each
         # service exposes a hand-rolled registerQmlTypes() that the host
         # process must call before loading QML (see main.cpp, and
-        # src/shell/main.cpp:135 for the shell's own block). So the service
+        # the block near src/shell/main.cpp:130 for the shell's own). So the service
         # libraries are linked here and registered explicitly there.
         PhosphorServiceNetwork::PhosphorServiceNetwork
         PhosphorServiceBluetooth::PhosphorServiceBluetooth

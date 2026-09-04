@@ -19,7 +19,7 @@ namespace PhosphorShellLauncher {
 // A hand-written recursive-descent evaluator rather than a JS engine:
 // the query is user input, and evaluating it as a script would be a
 // footgun for the sake of saving a hundred lines. Supported: decimal and
-// exponent literals, + - * / % ^, parentheses, unary minus, and sqrt().
+// exponent literals, + - * / % ^, parentheses, unary minus, and the sqrt() and abs() functions.
 //
 // A bare number yields nothing ("5" is not a calculation, and a row
 // reading "5" under every query that happens to be digits is noise); the

@@ -397,7 +397,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
     add_subdirectory(libs/phosphor-shell-control-center) # Phosphor.ControlCenter tile surface (Phase 4.4); depends on theme + widgets + Kirigami
     add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
-    add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the four shell-tier libs that also require KF6 Kirigami
+    add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center and launcher)
     add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
 endif()
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
