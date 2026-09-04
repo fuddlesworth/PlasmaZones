@@ -45,6 +45,31 @@ phosphorshelllauncher_add_test(test_calculatorprovider)
 phosphorshelllauncher_add_test(test_commandprovider)
 phosphorshelllauncher_add_test(test_appsprovider)
 phosphorshelllauncher_add_test(test_launchermodel)
+# ClipboardProvider, against a fake service. The provider talks to its
+# service purely by name, so the fake is the contract.
+phosphorshelllauncher_add_test(test_clipboardprovider)
+
+# CalculatorProvider's copy path needs a QGuiApplication for the clipboard,
+# so it cannot join the guiless helper above: that helper's binaries are
+# deliberately QCoreApplication-only, which is what pins the headless
+# refusal in test_calculatorprovider.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Gui)
+add_executable(test_calculatorprovider_clipboard test_calculatorprovider_clipboard.cpp)
+target_compile_features(test_calculatorprovider_clipboard PRIVATE cxx_std_20)
+target_link_libraries(test_calculatorprovider_clipboard
+    PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+        PhosphorShellLauncher::PhosphorShellLauncher
+)
+add_test(NAME test_calculatorprovider_clipboard COMMAND test_calculatorprovider_clipboard)
+set_property(TEST test_calculatorprovider_clipboard APPEND PROPERTY LABELS "phosphorshelllauncher")
+set_property(TEST test_calculatorprovider_clipboard APPEND PROPERTY ENVIRONMENT "LC_ALL=C.UTF-8")
+set_property(TEST test_calculatorprovider_clipboard APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+if(COMMAND phosphor_apply_test_isolation)
+    phosphor_apply_test_isolation(test_calculatorprovider_clipboard)
+endif()
 
 # The surface's keyboard contract, as a QtQuickTest over a fake model.
 # Links the Phosphor.Launcher module + its registrar, plus the modules it
