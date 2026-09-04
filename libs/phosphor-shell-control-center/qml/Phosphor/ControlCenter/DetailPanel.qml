@@ -126,6 +126,12 @@ FocusScope {
         anchors.fill: parent
         radius: Tokens.radius_l
         color: Theme.surface_container
+        // An outlined edge, matching the tiles the panel slides over. Without
+        // it the panel is the same colour as the surface behind it and has no
+        // edge at all, so a drill-in reads as the tiles vanishing rather than
+        // as a new view arriving.
+        border.width: 1
+        border.color: Theme.outline_variant
 
         ColumnLayout {
             anchors.fill: parent

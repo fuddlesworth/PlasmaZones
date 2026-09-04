@@ -398,10 +398,18 @@ void CalculatorProvider::setQuery(const QString& query)
             m_results.append(std::move(r));
         }
     } else if (value.has_value() && !std::isfinite(*value) && sawOperator) {
-        // It WAS an expression, it just has no representable answer:
-        // 2^5000, or a division by zero. Say so, rather than showing nothing
-        // and leaving the user to guess whether the syntax was wrong. No
-        // action label and no answer, so activation refuses.
+        // It WAS an expression, it just has no representable answer: 2^5000
+        // overflowing to infinity. Say so, rather than showing nothing and
+        // leaving the user to guess whether the syntax was wrong. No action
+        // label and no answer, so activation refuses.
+        //
+        // Division by zero does NOT reach here. term() refuses to produce a
+        // value for it at all, which is the documented contract, so it looks
+        // to this branch exactly like text that is not an expression and
+        // yields no row. That is a real gap: "1/0" is a question the user
+        // asked and gets silence. Closing it means the parser distinguishing
+        // "refused" from "not an expression", which is a contract change
+        // rather than a branch here.
         LauncherResult r;
         r.id = QStringLiteral("answer");
         r.title = QCoreApplication::translate("PhosphorShellLauncher", "Result is out of range");
