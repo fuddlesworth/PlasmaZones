@@ -2742,6 +2742,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // other placement (a plain retile, a maximize apply) is an
                     // arrival and keeps placeIn. Same evidence the departure
                     // rect is anchored on above, so the two cannot disagree.
+                    //
+                    // The THIRD bit-clearing site in this iteration — the
+                    // user-maximize demote near the top of this else arm, which
+                    // calls MaximizeRestore on a window carrying a maximize
+                    // this handler never claimed — deliberately does NOT count
+                    // as a release. Nothing there asked for an un-maximize: the
+                    // batch is placing the window into a tile and clearing a
+                    // stray bit that would otherwise fight the tile rect
+                    // (discussion #461), so the leg it owes is the arrival it
+                    // is. A user who un-maximizes such a window does it through
+                    // KWin, which answers on the native path with its own
+                    // placeOut.
                     const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
