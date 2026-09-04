@@ -212,6 +212,14 @@ void TestRoutingPopoutTransport::detachingTheCallbackDropsLaterDismissals()
     router.setSurfaceDismissedCallback([&calls](const QString&) {
         calls++;
     });
+    const QString first = router.openSurface(requestFor(QStringLiteral("power")));
+    // Positive control before the detach. Without it, a callback that was
+    // never wired at all satisfies every assertion below: zero calls is
+    // exactly what the broken case looks like.
+    layer.selfDismiss(first);
+    QCOMPARE(calls, 1);
+    calls = 0;
+
     const QString h = router.openSurface(requestFor(QStringLiteral("power")));
 
     // The controller detaches with an empty function in its destructor. A

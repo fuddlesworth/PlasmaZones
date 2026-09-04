@@ -113,9 +113,17 @@ TestCase {
 
     function test_reset_clears_and_focuses() {
         const t = makeLauncher();
-        t.results.query = "stale";
+        // Type it, so the FIELD holds the stale text too. Setting only the
+        // model's query left the field empty, which is why a reset that
+        // cleared the model and not the field passed this case: the next
+        // keystroke then re-sent the stale prefix.
+        keyClick(Qt.Key_S);
+        keyClick(Qt.Key_T);
+        compare(t.launcher.queryText, "st", "the field holds what was typed");
         t.results.providerFilter = "apps";
+
         t.launcher.reset();
+        compare(t.launcher.queryText, "", "reset clears the field, not just the model");
         compare(t.results.query, "", "reset clears the query");
         compare(t.results.providerFilter, "", "reset clears the filter");
         verify(t.launcher.activeFocus || t.launcher.focus, "reset puts keyboard focus in the surface");

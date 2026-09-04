@@ -111,7 +111,52 @@ private Q_SLOTS:
     void aProviderAddedAfterAQueryIsGivenIt();
     void addingTheSameProviderTwiceIsRefused();
     void roleNamesCoverEveryRoleTheSurfaceBinds();
+    void everyRebuildKeepsTheModelSignalsWellFormed();
 };
+
+// rowCount and data stay correct even when the reset bracket is broken, so
+// the rest of this file cannot see a rebuild that emits its begin/end pair
+// wrongly. A bound QML view can: a half-open reset strands the delegates on
+// stale rows. QAbstractItemModelTester watches the bracket on every
+// structural change below and fails the case where it goes wrong.
+void TestLauncherModel::everyRebuildKeepsTheModelSignalsWellFormed()
+{
+    LauncherModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+
+    auto* a = new FakeProvider(QStringLiteral("a"), true, &model);
+    auto* b = new FakeProvider(QStringLiteral("b"), false, &model);
+    a->rows = {FakeProvider::row(QStringLiteral("a1"), 10), FakeProvider::row(QStringLiteral("a2"), 4)};
+    b->rows = {FakeProvider::row(QStringLiteral("b1"), 7)};
+
+    // Every structural transition the surface can drive: providers arriving,
+    // rows appearing and vanishing under a query, the filter narrowing and
+    // clearing, and a provider dying.
+    model.addProvider(a);
+    model.addProvider(b);
+
+    // The tester validates the SHAPE of whatever signals are emitted, but a
+    // rebuild that emits none at all still satisfies it, and that is exactly
+    // the break that strands a bound view on stale rows. So the announcement
+    // itself is asserted here.
+    QSignalSpy aboutToReset(&model, &QAbstractItemModel::modelAboutToBeReset);
+    QSignalSpy wasReset(&model, &QAbstractItemModel::modelReset);
+
+    model.setQuery(QStringLiteral("x"));
+    QVERIFY(model.rowCount() > 0);
+    QVERIFY2(wasReset.count() > 0, "a rebuild that changes the rows announces itself");
+    QCOMPARE(aboutToReset.count(), wasReset.count());
+
+    model.setProviderFilter(QStringLiteral("a"));
+    model.setProviderFilter(QString());
+
+    a->rows.clear();
+    a->setQuery(QStringLiteral("x"));
+
+    model.setQuery(QString());
+    delete b;
+    model.setQuery(QStringLiteral("y"));
+}
 
 // A filter is the only piece of model state the user cannot see the cause of
 // when it goes wrong: the pill for an empty provider hides, so a stale filter

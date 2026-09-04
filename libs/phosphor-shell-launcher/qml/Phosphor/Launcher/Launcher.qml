@@ -59,6 +59,11 @@ FocusScope {
     implicitWidth: 640
     implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 
+    // What the user has typed. Read-only: the field is the only writer,
+    // and the model's query follows it. Exposed so a host (or a test) can
+    // see the two agree without reaching into the field.
+    readonly property alias queryText: field.text
+
     // Reset for a fresh open: empty query, all providers, selection on
     // top, keyboard in the field. The host calls this on open rather than
     // rebuilding the surface, so provider state (the apps scan) survives.

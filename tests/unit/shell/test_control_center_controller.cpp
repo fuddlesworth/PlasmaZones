@@ -21,6 +21,7 @@
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QScopedPointer>
 #include <QScreen>
 #include <QSignalSpy>
@@ -58,6 +59,7 @@ private Q_SLOTS:
     void screenOfAnItemInAWindowResolvesThatWindowsScreen();
     void openScreenNotifiesOncePerRealChange();
     void tileIdsListTheBuiltInCatalogInOrder();
+    void createTileRefusesAnUnknownIdAndAnEngineLessParent();
 };
 
 void TestControlCenterController::screenOfNullFallsBackToThePrimary()
@@ -168,6 +170,31 @@ void TestControlCenterController::tileIdsListTheBuiltInCatalogInOrder()
     const QStringList expected{QStringLiteral("network"), QStringLiteral("bluetooth"), QStringLiteral("idle"),
                                QStringLiteral("audio"), QStringLiteral("brightness")};
     QCOMPARE(controller.tileIds(), expected);
+}
+
+void TestControlCenterController::createTileRefusesAnUnknownIdAndAnEngineLessParent()
+{
+    ControlCenterController controller(nullptr);
+
+    // createTile is the whole provider contract the host calls, and neither
+    // documented refusal was covered. Both have to return null rather than
+    // throw or crash: the host reads a null return as "unavailable in this
+    // environment" and reports it through tileResolved.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no tile registered")));
+    QVERIFY(!controller.createTile(QStringLiteral("no-such-tile"), nullptr));
+
+    // A registered id whose parent resolves no QML engine. The factory
+    // builds its component from the engine, so there is nothing to build
+    // with.
+    QQuickItem engineLessParent;
+    QVERIFY(!qmlEngine(&engineLessParent));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no QML engine resolvable")));
+    QVERIFY(!controller.createTile(QStringLiteral("network"), &engineLessParent));
+
+    // A null parent on a registered id lands in the same place, since the
+    // engine is resolved from the parent.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no QML engine resolvable")));
+    QVERIFY(!controller.createTile(QStringLiteral("network"), nullptr));
 }
 
 QTEST_MAIN(TestControlCenterController)

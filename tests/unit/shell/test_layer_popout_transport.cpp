@@ -23,6 +23,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QStringList>
@@ -287,6 +288,13 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
 
     const QString handle = transport.openSurface(makeRequest());
     QVERIFY(!handle.isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    // Watched so the silence below is evidence of a suppressed report rather
+    // than of a close that never happened: an empty m_dismissed was already
+    // true before the call, so a closeSurface that did nothing at all would
+    // have passed this case.
+    QPointer<QQuickWindow> window = m_wire->m_lastWindow;
+    QVERIFY(window);
 
     // A controller-initiated close marks the entry `closing`, so the host's
     // eventual `dismissed` must tear the entry down WITHOUT reporting back —
@@ -295,6 +303,7 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
     transport.closeSurface(handle);
     QTest::qWait(1500);
     QVERIFY2(m_dismissed.isEmpty(), "controller-initiated close was reported back as a dismissal");
+    QVERIFY2(window.isNull(), "the close really tore the surface down");
 
     // The entry is gone: a second close of the same handle is a no-op.
     transport.closeSurface(handle);
@@ -362,12 +371,20 @@ void TestLayerPopoutTransport::drainEmptiesWithoutInvokingTheCallback()
     });
 
     QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    // Watched, so "the callback stayed empty" is not the whole assertion: a
+    // drain() that returned without emptying anything would satisfy that on
+    // its own.
+    QPointer<QQuickWindow> window = m_wire->m_lastWindow;
+    QVERIFY(window);
+
     transport.drain();
     // The teardown is deferred (deleteLater) but the disconnect is not:
     // nothing may reach the callback afterwards, including the hosts'
     // destruction-time emissions.
     QTest::qWait(200);
     QVERIFY(m_dismissed.isEmpty());
+    QVERIFY2(window.isNull(), "drain really emptied the transport");
 
     // A drained transport still opens fresh surfaces.
     QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
