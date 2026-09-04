@@ -123,8 +123,17 @@ Item {
 
         for (const id in priv.tiles) {
             const existing = priv.tiles[id];
-            if (existing)
+            if (existing) {
+                // Taken out of the LAYOUT before being destroyed. destroy()
+                // is deferred to the event loop while the replacements below
+                // are created synchronously, so both generations sat in the
+                // grid together for a frame and the whole thing visibly
+                // reflowed. Hiding and unmanaging the old one first means the
+                // deferred delete is invisible.
+                existing.visible = false;
+                existing.parent = null;
                 existing.destroy();
+            }
         }
         priv.tiles = ({});
 

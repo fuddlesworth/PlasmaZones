@@ -54,6 +54,14 @@ struct TileSpec
 ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleService* idleService, QObject* parent)
     : QObject(parent)
 {
+    // The display names are UNTRANSLATED, deliberately and for the same
+    // reason BarController's are: the factory contract leaves translation to
+    // the implementation, no surface renders these yet (the tile's own label
+    // comes from its QML, which does translate), and the shell tier has no
+    // i18n wiring on either side. They become PhosphorI18n::tr() calls
+    // together with the rest of the shell's strings; translating these alone
+    // would localise a label nothing displays and split the two controllers.
+    //
     // Capabilities are advisory until the Phase 5 capability runtime lands,
     // but they are declared now so the built-ins exercise the same manifest
     // surface a plugin will.
