@@ -56,12 +56,25 @@ public:
     // The layer sibling carries the same verb for the same reason.
     void drain();
 
+    /// Resolve the output name to open the pocket on, given the request's
+    /// target screen (which may be null, meaning "the transport decides").
+    /// An empty return refuses the open.
+    ///
+    /// Injectable for the same reason the layer transport takes a
+    /// reserved-margins provider: the default reads QScreen::name(), and no
+    /// headless Qt platform gives its screens a name, so the one-socket
+    /// invariant would otherwise be untestable. Production installs nothing
+    /// and gets the default.
+    using ScreenNameResolver = std::function<QString(QScreen*)>;
+    void setScreenNameResolver(ScreenNameResolver resolver);
+
 private:
     // Clear the open state and report it upward, for a close this transport
     // decided on rather than one the controller asked for.
     void selfDismiss();
 
     ControlCenterController* m_controller;
+    ScreenNameResolver m_resolveScreenName;
     QString m_openScreenName;
     QString m_openHandle;
     int m_counter = 0;

@@ -2415,8 +2415,35 @@ if(TARGET PhosphorRegistry::PhosphorRegistry AND TARGET PhosphorServiceIdle::Pho
             PhosphorServiceIdle::PhosphorServiceIdle
     )
     add_test(NAME test_control_center_controller COMMAND test_control_center_controller)
-    phosphor_apply_test_isolation(test_control_center_controller)
-    phosphor_append_test_environment(test_control_center_controller "QT_QPA_PLATFORM=offscreen")
+endif()
+
+# SocketPopoutTransport, the bar-pocket popout transport.
+# Needs the popout library for IPopoutTransport, and the control-center
+# controller because the transport is the sole writer of its openScreen.
+if(TARGET PhosphorPopout::PhosphorPopout AND TARGET PhosphorRegistry::PhosphorRegistry
+   AND TARGET PhosphorServiceIdle::PhosphorServiceIdle)
+    add_executable(test_socket_popout_transport
+        shell/test_socket_popout_transport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/SocketPopoutTransport.h
+        ${CMAKE_SOURCE_DIR}/src/shell/socketpopouttransport.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_socket_popout_transport PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_socket_popout_transport
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorPopout::PhosphorPopout
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorServiceIdle::PhosphorServiceIdle
+    )
+    add_test(NAME test_socket_popout_transport COMMAND test_socket_popout_transport)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════

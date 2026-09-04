@@ -147,6 +147,15 @@ void TestLayerPopoutTransport::opensASurfaceAndReturnsAHandle()
 
     const QString handle = transport.openSurface(makeRequest());
     QVERIFY(!handle.isEmpty());
+    // RoutingPopoutTransport keys close-routing on the handle string and
+    // documents this transport's prefix as disjoint from the socket
+    // transport's. Nothing enforced that, so a copy-paste making this mint
+    // "socket-" would route closes to the wrong transport with the router's
+    // own tests still green, because they use a fake that hardcodes both
+    // prefixes rather than the real minting.
+    QVERIFY2(handle.startsWith(QLatin1String("popout-")), qPrintable(QStringLiteral("handle was ") + handle));
+    // The host really got built, which the file header claims this case pins.
+    QVERIFY(lastHost());
     // The layer surface really attached through the wire.
     QTRY_VERIFY(m_wire->m_attachCount >= 1);
 

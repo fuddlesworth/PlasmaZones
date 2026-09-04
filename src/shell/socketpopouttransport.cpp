@@ -26,6 +26,15 @@ namespace PhosphorShellApp {
 
 SocketPopoutTransport::SocketPopoutTransport(ControlCenterController* controller)
     : m_controller(controller)
+    // Default resolution: the request's own output, or whatever the
+    // controller falls back to when the request carries none. screenOf()
+    // falls back to the primary and guards its own use of the result, so it
+    // is nullable when the session has no outputs at all.
+    , m_resolveScreenName([this](QScreen* requested) {
+        const QScreen* const target =
+            requested ? requested : (m_controller ? m_controller->screenOf(nullptr) : nullptr);
+        return target ? target->name() : QString();
+    })
 {
     // The layer sibling gets this repair from Surface::screenLost. This
     // transport owns no surface, so it has to watch the outputs directly:
@@ -47,6 +56,11 @@ SocketPopoutTransport::SocketPopoutTransport(ControlCenterController* controller
 SocketPopoutTransport::~SocketPopoutTransport()
 {
     drain();
+}
+
+void SocketPopoutTransport::setScreenNameResolver(ScreenNameResolver resolver)
+{
+    m_resolveScreenName = std::move(resolver);
 }
 
 void SocketPopoutTransport::drain()
@@ -88,10 +102,7 @@ QString SocketPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& 
     // is invisible by eye because the primary is the only output that
     // matters.
     const bool fromRequest = request.targetScreen != nullptr;
-    const QScreen* const target = fromRequest ? request.targetScreen : m_controller->screenOf(nullptr);
-    // screenOf() falls back to the primary and guards its own use of the
-    // result, so it is nullable when the session has no outputs at all.
-    const QString screenName = target ? target->name() : QString();
+    const QString screenName = m_resolveScreenName ? m_resolveScreenName(request.targetScreen) : QString();
     // An empty name means "closed everywhere" to the controller, so opening
     // with one would set a live handle that paints nothing and then block
     // every later open. Refuse instead, before anything is recorded.
