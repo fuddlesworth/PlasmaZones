@@ -20,13 +20,20 @@ Rectangle {
     /// labels at every scale.
     property string fontFamily: ""
     property real fontSizeScale: 1
+    /// Draw as a leading modifier rather than the key the row is really
+    /// about: no fill, dimmer text. A cheatsheet repeats the same two or
+    /// three modifiers on nearly every row, and at uniform weight the eye
+    /// has to parse the whole run to find the one token that differs.
+    /// Recessing the modifiers leaves the terminal cap as the only thing
+    /// at full contrast, so a row can be read by its last chip alone.
+    property bool dimmed: false
 
     implicitWidth: Math.max(keyLabel.implicitWidth + Kirigami.Units.smallSpacing * 2, implicitHeight)
     implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
     radius: Kirigami.Units.smallSpacing
-    color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
+    color: root.dimmed ? "transparent" : Qt.alpha(Kirigami.Theme.textColor, 0.08)
     border.width: 1
-    border.color: Qt.alpha(Kirigami.Theme.textColor, 0.25)
+    border.color: Qt.alpha(Kirigami.Theme.textColor, root.dimmed ? 0.16 : 0.25)
 
     Label {
         id: keyLabel
@@ -34,7 +41,7 @@ Rectangle {
         anchors.centerIn: parent
         font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
         font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.9 * root.fontSizeScale)
-        color: Kirigami.Theme.textColor
+        color: root.dimmed ? Qt.alpha(Kirigami.Theme.textColor, 0.6) : Kirigami.Theme.textColor
         // The hosting shortcut row announces a composed "action, keys" name;
         // the per-token caps must not be announced a second time.
         Accessible.ignored: true

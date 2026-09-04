@@ -112,11 +112,19 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::Cheatsheet, []() { });
-    // Modal — needs input for the backdrop click-to-dismiss.
-    syncPassiveShellSurfaceStateForSurface(shellSurface);
 
+    // Set BEFORE the sync, not after. The pointer-input predicate reads the
+    // slot's own visibility, which is already true above, but the keyboard
+    // predicate reads these two members (see shellhost_bridge.cpp) — it has to,
+    // because releasing on the first edge of dismissal means it cannot key on a
+    // slot that stays visible for the whole fade-out. Syncing first would
+    // compute kbd-None and the search field would never receive a keystroke.
     m_cheatsheetScreenId = resolvedId;
     m_cheatsheetVisible = true;
+
+    // Modal — needs input for the backdrop click-to-dismiss, and the keyboard
+    // for the search field.
+    syncPassiveShellSurfaceStateForSurface(shellSurface);
 
     qCInfo(lcOverlay) << "showCheatsheet: screen=" << resolvedId << "rows=" << model.size() << "mode=" << currentMode;
 }
@@ -139,6 +147,15 @@ void OverlayService::hideCheatsheet()
     // completion" regardless of whether the completion runs synchronously
     // or asynchronously — same ordering contract as the picker.
     Q_EMIT cheatsheetDismissed();
+
+    // Hand the keyboard back now, not when the fade finishes. The sheet is the
+    // one overlay that takes keyboard focus for its search field (see the
+    // anyKeyboardGrabbing derivation in shellhost_bridge.cpp), and the slot
+    // stays visible for the whole hide animation — releasing on completion
+    // would eat every keystroke aimed at the window the user just came back
+    // to. m_cheatsheetVisible is already false above, so this recomputes to
+    // kbd-None while leaving the mapped/input-region state untouched.
+    syncPassiveShellSurfaceState(screenId);
 
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()

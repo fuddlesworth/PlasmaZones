@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The shortcut cheatsheet can be searched, and reads more clearly**: the sheet listed around ninety shortcuts across three dense columns with no way to look one up, so finding a key meant scanning the whole card. There is now a filter field at the top, focused as soon as the sheet opens, matching on action names, category names and the keys themselves, so typing "column width" or "meta alt" narrows the card as you go. The columns no longer cut a category in half and reprint its heading as "(continued)", which had left most headings pointing at the middle of a section. Each category is now kept whole with a heading that reads as one, the leading modifiers on each row are drawn lighter than the key they lead to so a row can be read by its last cap, and a category's unassigned actions collapse into a single line you can open. The sheet also says which placement mode it is filtered for, since it has always been filtered by the mode of the screen it opens on and never mentioned it, and it now says that Escape closes it.
+
 ### Fixed
 
 - **Restoring a maximized window on a scrolling screen now plays the Released animation**: with a pack assigned to Released under Settings → Animations → Window Motion, clicking the restore button on a maximized window in scrolling mode played the Placed animation instead. The maximize button on a scrolling screen is answered by the scrolling engine rather than by KDE, and every placement that came back from it was treated as an arrival. A window handing its maximize state back is now treated as a release, so it animates on Released. A tiling algorithm such as monocle giving the screen back does the same. ([#1058](https://github.com/fuddlesworth/PlasmaZones/pull/1058))

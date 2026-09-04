@@ -17,6 +17,9 @@
         <file alias="CheatsheetContent.qml">../ui/CheatsheetContent.qml</file>
         <file alias="PopupCardTitle.qml">../ui/PopupCardTitle.qml</file>
         <file alias="KeyChip.qml">../ui/KeyChip.qml</file>
+        <file alias="CheatsheetRow.qml">../ui/CheatsheetRow.qml</file>
+        <file alias="CheatsheetGroup.qml">../ui/CheatsheetGroup.qml</file>
+        <file alias="CheatsheetSearchField.qml">../ui/CheatsheetSearchField.qml</file>
         <file alias="ScrollDropIndicatorContent.qml">../ui/ScrollDropIndicatorContent.qml</file>
     </qresource>
 </RCC>

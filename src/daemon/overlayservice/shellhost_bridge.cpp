@@ -373,7 +373,22 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
-    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
+    // Keyboard grab: the cheatsheet alone, because its search field is the
+    // only overlay content that reads typed characters. Snap assist and the
+    // picker stay kbd-None on purpose — both answer only to global shortcuts,
+    // which KWin routes ahead of surface delivery, so taking the keyboard
+    // would buy them nothing and cost the focused window its input.
+    //
+    // Keyed on m_cheatsheetVisible, NOT on the slot's isVisible(): the slot
+    // item stays visible for the whole fade-out, and holding the session's
+    // keyboard across an animation would swallow whatever the user typed into
+    // the window they were returning to. The flag is cleared on the first edge
+    // of every dismissal path, which is the edge that should release. Escape
+    // itself is unaffected either way — it reaches the daemon through the
+    // ad-hoc global grab (daemon/cheatsheet.cpp), never through this surface.
+    const bool anyKeyboardGrabbing = m_cheatsheetVisible && m_cheatsheetScreenId == effectiveId;
+
+    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing, anyKeyboardGrabbing);
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

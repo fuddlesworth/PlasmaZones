@@ -168,8 +168,28 @@ public:
     /// a slot wanting clicks only where it draws would need a sub-surface
     /// input region, which nothing asks for today.
     ///
+    /// @p anyKeyboardGrabbing - true when at least one slot needs to TYPE
+    /// (consumer-defined; Phosphor today: the cheatsheet's search field).
+    /// Drives the layer surface's keyboard interactivity between Exclusive
+    /// and None at runtime, which wlr-layer-shell permits after the initial
+    /// configure. Separate from @p anyInputGrabbing because the two are
+    /// genuinely different asks: snap-assist and the layout picker are modal
+    /// for the pointer but must NOT take the keyboard away from the focused
+    /// toplevel, since they are driven entirely by global shortcuts the
+    /// compositor routes before any surface sees them.
+    ///
+    /// Exclusive rather than OnDemand: a slot that wants the keyboard was
+    /// opened by an explicit user gesture and expects to receive the next
+    /// keystroke, not to be clicked into first. The cost is that the focused
+    /// window stops receiving keys for the slot's lifetime, so consumers must
+    /// drop the flag on the FIRST edge of dismissal rather than waiting for a
+    /// hide animation to finish.
+    ///
+    /// Gated on @p anyVisible for the same reason the input flag is: an
+    /// invisible surface must never hold the session's keyboard.
+    ///
     /// No-op when the shell surface or window is not yet up.
-    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);
+    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing, bool anyKeyboardGrabbing);
 
     /// Move the ShellState entry from @p oldKey to @p newKey, preserving
     /// the underlying heap-allocated state object (the borrowed pointer

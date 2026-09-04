@@ -4,6 +4,7 @@
 #include <PhosphorOverlay/ShellHost.h>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 
 #include <QChar>
@@ -164,7 +165,8 @@ void ShellHost::destroyShell(const QString& screenId)
     state->slots.clear();
 }
 
-void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
+void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,
+                                 bool anyKeyboardGrabbing)
 {
     auto it = m_states.find(screenId);
     if (it == m_states.end() || !it.value()->m_shellSurface || !it.value()->m_shellWindow) {
@@ -238,6 +240,25 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // place with the flag. Every caller is on a structural edge (slot show,
     // hide completion, screen add/remove), never a paint path.
     s.m_shellWindow->setMask(QRegion());
+
+    // Keyboard interactivity is a separate axis from the pointer flag above:
+    // the picker and snap assist are pointer-modal but deliberately leave the
+    // keyboard with the focused toplevel, because every key they answer to is
+    // a global shortcut the compositor routes before any surface sees it. Only
+    // a slot that has to TYPE asks for this, and while it holds it the user's
+    // focused window receives nothing.
+    //
+    // Runtime set_keyboard_interactivity is legal on wlr-layer-shell after the
+    // initial configure (unlike the scope, which is immutable), so this rides
+    // the same structural edges as the input flag rather than needing a
+    // surface rebuild. The transport handle is null until the surface has
+    // attached; a pre-attach call would be dropped, and the role's own
+    // KeyboardInteractivity::None is the correct value to attach with anyway.
+    if (auto* handle = s.m_shellSurface->transport()) {
+        const auto wantKeyboard = (anyVisible && anyKeyboardGrabbing) ? PhosphorLayer::KeyboardInteractivity::Exclusive
+                                                                      : PhosphorLayer::KeyboardInteractivity::None;
+        handle->setKeyboardInteractivity(wantKeyboard);
+    }
 }
 
 bool ShellHost::rekey(const QString& oldKey, const QString& newKey)
