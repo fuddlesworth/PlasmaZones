@@ -172,7 +172,15 @@ public:
     ///  • The interactive drag-restore, excluded at the call site: KWin
     ///    unmaximizes a window when the user pulls its titlebar, and that
     ///    gesture's visuals belong to the held move pack.
-    void noteMaximizeEdge(KWin::EffectWindow* w);
+    ///
+    /// Returns whether this edge was the EFFECT'S OWN — i.e. a stamp was found
+    /// and consumed, and no marker armed. The maximize lambda passes that
+    /// answer down to `TilingHandler::interceptMaximizeRequest`, whose
+    /// already-agrees arm must not record the echo of a write this effect made
+    /// as though it were a user's press. This is the only place that
+    /// distinction is available: the stamp is one-shot and is consumed here,
+    /// before the interception runs.
+    bool noteMaximizeEdge(KWin::EffectWindow* w);
 
     /// Whether @p w took a genuine maximize OR restore edge of its own within
     /// the freshness window, CONSUMING the marker either way.

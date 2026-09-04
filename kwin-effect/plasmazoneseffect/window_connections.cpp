@@ -899,8 +899,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // window when the user pulls its titlebar, and that gesture's
                 // visuals belong to the held move pack, not to a maximize
                 // morph replayed under the pointer.
+                //
+                // The answer is kept, not discarded: noteMaximizeEdge consumes
+                // the authorship stamp, so this is the last point at which the
+                // effect's own committed echo can be told apart from a user's
+                // press. The interception's already-agrees arm needs exactly
+                // that distinction and is handed it below. Left false on the
+                // gesture path, which is sound because interceptMaximizeRequest
+                // declines outright for a window under an interactive move or
+                // resize and never reaches that arm.
+                bool effectAuthoredEdge = false;
                 if (!window->isUserMove() && !window->isUserResize()) {
-                    m_shaderManager.noteMaximizeEdge(window);
+                    effectAuthoredEdge = m_shaderManager.noteMaximizeEdge(window);
                 }
                 // IsMaximized is a matchable rule field with the same
                 // cache-key staleness as IsMinimized (see the minimizedChanged
@@ -936,7 +946,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // drag-restore guard below. One owner per leg, and for an
                 // engine-authored maximize the owner is the batch.
                 if (m_tilingHandler && !m_tilingHandler->isSuppressingMaximizeChanged()
-                    && m_tilingHandler->interceptMaximizeRequest(window)) {
+                    && m_tilingHandler->interceptMaximizeRequest(window, effectAuthoredEdge)) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
                 }
@@ -1096,9 +1106,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // commit rather than an oversight. This one retargets a
                 // running leg ONTO the rect that was just committed, which is
                 // the right destination whoever committed it — including the
-                // effect itself, since a mid-animation apply from one of the
-                // thirteen bracketed sites is exactly a new destination the
-                // leg should adopt. Body -0.5 instead CENTRES the window on a
+                // effect itself, since a mid-animation apply from any of the
+                // bracketed sites is exactly a new destination the leg should
+                // adopt. Body -0.5 instead CENTRES the window on a
                 // size mismatch, and during an effect apply that mismatch is
                 // transient, so acting on it would fight the write in flight.
                 //

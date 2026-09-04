@@ -2589,14 +2589,17 @@ private:
     /// Mutable because the predicate is const and is the only place the inputs
     /// it reports are assembled — same shape, and the same justification, as
     /// the mutable m_scrollClipLossReported once-reporting set in the tiling
-    /// handler. Keyed by window id and swept only on windowDeleted, so within a
-    /// session it is bounded by the number of distinct windows traced while the
-    /// category was enabled rather than by the live strip population: the
-    /// relocation map it shadows is torn down on unfloat, screen change, engine
-    /// flip and daemon loss, and none of those reach this gate. Entries are two
-    /// points and three bools, and a stale key is only ever compared, never
-    /// dereferenced, so the cost of the looser bound is bytes in a debugging
-    /// session.
+    /// handler. Keyed by window id, swept in slotWindowClosed with a
+    /// windowDeleted backstop for a delete that had no preceding close, so it
+    /// is bounded by the live traced population. Nothing re-enters it after the
+    /// close sweep: every insert site is behind scrollManagedOutputFor, which
+    /// refuses a deleted window. It was
+    /// previously swept only on windowDeleted, and that removal sits behind the
+    /// id-cache guard the close path has already cleared — so on an ordinary
+    /// close it never ran and entries lived for the session. Entries are two
+    /// points and three bools and a stale key is only ever compared, never
+    /// dereferenced, so the leak cost bytes in a debugging session rather than
+    /// correctness, which is why it went unnoticed.
     struct StripDiagSample
     {
         bool hadPlacement = false;

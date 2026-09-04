@@ -70,10 +70,10 @@ void ShaderTransitionManager::noteEffectAuthoredMaximizeWrite(KWin::EffectWindow
     m_effectAuthoredMaximizeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
 }
 
-void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
+bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
 {
     if (!w) {
-        return;
+        return false;
     }
     // The effect's own write, not the user's. Consumed here rather than merely
     // tested, so one stamp answers for exactly one edge: a bracketed write that
@@ -87,9 +87,10 @@ void ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w)
     // nothing — a user edge no batch has answered yet is still owed its leg,
     // and the batch that answers it is still the right one to spend it.
     if (takeFreshStamp(m_effectAuthoredMaximizeAtMs, w)) {
-        return;
+        return true;
     }
     m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
+    return false;
 }
 
 bool ShaderTransitionManager::takeRecentMaximizeEdge(KWin::EffectWindow* w)

@@ -2026,7 +2026,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                                                      : PhosphorAnimation::ProfilePaths::WindowSnapIn,
                                                   monocleOrigin);
                 } else {
-                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
+                    // No KWin::Window, so this arm writes no maximize bit and
+                    // has no pre-maximize rect to depart from — but the marker
+                    // was consumed above the split for this entry, so honour it
+                    // rather than discard it. Otherwise a genuine user maximize
+                    // is spent here and plays the snap pack.
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  userMaximizeEdge ? PhosphorAnimation::ProfilePaths::WindowMaximize
+                                                                   : PhosphorAnimation::ProfilePaths::WindowSnapIn);
                 }
             } else {
                 // True only when THIS call handed KWin's maximize bit back for

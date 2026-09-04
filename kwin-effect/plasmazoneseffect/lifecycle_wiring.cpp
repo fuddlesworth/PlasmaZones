@@ -712,9 +712,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
             m_scrollVisualDelta.remove(cachedId);
-            // The lcStripDiag change-gate shadows that map, so it is bounded
-            // here for the same reason. This is its ONLY sweep anywhere, which
-            // is why its declaration states the looser bound.
+            // The lcStripDiag change-gate shadows that map. Its sweep is in
+            // slotWindowClosed; this one is the backstop for a delete with no
+            // preceding close, and that is ALL it is. Unlike m_focusFade above
+            // there is no re-insert to catch here: every insert site sits
+            // behind scrollManagedOutputFor, which answers nullptr for a
+            // deleted window, and the one arm that does not needs a live
+            // m_scrollVisualDelta entry that slotWindowClosed has already
+            // removed. So nothing can re-enter this map after the close sweep,
+            // corpse or otherwise.
             m_stripDiagLast.remove(cachedId);
             // Windowed-fullscreen membership keeps the same backstop pairing
             // (slotWindowClosed removes it first in every ordering KWin

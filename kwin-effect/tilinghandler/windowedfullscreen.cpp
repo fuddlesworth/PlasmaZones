@@ -448,7 +448,7 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     applyMaximizeSuppressed(kw, restored);
 }
 
-bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
+bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectAuthoredEdge)
 {
     if (!w || w->isDeleted()) {
         return false;
@@ -572,20 +572,37 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // has not moved yet, so a genuine second press looks exactly like the echo
     // above and the arm claimed it and dispatched nothing — two presses netted
     // to one action. Recording it instead lets the reply act on it once the
-    // first answer has settled, so a fast double-click toggles twice. The echo
-    // cannot reach this arm, because an echo of the effect's own write arrives
-    // only after the reply has cleared the flight entry.
+    // first answer has settled, so a fast double-click toggles twice.
     //
     // ONE press is remembered, not a queue, so a triple-click inside a single
     // round trip nets to two toggles. That is the intended ceiling: the point
     // is to keep a double-click from being swallowed, not to replay an
     // arbitrary backlog against a state each press was aimed at from a
     // different starting point.
+    //
+    // AND NEVER THE EFFECT'S OWN ECHO, which is what effectAuthoredEdge is for.
+    // This arm used to argue the echo could not reach it, on the grounds that
+    // an echo of the effect's own write arrives only after the reply has
+    // cleared the flight entry. True of the entry the reply CLEARED, and false
+    // once the reply's own pending-press guard re-dispatches: that guard runs
+    // at scope exit, after the refusal's write-back, and arms a fresh entry
+    // that is very much alive when the write-back's Wayland echo lands a round
+    // trip later. The echo then found KWin's bit equal to membership — it had
+    // just been set to exactly that — recorded a press nobody made, and the
+    // next refusal re-dispatched on it. A strip that keeps refusing keeps the
+    // cycle going, one unrequested toggle and one visible bit write per round
+    // trip, with nothing to stop it.
+    //
+    // The echo is only distinguishable here because the maximize lambda hands
+    // the answer down: the authorship stamp is consumed by noteMaximizeEdge
+    // before this runs, so by this point nothing else can tell the two apart.
+    // A genuine second press during the re-dispatched round trip still
+    // coalesces — it carries no authorship and lands after the echo.
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
         const bool inFlight = maximizeToggleInFlight(windowId);
-        if (inFlight) {
+        if (inFlight && !effectAuthoredEdge) {
             m_maximizeToggleInFlight[windowId].pendingPress = true;
         }
         // Entry presence is logged separately from the live/expired answer,
@@ -593,12 +610,15 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
         // report: a flight that expired with a press already recorded keeps
         // its entry while answering false here, so this press is neither
         // coalesced nor dispatched. (An expiry with no recorded press erases
-        // the entry, so both read false there.) The press is deliberately not
+        // the entry, so both read false there.) The effect's own echo is the
+        // other way they disagree — a live, unexpired entry that still
+        // coalesces nothing — and the authored-echo field names it. The press is deliberately not
         // recorded in that case — the reply may still land tens of seconds
         // later, and honouring it then would toggle the window long after the
         // user gave up on the click.
         qCInfo(lcEffect) << "Maximize interception: KWin already agrees with the engine for" << windowId
-                         << "— no toggle dispatched (coalesced press:" << inFlight
+                         << "— no toggle dispatched (coalesced press:" << (inFlight && !effectAuthoredEdge)
+                         << "authored echo:" << effectAuthoredEdge
                          << "flight entry standing:" << m_maximizeToggleInFlight.contains(windowId) << ")";
         return true;
     }
@@ -682,21 +702,31 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* pw) {
         pw->deleteLater();
         const QDBusPendingReply<bool> reply = *pw;
-        // DISARM FIRST, before any write below and on every exit.
-        //
-        // Ordering is load-bearing, not tidiness. The refusal write emits a
-        // committed echo that re-enters interceptMaximizeRequest, and the
-        // already-agrees arm there must fire for it — that is the whole
-        // anti-loop argument. With the entry still armed the echo would be
-        // recorded as a pending press instead and re-dispatched forever.
-        //
-        // Disarming on the success path too is what keeps the entry from
-        // outliving the round trip it describes.
+        // DISARM FIRST, before any write below and on every exit, so the entry
+        // cannot outlive the round trip it describes. That is the whole reason
+        // now, and it is the weaker one: this ordering used to be described as
+        // the anti-loop argument, on the grounds that a still-armed entry would
+        // let the refusal write's echo be recorded as a pending press and
+        // re-dispatched forever. Disarming here never actually prevented that
+        // — the pending-press guard below re-arms a fresh entry at scope exit,
+        // before the echo lands. What prevents it is the effectAuthoredEdge
+        // argument interceptMaximizeRequest now takes, which recognises that
+        // echo as the effect's own and refuses to record a press for it.
         const MaximizeToggleFlight flight = m_maximizeToggleInFlight.take(windowId);
         // A press that arrived mid-flight is honoured once the first answer
         // has settled, so a fast double-click toggles twice instead of once.
-        // Re-dispatching cannot loop: only a real user press sets this, and
-        // the entry it re-arms starts with pendingPress false.
+        //
+        // Re-dispatching cannot loop, but NOT for the reason this comment used
+        // to give. "Only a real user press sets this, and the entry it re-arms
+        // starts with pendingPress false" is true only of a real press. This
+        // guard runs at scope EXIT, after the refusal's write-back below, so
+        // the entry it arms is live when that write-back's own Wayland echo
+        // arrives — and that echo reaches the already-agrees arm looking
+        // exactly like a press, because the write-back just made KWin's bit
+        // equal membership. It set pendingPress, the next refusal re-dispatched
+        // on it, and a strip that kept refusing kept the cycle running. What
+        // stops it is the effectAuthoredEdge argument that arm now takes: the
+        // effect's own echo is recognised and never recorded as a press.
         //
         // RE-RESOLVES the screen rather than reusing the one captured at
         // dispatch, and re-runs both gates. This is the only thing in the

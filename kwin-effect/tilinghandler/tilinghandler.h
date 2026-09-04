@@ -397,7 +397,15 @@ public:
     /// which is what keeps the button's motion to a single animated leg. Only
     /// a REFUSED request writes the bit back, from the dispatch's reply
     /// handler.
-    bool interceptMaximizeRequest(KWin::EffectWindow* w);
+    ///
+    /// @p effectAuthoredEdge says this edge is the committed echo of a maximize
+    /// write the EFFECT made, as reported by
+    /// `ShaderTransitionManager::noteMaximizeEdge`. The already-agrees arm uses
+    /// it to tell that echo apart from a genuine user press arriving inside a
+    /// round trip, which are otherwise identical at this point: both find
+    /// KWin's bit equal to membership. Recording the echo as a press is what
+    /// let a refused toggle re-dispatch itself indefinitely.
+    bool interceptMaximizeRequest(KWin::EffectWindow* w, bool effectAuthoredEdge);
 
     /// Put a scroll-managed tile's KWin maximize bit back after an AXIS-ONLY
     /// flip, with no dispatch to the engine.
