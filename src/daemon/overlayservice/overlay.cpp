@@ -623,19 +623,18 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     if (usingShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            // A context overlay rule may override the layout's shader (with
-            // optional uniform params). When the rule sets the shader, use its
-            // params — an override with no params falls back to the shader's
-            // defaults; otherwise use the layout's params.
+            // A context overlay rule may override the resolved shader (with
+            // optional uniform params); otherwise the OverlayShaderTree
+            // resolves per layout with baseline fallback. See
+            // effectiveOverlayShader for the precedence contract.
             const PhosphorZones::ContextOverlayOverride overlayOverride =
                 overlayOverrideForScreen(m_layoutManager, screenId);
-            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams =
-                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
+            const OverlayShaderProfile shader = effectiveOverlayShader(overlayOverride, screenLayout);
+            const QString shaderId = shader.shaderId;
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                                << "bufferPaths=" << info.bufferShaderPaths.size();
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, shader.parameters);
             applyShaderInfoToWindow(slot, info, translatedParams, geometry, physScreenGeom);
         }
     }
@@ -889,11 +888,10 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams =
-                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
+            const OverlayShaderProfile shader = effectiveOverlayShader(overlayOverride, screenLayout);
+            const QString shaderId = shader.shaderId;
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, shader.parameters);
             const QRect vsGeom = resolveScreenGeometry(m_screenManager, screenId);
             const QRect physGeom = physScreen ? physScreen->geometry() : vsGeom;
             applyShaderInfoToWindow(slot, info, translatedParams, vsGeom, physGeom);

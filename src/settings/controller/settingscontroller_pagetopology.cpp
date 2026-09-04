@@ -128,6 +128,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kSnappingConfigChildren{
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
+        QStringLiteral("snapping-shader-assignments"),
         QStringLiteral("snapping-shaders"),
     };
     static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
@@ -315,6 +316,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZonesBorderGroup(), CD::radiusKey()},
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
+         }},
+        {QStringLiteral("snapping-shader-assignments"),
+         {
+             // The whole OverlayShaderTree blob (baseline + per-layout
+             // overrides) is one key, owned solely by this page — the browser
+             // leaf (snapping-shaders) edits no config.
+             {CD::snappingOverlayShadersGroup(), CD::overlayShaderTreeKey()},
          }},
         {QStringLiteral("snapping-zoneselector"),
          {
@@ -719,6 +727,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
+        QStringLiteral("snapping-shader-assignments"),
         QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),

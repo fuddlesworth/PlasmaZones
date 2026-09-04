@@ -177,7 +177,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     QJsonObject obj = *objOpt;
     QString idStr = obj[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
-    // Handle autotile layout settings updates (gaps, visibility, shader only)
+    // Handle autotile layout settings updates (gaps and visibility only)
     if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
         QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
         // D-Bus boundary: an id of exactly "autotile:" passes isAutotile but
@@ -199,8 +199,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         const std::array editorKeys{
             ::PhosphorZones::ZoneJsonKeys::ZonePadding,       ::PhosphorZones::ZoneJsonKeys::OuterGap,
             ::PhosphorZones::ZoneJsonKeys::AllowedScreens,    ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
-            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::ShaderId,
-            ::PhosphorZones::ZoneJsonKeys::ShaderParams,      ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
+            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
         };
         for (const QLatin1String key : editorKeys) {
             if (obj.contains(key)) {
@@ -284,14 +283,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // forms and maps a missing key to Any, which is the reset this branch wants.
     layout->setAspectRatioClassInt(static_cast<int>(
         PhosphorLayout::ScreenClassification::fromJsonValue(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey])));
-
-    // Update shader settings
-    layout->setShaderId(obj[::PhosphorZones::ZoneJsonKeys::ShaderId].toString());
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
-        layout->setShaderParams(obj[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap());
-    } else {
-        layout->setShaderParams(QVariantMap());
-    }
 
     // Update visibility allow-lists
     {

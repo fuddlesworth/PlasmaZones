@@ -5,6 +5,7 @@
 
 #include "config/configdefaults.h"
 #include "core/interfaces/interfaces.h"
+#include "core/types/overlayshadertree.h"
 
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
@@ -1838,7 +1839,7 @@ public:
     }
     void setScrollingDropIndicatorOpacity(double opacity) override
     {
-        if (qFuzzyCompare(m_scrollingDropIndicatorOpacity, opacity))
+        if (qFuzzyCompare(1.0 + m_scrollingDropIndicatorOpacity, 1.0 + opacity))
             return;
         m_scrollingDropIndicatorOpacity = opacity;
         Q_EMIT scrollingDropIndicatorOpacityChanged();
@@ -2117,11 +2118,50 @@ public:
         // Dropping the value made this the one key the effect fetches by SettingProperty
         // that no stub-backed test could move — while the comment below boasted "real
         // storage, not no-op setters".
+        // Empty string means "reset to the empty tree", like the real
+        // Settings facade (which clears and emits on "").
+        if (json.isEmpty()) {
+            setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
+            return;
+        }
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         if (doc.isNull() || !doc.isObject()) {
             return;
         }
         setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+    }
+    OverlayShaderTree overlayShaderTree() const override
+    {
+        return m_overlayShaderTree;
+    }
+    void setOverlayShaderTree(const OverlayShaderTree& value) override
+    {
+        if (m_overlayShaderTree == value) {
+            return;
+        }
+        m_overlayShaderTree = value;
+        Q_EMIT overlayShaderTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString overlayShaderTreeJson() const override
+    {
+        // Same coherence contract as the decoration facade above.
+        return QString::fromUtf8(QJsonDocument(overlayShaderTree().toJson()).toJson(QJsonDocument::Compact));
+    }
+    void setOverlayShaderTreeJson(const QString& json) override
+    {
+        // The real Settings treats "" as "reset to the empty tree" (and
+        // emits); silently ignoring it here would make a stub-backed
+        // clear a no-op that production performs.
+        if (json.isEmpty()) {
+            setOverlayShaderTree(OverlayShaderTree{});
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
     }
 
     // Decorations.Performance (ISettings). Real storage, not no-op setters: the
@@ -2398,8 +2438,8 @@ public:
     //
     // Every setter below pairs the field-specific signal with the umbrella
     // `settingsChanged()` emit. The concrete Settings class does the same
-    // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
-    // ~2759-2784) — the stub matches so tests can rely on `settingsChanged()`
+    // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros
+    // (src/config/settings/settings_detail.h) — the stub matches so tests can rely on `settingsChanged()`
     // firing on any setter, regardless of which ISettings backend is wired.
     QString editorDuplicateShortcut() const override
     {
@@ -2991,6 +3031,7 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
+    OverlayShaderTree m_overlayShaderTree;
     QColor m_borderColor = ConfigDefaults::borderFallbackColor();
     QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();
     QColor m_inactiveColor = ConfigDefaults::inactiveFallbackColor();

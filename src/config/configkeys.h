@@ -108,6 +108,12 @@ public:
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
+    // Snapping.OverlayShaders — zone-overlay shader assignments
+    // (OverlayShaderTree: global baseline + per-layout-UUID overrides).
+    // Its own group so the settings page and the per-page reset manifest
+    // address one subtree, mirroring how the animation/decoration trees
+    // each own a group.
+    P_CONFIG_GROUP(snappingOverlayShadersGroup, "Snapping.OverlayShaders")
     // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
     // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
     // and are read through Settings' gap getters.
@@ -388,6 +394,16 @@ public:
     P_CONFIG_KEY(previewHeightKey, "PreviewHeight")
     P_CONFIG_KEY(previewLockAspectKey, "PreviewLockAspect")
     P_CONFIG_KEY(gridColumnsKey, "GridColumns")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Snapping.OverlayShaders
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // OverlayShaderTree JSON blob — zone-overlay shader assignments
+    // (global baseline + per-layout overrides), nested under
+    // Snapping.OverlayShaders. Replaces the pre-v7 per-layout
+    // shaderId/shaderParams that lived in the layout-settings sidecar.
+    P_CONFIG_KEY(overlayShaderTreeKey, "OverlayShaderTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Gaps

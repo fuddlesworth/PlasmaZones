@@ -17,7 +17,7 @@ class EditorController;
  * @brief Owns the editor's D-Bus single-instance lifecycle.
  *
  * Split out of EditorController to keep the domain model (zones, layouts,
- * shaders, undo, selection) separate from transport/launch concerns. This
+ * undo, selection) separate from transport/launch concerns. This
  * class owns:
  *
  *   - The `SingleInstanceService` RAII handle for `org.plasmazones.Editor.App`
@@ -55,7 +55,7 @@ public:
      * launch request receiver.
      *
      * Must be called from main.cpp early enough that the heavy daemon calls
-     * inside `applyLaunchArgs` (shader queries, layout load) run *after*
+     * inside `applyLaunchArgs` (layout load among them) run *after*
      * the name is owned — otherwise a rapid-fire second launcher can still
      * race its own startup work before discovering there's a running
      * instance to forward to.

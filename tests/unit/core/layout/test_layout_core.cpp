@@ -118,6 +118,20 @@ private Q_SLOTS:
         layout.clearDirty();
         layout.setUseFullScreenGeometry(true);
         QVERIFY(layout.isDirty());
+
+        // Aspect-ratio classification: an edit that fails to mark dirty
+        // would skip saveLayout, the exact defect class this slot pins.
+        layout.clearDirty();
+        layout.setAspectRatioClass(::PhosphorLayout::AspectRatioClass::Ultrawide);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setMinAspectRatio(1.5);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setMaxAspectRatio(2.5);
+        QVERIFY(layout.isDirty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -571,8 +585,6 @@ private Q_SLOTS:
         QVERIFY(!structural.contains(QStringLiteral("zonePadding")));
         QVERIFY(!structural.contains(QStringLiteral("autoAssign")));
         QVERIFY(!structural.contains(QStringLiteral("useFullScreenGeometry")));
-        QVERIFY(!structural.contains(QStringLiteral("shaderId")));
-        QVERIFY(!structural.contains(QStringLiteral("shaderParams")));
         QVERIFY(!structural.contains(QStringLiteral("overlayDisplayMode")));
         QVERIFY(!structural.contains(QStringLiteral("usePerSideOuterGap")));
         QVERIFY(!structural.contains(QStringLiteral("outerGapTop")));
@@ -586,11 +598,14 @@ private Q_SLOTS:
         QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("overlayDisplayMode")).toInt(), 1);
         QCOMPARE(settings.value(QStringLiteral("outerGapLeft")).toInt(), 3);
-        QCOMPARE(settings.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
-        // The object-valued setting must survive as a nested object, not be flattened.
-        const QJsonObject sp = settings.value(QStringLiteral("shaderParams")).toObject();
-        QCOMPARE(sp.value(QStringLiteral("intensity")).toDouble(), 0.75);
-        QCOMPARE(sp.value(QStringLiteral("seed")).toInt(), 42);
+        QCOMPARE(settings.value(QStringLiteral("hiddenFromSelector")).toBool(), true);
+        // shaderId/shaderParams are no longer settings keys (overlay shader
+        // assignments live in the config's OverlayShaderTree since schema
+        // v7): the fixture carries them inline, and the store must neither
+        // extract them into settings nor strip them from the structural half.
+        QVERIFY(!settings.contains(QStringLiteral("shaderId")));
+        QVERIFY(!settings.contains(QStringLiteral("shaderParams")));
+        QVERIFY(structural.contains(QStringLiteral("shaderId")));
         const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
         QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
     }
@@ -737,10 +752,6 @@ private:
                          {QStringLiteral("zoneNumber"), 1},
                          {QStringLiteral("relativeGeometry"), relGeo},
                          {QStringLiteral("appearance"), appearance}};
-        // shaderParams is the only object-valued setting — the highest-risk one
-        // for a strip/merge bug — so it's covered here alongside the sentinel
-        // (overlayDisplayMode) and per-side gap keys.
-        const QJsonObject shaderParams{{QStringLiteral("intensity"), 0.75}, {QStringLiteral("seed"), 42}};
         return QJsonObject{
             {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
             {QStringLiteral("name"), QStringLiteral("Settings Layout")},
@@ -754,9 +765,14 @@ private:
             {QStringLiteral("outerGapRight"), 4},
             {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("hiddenFromSelector"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
-            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
-            {QStringLiteral("shaderParams"), shaderParams},
+            // Legacy-shaped extras a pre-v4 file could still carry inline:
+            // NOT in layoutSettingKeys, so the runtime store must neither
+            // extract nor strip them (the frozen v4 relocation is what moves
+            // them; post-v7 the sidecar lift retires them entirely).
+            {QStringLiteral("shaderId"), QStringLiteral("legacy-pack")},
+            {QStringLiteral("shaderParams"), QJsonObject{{QStringLiteral("k"), 1}}},
             {QStringLiteral("zones"), QJsonArray{zone}},
         };
     }

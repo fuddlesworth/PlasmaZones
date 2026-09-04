@@ -34,6 +34,7 @@
 #include <PhosphorOverlay/ShellState.h>
 
 #include "core/interfaces/interfaces.h"
+#include "core/types/overlayshadertree.h"
 #include "overlayservice_types.h"
 #include <PhosphorZones/Layout.h>
 
@@ -787,7 +788,7 @@ private:
     void refreshVisibleWindows();
 
     // Connect to a PhosphorZones::Layout's layoutModified signal so live edits from the editor
-    // (shader id/params, zone geometry, appearance) propagate to the live overlay
+    // (zone geometry, appearance, overlay display mode) propagate to the live overlay
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
@@ -1044,6 +1045,13 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    /// Cached copy of ISettings::overlayShaderTree(). The settings getter
+    /// re-reads the store and re-parses JSON on every call, and
+    /// effectiveOverlayShader() sits on the per-audio-frame path
+    /// (useShaderForScreen per screen at CAVA rate) plus twice per screen in
+    /// create/updateOverlayWindow. Refreshed in setSettings and on
+    /// overlayShaderTreeChanged.
+    OverlayShaderTree m_overlayShaderTree;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
     AutotileActiveResolver m_autotileActiveResolver;
@@ -1585,6 +1593,19 @@ private:
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
     // Shader support methods
+    /**
+     * @brief The shader a screen's overlay should draw: rule override →
+     *        per-layout tree override → tree baseline.
+     *
+     * A context overlay rule wins BOTH id and params (an engaged rule id
+     * with no params falls back to the shader's defaults), preserving the
+     * pre-tree rule-wins-both semantics. Otherwise the OverlayShaderTree
+     * from settings resolves per layout UUID with baseline fallback. An
+     * empty shaderId in the result means "no shader"
+     * (ShaderRegistry::isNoneShader).
+     */
+    OverlayShaderProfile effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                                const PhosphorZones::Layout* screenLayout) const;
     bool useShaderForScreen(QScreen* screen) const;
     bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;

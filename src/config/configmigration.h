@@ -90,7 +90,13 @@ namespace PlasmaZones {
 /// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
 ///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
 ///     retired into them (see migrateV6ToV7).
-inline constexpr int ConfigSchemaVersion = 7;
+/// v8: zone-overlay shader assignments move out of the layout-settings
+///     sidecar into the config's Snapping.OverlayShaders/OverlayShaderTree
+///     blob (global baseline + per-layout overrides). The chain step itself
+///     is a stamp-only no-op; the sidecar lift runs from ensureJsonConfig's
+///     finalize pass (see relocateOverlayShaderAssignments), mirroring how
+///     the v4 layout-settings relocation runs outside the chain.
+inline constexpr int ConfigSchemaVersion = 8;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -285,6 +291,21 @@ public:
     /// renameRetiredAnimationEventPaths, since rules.json is outside this
     /// chain. Stamps `_version = 7`.
     static void migrateV6ToV7(QJsonObject& root);
+
+    /// v7 → v8 schema step. Stamp-only: the real work (lifting per-layout
+    /// shaderId/shaderParams out of layout-settings.json into the
+    /// Snapping.OverlayShaders/OverlayShaderTree config blob) needs
+    /// filesystem access and must not run on sparse profile deltas, so it
+    /// lives in relocateOverlayShaderAssignments below.
+    static void migrateV7ToV8(QJsonObject& root);
+
+    /// Lift zone-overlay shader assignments from the layout-settings sidecar
+    /// into the config's OverlayShaderTree, stripping the relocated keys from
+    /// the sidecar. Idempotent and crash-safe — ensureJsonConfig calls it on
+    /// every run beside finalizeV4Conversion. An already-present tree entry
+    /// for a layout always wins over the sidecar copy (a retry after a
+    /// partial run must not clobber a since-edited assignment).
+    static bool relocateOverlayShaderAssignments(const QString& jsonPath);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

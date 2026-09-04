@@ -23,6 +23,7 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include "core/types/overlayshadertree.h"
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -563,6 +564,10 @@ public:
     // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
                    NOTIFY decorationProfileTreeChanged)
+    // JSON string facade for the zone-overlay shader tree — same
+    // meta-object dirty-tracking rationale as the two facades above.
+    Q_PROPERTY(QString overlayShaderTreeJson READ overlayShaderTreeJson WRITE setOverlayShaderTreeJson NOTIFY
+                   overlayShaderTreeChanged)
 
     // Decorations.Performance — three bounds on WHEN the decoration chain
     // animates, plus the blur-scale multiplier that shrinks the per-frame work.
@@ -1719,6 +1724,15 @@ public:
     /// ISettings: the committed baseline is a Settings-internal dirty-tracking
     /// concept, and only SettingsController's per-page kebab consumes it.
     PhosphorSurfaceShaders::DecorationProfileTree committedDecorationProfileTree() const;
+
+    // Zone-overlay shader tree (OverlayShaderTree: global baseline +
+    // per-layout overrides), persisted under Snapping.OverlayShaders. Typed
+    // accessors mirror the two trees above; the JSON-string facade backs the
+    // Q_PROPERTY.
+    OverlayShaderTree overlayShaderTree() const override;
+    void setOverlayShaderTree(const OverlayShaderTree& tree) override;
+    QString overlayShaderTreeJson() const override;
+    void setOverlayShaderTreeJson(const QString& json) override;
 
     // Decorations.Performance — PhosphorConfig::Store-backed.
     bool decorationAnimateFocusedOnly() const override;

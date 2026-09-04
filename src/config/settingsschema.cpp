@@ -45,6 +45,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     s.versionKey = ConfigKeys::versionKey();
 
     appendShadersSchema(s);
+    appendOverlayShadersSchema(s);
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
     appendAnimationsSchema(s);
@@ -866,6 +867,21 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
                     CD::overlayDisplayMode()),
          intChoices({{static_cast<int>(OverlayDisplayMode::ZoneRectangles), "zoneRectangles"_L1},
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
+    };
+}
+
+// ─── Snapping.OverlayShaders ────────────────────────────────────────────────
+// Zone-overlay shader assignments — one nested JSON blob (baseline +
+// per-layout overrides), persisted as a QVariantMap like the animation
+// ShaderProfileTree entry, with no sanitizer for the same reason.
+void appendOverlayShadersSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::snappingOverlayShadersGroup()] = {
+        {CD::overlayShaderTreeKey(), CD::overlayShaderTree(), QMetaType::QVariantMap,
+         QStringLiteral("Zone-overlay shader assignments (global baseline plus per-layout overrides). The "
+                        "settings app's Snapping Shaders page writes this, so it is not meant to be edited "
+                        "by hand.")},
     };
 }
 

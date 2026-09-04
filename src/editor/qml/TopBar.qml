@@ -25,7 +25,6 @@ ToolBar {
     required property var availableScreens
     required property var confirmCloseDialog
     required property var helpDialog
-    required property var shaderDialog
     required property var visibilityDialog
     required property var layoutSettingsDialog
     required property var importDialog
@@ -63,16 +62,16 @@ ToolBar {
             Repeater {
                 id: screenRepeater
 
-                model: availableScreens || []
+                model: topBar.availableScreens || []
 
                 delegate: ToolButton {
                     id: screenButton
 
                     required property var modelData
-                    property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
+                    property bool isActive: topBar.editorController && modelData && modelData.name === topBar.editorController.targetScreen
 
                     text: modelData ? (modelData.displayName || modelData.name || "") : ""
-                    enabled: editorController !== null
+                    enabled: topBar.editorController !== null
                     implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
                     implicitHeight: Kirigami.Units.gridUnit * 3
                     Accessible.name: modelData ? (modelData.displayName || modelData.name || "") : ""
@@ -80,8 +79,8 @@ ToolBar {
                     Accessible.checkable: true
                     Accessible.checked: isActive
                     onClicked: {
-                        if (editorController && modelData)
-                            editorController.targetScreen = modelData.name;
+                        if (topBar.editorController && modelData)
+                            topBar.editorController.targetScreen = modelData.name;
                     }
 
                     contentItem: Label {
@@ -140,15 +139,15 @@ ToolBar {
             id: layoutNameSection
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between label and field)
-            // Initialize on component creation with delay to ensure editorController is ready.
+            // Initialize on component creation with delay to ensure topBar.editorController is ready.
             // main.cpp loads the layout before it builds the QML engine, so the
             // controller's layoutNameChanged has already fired by the time the
             // Connections below exists — this is the only place the load path
             // can latch committedName.
             Component.onCompleted: {
                 Qt.callLater(function () {
-                    if (editorController) {
-                        layoutNameField.committedName = editorController.layoutName || "";
+                    if (topBar.editorController) {
+                        layoutNameField.committedName = topBar.editorController.layoutName || "";
                         layoutNameField.text = layoutNameField.committedName;
                     }
                 });
@@ -182,9 +181,9 @@ ToolBar {
             TextField {
                 id: layoutNameField
 
-                // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
-                // same client-side cap as PropertyPanel's zone name field.
-                readonly property int maxLength: 40
+                // PlasmaZones::MaxLayoutNameLength via the controller, same
+                // client-side cap as PropertyPanel's zone name field.
+                readonly property int maxLength: topBar.editorController.maxLayoutNameLength
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8
                 // The name as the controller last handed it over, latched before
@@ -201,7 +200,7 @@ ToolBar {
                 maximumLength: maxLength
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
-                enabled: editorController !== null && editorController !== undefined
+                enabled: topBar.editorController !== null && topBar.editorController !== undefined
                 Accessible.name: topBar.templateMode ? i18nc("@label", "Template name") : i18nc("@label", "Layout name")
                 Accessible.description: topBar.templateMode ? i18nc("@info", "Enter name for the template") : i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
@@ -223,8 +222,8 @@ ToolBar {
                         layoutNameField.text = layoutNameField.committedName;
                         return;
                     }
-                    if (editorController && text !== layoutNameField.committedName)
-                        editorController.layoutName = text;
+                    if (topBar.editorController && text !== layoutNameField.committedName)
+                        topBar.editorController.layoutName = text;
                 }
 
                 background: Rectangle {
@@ -266,7 +265,7 @@ ToolBar {
             // Explicitly connect to layoutNameChanged signal for reliable updates
             Connections {
                 function onLayoutNameChanged() {
-                    if (!editorController)
+                    if (!topBar.editorController)
                         return;
 
                     // Latch the controller's value, not the field's: assigning it
@@ -274,7 +273,7 @@ ToolBar {
                     // unconditional because a Return commit leaves the field
                     // focused, and a committedName left at the pre-commit name
                     // would then describe a name the controller no longer holds.
-                    layoutNameField.committedName = editorController.layoutName || "";
+                    layoutNameField.committedName = topBar.editorController.layoutName || "";
                     if (!layoutNameField.activeFocus) {
                         layoutNameField.text = layoutNameField.committedName;
                         // This sync replaces the field's content, so any edit that
@@ -283,8 +282,8 @@ ToolBar {
                     }
                 }
 
-                target: editorController
-                enabled: editorController !== null && editorController !== undefined
+                target: topBar.editorController
+                enabled: topBar.editorController !== null && topBar.editorController !== undefined
             }
         }
 
@@ -305,14 +304,14 @@ ToolBar {
             id: undoRedoSection
 
             // Helper property to safely access undoController
-            property var undoController: editorController ? editorController.undoController : null
+            property var undoController: topBar.editorController ? topBar.editorController.undoController : null
             property bool canUndo: undoController ? undoController.canUndo : false
             property bool canRedo: undoController ? undoController.canRedo : false
             property string undoText: undoController ? undoController.undoText : ""
             property string redoText: undoController ? undoController.redoText : ""
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between buttons)
-            visible: editorController !== null && editorController !== undefined && undoController !== null
+            visible: topBar.editorController !== null && topBar.editorController !== undefined && undoController !== null
 
             // Reactive updates when undoController properties change
             Connections {
@@ -385,7 +384,7 @@ ToolBar {
 
             visible: !topBar.templateMode
             icon.name: "configure"
-            enabled: editorController !== null && editorController !== undefined
+            enabled: topBar.editorController !== null && topBar.editorController !== undefined
             onClicked: topBar.layoutSettingsDialog.open()
             ToolTip.text: i18nc("@tooltip", "Layout-specific settings (gaps)")
             ToolTip.visible: hovered
@@ -409,35 +408,12 @@ ToolBar {
 
             visible: !topBar.templateMode
             icon.name: "view-filter"
-            enabled: editorController !== null && editorController !== undefined
+            enabled: topBar.editorController !== null && topBar.editorController !== undefined
             onClicked: topBar.visibilityDialog.open()
             ToolTip.text: i18nc("@tooltip", "Layout visibility (per monitor/desktop/activity)")
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Visibility")
             Accessible.description: i18nc("@info", "Configure where this layout appears in the zone selector")
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // SHADER SETTINGS BUTTON
-        // ═══════════════════════════════════════════════════════════════
-        ToolButton {
-            id: shaderButton
-
-            icon.name: "adjustlevels"
-            enabled: editorController !== null && editorController.shadersEnabled
-            visible: !topBar.previewMode && !topBar.templateMode && editorController !== null && editorController.shadersEnabled
-            onClicked: topBar.shaderDialog.open()
-            ToolTip.text: i18nc("@tooltip", "Shader effect settings")
-            ToolTip.visible: hovered
-            Accessible.name: i18nc("@action", "Shader Settings")
-            Accessible.description: i18nc("@info", "Configure visual shader effects for zones")
-        }
-
-        // Visual separator (only show if shader button is visible)
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            visible: shaderButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -452,8 +428,8 @@ ToolBar {
             ToolButton {
                 visible: !topBar.previewMode && !topBar.templateMode
                 icon.name: "document-import"
-                enabled: editorController !== null && editorController !== undefined
-                onClicked: importDialog.open()
+                enabled: topBar.editorController !== null && topBar.editorController !== undefined
+                onClicked: topBar.importDialog.open()
                 ToolTip.text: i18nc("@tooltip", "Import layout from file")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@action", "Import Layout")
@@ -464,8 +440,8 @@ ToolBar {
             ToolButton {
                 visible: !topBar.previewMode && !topBar.templateMode
                 icon.name: "document-export"
-                enabled: editorController !== null && editorController !== undefined && editorController.layoutId !== ""
-                onClicked: exportDialog.open()
+                enabled: topBar.editorController !== null && topBar.editorController !== undefined && topBar.editorController.layoutId !== ""
+                onClicked: topBar.exportDialog.open()
                 ToolTip.text: i18nc("@tooltip", "Export layout to file")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@action", "Export Layout")
@@ -493,7 +469,7 @@ ToolBar {
             // Help button
             ToolButton {
                 icon.name: "help-hint"
-                onClicked: helpDialog.open()
+                onClicked: topBar.helpDialog.open()
                 ToolTip.text: i18nc("@tooltip", "Quick reference guide (F1)")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@action", "Help")
@@ -504,8 +480,8 @@ ToolBar {
             ToolButton {
                 icon.name: "window-close"
                 onClicked: {
-                    if (editorController && editorController.hasUnsavedChanges)
-                        confirmCloseDialog.open();
+                    if (topBar.editorController && topBar.editorController.hasUnsavedChanges)
+                        topBar.confirmCloseDialog.open();
                     else
                         editorWindow.close();
                 }

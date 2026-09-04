@@ -31,6 +31,8 @@ class DecorationProfileTree;
 
 namespace PlasmaZones {
 
+class OverlayShaderTree;
+
 namespace isettings_detail {
 /// The drop indicator's colour when nothing can resolve one: the shipped zone
 /// highlight forced opaque. Shared by the two colour defaults below so the
@@ -192,6 +194,17 @@ public:
     virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
+
+    // Zone-overlay shader assignments — an OverlayShaderTree (global baseline
+    // + per-layout-UUID overrides) under Snapping.OverlayShaders. Flat
+    // counterpart of the two trees above; same typed-getter + JSON-facade
+    // split so the Q_PROPERTY dirty-tracking loop and the D-Bus adaptor both
+    // ride the facade. No committed getter: per-page Discard rides the
+    // generic baseline-map path (the decoration one is Settings-only too).
+    virtual OverlayShaderTree overlayShaderTree() const = 0;
+    virtual void setOverlayShaderTree(const OverlayShaderTree& tree) = 0;
+    virtual QString overlayShaderTreeJson() const = 0;
+    virtual void setOverlayShaderTreeJson(const QString& json) = 0;
 
     // Decorations.Performance — an animated pack repaints every window carrying
     // it on every vsync, and that alone keeps the GPU in its top performance
@@ -760,6 +773,8 @@ Q_SIGNALS:
     void outerGapLeftChanged();
     void outerGapRightChanged();
     void adjacentThresholdChanged();
+    void overlayShaderTreeChanged(); // zone-overlay shader assignments tree
+
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
     void minimumZoneDisplaySizePxChanged();

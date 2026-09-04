@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Overlay shader assignment moved from the layout editor into the settings app**: which shader a zone overlay draws is a display preference rather than part of a layout, so the editor's shader dialog is gone and assignments now live on the Shaders page under Snapping in the settings app. The new page has one card for the global default and one per layout, each with the same shader picker and parameter editor the dialog had, and the Shader Library page next to it browses and installs packs. Existing per-layout assignments are carried over automatically on the first start after updating. ([#1006](https://github.com/fuddlesworth/PlasmaZones/pull/1006))
+
 ## [3.4.11] - 2026-09-04
 
 ### Added
@@ -64,6 +68,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Clicking a taskbar entry for a window on another desktop centers its strip on it**: from a desktop with no scrolling strip, clicking a window that lives on a scrolling desktop switched you there but left the strip where it was, so the window you asked for could be off screen. The click activates the window before the KWin effect has caught up with the desktop switch, and the effect was still judging the click by the desktop you were leaving, which had nothing under management, so the report that centers the strip was dropped. The report is now always passed along, and the placement engines already ignore windows that are not theirs. ([#1040](https://github.com/fuddlesworth/PlasmaZones/pull/1040))
 - **Closing a scrolling window moves the neighbours in right away**: after a window closed, the remaining columns waited out the PlasmaZones animation duration before filling the gap, even when the close was animated by KWin or not animated at all, so the strip sat idle staring at a hole. That wait existed so the closing window's animation would not play over columns that had already moved, and it has been replaced at the source. The neighbours now move in on the same frame as the close, and the closing window is drawn above the settling strip for the length of its animation, the same order niri uses. ([#1041](https://github.com/fuddlesworth/PlasmaZones/pull/1041))
+>>>>>>> origin/main
 
 ## [3.4.8] - 2026-09-02
 

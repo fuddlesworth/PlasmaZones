@@ -118,6 +118,24 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     return useShaderForScreen(physId);
 }
 
+OverlayShaderProfile
+OverlayService::effectiveOverlayShader(const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                       const PhosphorZones::Layout* screenLayout) const
+{
+    // Rule override wins both id and params: an engaged rule id with no
+    // params means "that shader at its defaults", never "that shader with
+    // the tree's params" (see the pre-tree semantics this preserves).
+    if (overlayOverride.shaderId) {
+        return {*overlayOverride.shaderId, overlayOverride.shaderParams};
+    }
+    if (!m_settings || !screenLayout) {
+        return {};
+    }
+    // m_overlayShaderTree is the cached settings tree (see the member doc);
+    // reading through ISettings here would re-parse the store per call.
+    return m_overlayShaderTree.resolve(screenLayout->id().toString());
+}
+
 bool OverlayService::anyScreenUsesShader() const
 {
     if (!canUseShaders()) {
@@ -140,10 +158,10 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     if (!screenLayout) {
         return false;
     }
-    // A context overlay rule may override the layout's own shader / style for
-    // this (screen, desktop, activity). Resolve once and apply over the layout.
+    // A context overlay rule may override the resolved shader / style for
+    // this (screen, desktop, activity). Resolve once and apply over the tree.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
-    const QString effectiveShaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
+    const QString effectiveShaderId = effectiveOverlayShader(overlayOverride, screenLayout).shaderId;
     if (ShaderRegistry::isNoneShader(effectiveShaderId)) {
         return false;
     }
@@ -193,7 +211,7 @@ void OverlayService::startShaderAnimation()
         m_audioProvider->setOptions(opts);
     }
 
-    qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
+    qCDebug(lcOverlay) << "Shader animation started at" << frameRate << "fps";
 }
 
 void OverlayService::stopShaderAnimation()

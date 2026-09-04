@@ -653,7 +653,11 @@ private Q_SLOTS:
     {
         // v7 qualifies: migrateV6ToV7 rewrites only the Animations group's
         // ShaderProfileTree blob in place (see olderProfileFileV6RenamesPlacementNodes).
-        QCOMPARE(ConfigSchemaVersion, 7);
+        // v8 qualifies: migrateV7ToV8 is stamp-only for the config root (the
+        // overlay-shader sidecar lift runs outside the chain and never touches
+        // a profile delta), so a v7-stamped profile migrates forward cleanly
+        // (see olderProfileV7FileMigratesForward).
+        QCOMPARE(ConfigSchemaVersion, 8);
     }
 
     /// A profile file stamped v5 whose delta carries the old zone-colour
@@ -748,6 +752,27 @@ private Q_SLOTS:
         // delta's version key after migrating. This pins the seed's stamp,
         // not the migration.
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
+    /// The stamp-only arm required by the version-pin policy in
+    /// profileFormatTracksConfigSchemaVersion: migrateV7ToV8 touches nothing
+    /// but the version key, so a v7-stamped profile's delta must load and
+    /// apply unchanged under a current-version store. (A v6-stamped delta
+    /// with no animation overrides crosses both remaining steps unchanged
+    /// too — the second case pins that.)
+    void olderProfileV7FileMigratesForward()
+    {
+        for (int seedVersion : {7, 6}) {
+            const QUuid id = QUuid::createUuid();
+            QJsonObject delta;
+            delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+            QVERIFY(writeProfileFileFixture(id, seedVersion, delta));
+
+            ProfileStore store(makeCurrentVersionConfig());
+            QVERIFY(store.activateProfile(id.toString()));
+            QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
+            QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+        }
     }
 
     /// A profile file stamped v6 whose delta carries a shader override on a

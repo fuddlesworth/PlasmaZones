@@ -1022,8 +1022,8 @@ QtObject {
     // animation shaders above. Wire value is the shader id.
     property Component _overlayShaderEditor: Component {
         // Cascading category menu of the overlay/snapping shaders — the same
-        // registry the "Snapping → Shaders" page edits and that Layout::shaderId
-        // stores — grouped by category. Distinct from _shaderEffectEditor, which
+        // registry the "Snapping → Shaders" page edits and whose ids the
+        // OverlayShaderTree assignments store — grouped by category. Distinct from _shaderEffectEditor, which
         // lists the ANIMATION shaders. No path-aware dim/incompatible state here
         // (overlay shaders are event-agnostic, unlike the per-event animation
         // shaders). Wire value is the shader id; an unknown/uninstalled id

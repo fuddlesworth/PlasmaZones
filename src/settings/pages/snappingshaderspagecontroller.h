@@ -5,12 +5,12 @@
 
 #include <PhosphorControl/PageController.h>
 #include <QObject>
-#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
 
 namespace PlasmaZones {
+class ISettings;
 class ShaderRegistry;
 class ShaderPreviewController;
 }
@@ -21,30 +21,36 @@ class IZoneLayoutRegistry;
 
 namespace PlasmaZones {
 
-/// Q_PROPERTY surface for the "Snapping → Shaders" settings page.
+/// Q_PROPERTY surface for the "Snapping → Overlay Shaders" pages: the
+/// assignment page (global default + per-layout overrides) and the
+/// pack browser.
 ///
-/// Read-only browser over the snapping overlay shader registry (the
-/// `data/overlays/` family — cosmic-flow, neon-city, etc.) — the
-/// counterpart to @ref AnimationsPageController's animation-shader
-/// surface. Drives the pack-agnostic `ShaderBrowserPage.qml` via a
-/// duck-typed bridge contract: `availableShaderEffects`,
-/// `installShaderPack`, `openUserShaderDirectory`, `shaderEffectUsages`,
-/// plus a `shaderEffectsChanged` signal forwarded from the registry.
+/// ## Scope: an OverlayShaderTree keyed on layout UUIDs
 ///
-/// ## "Used in:" reverse lookup
+/// Overlay shader assignments live in the config as an
+/// `OverlayShaderTree` (`ISettings::overlayShaderTree()`): one global
+/// baseline plus per-layout overrides, each node a `{shaderId,
+/// parameters}` pair. The resolve step is flat — a layout's override
+/// wins, otherwise the baseline applies. Paths in this API are layout
+/// UUIDs (with braces); the empty path "" addresses the baseline,
+/// mirroring the DecorationPageController convention.
 ///
-/// Snapping overlay shaders are assigned to layouts (one shader per
-/// `PhosphorZones::Layout::shaderId`). `shaderEffectUsages(id)` walks
-/// the borrowed @ref PhosphorZones::IZoneLayoutRegistry and returns
-/// `[{path, label}]` for every layout that references @p id.
+/// ## Dirty tracking
 ///
-/// ## Settings-side mirror
+/// All mutators read the tree from `ISettings::overlayShaderTree()`,
+/// mutate, and write back through `setOverlayShaderTree()`. That
+/// setter's NOTIFY (`overlayShaderTreeChanged`) rides the
+/// SettingsController meta-object dirty loop, so this controller
+/// carries NO per-page staged state: `isDirty()` / `apply()` /
+/// `discard()` are no-ops, exactly like `DecorationPageController`.
 ///
-/// Mirrors the `AnimationShaderRegistry` setup pattern in
-/// `SettingsController` — both processes scan the same XDG dirs
-/// independently, FS watching keeps each in sync. The settings-side
-/// registry instance is borrowed (constructor parameter); composition
-/// is owned by `SettingsController`.
+/// ## Browser bridge
+///
+/// Also implements the pack-agnostic `ShaderBrowserPage.qml` duck-typed
+/// bridge contract (`availableShaderEffects`, `installShaderPack`,
+/// `openUserShaderDirectory`, `shaderEffectUsages`,
+/// `shaderEffectsChanged`) over the overlay registry (`data/overlays/`
+/// family).
 class SnappingShadersPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -56,25 +62,21 @@ class SnappingShadersPageController : public PhosphorControl::PageController
     Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
 
 public:
+    // ── PhosphorControl::StagingDomain contract ───────────────────────────
+    // No per-page staged state — mutations write straight to Settings and
+    // the global SettingsController dirty loop tracks them (see class doc).
+    // The inherited applyResult / discardResult still fire so the
+    // framework's wait-counter ticks down.
     bool isDirty() const override
     {
         return false;
     }
-    // The read-only browser never owns staged edits, so apply()/discard()
-    // are no-ops at the storage layer. We still emit the inherited
-    // applyResult / discardResult so the framework's wait-counter ticks
-    // down — without it, a future per-page dirty flag accidentally
-    // wired here would deadlock the chrome footer ("0 of 1 pages
-    // saved" with no signal in sight). Q_ASSERT documents that we
-    // never expect a dirty-state caller to reach these bodies.
     void apply() override
     {
-        Q_ASSERT(!isDirty());
         Q_EMIT applyResult(true, QString());
     }
     void discard() override
     {
-        Q_ASSERT(!isDirty());
         Q_EMIT discardResult(true, QString());
     }
 
@@ -85,15 +87,58 @@ public:
     ///        the user-shader directory + open-folder helpers can be
     ///        forwarded straight through, keeping the on-disk path in a
     ///        single source of truth on the registry.
-    /// @param layoutRegistry Borrowed; consulted by `shaderEffectUsages`.
-    ///        Pass nullptr to disable usage lookup (returns empty).
+    /// @param layoutRegistry Borrowed; drives layout enumeration for the
+    ///        assignment cards and label resolution for usages. Pass
+    ///        nullptr to disable both (returns empty).
+    /// @param settings Borrowed; the assignment store. Pass nullptr to
+    ///        make every mutator a no-op and every read return empty.
     explicit SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
-                                           PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                                           PhosphorZones::IZoneLayoutRegistry* layoutRegistry, ISettings* settings,
                                            ShaderPreviewController* previewController, QObject* parent = nullptr);
     ~SnappingShadersPageController() override;
 
     /// The borrowed live-preview controller (see the previewController property).
     QObject* previewController() const;
+
+    // ── Assignment surface ────────────────────────────────────────────────
+
+    /// Every layout an override card can target: `{id, name}` rows from
+    /// the layout registry, sorted by name (case-insensitively). `id` is
+    /// the UUID-with-braces. Overrides whose layout no longer exists in
+    /// the registry are appended as `{id, name: "", missing: true}` rows
+    /// so a stale assignment stays visible and clearable.
+    Q_INVOKABLE QVariantList assignableLayouts() const;
+
+    /// True iff @p path (a layout UUID) carries a direct override.
+    /// Always false for "" (the baseline is not an override).
+    Q_INVOKABLE bool hasOverride(const QString& path) const;
+
+    /// The DIRECT node at @p path as `{shaderId, parameters}` — the
+    /// baseline for "", the layout's own override otherwise (empty map
+    /// values when none).
+    Q_INVOKABLE QVariantMap rawShaderProfile(const QString& path) const;
+
+    /// The EFFECTIVE node at @p path: the layout's override when one
+    /// exists, else the baseline. For "" this is the baseline itself.
+    /// An empty shaderId in the result means "no shader".
+    Q_INVOKABLE QVariantMap resolvedShaderProfile(const QString& path) const;
+
+    /// Engage @p effectId (with @p params) at @p path — the baseline for
+    /// "", a per-layout override otherwise. An empty @p effectId on a
+    /// layout path explicitly suppresses the baseline shader for that
+    /// layout; on "" it clears the global default.
+    Q_INVOKABLE void setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params);
+
+    /// Drop the override at @p path so the layout inherits the baseline
+    /// again. Rejected for "" (clear the baseline via setShaderOverride
+    /// with an empty effectId). @return true when an override was removed.
+    Q_INVOKABLE bool clearOverride(const QString& path);
+
+    /// Parameter declarations for @p effectId (the registry's
+    /// ParameterInfo maps), for the assignment page's parameter editor.
+    Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
+
+    // ── Shader-browser bridge (ShaderBrowserPage contract) ────────────────
 
     /// Installed overlay shader packs flattened to a QML-friendly list.
     /// Each row carries the same shape as the animations bridge so
@@ -114,11 +159,12 @@ public:
     /// @return true on success.
     Q_INVOKABLE bool installShaderPack(const QString& sourceUrl);
 
-    /// Reverse-lookup: list every layout whose `shaderId` matches @p
-    /// effectId. Each entry: `{path, label}` where `path` is the
-    /// layout's UUID-with-braces and `label` is the layout's display
-    /// name (matching the `{path,label}` shape the animations bridge
-    /// returns). Sorted by label for deterministic UI order.
+    /// Reverse-lookup over the assignment tree: a "Global default" entry
+    /// (empty path) when the baseline uses @p effectId, plus `{path,
+    /// label}` for every layout whose override does — `path` the layout
+    /// UUID-with-braces, `label` its display name resolved through the
+    /// layout registry (falls back to the bare UUID for a stale entry).
+    /// Sorted by label for deterministic UI order.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
 Q_SIGNALS:
@@ -126,17 +172,13 @@ Q_SIGNALS:
     /// so QML can rebind without poking at the registry directly.
     void shaderEffectsChanged();
 
-    /// Emitted when a layout's `shaderId` changes — the browser's
-    /// "Used in:" chips re-resolve on this tick. Forwarded from every
-    /// `PhosphorZones::Layout::shaderIdChanged` signal in the registry.
-    ///
-    /// @p path carries the layout's UUID-with-braces when the emit
-    /// originates from a per-layout signal (the canonical case).
-    /// The fan-out path that fires on `ILayoutSourceRegistry::contentsChanged`
-    /// emits with an EMPTY path — QML treats that as "any layout may
-    /// have changed, re-resolve everything." Consumers that key off
-    /// `path` MUST guard for the empty case and treat it as a full
-    /// refresh trigger, not a no-op.
+    /// Emitted whenever the assignment tree mutates (any setter, a D-Bus
+    /// write, a global reload — forwarded from
+    /// `ISettings::overlayShaderTreeChanged`) and when the layout
+    /// catalogue changes (add / remove / rename). Cards and the
+    /// browser's "Used in:" chips re-resolve on this tick. Always fires
+    /// with an EMPTY path ("any assignment may have changed"); consumers
+    /// treat it as a full refresh trigger.
     void shaderProfileChanged(const QString& path);
 
     /// User-facing transient notification request. QML chrome wires
@@ -146,16 +188,6 @@ Q_SIGNALS:
     /// AnimationsPageController.
     void toastRequested(const QString& text);
 
-private Q_SLOTS:
-    /// Slot wired (with `Qt::UniqueConnection`) to every layout's
-    /// `shaderIdChanged`. A free-function lambda would defeat
-    /// `UniqueConnection` — Qt cannot dedupe functor connections — and
-    /// each `contentsChanged` fan-out would accumulate duplicate edges,
-    /// causing N-fold signal multiplication on real edits. Using a
-    /// member-function pointer makes `UniqueConnection` actually
-    /// idempotent. Recovers the layout via @c sender().
-    void onLayoutShaderIdChanged();
-
 private:
     /// User-writable XDG directory the overlay-shader registry watches.
     /// Forwards to `PlasmaZones::ShaderRegistry::userShaderDirectory()`
@@ -163,33 +195,14 @@ private:
     /// registry resolves via `ConfigDefaults::userOverlayShadersSubdir`).
     QString userShaderDirectoryPath() const;
 
-    /// Wire up `shaderIdChanged` for every layout currently in the
-    /// registry plus any added later. Each fire re-emits
-    /// `shaderProfileChanged` so the QML usage chips re-evaluate.
-    /// Layouts already in @c m_wiredLayouts are skipped to keep the
-    /// per-refresh cost proportional to NEW layouts rather than the
-    /// full registry size — Qt::UniqueConnection still guarantees
-    /// idempotence on the rare path where the set drifts.
-    void connectLayoutSignals();
-
-    /// Evict an entry from @c m_wiredLayouts when its layout is
-    /// destroyed (QObject::destroyed). Without this, the set retains
-    /// stale dangling pointers, and the next reconnect would skip a
-    /// reused address that happens to match an old entry.
-    void onWiredLayoutDestroyed(QObject* layout);
+    /// Layout display name for @p layoutId (UUID-with-braces), or an
+    /// empty string when the registry has no such layout.
+    QString layoutNameFor(const QString& layoutId) const;
 
     PlasmaZones::ShaderRegistry* m_shaderRegistry = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry = nullptr;
+    ISettings* m_settings = nullptr;
     ShaderPreviewController* m_previewController = nullptr; // borrowed; owned by SettingsController
-    /// Layouts already wired via @c connectLayoutSignals — tracked so
-    /// the O(N) walk on every @c contentsChanged is replaced by an
-    /// O(new) walk. Entries are evicted on the layout's destroyed()
-    /// signal (see @c onWiredLayoutDestroyed). connectLayoutSignals
-    /// itself only ever calls `disconnect()` on pointers it has
-    /// already confirmed are present in the current live registry
-    /// snapshot (`live` QSet), so the set never dereferences a
-    /// dangling raw pointer.
-    QSet<QObject*> m_wiredLayouts;
 };
 
 } // namespace PlasmaZones

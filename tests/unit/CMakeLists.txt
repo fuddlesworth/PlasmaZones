@@ -377,6 +377,11 @@ p_add_test(test_settings_animation_profile config/settings/test_settings_animati
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
+p_add_test(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
+# QTEST_MAIN constructing Settings needs QGuiApplication: link Qt6::Gui
+# explicitly rather than riding plasmazones_core's coincidental PUBLIC edge
+# (the p_add_test doc block above spells out the hazard).
+target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Gui)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
@@ -428,6 +433,10 @@ p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
 p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
 p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
 p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
+p_add_test(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
+# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion (see the
+# p_add_test doc block).
+target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Gui)
 
 # Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
 # enum fall-back-to-default validators, preset-list canonicalization.
@@ -1756,6 +1765,25 @@ target_link_libraries(test_decorationpagecontroller
 # zone pane when the token does not match, so a drift is silent otherwise.
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
+
+add_executable(test_snappingshaders_page_controller
+    settings/pages/test_snappingshaders_page_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/snappingshaderspagecontroller.cpp
+    # installShaderPack forwards into the shared installer, so the symbol is
+    # needed at link even though the suite does not exercise it.
+    ${CMAKE_SOURCE_DIR}/src/settings/services/shaderpackinstaller.cpp
+)
+target_link_libraries(test_snappingshaders_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
+        PhosphorAudio::PhosphorAudio  # shaderpreviewcontroller.h -> ishaderpreviewbackend.h include chain
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_snappingshaders_page_controller COMMAND test_snappingshaders_page_controller)
 
 # Data surface behind the settings app's live decoration preview: chain
 # composition, the extended-FBO padding request, and the degraded paths a

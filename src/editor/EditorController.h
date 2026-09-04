@@ -36,7 +36,6 @@
 #include "undo/UndoController.h"
 #include "EditorGapsModel.h"
 #include "EditorTemplateModel.h"
-#include "../shaderpreview/ishaderpreviewbackend.h"
 
 #include <memory>
 #include <optional>
@@ -63,7 +62,6 @@ namespace PlasmaZones {
 
 class ILayoutService;
 class ZoneManager;
-class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 class EditorGapsModel;
@@ -74,7 +72,7 @@ class EditorGapsModel;
  * Manages zone editing operations and communicates with the daemon via D-Bus.
  * Exposed to QML for the editor UI.
  */
-class EditorController : public QObject, public IShaderPreviewBackend
+class EditorController : public QObject
 {
     Q_OBJECT
 
@@ -183,18 +181,6 @@ class EditorController : public QObject, public IShaderPreviewBackend
     Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline CONSTANT)
     Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout CONSTANT)
 
-    // Shader properties for current layout
-    Q_PROPERTY(QString currentShaderId READ currentShaderId WRITE setCurrentShaderId NOTIFY currentShaderIdChanged)
-    Q_PROPERTY(QVariantMap currentShaderParams READ currentShaderParams WRITE setCurrentShaderParams NOTIFY
-                   currentShaderParamsChanged)
-    Q_PROPERTY(QVariantList availableShaders READ availableShaders NOTIFY availableShadersChanged)
-    Q_PROPERTY(QVariantList currentShaderParameters READ currentShaderParameters NOTIFY currentShaderParametersChanged)
-    Q_PROPERTY(bool shadersEnabled READ shadersEnabled NOTIFY shadersEnabledChanged)
-    Q_PROPERTY(QString noneShaderUuid READ noneShaderUuid CONSTANT)
-
-    // Audio spectrum (CAVA) for shader preview
-    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant NOTIFY audioSpectrumChanged)
-
     // Visibility filtering (Tier 2 per-context allow-lists)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
     Q_PROPERTY(QVariantList allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
@@ -230,6 +216,9 @@ class EditorController : public QObject, public IShaderPreviewBackend
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
+    /// PlasmaZones::MaxLayoutNameLength for QML name fields, so the cap
+    /// cannot silently desync from the C++ clamp.
+    Q_PROPERTY(int maxLayoutNameLength READ maxLayoutNameLength CONSTANT)
 
 public:
     explicit EditorController(QObject* parent = nullptr);
@@ -292,7 +281,7 @@ public:
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
-    QSize targetScreenSize() const override; // also satisfies IShaderPreviewBackend
+    QSize targetScreenSize() const;
     QRect virtualScreenRect() const
     {
         return m_virtualScreenRect;
@@ -308,6 +297,10 @@ public:
     void refreshUsableAreaInsets();
     bool canPaste() const;
     UndoController* undoController() const;
+    int maxLayoutNameLength() const
+    {
+        return MaxLayoutNameLength;
+    }
 
     // Font settings getters
     QString labelFontFamily() const
@@ -380,20 +373,6 @@ public:
     void setAllowedScreens(const QStringList& screens);
     void setAllowedDesktops(const QVariantList& desktops);
     void setAllowedActivities(const QStringList& activities);
-
-    // Shader getters
-    QString currentShaderId() const;
-    QVariantMap currentShaderParams() const;
-    QVariantList availableShaders() const
-    {
-        return m_availableShaders;
-    }
-    QVariantList currentShaderParameters() const;
-    bool shadersEnabled() const
-    {
-        return m_shadersEnabled;
-    }
-    QString noneShaderUuid() const;
 
     // Property setters
     void setLayoutName(const QString& name);
@@ -487,95 +466,14 @@ public:
     void setUseFullScreenGeometry(bool enabled);
     void setAspectRatioClass(int cls);
 
-    // Shader setters (create undo commands)
-    void setCurrentShaderId(const QString& id);
-    void setCurrentShaderParams(const QVariantMap& params);
-
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setOverlayDisplayModeDirect(int mode);
     void setUseFullScreenGeometryDirect(bool enabled);
-
-    // Shader setters - Direct (for undo/redo, bypass command creation)
-    void setCurrentShaderIdDirect(const QString& id);
-    void setCurrentShaderParamsDirect(const QVariantMap& params);
-    void setShaderParameterDirect(const QString& key, const QVariant& value);
 
     // Visibility setters - Direct (for undo/redo, bypass command creation)
     void setAllowedScreensDirect(const QStringList& screens);
     void setAllowedDesktopsDirect(const QList<int>& desktops);
     void setAllowedActivitiesDirect(const QStringList& activities);
-
-    // Shader operations (QML-invokable)
-    Q_INVOKABLE void setShaderParameter(const QString& key, const QVariant& value);
-    Q_INVOKABLE void resetShaderParameters();
-    Q_INVOKABLE void switchShader(const QString& id, const QVariantMap& params);
-    Q_INVOKABLE void refreshAvailableShaders();
-
-    /**
-     * @brief Convert current zones to the format the ZoneShaderRenderer preview consumes
-     * @param width Preview width in pixels
-     * @param height Preview height in pixels
-     * @return PhosphorZones::Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
-     */
-    Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
-
-    /**
-     * @brief Translate shader params from param IDs to the uniform names the renderer reads
-     * @param shaderId Shader UUID
-     * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
-     * @param previewWidth Logical width the preview renders at; scales the
-     *        shader's px-denominated parameters down by the same factor
-     *        zonesForShaderPreview scales the zone geometry (see
-     *        ShaderPreviewController::translateShaderParams). 0 leaves them raw.
-     * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
-     */
-    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params,
-                                                  int previewWidth = 0) const;
-
-    /**
-     * @brief Gets shader info from daemon via D-Bus (for shader preview in dialogs)
-     * @param shaderId Shader ID to query
-     * @return Shader metadata as QVariantMap, or empty map if not found
-     */
-    Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
-
-    /**
-     * Build the generated `#define p_<id> ...` preamble (T1.1) for a shader, so
-     * the editor's live preview compiles a pack that reads parameters by name.
-     * Mirrors what the daemon overlay splices via ShaderRegistry::paramPreamble;
-     * the per-param `slot` comes from the same D-Bus shaderInfo the daemon's
-     * registry produced (auto-assigned), so the preview's preamble and its
-     * translateShaderParams uploads agree on every lane. Empty if the shader
-     * declares no parameters.
-     * @param shaderId Shader ID to query
-     * @return The preamble block, spliced after the shader's #version at load.
-     */
-    Q_INVOKABLE QString shaderParamPreamble(const QString& shaderId) const;
-
-    /**
-     * @brief Build a labels texture (zone numbers) for shader preview
-     * @param zones PhosphorZones::Zone data from zonesForShaderPreview()
-     * @param width Texture width in pixels
-     * @param height Texture height in pixels
-     * @return QImage with zone numbers rendered, or null image if no zones
-     */
-    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, int width, int height) const;
-
-    /**
-     * @brief Load the current Plasma desktop wallpaper as a QImage
-     * @return RGBA8888 QImage, or null image if no wallpaper found
-     */
-    Q_INVOKABLE QImage loadWallpaperTexture() const;
-
-    /**
-     * @brief Start CAVA audio capture for shader preview (if available)
-     */
-    Q_INVOKABLE void startAudioCapture();
-
-    /**
-     * @brief Stop CAVA audio capture
-     */
-    Q_INVOKABLE void stopAudioCapture();
 
 public Q_SLOTS:
     // PhosphorZones::Layout operations; loadLayout's bool = payload
@@ -799,20 +697,6 @@ public Q_SLOTS:
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& filePath);
 
-    // Shader preset operations
-    Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
-                                      const QString& presetName);
-    Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
-    Q_INVOKABLE QString shaderPresetDirectory() const;
-
-    /// Look up a metadata-defined preset for @p shaderId by @p presetName.
-    /// Returns the preset's parameter map, or an empty map when the
-    /// shader / preset is unknown. Reads from the cached
-    /// @c availableShaders (each entry's @c presets list is populated
-    /// upstream by @c ShaderRegistry::shaderInfoToVariantMap), so no
-    /// additional D-Bus round-trip is needed at call time.
-    Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
-
     // Clipboard operations
     /**
      * @brief Copies selected zones to clipboard
@@ -874,14 +758,6 @@ Q_SIGNALS:
     void aspectRatioClassChanged();
     void targetScreenSizeChanged();
 
-    // Shader signals
-    void currentShaderIdChanged();
-    void currentShaderParamsChanged();
-    void availableShadersChanged();
-    void currentShaderParametersChanged();
-    void shadersEnabledChanged();
-    void audioSpectrumChanged();
-
     // Visibility filtering signals
     void allowedScreensChanged();
     void allowedDesktopsChanged();
@@ -904,8 +780,11 @@ Q_SIGNALS:
     void layoutExported();
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
-    void shaderPresetLoadFailed(const QString& error);
-    void shaderPresetSaveFailed(const QString& error);
+    /// Relayed from ILayoutService::errorOccurred. The service's messages are
+    /// self-describing ("Failed to load layout: …"), so QML toasts them
+    /// verbatim; layoutLoadFailed/layoutSaveFailed carry only the
+    /// controller-side failures whose toast adds the operation prefix.
+    void serviceErrorOccurred(const QString& error);
     void editorClosed();
 
     // Validation signals
@@ -923,7 +802,6 @@ Q_SIGNALS:
     void clipboardOperationFailed(const QString& error);
 
 private:
-    QVariant audioSpectrumVariant() const;
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
     /// Carry out the gated screen switch (caller cleared the replace
@@ -932,14 +810,6 @@ private:
     void applyTargetScreen(const QString& screenName, bool forceLayoutMode = false);
     void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
     void setInsets(int left, int top, int right, int bottom);
-
-    /**
-     * @brief Remove shader params that don't belong to the current shader
-     *
-     * Uses m_cachedShaderParameters to determine valid param IDs.
-     * Returns a new map containing only keys that match the current shader's definitions.
-     */
-    QVariantMap stripStaleShaderParams(const QVariantMap& params) const;
 
     /**
      * @brief Z-order operation types for changeZOrderImpl
@@ -1186,32 +1056,6 @@ private:
 
     // Clipboard state
     bool m_canPaste = false;
-
-    // Shader state (cached from D-Bus query - NOT a local ShaderRegistry)
-    QVariantList m_availableShaders;
-    bool m_shadersEnabled = false;
-
-    // Current layout's shader settings
-    QString m_currentShaderId; // Empty = no shader effect
-    QVariantMap m_currentShaderParams;
-
-    // IShaderPreviewBackend — the editor's preview data source: shader metadata
-    // via D-Bus to the daemon registry, the live edited layout's zones, and the
-    // audio-visualizer config. Consumed by m_shaderPreview; the QML-facing
-    // preview methods delegate to it. (targetScreenSize() above is the sixth.)
-    QVariantMap shaderInfo(const QString& shaderId) const override;
-    QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const override;
-    QVariantList previewZones() const override;
-    bool audioVisualizerEnabled() const override;
-    PhosphorAudio::SpectrumOptions audioOptions() const override;
-
-    // Shared zone-shader preview feed (owns the CAVA capture + texture/preamble
-    // helpers). EditorController is its backend; the preview methods delegate.
-    ShaderPreviewController* m_shaderPreview = nullptr;
-
-    // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
-    // Updated when shader selection changes
-    QVariantList m_cachedShaderParameters;
 
     // Visibility filtering state
     QStringList m_allowedScreens;

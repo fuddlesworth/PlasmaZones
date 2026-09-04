@@ -6,7 +6,7 @@
 //     getSetting/setSetting D-Bus surface (REGISTER_* macro block,
 //     enum-validated custom setters, JSON profile-tree blob round-trips) and
 //     calls the three per-mode slices
-//   * validProfileTreeBlob — shared wire validation for the two profile-tree
+//   * validProfileTreeBlob — shared wire validation for the three profile-tree
 //     blob setters
 //
 // The registry is split across FOUR TUs, one per family, all filling the same
@@ -66,11 +66,12 @@ bool isWindowScopeToken(const QString& requested)
     return requested == WAS::Tiled || requested == WAS::Normal || requested == WAS::All;
 }
 
-// Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
-// AND surface decoration tree) accepted over D-Bus.
+// Shared wire-size cap for the JSON profile-tree blobs (animation shader
+// tree, surface decoration tree, and overlay shader tree) accepted over
+// D-Bus.
 constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
 
-// Shared wire validation for the two profile-tree blob setters: gate on UTF-8
+// Shared wire validation for the three profile-tree blob setters: gate on UTF-8
 // byte length — for multi-byte payloads QString::size() undercounts what a
 // 64 KiB wire frame encodes to — and require a top-level JSON object. Fills
 // @p outDoc with the parsed document on success.
@@ -750,6 +751,22 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
+
+    // Zone-overlay shader tree (JSON blob round-trip via D-Bus), the third
+    // tree alongside the two above. The settings app writes assignments here;
+    // the daemon consumes the tree in-process (OverlayService shader resolve).
+    m_getters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = [this]() {
+        return m_settings->overlayShaderTreeJson();
+    };
+    m_setters[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] =
+        [this](const QVariant& v) -> bool {
+        QJsonDocument doc;
+        if (!validProfileTreeBlob(v, &doc))
+            return false;
+        m_settings->setOverlayShaderTree(OverlayShaderTree::fromJson(doc.object()));
+        return true;
+    };
+    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::OverlayShaderTree)] = QStringLiteral("string");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Per-mode families, one TU each: settingsadaptor_registry_snapping.cpp,
