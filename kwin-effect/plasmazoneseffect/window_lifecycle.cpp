@@ -103,7 +103,7 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // KWin's maximize bit fighting the zone rect from its first frame.
         m_tilingHandler->demoteMaximizeForSnapPlacement(w, cached->geometry);
         applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
-                            PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                            PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                             /*demoteMaximizeOnDeferredReplay=*/true);
         return true;
     }
@@ -584,6 +584,15 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // window set.
     m_pendingFrameGeometry.remove(closedWindowId);
     m_focusFade.remove(closedWindowId);
+    // The lcStripDiag change-gate, and this is its REAL sweep rather than a
+    // backstop. Its only other removal sits inside the windowDeleted lambda's
+    // `windowIdCache.contains(w)` guard, and the scrub a few lines above clears
+    // that cache for every window not riding a close animation — so on the
+    // ordinary close path the guard is already false and that removal never
+    // runs. The entry then survives for the session. Bounded in practice only
+    // because the inserts are gated on lcStripDiag being debug-enabled, which
+    // is a reason it went unnoticed, not a reason to leave it.
+    m_stripDiagLast.remove(closedWindowId);
     // Symmetric with the `windowDeleted` lambda in `lifecycle_wiring.cpp`
     // (which removes the same key from `m_frameOpacityCache` after the
     // close-grab unref). Close shaders held via `holdCloseGrab=true`

@@ -13,11 +13,14 @@
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorRules/ActionParams.h>
+#include <PhosphorRules/ActionTypes.h>
 #include <PhosphorRules/RuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -530,6 +533,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // on a fixed id, and folded here rather than into a schema bump
         // because it corrects a rule this function seeded, not a schema.
         ok = repairSeededSteamRule(jsonPath) && ok;
+
+        // Rename rule actions still scoped to a retired window-movement
+        // animation event onto the v7 nodes. The config step (migrateV6ToV7)
+        // rewrites the ShaderProfileTree blob but cannot reach rules.json, and
+        // a rule left naming `snapIn` or `maximize` would silently never match
+        // again. Idempotent like its two siblings.
+        ok = renameRetiredAnimationEventPaths(jsonPath) && ok;
 
         return ok;
     }
@@ -1116,6 +1126,51 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
         return true;
     });
     return ok && !failed;
+}
+
+bool ConfigMigration::renameRetiredAnimationEventPaths(const QString& jsonPath)
+{
+    // Frozen spellings, for the same reason the schema steps freeze theirs:
+    // this rewrite's wire-format contract must not follow a later rename of
+    // the live ProfilePaths constants.
+    static const QHash<QString, QString> kRenames{
+        {QStringLiteral("window.movement.snapIn"), QStringLiteral("window.movement.placeIn")},
+        {QStringLiteral("window.movement.snapOut"), QStringLiteral("window.movement.placeOut")},
+        {QStringLiteral("window.movement.maximize"), QStringLiteral("window.movement.placeIn")},
+    };
+    // Every action type that carries an `event` param — the ones whose slot
+    // is `<prefix>:<event>` (see ruleaction_builtins_engine.cpp).
+    static const QSet<QString> kEventScoped{
+        QString(PhosphorRules::ActionType::OverrideAnimationShader),
+        QString(PhosphorRules::ActionType::OverrideAnimationTiming),
+        QString(PhosphorRules::ActionType::OverrideAnimationCurve),
+    };
+
+    return withRuleSet(jsonPath, "renameRetiredAnimationEventPaths", [](PhosphorRules::RuleSet& ruleSet) {
+        // Iterate a COPY: updateRule replaces entries in the live list.
+        const QList<PhosphorRules::Rule> rules = ruleSet.rules();
+        bool changed = false;
+        for (const PhosphorRules::Rule& rule : rules) {
+            PhosphorRules::Rule updated = rule;
+            bool ruleChanged = false;
+            for (PhosphorRules::RuleAction& action : updated.actions) {
+                if (!kEventScoped.contains(action.type)) {
+                    continue;
+                }
+                const QString event = action.params.value(PhosphorRules::ActionParam::Event).toString();
+                const auto it = kRenames.constFind(event);
+                if (it == kRenames.constEnd()) {
+                    continue;
+                }
+                action.params.insert(QString(PhosphorRules::ActionParam::Event), it.value());
+                ruleChanged = true;
+            }
+            if (ruleChanged && ruleSet.updateRule(updated)) {
+                changed = true;
+            }
+        }
+        return changed;
+    });
 }
 
 } // namespace PlasmaZones

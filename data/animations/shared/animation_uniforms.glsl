@@ -578,8 +578,8 @@ vec2 surfacePadRel() {
 // fragments if migrated. Migrate deliberately, not mechanically.
 
 // ─── Direction helpers (T1.5) ──────────────────────────────────────────
-// A transition plays forward (in: window.open / snapIn / show) or reverse
-// (out: window.close / snapOut / hide). The runtime exposes that as
+// A transition plays forward (in: window.open / placeIn / show) or reverse
+// (out: window.close / placeOut / hide). The runtime exposes that as
 // `iIsReversed` (1 on reverse legs) and by flipping `iTime` (0→1 in, 1→0
 // out) so symmetric shaders auto-mirror. Both names below resolve in the
 // daemon UBO and the kwin default-block branch, so a shader uses them

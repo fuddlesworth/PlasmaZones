@@ -26,12 +26,10 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-window-dragging"), QStringLiteral("window.movement.move"),
                PhosphorI18n::tr("Dragged"));
     // Windows (movement) page under Motion.
-    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.maximize"),
-               PhosphorI18n::tr("Maximized"));
-    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.snapIn"),
-               PhosphorI18n::tr("Snapped Into Zone"));
-    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.snapOut"),
-               PhosphorI18n::tr("Snapped Out of Zone"));
+    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.placeIn"),
+               PhosphorI18n::tr("Placed"));
+    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.placeOut"),
+               PhosphorI18n::tr("Released"));
     addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.layoutSwitch"),
                PhosphorI18n::tr("Layout Switched"));
     // OSDs page.

@@ -162,7 +162,7 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
             //
             // Cost: a level that HAD a registry entry used to resolve from RAM
             // with no filesystem I/O at all. Bounded by chain depth (four levels
-            // at the deepest, e.g. window.movement.snapIn), but this function
+            // at the deepest, e.g. window.movement.placeIn), but this function
             // backs a QML binding that every card in scope re-evaluates on each
             // overrideChanged, and setOverride emits one of those per write path
             // per slider tick — so the naive form costs (visible cards x 4)

@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Stock-animation conflict chip for rule actions.
  *
  * Shown next to an `overrideAnimationShader` action targeting the minimize
- * or maximize event when KDE's own effect for that event will run alongside
+ * event or either placement event when KDE's own effect will run alongside
  * the rule's shader: a per-window rule cannot suppress the stock effect
  * (unloading it is global, so the runtime only does that for packs assigned
  * in the animation tree, never for rules). The chip therefore HIDES when a
@@ -41,7 +41,7 @@ Kirigami.Icon {
         if ((chip.action.effectId || "") === "")
             return false;
 
-        if (chip.action.event !== "window.appearance.minimize" && chip.action.event !== "window.movement.maximize")
+        if (chip.action.event !== "window.appearance.minimize" && chip.action.event !== "window.movement.placeIn" && chip.action.event !== "window.movement.placeOut")
             return false;
 
         var suppressed = chip.animationsController ? chip.animationsController.stockSuppressedEvents : [];
@@ -56,7 +56,7 @@ Kirigami.Icon {
     Accessible.name: i18n("May run alongside the KDE animation for this event")
     ToolTip.visible: conflictHover.hovered
     ToolTip.delay: Kirigami.Units.toolTipDelay
-    ToolTip.text: chip.action && chip.action.event === "window.movement.maximize" ? i18n("A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
+    ToolTip.text: chip.action && chip.action.event !== "window.appearance.minimize" ? i18n("A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together when such a window maximizes or restores.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
 
     HoverHandler {
         id: conflictHover

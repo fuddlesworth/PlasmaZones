@@ -1069,7 +1069,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
         m_effect->applyWindowGeometry(targetWindow, geometry, false, false,
-                                      PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                                      PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                                       /*demoteMaximizeOnDeferredReplay=*/true);
     }
 

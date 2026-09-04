@@ -982,10 +982,9 @@ private Q_SLOTS:
         expect(QStringLiteral("window.appearance.open"), true);
         expect(QStringLiteral("window.appearance.close"), true);
         expect(QStringLiteral("window.appearance.minimize"), true);
-        expect(QStringLiteral("window.movement.maximize"), true);
         expect(QStringLiteral("window.movement.move"), true);
-        expect(QStringLiteral("window.movement.snapIn"), true);
-        expect(QStringLiteral("window.movement.snapOut"), true);
+        expect(QStringLiteral("window.movement.placeIn"), true);
+        expect(QStringLiteral("window.movement.placeOut"), true);
         expect(QStringLiteral("window.movement.layoutSwitch"), true);
         expect(QStringLiteral("window.appearance.focus"), true);
         // The resize legs were dropped from the taxonomy: the interactive
@@ -993,6 +992,11 @@ private Q_SLOTS:
         // snapResize never had a callsite. Stale config overrides on these
         // paths must prune, so they stay unsupported.
         expect(QStringLiteral("window.movement.resize"), false);
+        // The maximize node was retired into placeIn / placeOut at schema v7,
+        // and the snap* spellings were renamed; stale overrides must prune.
+        expect(QStringLiteral("window.movement.maximize"), false);
+        expect(QStringLiteral("window.movement.snapIn"), false);
+        expect(QStringLiteral("window.movement.snapOut"), false);
         expect(QStringLiteral("window.movement.snapResize"), false);
         // Desktop family — the two-texture switch and the show-desktop peek
         // are consumed leaves too (the KWin effect's DesktopTransitionManager

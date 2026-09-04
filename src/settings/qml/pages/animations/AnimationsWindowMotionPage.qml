@@ -3,7 +3,7 @@
 import QtQuick
 
 // Window MOVEMENT events (a window changing geometry, cross-faded from its old
-// rect to its new one: maximize, snap in/out, layout switch). The window
+// rect to its new one: placed, released, layout switch). The window
 // APPEARANCE events (open/close/...) live on the Transitions → Windows page
 // under their own window.appearance parent.
 //
@@ -16,13 +16,15 @@ import QtQuick
 // inherited shader, so a row here under "All Windows" would misrepresent the
 // cascade — see AnimationsWindowDraggingPage.qml. There are no resize rows:
 // the interactive-resize and snapResize events were dropped from the taxonomy
-// (held resizes have nothing to animate; discrete resizes are the snap /
-// layout-switch / maximize events).
+// (held resizes have nothing to animate; discrete resizes are the placed /
+// released / layout-switch events). There is no separate maximize row: a
+// window maximizing is placed into the maximize area and restoring is
+// released from it, on the same two events every placement mode uses.
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Window movement animation events")
-    headerText: i18n("Animations for windows moving and snapping. “All Windows” is the default. Each event can override it.")
+    headerText: i18n("Animations for windows being placed, released and rearranged, including maximizing. “All Windows” is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "window.movement",
@@ -30,18 +32,13 @@ AnimationEventCardList {
             "isParentNode": true
         },
         {
-            "eventPath": "window.movement.maximize",
-            "eventLabel": i18n("Maximized"),
+            "eventPath": "window.movement.placeIn",
+            "eventLabel": i18n("Placed"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.movement.snapIn",
-            "eventLabel": i18n("Snapped Into Zone"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.movement.snapOut",
-            "eventLabel": i18n("Snapped Out of Zone"),
+            "eventPath": "window.movement.placeOut",
+            "eventLabel": i18n("Released"),
             "isParentNode": false
         },
         {

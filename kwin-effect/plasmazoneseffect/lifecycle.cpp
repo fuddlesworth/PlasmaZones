@@ -173,11 +173,10 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
     // enabled, a pack resolved for the event's path, installed, AND applying
     // to the event's contract class. Resolution goes through
     // resolveShaderWithDefault, so a built-in per-event default counts as
-    // ownership too. WindowMaximize carries one (window-morph, like the other
-    // geometry legs, because the engines route their own column and monocle
-    // maximizes through it), so on a fresh config stock maximize IS unloaded
-    // and only a per-event "None" brings it back. Peek and minimize carry no
-    // default and stay opt-in.
+    // ownership too. The placement nodes carry one (window-morph, like every
+    // geometry leg), and the native maximize morph rides them, so on a fresh
+    // config stock maximize IS unloaded and only a per-event "None" on both
+    // brings it back. Peek and minimize carry no default and stay opt-in.
     // For the peek this mirrors the whole peek path's runnability gates, not
     // just the showingDesktopChanged handler's: the handler itself only
     // checks the animations toggle and a non-empty id, while the
@@ -233,19 +232,16 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         // the one that is not loaded is a recorded no-op.
         wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
     }
-    if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMaximize)) {
-        // Whole-session unload, and the assigned pack now plays for every
-        // maximize source. A maximize on a scroll-managed tile is claimed by
-        // the strip's maximize-to-edges verb, and a monocle tile's maximize
-        // is written by the tile batch; the batch that authored the resize
-        // routes the leg onto WindowMaximize itself (slotWindowsTileRequested,
-        // maximizeLegThisBatch) and is its single owner. The
-        // windowMaximizedStateChanged handler (window_connections.cpp) skips
-        // the column echo outright, and the monocle echo either skips (X11,
-        // under the suppression counter) or is absorbed by the same-effect
-        // short-circuit onto the batch's live leg (Wayland). Unmanaged windows
-        // take the native path (beginMaximizeShaderMorph). Same pack, one
-        // owner per leg, on every screen.
+    if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowPlaceIn)
+        || packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowPlaceOut)) {
+        // Whole-session unload. KWin's stock maximize effect animates on every
+        // maximizedChanged regardless of who set the bit. The native maximize
+        // morph (beginMaximizeShaderMorph) rides placeIn growing and placeOut
+        // restoring, and the tile batch's own placement legs on a monocle or
+        // maximized-to-edges tile ride placeIn too, so a pack owning EITHER
+        // node would double-animate against it. Either is enough to unload:
+        // the unload is global, and a window that maximizes on one leg
+        // restores on the other.
         wanted << QStringLiteral("maximize");
     }
 
