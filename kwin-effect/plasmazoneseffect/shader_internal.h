@@ -150,19 +150,6 @@ inline qint64 shaderClockNowMs()
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-/// How long a maximize/restore event stays claimable by the machinery that
-/// answers it, in milliseconds.
-///
-/// One constant for the whole family rather than a value repeated per TU with
-/// a comment asserting the two agree. Three readers share it and must:
-/// `PendingMaximizeMorph`'s wait for the event's geometry to land, the
-/// maximize-edge marker the tile batch consumes, and the authored-write stamp
-/// that keeps the effect's own bracketed maximize writes from arming that
-/// marker. All three bound the same thing — the span between a maximize edge
-/// and the commit that answers it, which is one daemon round trip — so they
-/// cannot drift apart without one of them outliving the event it describes.
-inline constexpr qint64 kMaximizeEventDeadlineMs = 1000;
-
 /// Animation-shader anchor uniforms: where the captured window ("anchor")
 /// sits inside the shader's render target ("FBO").
 ///

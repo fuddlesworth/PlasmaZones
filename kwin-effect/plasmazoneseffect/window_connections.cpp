@@ -31,12 +31,7 @@ namespace {
 // is considered stale (state flipped but the commit never came, e.g. an
 // occluded client under the lock screen) — the morph is skipped so a much
 // later unrelated resize cannot fire a bogus maximize animation.
-//
-// Aliases the shared bound rather than restating the number: the maximize-edge
-// marker the tile batch consumes and the authorship stamp that guards it bound
-// the same span (a maximize edge to the commit that answers it), and a copy per
-// TU is a copy that can drift.
-constexpr qint64 kPendingMaximizeMorphDeadlineMs = ShaderInternal::kMaximizeEventDeadlineMs;
+constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
 
 // Maximize-morph landing discriminator: has the frame SIZE actually moved
 // away from the departure rect? A maximize/restore always changes the frame
@@ -865,208 +860,156 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     refreshSurfaceShadowMargins(w);
     connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
             &PlasmaZonesEffect::refreshSurfaceShadowMargins);
-    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
-            [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
-                // isDeleted() as well as null. Every body below is meaningless
-                // for a corpse, and one is actively harmful: the rule-cache
-                // invalidation calls getWindowId, which re-populates the id
-                // caches slotWindowClosed has just scrubbed (window_lifecycle
-                // spells that hazard out), leaving a stale mapping for the
-                // windowDeleted backstop to clean up again.
-                if (!window || window->isDeleted()) {
-                    return;
-                }
-                const bool fullyMaximized = horizontal && vertical;
-                const bool wasFullyMaximized = m_shaderManager.m_lastFullyMaximized.value(window, false);
-                if (fullyMaximized == wasFullyMaximized) {
-                    // Intermediate axis-only flip, so no shader — but on a
-                    // scroll-managed tile the bit still has to go back.
-                    //
-                    // A quick tile (Meta+Left and friends) sets ONE axis, which
-                    // never reaches the interception below, and nothing else
-                    // clears it: the batch arm that would only runs when a
-                    // batch arrives, and the engine emits on change, so a quick
-                    // tile that moves no column schedules none. The window then
-                    // sits half-maximized against the strip's rects with no
-                    // correction coming.
-                    //
-                    // CANCEL ONLY, never a dispatch. Routing this through
-                    // interceptMaximizeRequest would dispatch a toggle,
-                    // turning the user's quick tile into a column maximize (or,
-                    // on a member, into an un-maximize).
-                    m_tilingHandler->cancelAxisOnlyMaximize(window);
-                    return;
-                }
-                m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
-                // MAXIMIZE-EDGE MARKER, armed here and nowhere else: this is
-                // the one point every route to a maximize passes through,
-                // ahead of the interception and pending-morph skips below.
-                // Whether the request ends up answered by the scrolling
-                // engine's maximize-to-edges verb or by KWin itself on an
-                // autotile or unmanaged screen, the user pressed maximize and
-                // the geometry that follows must ride window.movement.maximize.
-                // Without it the tile batch could only recognise a maximize it
-                // had authored ITSELF on a scrolling screen, so every other
-                // maximize reached applyWindowGeometry as a plain snapIn and
-                // played whatever the movement PARENT resolves — the user's
-                // maximize pack never ran.
+    connect(
+        w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
+        [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
+            // isDeleted() as well as null. Every body below is meaningless
+            // for a corpse, and one is actively harmful: the rule-cache
+            // invalidation calls getWindowId, which re-populates the id
+            // caches slotWindowClosed has just scrubbed (window_lifecycle
+            // spells that hazard out), leaving a stale mapping for the
+            // windowDeleted backstop to clean up again.
+            if (!window || window->isDeleted()) {
+                return;
+            }
+            const bool fullyMaximized = horizontal && vertical;
+            const bool wasFullyMaximized = m_shaderManager.m_lastFullyMaximized.value(window, false);
+            if (fullyMaximized == wasFullyMaximized) {
+                // Intermediate axis-only flip, so no shader — but on a
+                // scroll-managed tile the bit still has to go back.
                 //
-                // What it must NOT record is an edge the EFFECT authored. Every
-                // such write already has an owner for its leg — the batch that
-                // made it, routing the geometry onto WindowMaximize from its
-                // own per-iteration flag — so arming for one would leave a
-                // marker nothing needs, and the next unrelated placement of
-                // that window would claim it and morph from a stale rect. The
-                // suppression counter cannot be the test: it is held across the
-                // write, so it answers on X11 where maximize() re-enters this
-                // lambda synchronously, but on Wayland the committed echo
-                // arrives a round trip later with the counter back at 0. So
-                // authorship is carried by a stamp instead, left at the
-                // applyMaximizeSuppressed chokepoint and consumed inside
-                // noteMaximizeEdge, which answers on both platforms. That is
-                // also why this sits ABOVE the suppression skip below rather
-                // than under it — the skip would only cover X11.
+                // A quick tile (Meta+Left and friends) sets ONE axis, which
+                // never reaches the interception below, and nothing else
+                // clears it: the batch arm that would only runs when a
+                // batch arrives, and the engine emits on change, so a quick
+                // tile that moves no column schedules none. The window then
+                // sits half-maximized against the strip's rects with no
+                // correction coming.
                 //
-                // The interactive drag is the deliberate exclusion, and the
-                // same one the shader skip below makes: KWin unmaximizes a
-                // window when the user pulls its titlebar, and that gesture's
-                // visuals belong to the held move pack, not to a maximize
-                // morph replayed under the pointer.
-                //
-                // The answer is kept, not discarded: noteMaximizeEdge consumes
-                // the authorship stamp, so this is the last point at which the
-                // effect's own committed echo can be told apart from a user's
-                // press. The interception is handed it below.
-                //
-                // The gesture flags go IN as the arming permission rather than
-                // guarding the call. They are the drag-restore exclusion —
-                // pulling a maximized window off its titlebar is a drag, and
-                // the drag owns those visuals — but they must not gate the
-                // stamp consumption, which belongs to the write that armed it
-                // and not to what the pointer is doing when its echo lands. An
-                // authored edge is still reported as authored during a drag,
-                // which is also what the interception wants to hear.
-                const bool effectAuthoredEdge = m_shaderManager.noteMaximizeEdge(
-                    window, fullyMaximized, !window->isUserMove() && !window->isUserResize());
-                // IsMaximized is a matchable rule field with the same
-                // cache-key staleness as IsMinimized (see the minimizedChanged
-                // metadata lambda below) — invalidate on the genuine
-                // full-maximize edge, after the tracking write and before the
-                // interactive-gesture early return (the verdict must refresh
-                // even when the shader is skipped).
-                invalidateRuleCacheForStateChange(getWindowId(window));
-                // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
-                // belongs to the scrolling engine's maximize-to-edges verb, not
-                // to KWin: the strip owns the column's width, so letting both
-                // answer would give one window two maximize authorities.
-                // Placed AFTER the edge filter and the tracking write so it
-                // sees genuine full-maximize edges only (KWin emits once per
-                // axis, and a half-snapped window going to full fires twice —
-                // a toggle verb driven off both would cancel itself), and
-                // after the rule-cache invalidation, which must run for the
-                // IsMaximized field whoever ends up owning the state.
-                //
-                // The suppression check keeps this off the handler's own
-                // bracketed writes; interceptMaximizeRequest additionally
-                // no-ops on the Wayland-lagged echo of the refusal handler's
-                // write-back, which arrives with the counter back at 0.
-                //
-                // A claimed request skips the shader install HERE
-                // deliberately, not the maximize animation: the window still
-                // resizes when the column grows, and that geometry arrives
-                // through the strip's own batch, which installs the
-                // WindowMaximize leg itself (slotWindowsTileRequested, gated on
-                // maximizeBitWrittenThisBatch) with the pre-maximize rect as
-                // its departure. Installing a second WindowMaximize from this
-                // handler would supersede that one — the same reasoning as the
-                // drag-restore guard below. One owner per leg, and for an
-                // engine-authored maximize the owner is the batch.
-                if (!m_tilingHandler->isSuppressingMaximizeChanged()
-                    && m_tilingHandler->interceptMaximizeRequest(window, effectAuthoredEdge)) {
-                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
-                    return;
-                }
-                // The handler's OWN bracketed writes take the same skip, and
-                // must: on XWayland maximize() emits this signal synchronously
-                // with the counter still held, so the conjunct above is false
-                // and control used to fall through to the shader install
-                // below — the engine-authored column maximize played a
-                // WindowMaximize morph on X11 and not on Wayland, where the
-                // committed echo arrives with the counter at 0 and the
-                // interception claims it. Same deliberate skip, now on both
-                // platforms. The edge tracking and the rule-cache
-                // invalidation above have already run, so nothing else is
-                // lost by returning here.
-                //
-                // The counter is raised by every bracketed maximize write this
-                // handler makes, not only the column-maximize ones, so the
-                // monocle apply and release skip here too on X11. That is the
-                // same judgement applied consistently: motion this effect
-                // authored is animated by the batch that authored it, which
-                // routes the leg onto WindowMaximize itself (monocleBitWritten
-                // / monocleBitReleased in the tile batch), not by a second
-                // morph replayed over it from this handler.
-                //
-                // On Wayland the MONOCLE echo has no skip here: it arrives with
-                // the counter back at 0, and the interception above declines
-                // it because a monocle screen is not scrolling. It falls
-                // through to beginMaximizeShaderMorph, and what keeps the
-                // batch the single owner there is tryBeginShaderForEvent's
-                // same-effect short-circuit: the batch's WindowMaximize leg is
-                // still live, resolves to the same pack, and is kept rather
-                // than superseded. The morph then only re-asserts the
-                // endpoints the batch already installed (toGeometry becomes
-                // the frame the client committed, and fromGeometry is left
-                // alone once the snapshot exists, or re-read from the same
-                // m_preMaximizeFrame capture the batch anchored on). One leg,
-                // one owner, on both platforms; the echo is absorbed rather
-                // than skipped.
-                if (m_tilingHandler->isSuppressingMaximizeChanged()) {
-                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
-                    return;
-                }
-                // Drag-restore guard: KWin unmaximizes a window mid interactive
-                // move when the user grabs the maximized title bar and pulls
-                // ("restore on drag"). The drag already owns the visuals — the
-                // windowStartUserMovedResized hookup above installed the
-                // window.move shader as a HELD transition — and installing
-                // WindowMaximize here would supersede it: the move pack dies
-                // mid-drag and a full-screen→cursor morph replays over the
-                // pointer. The isUserResize branch is skipped for a different
-                // reason: an interactive resize starts NO shader (the start
-                // handler gates on !isUserResize), but it is still a held
-                // gesture with continuous geometry feedback, so a discrete
-                // maximize morph replaying under the pointer would be just as
-                // wrong. Skip the shader; the edge tracking above still ran,
-                // so the next non-interactive flip fires normally.
-                if (window->isUserMove() || window->isUserResize()) {
-                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
-                    return;
-                }
-                const QRectF newFrame = window->frameGeometry();
-                QRectF preFrame = m_shaderManager.m_preMaximizeFrame.value(window);
-                if (preFrame.isEmpty()) {
-                    // No capture (window managed after the about-to-change
-                    // fired, or a degenerate rect). Fall back to the live
-                    // frame: the size test below then defers to the geometry
-                    // change, which still carries the real jump.
-                    preFrame = newFrame;
-                }
-                // KWin does NOT guarantee the maximize/restore geometry has
-                // been applied when this state signal fires — see the
-                // PendingMaximizeMorph docstring for the observed decoupling.
-                // Only install here when the size has actually changed
-                // (maximizeSizeLanded above); otherwise arm the pending entry
-                // and let the size-delivering windowFrameGeometryChanged below
-                // complete the install at the visible jump.
-                if (maximizeSizeLanded(newFrame, preFrame)) {
-                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
-                    beginMaximizeShaderMorph(window, preFrame);
-                } else {
-                    m_shaderManager.m_pendingMaximizeMorph.insert(window,
-                                                                  {preFrame, ShaderInternal::shaderClockNowMs()});
-                }
-            });
+                // CANCEL ONLY, never a dispatch. Routing this through
+                // interceptMaximizeRequest would dispatch a toggle,
+                // turning the user's quick tile into a column maximize (or,
+                // on a member, into an un-maximize).
+                m_tilingHandler->cancelAxisOnlyMaximize(window);
+                return;
+            }
+            m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
+            // IsMaximized is a matchable rule field with the same
+            // cache-key staleness as IsMinimized (see the minimizedChanged
+            // metadata lambda below) — invalidate on the genuine
+            // full-maximize edge, after the tracking write and before the
+            // interactive-gesture early return (the verdict must refresh
+            // even when the shader is skipped).
+            invalidateRuleCacheForStateChange(getWindowId(window));
+            // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
+            // belongs to the scrolling engine's maximize-to-edges verb, not
+            // to KWin: the strip owns the column's width, so letting both
+            // answer would give one window two maximize authorities.
+            // Placed AFTER the edge filter and the tracking write so it
+            // sees genuine full-maximize edges only (KWin emits once per
+            // axis, and a half-snapped window going to full fires twice —
+            // a toggle verb driven off both would cancel itself), and
+            // after the rule-cache invalidation, which must run for the
+            // IsMaximized field whoever ends up owning the state.
+            //
+            // The suppression check keeps this off the handler's own
+            // bracketed writes; interceptMaximizeRequest additionally
+            // no-ops on the Wayland-lagged echo of the refusal handler's
+            // write-back, which arrives with the counter back at 0.
+            //
+            // A claimed request skips the shader install HERE
+            // deliberately, not the maximize animation: the window still
+            // resizes when the column grows, and that geometry arrives
+            // through the strip's own batch, which installs its own
+            // placement leg (slotWindowsTileRequested) anchored at the
+            // pre-maximize rect. Installing a maximize morph from this
+            // handler on top would supersede that one — the same reasoning
+            // as the drag-restore guard below. One owner per leg, and for an
+            // engine-authored maximize the owner is the batch.
+            if (!m_tilingHandler->isSuppressingMaximizeChanged() && m_tilingHandler->interceptMaximizeRequest(window)) {
+                m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                return;
+            }
+            // The handler's OWN bracketed writes take the same skip, and
+            // must: on XWayland maximize() emits this signal synchronously
+            // with the counter still held, so the conjunct above is false
+            // and control used to fall through to the shader install
+            // below — the engine-authored column maximize played a
+            // WindowMaximize morph on X11 and not on Wayland, where the
+            // committed echo arrives with the counter at 0 and the
+            // interception claims it. Same deliberate skip, now on both
+            // platforms. The edge tracking and the rule-cache
+            // invalidation above have already run, so nothing else is
+            // lost by returning here.
+            //
+            // The counter is raised by every bracketed maximize write this
+            // handler makes, not only the column-maximize ones, so the
+            // monocle apply and release skip here too on X11. That is the
+            // same judgement applied consistently: motion this effect
+            // authored is animated by the batch that authored it — a
+            // placement leg anchored at the captured pre-maximize rect
+            // (monocleBitWritten / monocleBitReleased in the tile batch) —
+            // not by a second morph replayed over it from this handler.
+            //
+            // On Wayland the MONOCLE echo has no skip here: it arrives with
+            // the counter back at 0, and the interception above declines
+            // it because a monocle screen is not scrolling. It falls
+            // through to beginMaximizeShaderMorph. Whether that ABSORBS
+            // onto the batch's live placement leg or SUPERSEDES it is
+            // decided by tryBeginShaderForEvent's same-effect short-circuit,
+            // which keeps the prior leg only when both resolve the same
+            // pack — so the two must ride the same node for the monocle
+            // echo to be absorbed rather than replayed. When they do, the
+            // morph only re-asserts the endpoints the batch already
+            // installed (toGeometry becomes the frame the client committed,
+            // and fromGeometry is left alone once the snapshot exists, or
+            // re-read from the same m_preMaximizeFrame capture the batch
+            // anchored on).
+            if (m_tilingHandler->isSuppressingMaximizeChanged()) {
+                m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                return;
+            }
+            // Drag-restore guard: KWin unmaximizes a window mid interactive
+            // move when the user grabs the maximized title bar and pulls
+            // ("restore on drag"). The drag already owns the visuals — the
+            // windowStartUserMovedResized hookup above installed the
+            // window.move shader as a HELD transition — and installing
+            // WindowMaximize here would supersede it: the move pack dies
+            // mid-drag and a full-screen→cursor morph replays over the
+            // pointer. The isUserResize branch is skipped for a different
+            // reason: an interactive resize starts NO shader (the start
+            // handler gates on !isUserResize), but it is still a held
+            // gesture with continuous geometry feedback, so a discrete
+            // maximize morph replaying under the pointer would be just as
+            // wrong. Skip the shader; the edge tracking above still ran,
+            // so the next non-interactive flip fires normally.
+            if (window->isUserMove() || window->isUserResize()) {
+                m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                return;
+            }
+            const QRectF newFrame = window->frameGeometry();
+            QRectF preFrame = m_shaderManager.m_preMaximizeFrame.value(window);
+            if (preFrame.isEmpty()) {
+                // No capture (window managed after the about-to-change
+                // fired, or a degenerate rect). Fall back to the live
+                // frame: the size test below then defers to the geometry
+                // change, which still carries the real jump.
+                preFrame = newFrame;
+            }
+            // KWin does NOT guarantee the maximize/restore geometry has
+            // been applied when this state signal fires — see the
+            // PendingMaximizeMorph docstring for the observed decoupling.
+            // Only install here when the size has actually changed
+            // (maximizeSizeLanded above); otherwise arm the pending entry
+            // and let the size-delivering windowFrameGeometryChanged below
+            // complete the install at the visible jump.
+            if (maximizeSizeLanded(newFrame, preFrame)) {
+                m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                beginMaximizeShaderMorph(window, preFrame);
+            } else {
+                m_shaderManager.m_pendingMaximizeMorph.insert(window, {preFrame, ShaderInternal::shaderClockNowMs()});
+            }
+        });
 
     // Track when a monocle-maximized window goes fullscreen
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),

@@ -163,29 +163,16 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     if (!kw) {
         return;
     }
-    // NOTHING TO ASK FOR, so nothing is done — not the write, and therefore
-    // not the stamp either.
-    //
-    // This is what keeps the authorship stamp honest, and it is why the check
-    // gates the WRITE rather than the stamp. Several callers do not gate on the
-    // requested mode themselves — the ballooning clear before an autotile,
-    // cancelAxisOnlyMaximize and the toggle reply's write-back all read the
-    // COMMITTED mode, and unmaximizeMonocleWindow calls with no mode gate at
-    // all — so any of them can ask for a mode the window has ALREADY been asked
-    // to hold. KWin emits nothing for that, which would leave a stamp with no
-    // edge to consume it, waiting for a genuine user edge in the same direction
-    // to take instead. Declining the call declines the stamp with it.
-    //
-    // Skipping the stamp alone would rest on KWin emitting nothing here — and
-    // if it ever did emit, the edge would arrive unstamped and arm a false
-    // marker. Declining the whole call needs no such assumption: no call, no
-    // edge, no stamp. What it skips is at most a re-assert of a mode already
-    // requested — and verified against KWin 6.7.4, exactly what KWin itself
-    // would skip: XdgToplevelWindow::maximize early-returns on
-    // `m_requestedMaximizeMode == mode` and X11Window::maximize on
-    // `max_mode == mode` (which on X11 is the same value, per
-    // Window::requestedMaximizeMode's own contract note). This gate is that
-    // condition, moved one frame earlier so the stamp is skipped with it.
+    // NOTHING TO ASK FOR, so nothing is done. This is KWin's own no-op
+    // condition, verified against 6.7.4: XdgToplevelWindow::maximize returns
+    // early on `m_requestedMaximizeMode == mode`, and X11Window::maximize on
+    // `max_mode == mode`, which is the same value there per
+    // Window::requestedMaximizeMode's contract note. Declining here just saves
+    // the bracket below for a write KWin would have dropped anyway — and it is
+    // what lets the tile batch adopt a bit the user already set: a maximize
+    // press that the engine then confirms reaches this helper with requested
+    // already Full, writes nothing, and so produces no echo for anything
+    // downstream to misread.
     if (kw->requestedMaximizeMode() == mode) {
         return;
     }
@@ -196,102 +183,16 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // callers hold. The counter's failure mode is silent and permanent: leak
     // one increment and isSuppressingMaximizeChanged() answers true for the
     // rest of the session, so the interception never fires again.
+    //
+    // What the counter covers is X11, where maximize() re-enters the maximize
+    // lambda synchronously and the skip there sees it held. On Wayland the
+    // committed echo arrives a client round trip later with the counter back
+    // at 0; the interception's already-agrees arm is what absorbs it there,
+    // because the write put the bit exactly where membership says.
     ++m_suppressMaximizeChanged;
     const auto suppressGuard = qScopeGuard([this] {
         --m_suppressMaximizeChanged;
     });
-    // Why an authorship stamp exists at all, before the contract below.
-    //
-    // The counter is held only across the call, which answers on X11 where
-    // maximize() re-enters windowMaximizedStateChanged synchronously — but on
-    // Wayland the committed echo arrives a client round trip later with the
-    // counter back at 0, the same asymmetry interceptMaximizeRequest's
-    // already-agrees arm exists to absorb. And the marker is armed ABOVE that
-    // skip in any case, so the counter never reaches it on either platform.
-    // Either way it would arm for the effect's own writes and hand the next
-    // unrelated placement a maximize leg it never earned. A stamp outlives the
-    // bracket, so the edge this write produces is recognised as the effect's
-    // wherever the echo lands.
-    //
-    // AUTHORSHIP STAMP, recorded for every write this helper makes and tagged
-    // with the direction it wrote.
-    //
-    // The consumer's edge is the COMMITTED mode, and that is verified rather
-    // than assumed (KWin 6.7.4): X11Window::maximize assigns max_mode and only
-    // then emits maximizedChanged, XdgToplevelWindow::updateMaximizeMode does
-    // the same with m_maximizeMode on the client's ack, and EffectWindow's
-    // forwarder READS maximizeMode() inside that handler to build the
-    // horizontal/vertical pair. So by the time the maximize lambda runs, the
-    // committed mode already equals the edge it is being told about.
-    //
-    // WHICH edge it belongs to is settled by the tag, not by a prediction. Two
-    // earlier revisions predicted instead — first from requestedMaximizeMode,
-    // then from lastFullyMaximized — and each was wrong exactly where the other
-    // was right, because on Wayland a request and its commit are a client round
-    // trip apart and the answer depends on a commit that has not happened yet.
-    // noteMaximizeEdge now takes a stamp only when an edge arrives in the
-    // direction it names: ours is recognised whenever it lands, an edge that is
-    // not ours cannot spend it, and one whose edge never comes expires.
-    //
-    // WHETHER to stamp at all is the remaining question, and it is asked
-    // because a stamp is not inert while it waits. One left by a write that can
-    // produce no full-maximize edge sits for the deadline and is then taken by
-    // the user's own next edge in that direction.
-    //
-    // BOTH CLOCKS, because neither alone is safe and their errors point
-    // opposite ways. The requested mode is what KWin acts on; the committed
-    // mode is what the consumer's edge is derived from; and on Wayland they
-    // disagree for a client round trip. Ask only requested and a write issued
-    // while a quick-tile request sits over a still-fully-maximized window looks
-    // like partial→Restore and is refused — but it commits Full→Restore, a real
-    // edge, which then arrives unstamped and arms the user marker for a restore
-    // the effect authored. Ask only committed and the in-flight case that holed
-    // the earlier gate comes back. So the write is stamped when EITHER reading
-    // admits an edge.
-    //
-    // The asymmetry is deliberate, because the two errors are not equally bad.
-    // Under-stamping arms a false marker for a write the effect made, every
-    // time it happens, and that is the defect this whole mechanism exists to
-    // prevent. Over-stamping leaves a stamp no edge collects, and the direction
-    // tag plus the deadline confine the damage to a single same-direction user
-    // edge inside one second — a mis-chosen leg, or, on a scroll-managed tile,
-    // a maximize press SWALLOWED: interceptMaximizeRequest reads the stolen
-    // stamp as its own echo, claims the event and dispatches nothing, so the
-    // engine is never asked and KWin's bit stands against the strip's rect
-    // until something else corrects it. That is worse than a wrong animation
-    // and is stated plainly here rather than glossed, but it is still a bounded
-    // in-flight race against an unconditional failure. Closing it properly
-    // needs the stamp to carry more identity than one slot per window.
-    //
-    // Both over-stamping rows (a write whose requested and committed modes
-    // disagree in the direction being written) predate the committed disjunct;
-    // adding it introduced no new ones, and removed the only row where a real
-    // edge went unstamped.
-    //
-    // This is still not a prediction about the edge — the direction tag settles
-    // that. It only refuses writes for which NEITHER clock allows one.
-    //
-    // Before the call, not after: on X11 the handler has already run by the
-    // time maximize() returns.
-    const bool wroteFullyMaximized = mode == KWin::MaximizeFull;
-    const bool willFlipFullyMaximized = (wroteFullyMaximized != (kw->requestedMaximizeMode() == KWin::MaximizeFull))
-        || (wroteFullyMaximized != (kw->maximizeMode() == KWin::MaximizeFull));
-    if (KWin::EffectWindow* ew = kw->effectWindow(); ew != nullptr) {
-        if (willFlipFullyMaximized) {
-            m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew, wroteFullyMaximized);
-        }
-    } else if (willFlipFullyMaximized) {
-        // The write still goes out, so its edge will reach noteMaximizeEdge
-        // with nothing to identify it and arm the user marker for a maximize
-        // the effect made. Believed unreachable — a Window this handler is
-        // acting on has an EffectWindow, that being how it got here — but a
-        // silent miss here is a mis-anchored morph somewhere else entirely, so
-        // it is worth a line in a support report rather than nothing. Gated on
-        // the same predicate as the stamp: a write that would not have stamped
-        // anyway has lost nothing and must not warn.
-        qCWarning(lcEffect) << "Maximize write with no EffectWindow — authorship unrecorded, a following"
-                            << "placement may take the maximize leg";
-    }
     kw->maximize(mode);
 }
 
@@ -364,23 +265,6 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
         m_effect->m_daemonGate.inGeometryApply = prevInApply;
     });
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
-    // The one authored write whose stamp no edge can consume, so it is dropped
-    // by hand, and on the ordinary path there really is one. The pre-write above
-    // forces only the effect's own mirror false; KWin's committed mode still
-    // reads Full for a genuinely maximized window, so the stamp gate's
-    // committed disjunct admits this write and stamps it — while that same
-    // pre-written mirror guarantees the echo reads as a no-edge and never
-    // collects it. So this clear is load-bearing, not a tidy-up. It no-ops only
-    // for a window that was not fully maximized to begin with, which is why it
-    // is a conditional remove rather than an assertion that something was
-    // there. The pre-write above forced lastFullyMaximized false precisely so
-    // this write's echo reads as a no-edge and never reaches noteMaximizeEdge —
-    // which also means the stamp it just left has nothing to match it. Left
-    // standing it would wait out the deadline, and the first genuine user
-    // unmaximize inside that window — the same direction this wrote — would
-    // take it and lose its marker. Every other authored write is answered by
-    // its own edge and needs no cleanup.
-    m_effect->m_shaderManager.clearEffectAuthoredMaximizeWrite(w, /*wroteFullyMaximized=*/false);
 }
 
 void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
@@ -523,7 +407,7 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     applyMaximizeSuppressed(kw, restored);
 }
 
-bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectAuthoredEdge)
+bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {
         return false;
@@ -587,36 +471,6 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectA
     KWin::Window* kw = w->window();
     if (!kw) {
         return false;
-    }
-    // THE EFFECT'S OWN ECHO NEVER DISPATCHES, whatever bit it left behind.
-    //
-    // Claimed here rather than only inside the already-agrees arm below, and
-    // the difference is the whole point: that arm fires when the resulting bit
-    // MATCHES membership, so it covers an authored echo only while membership
-    // still says what it said at write time. On Wayland a client round trip
-    // separates the two, and membership can move inside it — a Release arm
-    // running between the write and its echo is enough. The echo then arrives
-    // DISAGREEING, falls past that arm, and reaches the dispatch below, which
-    // sends the engine a toggle nobody pressed and moves the window for it.
-    // What disqualifies a dispatch is authorship, not agreement, so the test is
-    // made on authorship and made first. Every authored write whose echo agrees
-    // is caught either way; this is what covers the ones that do not, including
-    // any future arm that writes a bit membership does not yet hold.
-    //
-    // Wayland only in practice: on X11 the echo is synchronous under the
-    // suppression counter, so the caller's own conjunct means this function is
-    // never entered for it. And below the screen gate above, so the ordinary
-    // monocle echo on a non-scrolling screen still declines exactly as before
-    // and is still absorbed by the shader layer's same-effect short-circuit
-    // rather than skipped here.
-    //
-    // Claimed rather than declined, matching the arm below: the caller must not
-    // run its own maximize shader for a state change the batch that authored it
-    // already owns the leg for.
-    if (effectAuthoredEdge) {
-        qCDebug(lcEffect) << "Maximize interception: claiming" << windowId
-                          << "— committed echo of the effect's own maximize write, nothing to dispatch";
-        return true;
     }
     // Decline BEFORE the cancel when there is no daemon to answer.
     //
@@ -685,31 +539,47 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w, bool effectA
     // arbitrary backlog against a state each press was aimed at from a
     // different starting point.
     //
-    // The effect's own echo cannot reach this arm — it is claimed above, on
-    // authorship, before membership is even consulted. That guard is what
-    // closes the re-dispatch loop this arm used to feed: the reply's
-    // pending-press scope guard re-arms a fresh flight entry after the
-    // refusal's write-back, so that write-back's Wayland echo arrived with an
-    // entry very much alive and with KWin's bit equal to membership — it had
-    // just been set to exactly that. It was recorded as a press nobody made,
-    // and the next refusal re-dispatched on it, one unrequested toggle and one
-    // visible bit write per round trip for as long as the strip kept refusing.
-    // A genuine second press still coalesces here: it carries no authorship.
+    // THE REFUSAL WRITE-BACK'S ECHO IS NOT A PRESS, and this arm is where it
+    // arrives. A refused toggle puts KWin's bit back to membership from the
+    // reply handler, and that handler's pending-press guard re-arms a fresh
+    // flight entry AFTER the write, so on Wayland the write-back's committed
+    // echo lands a round trip later on a live entry, reading exactly like a
+    // press that agrees. Recorded as one, it re-dispatched on the next
+    // refusal, and a strip that kept refusing kept the cycle going — one
+    // unrequested toggle and one visible bit write per round trip.
+    //
+    // The entry carries how many such echoes it still owes, and this arm
+    // consumes one per arrival instead of recording a press. A genuine press
+    // queued behind the echo is recorded normally: committed edges arrive in
+    // request order, so the write-back's echo is always the first to land.
+    // No other write of the effect's reaches here with an entry live — for a
+    // user-driven toggle the engine ADOPTS KWin's bit rather than re-writing
+    // it (applyMaximizeSuppressed's requested-mode early return), so the
+    // batch produces no echo at all.
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
         const bool inFlight = maximizeToggleInFlight(windowId);
+        bool consumedWriteBackEcho = false;
         if (inFlight) {
-            m_maximizeToggleInFlight[windowId].pendingPress = true;
+            MaximizeToggleFlight& entry = m_maximizeToggleInFlight[windowId];
+            if (entry.writeBackEchoesPending > 0) {
+                --entry.writeBackEchoesPending;
+                consumedWriteBackEcho = true;
+            } else {
+                entry.pendingPress = true;
+            }
         }
         // Entry presence is logged separately from the live/expired answer,
         // because the case where they disagree is the one worth reading in a
         // report: a flight that expired with a press already recorded keeps
         // its entry while answering false here, so this press is neither
         // coalesced nor dispatched. (An expiry with no recorded press erases
-        // the entry, so both read false there.)
+        // the entry, so both read false there.) A consumed write-back echo is
+        // the other way a live entry coalesces nothing, and is named as such.
         qCInfo(lcEffect) << "Maximize interception: KWin already agrees with the engine for" << windowId
-                         << "— no toggle dispatched (coalesced press:" << inFlight
+                         << "— no toggle dispatched (coalesced press:" << (inFlight && !consumedWriteBackEcho)
+                         << "write-back echo:" << consumedWriteBackEcho
                          << "flight entry standing:" << m_maximizeToggleInFlight.contains(windowId) << ")";
         return true;
     }
@@ -745,7 +615,8 @@ bool TilingHandler::maximizeToggleInFlight(const QString& windowId)
     return true;
 }
 
-void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId)
+void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId,
+                                                  int writeBackEchoesPending)
 {
     // The reply IS consumed, unlike every other dispatch in this file, and
     // since the interception stopped writing KWin's bit this is the ONLY thing
@@ -792,6 +663,12 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
     // would silently drop a press the interception had recorded.
     MaximizeToggleFlight& flightEntry = m_maximizeToggleInFlight[windowId];
     flightEntry.armedAtMs = QDateTime::currentMSecsSinceEpoch();
+    // The echo debt is SEEDED, not accumulated: the reply handler computes the
+    // full count it owes (whatever the entry it took still had, plus one if
+    // its own write-back has not committed yet) and passes it here, so a
+    // re-dispatch after a refusal starts with exactly the echoes that are
+    // actually in flight. A fresh user press passes the default of none.
+    flightEntry.writeBackEchoesPending = writeBackEchoesPending;
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
                                                    QStringLiteral("toggleMaximizeToEdges"), {screenId, windowId}),
@@ -800,30 +677,33 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         pw->deleteLater();
         const QDBusPendingReply<bool> reply = *pw;
         // DISARM FIRST, before any write below and on every exit, so the entry
-        // cannot outlive the round trip it describes. That is the whole reason
-        // now, and it is the weaker one: this ordering used to be described as
-        // the anti-loop argument, on the grounds that a still-armed entry would
-        // let the refusal write's echo be recorded as a pending press and
-        // re-dispatched forever. Disarming here never actually prevented that
-        // — the pending-press guard below re-arms a fresh entry at scope exit,
-        // before the echo lands. What prevents it is the effectAuthoredEdge
-        // argument interceptMaximizeRequest now takes, which recognises that
-        // echo as the effect's own and refuses to record a press for it.
+        // cannot outlive the round trip it describes. That is the whole reason;
+        // it is NOT what keeps the refusal write-back from looping, since the
+        // pending-press guard below re-arms a fresh entry at scope exit, before
+        // that write's echo can land. The echo debt carried on the entry is
+        // what closes the loop — see writeBackEchoesPending.
         const MaximizeToggleFlight flight = m_maximizeToggleInFlight.take(windowId);
+        // Echoes the entry we just took still owed, carried forward to the one
+        // the guard may re-arm. A reply can beat its own write-back's echo (a
+        // daemon round trip against a client one), in which case the debt
+        // would otherwise be lost with the taken entry and the echo would land
+        // on the re-armed one as a phantom press. Incremented below if this
+        // reply issues a write-back of its own; read by reference in the guard,
+        // which runs after that write.
+        int writeBackEchoesPending = flight.writeBackEchoesPending;
         // A press that arrived mid-flight is honoured once the first answer
         // has settled, so a fast double-click toggles twice instead of once.
         //
-        // Re-dispatching cannot loop, but NOT for the reason this comment used
-        // to give. "Only a real user press sets this, and the entry it re-arms
-        // starts with pendingPress false" is true only of a real press. This
-        // guard runs at scope EXIT, after the refusal's write-back below, so
-        // the entry it arms is live when that write-back's own Wayland echo
-        // arrives — and that echo reaches the already-agrees arm looking
-        // exactly like a press, because the write-back just made KWin's bit
-        // equal membership. It set pendingPress, the next refusal re-dispatched
-        // on it, and a strip that kept refusing kept the cycle running. What
-        // stops it is the effectAuthoredEdge argument that arm now takes: the
-        // effect's own echo is recognised and never recorded as a press.
+        // Re-dispatching cannot loop, and the reason is the echo debt, not the
+        // order of operations. This guard runs at scope EXIT, after the
+        // refusal's write-back below, so the entry it arms is live when that
+        // write-back's own Wayland echo arrives — and that echo reaches the
+        // already-agrees arm looking exactly like a press, because the
+        // write-back just made KWin's bit equal membership. Recorded as a
+        // press, it re-dispatched on the next refusal, and a strip that kept
+        // refusing kept the cycle running. The entry re-armed here carries the
+        // count of such echoes still in flight, and the arm consumes them
+        // instead of recording them.
         //
         // RE-RESOLVES the screen rather than reusing the one captured at
         // dispatch, and re-runs both gates. This is the only thing in the
@@ -831,7 +711,7 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         // at least as much as the write below does: a window that changed
         // output mid-flight would otherwise have a toggle addressed to the
         // strip it left.
-        const auto honourPendingPress = qScopeGuard([this, windowId, flight] {
+        const auto honourPendingPress = qScopeGuard([this, windowId, flight, &writeBackEchoesPending] {
             if (!flight.pendingPress) {
                 return;
             }
@@ -856,7 +736,7 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
                                   << pendingScreenId << "is no longer scrolling";
                 return;
             }
-            dispatchMaximizeToEdgesToggle(pendingScreenId, windowId);
+            dispatchMaximizeToEdgesToggle(pendingScreenId, windowId, writeBackEchoesPending);
         });
         if (!reply.isError() && reply.value()) {
             return;
@@ -876,15 +756,16 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         // cancel the interception used to do unconditionally, now paid only on
         // the path that actually needs it.
         //
-        // No pass-through marker is needed to keep this from looping, and that
-        // is a property of writing the engine's state rather than replaying the
-        // user's. The write is suppressed, so X11's synchronous emission is
-        // covered by the counter; on Wayland the committed echo arrives with
-        // the counter back at 0 and re-enters the interception, where the
-        // already-agrees arm now fires by construction — the bit was just set
-        // to exactly what membership says. The old replay wrote the USER's
-        // request instead, which by definition disagrees with membership, so
-        // it fell through and dispatched again once per round trip forever.
+        // Writing the ENGINE's state is what makes the echo land on the
+        // already-agrees arm by construction — the bit was just set to exactly
+        // what membership says. (The old replay wrote the USER's request
+        // instead, which by definition disagrees with membership, so it fell
+        // through and dispatched again once per round trip forever.) On X11 the
+        // write is suppressed and its synchronous emission never reaches the
+        // interception at all; on Wayland the committed echo arrives with the
+        // counter back at 0 and DOES reach that arm, on whatever entry the
+        // pending-press guard has re-armed by then. That is the echo the debt
+        // below accounts for.
         KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
         KWin::Window* kw = w ? w->window() : nullptr;
         if (!w || w->isDeleted() || !kw) {
@@ -928,6 +809,15 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
         applyMaximizeSuppressed(kw, engineState);
+        // One more echo owed if the write has not committed yet. On Wayland it
+        // has not — the client round trip is still ahead, and its landing is
+        // the echo the already-agrees arm must consume rather than record. On
+        // X11 maximize() committed synchronously inside the call, under the
+        // suppression counter, so no echo will reach the arm and none is
+        // counted. The committed mode is the exact discriminator for both.
+        if (kw->maximizeMode() != engineState) {
+            ++writeBackEchoesPending;
+        }
         // Tracker re-seed, pairing with the suppressed VS-crossing detectors
         // exactly as unmaximizeMonocleWindow does.
         m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
@@ -1247,15 +1137,10 @@ void TilingHandler::restoreAllMonocleMaximized()
         // pointer is the lesser cost. The edges twin retains because its claim
         // genuinely can be paid — through releaseMaximizedToEdges at the
         // gesture end, and through the bring-up drain after a daemon loss.
-        // Through the helper, not a bare maximize(), even though the loop-wide
-        // bracket above already holds the counter. The counter does not cover
-        // this on EITHER platform, which is easy to misread: noteMaximizeEdge
-        // is armed near the top of the maximized lambda, above the suppression
-        // skip, so a bare write here armed the user maximize-edge marker for a
-        // restore the effect authored — synchronously on X11, and a round trip
-        // later on Wayland. The next placement of that window would then claim
-        // a maximize leg it never earned. The authorship stamp the helper
-        // writes is what the marker actually consults; the helper's own counter
+        // Through the helper rather than a bare maximize(), even though the
+        // loop-wide bracket above already holds the counter: the helper is the
+        // one place every authored write goes through, and its requested-mode
+        // early return skips a write KWin would drop anyway. Its own counter
         // bracket nests inside this one harmlessly.
         applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
         // Same tracker re-seed as unmaximizeMonocleWindow, and more

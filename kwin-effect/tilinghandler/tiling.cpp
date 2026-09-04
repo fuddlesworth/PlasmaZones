@@ -1894,45 +1894,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
             }
 
-            // MAXIMIZE-EDGE MARKER, consumed here: once per window per batch,
-            // above the monocle/else split and above every arm that can decline
-            // to commit, because consumption is what bounds the marker to a
-            // single placement.
-            //
-            // The two arms below used to take it themselves, and both leaked.
-            // The monocle arm had it as the last operand of an `||` whose left
-            // side is true exactly when that arm just wrote the bit, so `||`
-            // short-circuited and the marker went unconsumed; the else arm's
-            // take sits inside `if (!skipMoveResize)`, which a Wayland client
-            // re-tiled to the zone it already holds takes as its steady state.
-            // Either way the entry survived to be claimed by the next,
-            // unrelated placement of the same window, which then animated a
-            // maximize morph from a stale departure rect. Hoisting is the fix
-            // for both, and for the monocle arm's null-KWin::Window fallback
-            // that never took it at all.
-            //
-            // Safe above the writes below because no write routed through
-            // applyMaximizeSuppressed can re-arm it: that helper stamps its own
-            // authorship and noteMaximizeEdge declines on the stamp. Every
-            // maximize write this iteration makes goes through it, and the
-            // stamp is written for the WRITE rather than for whatever the
-            // pointer is doing when its echo lands — which is what makes this
-            // hold for a mid-gesture write too, whose Wayland echo can arrive
-            // after the drag has ended.
-            //
-            // What the hoist COSTS, stated because it is a real trade and not
-            // a free fix: a batch that reaches here and then declines to commit
-            // now destroys the marker, so "no-op batch, then the real answering
-            // batch a moment later" loses the maximize leg where it used to
-            // survive. That is the better half. A no-op batch answers nothing,
-            // so the entry it used to leave behind was claimed by whatever
-            // placement came next — commonly a scroll or focus retile with no
-            // relation to the press — which then morphed from a departure rect
-            // belonging to an older episode. A missed leg plays the wrong pack
-            // once; a stale claim animates the wrong motion from the wrong
-            // place, and does it on a placement the user did not ask for.
-            const bool userMaximizeEdge = m_effect->m_shaderManager.takeRecentMaximizeEdge(snap.window);
-
             if (snap.isMonocle) {
                 if (KWin::Window* kw = snap.window->window()) {
                     // REQUESTED, not committed, for the reason the column arm
@@ -1954,16 +1915,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // install over the leg this arm is placing. The counter is a
                     // counter, so the helper's own bracket nests inside this one
                     // harmlessly.
-                    //
-                    // What the counter does NOT protect is the maximize-edge
-                    // marker, and it is worth being exact about that because
-                    // the two look alike. noteMaximizeEdge is armed above the
-                    // suppression skip in that lambda, so the counter never
-                    // reaches it on either platform — see the contract note on
-                    // noteEffectAuthoredMaximizeWrite. The marker is kept
-                    // honest by the authorship stamp instead, which
-                    // applyMaximizeSuppressed writes for the maximize() call
-                    // below.
                     ++m_suppressMaximizeChanged;
                     const auto maxSuppressGuard = qScopeGuard([this] {
                         --m_suppressMaximizeChanged;
@@ -1986,10 +1937,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // used to hold. That helper owns the suppression bracket
                     // (leak one increment and isSuppressingMaximizeChanged()
                     // stays true for the session, so the interception never
-                    // fires again) AND the authorship stamp that keeps the
-                    // maximize-edge marker from arming on the effect's own
-                    // write. A second copy of the bracket would have to grow
-                    // the stamp too, and silently mis-animate if it did not.
+                    // fires again) and the requested-mode early return, so
+                    // every authored write in the tree goes through one door.
                     bool monocleBitWritten = false;
                     if (!kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                         applyMaximizeSuppressed(kw, KWin::MaximizeFull);
@@ -2015,70 +1964,35 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Gated on that call having actually happened AND on the
                     // state having changed: on the already-maximized path
                     // maximize() emits nothing, so the entry would be stale.
-                    // A maximize the USER took also owns this leg, not just one
-                    // this arm authored: on a monocle screen the press reaches
-                    // KWin directly (nothing intercepts it here), so
-                    // monocleBitWritten is false for it and the placement that
-                    // follows would otherwise land as a plain snapIn. The
-                    // marker was consumed above the split, so the `||` here is
-                    // a plain test of two locals with nothing to short-circuit
-                    // past.
-                    //
-                    // maximizeBitWrittenThisBatch is left out of this
-                    // disjunction because the pair is unreachable, NOT because
-                    // folding it in would be wrong. The column block above is
-                    // gated only on isScrollingScreen, with no !snap.isMonocle
-                    // term, so a monocle entry on a scrolling screen would
-                    // compute it — and in that case the column arm would have
-                    // written the bit for this same window, wasAlreadyMaximized
-                    // would read true, monocleBitWritten would be false, and
-                    // this leg would play snapIn over a maximize that really
-                    // happened. Folding it in would be the CORRECT attribution
-                    // there. It is omitted only because no emitter pairs
-                    // monocle with a scrolling screen today, which is a
-                    // daemon-side claim this file cannot check. If the pair
-                    // ever becomes reachable, revisit this line first.
-                    const bool monocleMaximizeLeg = monocleBitWritten || userMaximizeEdge;
                     QRectF monocleOrigin;
-                    if (monocleMaximizeLeg) {
+                    if (monocleBitWritten) {
                         const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
                         if (preMaximize.isValid() && !preMaximize.isEmpty()) {
                             monocleOrigin = preMaximize;
                         }
                     }
-                    // The leg that MAXIMIZES the tile is the user's maximize
-                    // event, not a snap: it rides window.movement.maximize so
-                    // the pack assigned there plays, the same node the
-                    // KWin-native path (beginMaximizeShaderMorph) uses for an
-                    // unmanaged window. The two never double-install: on X11
-                    // the native handler skips this window under the
-                    // suppression counter (isSuppressingMaximizeChanged), and
-                    // on Wayland its later echo short-circuits onto this very
-                    // leg (window_connections.cpp spells out the absorb). A
-                    // batch that re-asserts an already-maximized monocle tile
-                    // is a plain placement and stays on snapIn.
+                    // A PLACEMENT, on the placement node, like every other
+                    // geometry this batch commits. Setting KWin's maximize bit
+                    // is how monocle gets the work-area rect, borderless
+                    // handling and a sane restore rect; it is a mechanism, not
+                    // a statement that the user maximized anything, and the node
+                    // a user assigns "Maximized" to must not play for a retile.
+                    // What the bit write DOES change is the departure rect,
+                    // anchored above at the captured pre-maximize frame when
+                    // this arm wrote it, because maximize() has already moved
+                    // the window and a leg from the live frame would animate
+                    // nothing.
                     m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
-                                                  monocleMaximizeLeg ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                                     : PhosphorAnimation::ProfilePaths::WindowSnapIn,
-                                                  monocleOrigin);
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, monocleOrigin);
                 } else {
-                    // No KWin::Window, so this arm writes no maximize bit and
-                    // has no pre-maximize rect to depart from — but the marker
-                    // was consumed above the split for this entry, so honour it
-                    // rather than discard it. Otherwise a genuine user maximize
-                    // is spent here and plays the snap pack.
-                    m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
-                                                  /*skipAnimation=*/false,
-                                                  userMaximizeEdge ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                                   : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
             } else {
                 // True only when THIS call handed KWin's maximize bit back for
-                // a window PlasmaZones itself maximized for monocle. It routes
-                // the geometry apply below onto window.movement.maximize and
-                // anchors its departure at the captured pre-restore rect, the
-                // same pairing the column Release arm gets through
+                // a window PlasmaZones itself maximized for monocle. It anchors
+                // the geometry apply below at the captured pre-restore rect, the
+                // same departure the column Release arm gets through
                 // maximizeBitWrittenThisBatch.
                 const bool monocleBitReleased = unmaximizeMonocleWindow(snap.windowId);
                 // Clear any KWin maximize state before tiling. A user-
@@ -2775,26 +2689,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // screen-gated, because monocle is not a scrolling-only
                     // claim; the per-iteration flag is what keeps it fresh.
                     //
-                    // The third owner of this leg, and the one that covers
-                    // every screen: a maximize the USER took, marked at the
-                    // windowMaximizedStateChanged hook before any of the paths
-                    // that answer it diverge. The two terms beside it recognise
-                    // only a maximize this batch AUTHORED — a scrolling
-                    // screen's maximize-to-edges verb, or a monocle release —
-                    // so on an autotile or unmanaged screen the press reached
-                    // KWin directly, both were false, and the placement that
-                    // followed took the snapIn leg and played whatever
-                    // window.movement resolves instead of the pack the user
-                    // assigned to window.movement.maximize.
-                    //
-                    // userMaximizeEdge is the marker, consumed once per window
-                    // per batch above the monocle/else split rather than here:
-                    // this line sits inside the redundant-apply skip, so taking
-                    // it here left the entry armed on every batch a Wayland
-                    // client answered by holding the zone it already had.
-                    const bool maximizeLegThisBatch = (maximizeBitWrittenThisBatch && isScrollingScreen(snap.screenId))
-                        || monocleBitReleased || userMaximizeEdge;
-                    if (!originOverride.isValid() && maximizeLegThisBatch) {
+                    const bool departsFromPreMaximizeRect =
+                        (maximizeBitWrittenThisBatch && isScrollingScreen(snap.screenId)) || monocleBitReleased;
+                    if (!originOverride.isValid() && departsFromPreMaximizeRect) {
                         const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
                         if (preMaximize.isValid() && !preMaximize.isEmpty()) {
                             originOverride = preMaximize;
@@ -2820,32 +2717,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         skipScrollAnimation = true;
                         originOverride = QRectF();
                     }
-                    // A leg that this iteration MADE a maximize or a restore
-                    // (column maximize-to-edges either way, monocle release),
-                    // or that answers a maximize the user just took anywhere
-                    // else, is the user's maximize event and rides
-                    // window.movement.maximize, so the pack assigned there
-                    // plays; every other placement is a snap.
-                    //
-                    // For the two the batch authored this apply is the single
-                    // owner: the KWin-native handler in window_connections.cpp
-                    // skips the column echo (interceptMaximizeRequest) and the
-                    // X11 monocle echo (isSuppressingMaximizeChanged), and the
-                    // Wayland monocle echo is absorbed by the same-effect
-                    // short-circuit onto the leg installed here. For the
-                    // marker-driven case the native handler DOES install first
-                    // — that is the whole point of it, an unintercepted
-                    // maximize is its event — and the same short-circuit
-                    // absorbs this one onto it: same path, same resolved pack,
-                    // so the leg is kept and only its endpoints are
-                    // re-asserted. What the marker fixes is the leg this apply
-                    // would otherwise have installed, which was snapIn, and
-                    // which SUPERSEDED the native maximize leg because it
-                    // resolved to a different pack.
+                    // ALWAYS the placement node. A window this batch maximized or
+                    // restored on the way is still a window this batch PLACED,
+                    // and the node a user assigns "Maximized" to must not play
+                    // for it. The KWin-native path (beginMaximizeShaderMorph) is
+                    // what answers a maximize the engine had no part in. The
+                    // bit write's one effect on the animation is the departure
+                    // rect, anchored above.
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
-                                                  maximizeLegThisBatch ? PhosphorAnimation::ProfilePaths::WindowMaximize
-                                                                       : PhosphorAnimation::ProfilePaths::WindowSnapIn,
-                                                  originOverride, visualTargetOverride);
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
+                                                  visualTargetOverride);
                 }
             }
 

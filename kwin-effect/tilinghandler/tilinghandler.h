@@ -402,14 +402,13 @@ public:
     /// a REFUSED request writes the bit back, from the dispatch's reply
     /// handler.
     ///
-    /// @p effectAuthoredEdge says this edge is the committed echo of a maximize
-    /// write the EFFECT made, as reported by
-    /// `ShaderTransitionManager::noteMaximizeEdge`. The already-agrees arm uses
-    /// it to tell that echo apart from a genuine user press arriving inside a
-    /// round trip, which are otherwise identical at this point: both find
-    /// KWin's bit equal to membership. Recording the echo as a press is what
-    /// let a refused toggle re-dispatch itself indefinitely.
-    bool interceptMaximizeRequest(KWin::EffectWindow* w, bool effectAuthoredEdge);
+    /// The one echo of the effect's own that reaches the already-agrees arm
+    /// with a flight entry live is the refusal write-back's, and it is told
+    /// apart from a user press by MaximizeToggleFlight::writeBackEchoesPending
+    /// rather than by any per-window authorship record: the batch's own writes
+    /// never land there, because for a user-driven toggle KWin's bit is already
+    /// where the engine will put it and applyMaximizeSuppressed writes nothing.
+    bool interceptMaximizeRequest(KWin::EffectWindow* w);
 
     /// Put a scroll-managed tile's KWin maximize bit back after an AXIS-ONLY
     /// flip, with no dispatch to the engine.
@@ -1229,9 +1228,15 @@ private:
     /// membership argument for needing no marker held only while the
     /// interception cancelled KWin's flip before dispatching; it no longer
     /// does, so a pre-toggle batch on the restore direction now resolves to
-    /// Apply and re-maximizes the window mid-flight. See the marker's own
+    /// Apply and re-maximizes the window mid-flight. See the flight entry's own
     /// declaration for both bugs it closes.
-    void dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId);
+    ///
+    /// @p writeBackEchoesPending seeds the entry's echo debt: the reply handler
+    /// passes the count of refusal write-backs whose committed echo has not yet
+    /// reached the already-agrees arm, so a re-dispatched entry does not record
+    /// that echo as a coalesced press.
+    void dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId,
+                                       int writeBackEchoesPending = 0);
 
     /// Announce, once per window per episode, that a window on a tracked
     /// scrolling screen lost its clip because the screen's physical output is
@@ -1859,6 +1864,20 @@ private:
     {
         qint64 armedAtMs = 0;
         bool pendingPress = false;
+        /// Committed echoes of the REFUSAL write-back still expected to arrive at
+        /// the already-agrees arm while this entry is live. That write puts
+        /// KWin's bit back to membership, so its echo reaches the arm looking
+        /// exactly like a user press that agrees — and the reply handler's
+        /// pending-press guard re-arms a fresh entry AFTER the write, so the
+        /// echo lands on a live entry. Counted rather than flagged so a reply
+        /// that beats its own echo can carry the debt forward to the entry it
+        /// re-arms. Each echo the arm consumes decrements instead of recording a
+        /// press; a genuine press queued behind the echo is recorded normally,
+        /// because the compositor delivers committed edges in request order.
+        /// On X11 the write-back commits synchronously under the suppression
+        /// counter and never reaches the arm, so the reply handler does not
+        /// count it there.
+        int writeBackEchoesPending = 0;
     };
     QHash<QString, MaximizeToggleFlight> m_maximizeToggleInFlight;
     /// Upper bound on how long a dispatched toggle is treated as in flight.

@@ -3,36 +3,7 @@
 
 #include "shadertransitionmanager.h"
 
-#include "plasmazoneseffect/shader_internal.h"
-
 namespace PlasmaZones {
-
-namespace {
-
-// Consume a timestamped one-shot entry from @p hash, answering whether it was
-// there AND still inside kMaximizeEventDeadlineMs.
-//
-// Erased on the stale hit too, which is the property the maximize-edge marker
-// needs: an entry that outlived its deadline is never going to become fresh
-// again, and leaving it behind would let a LATER consumer read a marker that
-// was never armed for it. One caller now — the authorship stamp grew a
-// direction tag and a typed hash of its own, so it consumes inline rather than
-// through here.
-bool takeFreshStamp(QHash<KWin::EffectWindow*, qint64>& hash, KWin::EffectWindow* w)
-{
-    if (!w) {
-        return false;
-    }
-    const auto it = hash.find(w);
-    if (it == hash.end()) {
-        return false;
-    }
-    const qint64 armedAtMs = *it;
-    hash.erase(it);
-    return ShaderInternal::shaderClockNowMs() - armedAtMs <= ShaderInternal::kMaximizeEventDeadlineMs;
-}
-
-} // namespace
 
 ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
     : m_effect(effect)
@@ -63,71 +34,6 @@ ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
 }
 
 ShaderTransitionManager::~ShaderTransitionManager() = default;
-
-void ShaderTransitionManager::noteEffectAuthoredMaximizeWrite(KWin::EffectWindow* w, bool wroteFullyMaximized)
-{
-    if (!w) {
-        return;
-    }
-    m_effectAuthoredMaximizeWrites.insert(w, {ShaderInternal::shaderClockNowMs(), wroteFullyMaximized});
-}
-
-bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w, bool fullyMaximized, bool armingAllowed)
-{
-    if (!w) {
-        return false;
-    }
-    // The effect's own write, not the user's. Consumed here rather than merely
-    // tested, so one stamp answers for exactly one edge: a bracketed write that
-    // toggles the bit twice must not have its second edge swallowed as well.
-    //
-    // CONSUMED BEFORE the arming gate, not after, so every stamp is answered by
-    // the edge it belongs to whatever the pointer is doing. The write site
-    // cannot predict that: it stamps when the write is issued, and the caller
-    // decides arming when the edge lands, which on Wayland is a client round
-    // trip later and on X11 is the same instant. Gate the consumption on
-    // arming and a write issued during a drag leaves a stamp nothing takes —
-    // on X11 for every such write — which then swallows the user's next
-    // genuine maximize inside the deadline. Take it always; arm conditionally.
-    //
-    // MATCHED ON DIRECTION, which is what makes "answered by its own edge"
-    // literal rather than approximate. A stamp naming the other direction is
-    // left standing: it belongs to a write whose edge has not arrived yet, and
-    // spending it on this one would both swallow this edge and abandon that
-    // write to arm a false marker when it lands. A stale one is dropped on the
-    // way past, so it cannot accumulate.
-    //
-    // Any marker a PRIOR genuine user edge armed is deliberately LEFT standing,
-    // which is the opposite of what noteMaximizeDemotedForSnap does, and the
-    // two are not inconsistent. A demote re-purposes the placement it precedes:
-    // that placement is a snap into a zone, so a maximize the user took a
-    // moment earlier must not claim it. An ordinary authored write re-purposes
-    // nothing — a user edge no batch has answered yet is still owed its leg,
-    // and the batch that answers it is still the right one to spend it.
-    const auto authoredIt = m_effectAuthoredMaximizeWrites.find(w);
-    if (authoredIt != m_effectAuthoredMaximizeWrites.end()) {
-        const bool fresh =
-            ShaderInternal::shaderClockNowMs() - authoredIt->atMs <= ShaderInternal::kMaximizeEventDeadlineMs;
-        if (!fresh) {
-            m_effectAuthoredMaximizeWrites.erase(authoredIt);
-        } else if (authoredIt->wroteFullyMaximized == fullyMaximized) {
-            m_effectAuthoredMaximizeWrites.erase(authoredIt);
-            return true;
-        }
-    }
-    // Not the effect's, so it is the user's — but arming is still the caller's
-    // call. An interactive drag-restore is a genuine user edge that no
-    // placement should claim, and the caller says so through @p armingAllowed.
-    if (armingAllowed) {
-        m_maximizeEdgeAtMs.insert(w, ShaderInternal::shaderClockNowMs());
-    }
-    return false;
-}
-
-bool ShaderTransitionManager::takeRecentMaximizeEdge(KWin::EffectWindow* w)
-{
-    return takeFreshStamp(m_maximizeEdgeAtMs, w);
-}
 
 void ShaderTransitionManager::rebuildAnimationRuleSet()
 {
