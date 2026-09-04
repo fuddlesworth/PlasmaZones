@@ -26,10 +26,17 @@ TestCase {
         ControlCenter {}
     }
 
+    // Counts its own teardown, so a test can tell "the host destroyed the
+    // tile" from "the host dropped its reference and left it in the grid".
+    // A bare object reference cannot: the JS handle survives either way.
+    property int tilesDestroyed: 0
+
     Component {
         id: tileComp
 
-        Tile {}
+        Tile {
+            Component.onDestruction: testCase.tilesDestroyed++
+        }
     }
 
     // A provider that builds a real Tile for every id except those in
@@ -40,20 +47,26 @@ TestCase {
 
         property var unavailable: []
         property var requested: []
+        // The most recent tile handed out, so a test can watch what happens
+        // to it after a rebuild.
+        property var lastBuilt: null
 
         function createTile(id, parent) {
             fakeProvider.requested.push(id);
             if (fakeProvider.unavailable.indexOf(id) !== -1)
                 return null;
-            return tileComp.createObject(parent, {
+            fakeProvider.lastBuilt = tileComp.createObject(parent, {
                 "label": id
             });
+            return fakeProvider.lastBuilt;
         }
     }
 
     function init() {
         fakeProvider.unavailable = [];
         fakeProvider.requested = [];
+        fakeProvider.lastBuilt = null;
+        testCase.tilesDestroyed = 0;
     }
 
     function test_defaults() {
@@ -137,6 +150,42 @@ TestCase {
         // so it cannot outlive it.
         cc.tileIds = ["audio"];
         compare(cc.detailTileId, "", "rebuild returns to the grid");
+    }
+
+    function test_rebuild_destroys_the_tiles_it_replaces() {
+        const cc = createTemporaryObject(controlCenterComp, testCase, {
+            "provider": fakeProvider,
+            "tileIds": ["network"]
+        });
+        // The provider builds; the host owns teardown. Nothing asserted
+        // that half, so a rebuild that leaked every previous tile into the
+        // grid passed this file with the tile count silently doubling on
+        // each service change.
+        const first = fakeProvider.lastBuilt;
+        verify(first, "a tile was built");
+        compare(testCase.tilesDestroyed, 0, "nothing torn down yet");
+
+        cc.tileIds = ["audio"];
+        // destroy() is deferred to the event loop, so this cannot be read on
+        // the line that triggers the rebuild.
+        tryCompare(testCase, "tilesDestroyed", 1, 2000);
+        verify(fakeProvider.lastBuilt !== first, "the rebuild built a fresh tile");
+    }
+
+    function test_a_tile_asking_for_its_detail_view_opens_it() {
+        const cc = createTemporaryObject(controlCenterComp, testCase, {
+            "provider": fakeProvider,
+            "tileIds": ["network", "audio"]
+        });
+        // The tile chrome carries no id, so the host binds the signal to the
+        // id it built the tile for. That routing is what turns a chevron
+        // press into a detail view, and it was unpinned.
+        const audio = fakeProvider.lastBuilt;
+        verify(audio, "the audio tile was built");
+        compare(cc.detailTileId, "", "nothing open to begin with");
+
+        audio.detailRequested();
+        compare(cc.detailTileId, "audio", "the tile's own id was routed, not another's");
     }
 
     function test_no_provider_builds_nothing() {
