@@ -203,7 +203,7 @@ jobs:
           apt_install_with_retry git ca-certificates dpkg-dev fakeroot
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -321,7 +321,7 @@ jobs:
         run: dnf install -y git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -461,7 +461,7 @@ jobs:
           install_with_retry git rpm-build rpmdevtools
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -570,7 +570,7 @@ jobs:
           pacman -S --noconfirm git tar
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -660,7 +660,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -766,13 +766,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
       - name: Install Nix
         # SHA-pinned to match ci.yml; bump together when verifying a new release.
-        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -804,7 +804,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
           fetch-depth: 0
@@ -975,7 +975,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
@@ -1227,7 +1227,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
 
