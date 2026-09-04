@@ -87,6 +87,13 @@ public:
 // was just set. A synchronous provider emits it from inside setQuery.
 // The surface reads results() on that signal and never caches across
 // queries.
+// id() MUST be unique across the providers a host registers, and stable for
+// the life of the process: the model buckets rows and counts by it, so two
+// providers sharing an id collapse into one bucket and the pill for it
+// reports their sum while the filter shows only one of them. The registry
+// refuses a duplicate FACTORY id, which is what a host registers through, so
+// this is enforced for anything built that way and is a bare contract for a
+// provider added to the model directly.
 class PHOSPHORREGISTRY_EXPORT ILauncherProvider : public QObject
 {
     Q_OBJECT

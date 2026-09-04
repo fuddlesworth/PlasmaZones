@@ -103,6 +103,13 @@ public:
     // can launch without going through a query. Returns false when the
     // entry has no runnable Exec, or Terminal=true and no terminal could
     // be found.
+    /// Launch one entry directly, bypassing the id lookup activate() does.
+    ///
+    /// PUBLIC for a host that has a DesktopEntry in hand from somewhere
+    /// other than this provider's own results: a recent-apps list, a file
+    /// manager's open-with. Nothing in this repo calls it, so it is API
+    /// surface rather than used code, and it is the one place a caller can
+    /// launch something this provider never offered.
     [[nodiscard]] static bool launch(const DesktopEntry& entry);
 
 private:
