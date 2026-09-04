@@ -14,8 +14,6 @@
 #include <PhosphorShell/PopupWindow.h>
 #include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
-
-#include <algorithm>
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/SystemClock.h>
 #include <PhosphorShell/SystemUsage.h>
@@ -45,6 +43,7 @@
 #include <QSize>
 #include <QTimer>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <mutex>

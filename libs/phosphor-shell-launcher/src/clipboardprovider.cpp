@@ -129,7 +129,7 @@ void ClipboardProvider::recompute()
             const QString preview = m_history->data(idx, m_previewRole).toString();
             int score = 0;
             if (!m_query.isEmpty()) {
-                const auto m = FuzzyMatcher::match(m_query, preview);
+                const auto m = FuzzyMatcher::match(m_query, preview, FuzzyMatcher::patternIsCaseSensitive(m_query));
                 if (!m) {
                     continue;
                 }

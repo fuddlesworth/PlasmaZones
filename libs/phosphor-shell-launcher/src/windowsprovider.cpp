@@ -168,12 +168,15 @@ void WindowsProvider::recompute()
             const QString title = obj->property("title").toString().left(kMaxCandidateChars);
             const QString appId = obj->property("appId").toString().left(kMaxCandidateChars);
             int score = 0;
+            // Smart case: a lower-case query matches anything, and a
+            // typed capital means the user wants it.
+            const bool smartCase = FuzzyMatcher::patternIsCaseSensitive(m_query);
             if (!m_query.isEmpty()) {
                 int best = -1;
-                if (const auto m = FuzzyMatcher::match(m_query, title)) {
+                if (const auto m = FuzzyMatcher::match(m_query, title, smartCase)) {
                     best = m->score;
                 }
-                if (const auto m = FuzzyMatcher::match(m_query, appId)) {
+                if (const auto m = FuzzyMatcher::match(m_query, appId, smartCase)) {
                     best = std::max(best, m->score);
                 }
                 if (best < 0) {

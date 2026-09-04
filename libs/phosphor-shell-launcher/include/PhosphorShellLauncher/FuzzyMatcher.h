@@ -45,6 +45,14 @@ public:
     [[nodiscard]] static std::optional<FuzzyMatch> match(QStringView pattern, QStringView candidate,
                                                          bool caseSensitive = false);
 
+    /// fzf's smart case, as a decision a caller can make in one line.
+    ///
+    /// True when the pattern contains an upper-case character, which is the
+    /// user saying they mean that capital. Providers pass the result of this
+    /// to match(), so a lower-case query still matches anything and a typed
+    /// capital narrows.
+    [[nodiscard]] static bool patternIsCaseSensitive(QStringView pattern);
+
     // fzf's score constants, public so a provider that answers a query
     // exactly (the calculator) can pick a score that outranks any fuzzy
     // match without guessing at the scale.

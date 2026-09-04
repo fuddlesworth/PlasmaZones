@@ -52,8 +52,17 @@ QString CommandProvider::resolveProgram(const QString& commandLine)
     // shell's problem at run time; for the gate, a quoted program name is
     // rare enough that treating the quote as part of the word (and thus
     // not finding it) is an acceptable miss.
-    const qsizetype space = trimmed.indexOf(u' ');
-    const QString program = space < 0 ? trimmed : trimmed.left(space);
+    // Any whitespace, not just a space: a line pasted from a terminal or a
+    // document can be tab-separated, and splitting on the space alone read
+    // the whole line as the program name, so no Run row was offered at all.
+    qsizetype split = -1;
+    for (qsizetype i = 0; i < trimmed.size(); ++i) {
+        if (trimmed.at(i).isSpace()) {
+            split = i;
+            break;
+        }
+    }
+    const QString program = split < 0 ? trimmed : trimmed.left(split);
     if (QDir::isAbsolutePath(program)) {
         return QFileInfo(program).isExecutable() ? program : QString();
     }

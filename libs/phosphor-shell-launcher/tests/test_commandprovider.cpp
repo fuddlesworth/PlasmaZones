@@ -37,6 +37,9 @@ void TestCommandProvider::resolvesTheFirstWordOnPath()
     // /bin/sh exists on every host this builds on, and "sh" resolves.
     QVERIFY(!QStandardPaths::findExecutable(QStringLiteral("sh")).isEmpty());
     QVERIFY(!CommandProvider::resolveProgram(QStringLiteral("sh")).isEmpty());
+    // Tab-separated, which a line pasted from a terminal or a document can
+    // be. Splitting on the space alone read the whole line as the program.
+    QVERIFY(!CommandProvider::resolveProgram(QStringLiteral("sh\t-c\ttrue")).isEmpty());
     QVERIFY(!CommandProvider::resolveProgram(QStringLiteral("sh -c 'echo hi'")).isEmpty());
     QVERIFY(!CommandProvider::resolveProgram(QStringLiteral("  sh  ")).isEmpty());
     QCOMPARE(CommandProvider::resolveProgram(QStringLiteral("/bin/sh -c true")), QStringLiteral("/bin/sh"));

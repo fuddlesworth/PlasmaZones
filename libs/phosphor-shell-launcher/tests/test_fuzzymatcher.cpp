@@ -28,6 +28,8 @@ class TestFuzzyMatcher : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void smartCaseTurnsOnWhenThePatternHasACapital();
+    void anEnormousCandidateIsTruncatedRatherThanOverflowing();
     void emptyPatternMatchesEverythingAtZero();
     void emptyCandidateNeverMatchesAPattern();
     void everyPatternCharMustAppearInOrder();
@@ -132,6 +134,36 @@ void TestFuzzyMatcher::positionsFollowTheBestScoringAlignment()
     const auto m = FuzzyMatcher::match(QStringLiteral("ffo"), QStringLiteral("fx fox"));
     QVERIFY(m.has_value());
     QCOMPARE(m->positions, (QList<int>{0, 3, 4}));
+}
+
+// fzf's smart case, which the header documented as the caller's business
+// and no caller was doing, so every match in the shell was
+// case-insensitive whatever the user typed.
+void TestFuzzyMatcher::smartCaseTurnsOnWhenThePatternHasACapital()
+{
+    QVERIFY(!FuzzyMatcher::patternIsCaseSensitive(QStringLiteral("ip")));
+    QVERIFY(FuzzyMatcher::patternIsCaseSensitive(QStringLiteral("IP")));
+    QVERIFY(FuzzyMatcher::patternIsCaseSensitive(QStringLiteral("iPython")));
+    QVERIFY(!FuzzyMatcher::patternIsCaseSensitive(QString()));
+
+    // What that buys the user: a capital narrows, and lower case still
+    // matches either way.
+    const QString candidate = QStringLiteral("ipython");
+    QVERIFY(FuzzyMatcher::match(QStringLiteral("ip"), candidate, false).has_value());
+    QVERIFY(FuzzyMatcher::match(QStringLiteral("IP"), candidate, true) == std::nullopt);
+    QVERIFY(FuzzyMatcher::match(QStringLiteral("IP"), QStringLiteral("IPython"), true).has_value());
+}
+
+// The DP allocates three vectors of n*m ints and computes n*m in int, so a
+// candidate long enough to overflow that asked QVector for a negative size.
+// Window titles and clipboard entries are client-supplied and unbounded.
+void TestFuzzyMatcher::anEnormousCandidateIsTruncatedRatherThanOverflowing()
+{
+    const QString huge = QStringLiteral("a").repeated(200000) + QStringLiteral("z");
+    const auto m = FuzzyMatcher::match(QStringLiteral("aa"), huge);
+    QVERIFY(m.has_value());
+    // The tail is past the cap, so it cannot be reached.
+    QVERIFY(FuzzyMatcher::match(QStringLiteral("z"), huge) == std::nullopt);
 }
 
 QTEST_GUILESS_MAIN(TestFuzzyMatcher)

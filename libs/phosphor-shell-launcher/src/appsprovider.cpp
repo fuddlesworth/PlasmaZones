@@ -172,10 +172,13 @@ void AppsProvider::recompute()
             const DesktopEntry* entry;
             int score;
         };
+        // Smart case: a lower-case query matches anything, and a typed
+        // capital means the user wants it.
+        const bool smartCase = FuzzyMatcher::patternIsCaseSensitive(m_query);
         QList<Scored> scored;
         for (const DesktopEntry& entry : std::as_const(m_entries)) {
             int best = -1;
-            if (const auto m = FuzzyMatcher::match(m_query, entry.name)) {
+            if (const auto m = FuzzyMatcher::match(m_query, entry.name, smartCase)) {
                 best = m->score;
             }
             // Secondary fields: worth matching, but a name hit must win a
@@ -184,7 +187,7 @@ void AppsProvider::recompute()
                 if (field.isEmpty()) {
                     return;
                 }
-                if (const auto m = FuzzyMatcher::match(m_query, field)) {
+                if (const auto m = FuzzyMatcher::match(m_query, field, smartCase)) {
                     best = std::max(best, m->score - SecondaryFieldPenalty);
                 }
             };

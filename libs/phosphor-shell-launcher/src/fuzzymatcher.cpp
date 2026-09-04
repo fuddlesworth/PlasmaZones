@@ -108,10 +108,33 @@ int FuzzyMatcher::perfectScore(int length)
     return first + (length - 1) * rest;
 }
 
+bool FuzzyMatcher::patternIsCaseSensitive(QStringView pattern)
+{
+    // fzf's smart case: an all-lower-case pattern matches case-insensitively,
+    // and the moment the user types a capital they mean it. Documented as
+    // the caller's business, and no caller was doing it, so every match in
+    // the shell was case-insensitive and typing "IP" could not be used to
+    // pick "IPython" out of a list full of "ip".
+    for (QChar c : pattern) {
+        if (c.isUpper()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::optional<FuzzyMatch> FuzzyMatcher::match(QStringView pattern, QStringView candidate, bool caseSensitive)
 {
     const int n = static_cast<int>(pattern.size());
-    const int m = static_cast<int>(candidate.size());
+    // Hard cap on the candidate. The DP below allocates three n*m vectors,
+    // and n*m is computed in int: a candidate long enough to overflow it
+    // asked QVector for a negative size. Window titles and clipboard
+    // entries are client-supplied and unbounded, so the providers cap what
+    // they pass, and this is the backstop for a caller that does not. Past
+    // this length the tail cannot change which candidate a user meant.
+    constexpr int kMaxCandidateChars = 4096;
+    const int m = static_cast<int>(std::min<qsizetype>(candidate.size(), kMaxCandidateChars));
+    candidate = candidate.left(m);
     if (n == 0) {
         return FuzzyMatch{0, {}};
     }
