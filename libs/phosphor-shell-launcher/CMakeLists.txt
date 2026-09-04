@@ -28,10 +28,12 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Core only. Gui is deliberately NOT linked into the core library: nothing in
-# the matcher, the parser or the providers touches QImage / QGuiApplication,
-# which keeps a CLI or a test free of the GUI stack.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+# Gui for exactly one thing: the calculator copies its answer through
+# QGuiApplication::clipboard(). Everything else (matcher, parser, model,
+# the other providers) is Core, and every provider degrades to a refusal
+# rather than a crash under a plain QCoreApplication, so the tests run
+# headless. No Quick / Qml: the surface is a separate module.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
 # The provider contract (ILauncherProvider / ILauncherProviderFactory) lives
 # in phosphor-registry.
@@ -48,11 +50,25 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphorshelllauncher_public_HDRS
     include/PhosphorShellLauncher/FuzzyMatcher.h
     include/PhosphorShellLauncher/DesktopEntry.h
+    include/PhosphorShellLauncher/LauncherModel.h
+    # The built-in ILauncherProvider implementations.
+    include/PhosphorShellLauncher/AppsProvider.h
+    include/PhosphorShellLauncher/CalculatorProvider.h
+    include/PhosphorShellLauncher/CommandProvider.h
+    include/PhosphorShellLauncher/ClipboardProvider.h
+    include/PhosphorShellLauncher/WindowsProvider.h
 )
 
 set(phosphorshelllauncher_SRCS
     src/fuzzymatcher.cpp
     src/desktopentry.cpp
+    src/launchermodel.cpp
+    src/appsprovider.cpp
+    src/calculatorprovider.cpp
+    src/commandprovider.cpp
+    src/clipboardprovider.cpp
+    src/windowsprovider.cpp
+    src/launchhelpers_p.h
 )
 
 add_library(PhosphorShellLauncher SHARED
@@ -78,6 +94,7 @@ target_compile_features(PhosphorShellLauncher PUBLIC cxx_std_20)
 target_link_libraries(PhosphorShellLauncher
     PUBLIC
         Qt6::Core
+        Qt6::Gui
         PhosphorRegistry::PhosphorRegistry
 )
 

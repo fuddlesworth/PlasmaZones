@@ -35,3 +35,7 @@ endfunction()
 
 phosphorshelllauncher_add_test(test_fuzzymatcher)
 phosphorshelllauncher_add_test(test_desktopentry)
+phosphorshelllauncher_add_test(test_calculatorprovider)
+phosphorshelllauncher_add_test(test_commandprovider)
+phosphorshelllauncher_add_test(test_appsprovider)
+phosphorshelllauncher_add_test(test_launchermodel)

@@ -1,0 +1,152 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// AppsProvider over the fixture applications tree. Pins what the launcher
+// experience depends on: nothing on an empty query, name matches beat
+// keyword matches for the same text, the secondary-field penalty, the
+// result cap, the rows' shape, and activation of an unknown id refusing.
+// Launching itself starts a real process and is not exercised here.
+
+#include <PhosphorShellLauncher/AppsProvider.h>
+
+#include <QDir>
+#include <QSignalSpy>
+#include <QtTest/QtTest>
+
+using PhosphorRegistry::ILauncherProvider;
+using PhosphorShellLauncher::AppsProvider;
+
+namespace {
+const QString kFixtures = QStringLiteral(PHOSPHOR_LAUNCHER_FIXTURES);
+
+QStringList titles(const AppsProvider& p)
+{
+    QStringList out;
+    for (const auto& r : p.results()) {
+        out.append(r.title);
+    }
+    return out;
+}
+} // namespace
+
+class TestAppsProvider : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void scansTheFixtureTreeOnConstruction();
+    void nothingOnAnEmptyQuery();
+    void nameMatchOutranksKeywordMatchForTheSameText();
+    void keywordsAndGenericNameStillMatch();
+    void capsTheResultCount();
+    void rowsCarryTheEntryFields();
+    void activateRefusesUnknownAndAlternate();
+};
+
+void TestAppsProvider::scansTheFixtureTreeOnConstruction()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    QStringList ids;
+    for (const auto& e : provider.entries()) {
+        ids.append(e.id);
+    }
+    QVERIFY(ids.contains(QStringLiteral("firefox")));
+    QVERIFY(ids.contains(QStringLiteral("kitty")));
+    QVERIFY(ids.contains(QStringLiteral("vendor-nested-tool")));
+    QVERIFY(!ids.contains(QStringLiteral("hidden-tool")));
+}
+
+void TestAppsProvider::nothingOnAnEmptyQuery()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    QVERIFY(!provider.listsOnEmptyQuery());
+    QSignalSpy changed(&provider, &ILauncherProvider::resultsChanged);
+    provider.setQuery(QString());
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(provider.results().isEmpty());
+}
+
+void TestAppsProvider::nameMatchOutranksKeywordMatchForTheSameText()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    // "browser" is Firefox's KEYWORD ("Browser") and the fixture has no app
+    // NAMED browser, so it must still match; but for "fire", which is in
+    // the NAME, Firefox must come first even if some keyword elsewhere
+    // matched equally well.
+    provider.setQuery(QStringLiteral("browser"));
+    QCOMPARE(titles(provider).first(), QStringLiteral("Firefox"));
+
+    provider.setQuery(QStringLiteral("fire"));
+    QCOMPARE(titles(provider).first(), QStringLiteral("Firefox"));
+
+    // The case that actually needs the penalty: "files" is the NAME of
+    // Files and a KEYWORD of Archive Tool, both perfect fuzzy matches on
+    // the same text. Without SecondaryFieldPenalty they tie and the
+    // alphabetical tie-break puts Archive Tool first. (A mutation run
+    // with the penalty removed passed the two cases above, which is why
+    // this one exists.)
+    provider.setQuery(QStringLiteral("files"));
+    QCOMPARE(titles(provider).first(), QStringLiteral("Files"));
+    QCOMPARE(titles(provider).at(1), QStringLiteral("Archive Tool"));
+}
+
+void TestAppsProvider::keywordsAndGenericNameStillMatch()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    // "web" is only in Firefox's GenericName "Web Browser".
+    provider.setQuery(QStringLiteral("web"));
+    QVERIFY(titles(provider).contains(QStringLiteral("Firefox")));
+    // "term" is kitty's keyword.
+    provider.setQuery(QStringLiteral("term"));
+    QVERIFY(titles(provider).contains(QStringLiteral("kitty")));
+    // And a query matching nothing yields nothing.
+    provider.setQuery(QStringLiteral("zzqx"));
+    QVERIFY(provider.results().isEmpty());
+}
+
+void TestAppsProvider::capsTheResultCount()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    provider.setMaximumResults(1);
+    QCOMPARE(provider.maximumResults(), 1);
+    // "t" is in Firefox? no. "e": Firefox, Nested Tool, kitty... several.
+    provider.setQuery(QStringLiteral("e"));
+    QCOMPARE(provider.results().size(), 1);
+    // Clamped to at least one.
+    provider.setMaximumResults(0);
+    QCOMPARE(provider.maximumResults(), 1);
+}
+
+void TestAppsProvider::rowsCarryTheEntryFields()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    provider.setQuery(QStringLiteral("firefox"));
+    const auto rows = provider.results();
+    QVERIFY(!rows.isEmpty());
+    const auto& r = rows.first();
+    QCOMPARE(r.id, QStringLiteral("firefox"));
+    QCOMPARE(r.title, QStringLiteral("Firefox"));
+    QCOMPARE(r.subtitle, QStringLiteral("Web Browser"));
+    QCOMPARE(r.iconName, QStringLiteral("firefox"));
+    QVERIFY(r.score > 0);
+    QVERIFY(!r.primaryActionLabel.isEmpty());
+    QVERIFY(!r.hasAlternateAction());
+}
+
+void TestAppsProvider::activateRefusesUnknownAndAlternate()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    QVERIFY(!provider.activate(QStringLiteral("no-such-app"), ILauncherProvider::Activation::Primary));
+    QVERIFY(!provider.activate(QStringLiteral("firefox"), ILauncherProvider::Activation::Alternate));
+}
+
+QTEST_GUILESS_MAIN(TestAppsProvider)
+
+#include "test_appsprovider.moc"
