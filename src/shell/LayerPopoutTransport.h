@@ -137,6 +137,13 @@ private:
         // for surfaces that close themselves, so a close we initiated must
         // stay silent even though it drains through the same animation.
         bool closing = false;
+        // Which popout this entry belongs to. The controller frees its own
+        // row before asking us to close, and our close only starts an
+        // animation, so a caller toggling faster than that animation opens a
+        // second surface for the same popout while the first is still
+        // draining. Recorded so openSurface can retire the draining one
+        // instead of stacking on top of it.
+        QString popoutId;
     };
 
     void destroyEntry(const QString& handle, Entry entry);

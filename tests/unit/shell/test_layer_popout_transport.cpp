@@ -56,6 +56,7 @@ private Q_SLOTS:
     void barAnchorsPlaceTheHostBelowTheReservedBand();
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
     void screenCenterAndCustomAnchorsMapToTheirPlacements();
+    void reopeningWhileClosingRetiresTheDrainingSurface();
 
 private:
     PopoutRequest makeRequest();
@@ -289,6 +290,49 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
     // The entry is gone: a second close of the same handle is a no-op.
     transport.closeSurface(handle);
     QVERIFY(m_dismissed.isEmpty());
+}
+
+// A close only starts the host's dismiss animation, and the controller frees
+// its own row before asking for one, so a caller toggling faster than that
+// animation reaches openSurface again while the previous surface is still
+// draining. Without retiring it, each toggle stacks another full-screen
+// surface, several holding an exclusive keyboard grab, until the animations
+// catch up. A local peer can drive this through the IPC toggle verb.
+void TestLayerPopoutTransport::reopeningWhileClosingRetiresTheDrainingSurface()
+{
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    transport.setSurfaceDismissedCallback([this](const QString& h) {
+        m_dismissed.append(h);
+    });
+
+    const QString first = transport.openSurface(makeRequest());
+    QVERIFY(!first.isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    // The window the first surface attached. Its lifetime is the observable:
+    // a retired surface is torn down at the reopen, a merely-closing one
+    // lingers until its dismiss animation finishes.
+    QPointer<QQuickWindow> firstWindow(m_wire->m_attachRecords.at(0).window);
+    QVERIFY(firstWindow);
+
+    // Close, then reopen immediately, well inside the close animation.
+    transport.closeSurface(first);
+    const QString second = transport.openSurface(makeRequest());
+    QVERIFY(!second.isEmpty());
+    QVERIFY(second != first);
+    QTRY_VERIFY(m_wire->m_attachCount >= 2);
+
+    // Well under the host's close duration, so without retiring the first
+    // surface would still be alive here alongside the second.
+    QTest::qWait(100);
+    QVERIFY2(firstWindow.isNull(), "the draining surface outlived the reopen instead of being retired");
+
+    // Nothing was self-dismissed, so the callback must have stayed silent,
+    // and the retired surface must not resurrect a dismissal for a handle
+    // the controller has already forgotten.
+    transport.closeSurface(second);
+    QTest::qWait(1500);
+    QVERIFY2(m_dismissed.isEmpty(), "a retired or controller-closed surface was reported as a dismissal");
 }
 
 void TestLayerPopoutTransport::closeIsIdempotentForUnknownHandles()
