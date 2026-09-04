@@ -32,7 +32,7 @@ Item {
     // Tile ids to materialise, in display order. The shell feeds this from
     // the registry (and, later, from the user's tile arrangement); a test
     // passes a literal list.
-    property var tileIds: []
+    property list<string> tileIds: []
     // Tiles per row. The grid reflows rather than scrolling: a control
     // surface that scrolls hides controls behind a gesture, and the
     // catalog is small enough not to need it.
@@ -40,6 +40,12 @@ Item {
     // Detail view currently open, or "" for the grid. Read-only for
     // consumers; drive it through openDetail() / closeDetail().
     readonly property alias detailTileId: priv.detailTileId
+
+    // Anchors, positioners and layouts mirror under a right-to-left locale,
+    // but only when this is set; QML does not infer it from the application
+    // layout direction. Inherited so the tiles and the detail panel follow.
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
 
     // Emitted when a tile is materialised or refused, so the shell can log
     // an unavailable service without this component knowing what logging
@@ -115,6 +121,15 @@ Item {
 
         if (!root.provider)
             return;
+        // Duck-type the seam before using it, the way Slot and ToastHost do
+        // for their own provider seams. Without this a provider object that
+        // does not implement the contract throws inside the loop below,
+        // after priv.tiles has already been emptied, leaving an empty grid
+        // and a half-fired tileResolved stream with nothing logged.
+        if (typeof root.provider.createTile !== "function") {
+            console.warn("ControlCenter: provider does not implement createTile(id, parent); no tiles built");
+            return;
+        }
 
         const built = ({});
         for (let i = 0; i < root.tileIds.length; ++i) {
@@ -135,7 +150,10 @@ Item {
                         root.openDetail(id);
                     });
             }
-            root.tileResolved(id, item !== null);
+            // Truthiness, not a null comparison: a factory that falls off
+            // the end returns undefined, which `!== null` would report as
+            // created while nothing was built.
+            root.tileResolved(id, !!item);
         }
         priv.tiles = built;
     }
@@ -147,6 +165,21 @@ Item {
     onTileIdsChanged: {
         if (priv.completed)
             root.rebuild();
+    }
+    // columnSpan is written imperatively in rebuild(), so it does not track
+    // `columns` on its own. The GridLayout below reflows live, which without
+    // this would leave every spanning tile pinned to the old span: a slider
+    // built at two columns spanning two of three. Re-apply the spans rather
+    // than rebuilding, so live service tiles are not torn down and rebuilt
+    // just because the grid got wider.
+    onColumnsChanged: {
+        if (!priv.completed)
+            return;
+        for (const id in priv.tiles) {
+            const tile = priv.tiles[id];
+            if (tile && tile.spansRow)
+                tile.Layout.columnSpan = root.columns;
+        }
     }
     Component.onCompleted: {
         priv.completed = true;
@@ -167,9 +200,10 @@ Item {
         columns: root.columns
         columnSpacing: Tokens.spacing_m
         rowSpacing: Tokens.spacing_m
-        // The grid is the tiles' parent, so the detail panel covering it
-        // must not also hide it from the accessibility tree while it is
-        // merely behind something.
+        // Hidden, not merely covered, while a detail view is open. The
+        // detail panel is a sibling rather than a child, so leaving the grid
+        // visible underneath would keep every tile in the accessibility tree
+        // and the tab order behind a panel the user cannot see past.
         visible: priv.detailTileId === ""
     }
 

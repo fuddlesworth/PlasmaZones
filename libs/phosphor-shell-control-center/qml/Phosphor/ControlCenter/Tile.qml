@@ -197,17 +197,28 @@ Item {
             onTapped: root.toggled()
         }
 
-        Kirigami.Icon {
+        // The glyph is 16px but the target is 28, matching DetailPanel's back
+        // button. A 16px hit area is below any usable pointer minimum, and
+        // the two are the same class of navigation affordance.
+        Item {
             id: chevron
 
             anchors.right: parent.right
             anchors.rightMargin: Tokens.spacing_s
             anchors.verticalCenter: parent.verticalCenter
-            width: 16
-            height: 16
-            source: "go-next-symbolic"
-            color: surface.contentColor
+            width: 28
+            height: 28
             visible: root.hasDetail
+
+            Kirigami.Icon {
+                anchors.centerIn: parent
+                width: 16
+                height: 16
+                // Mirrored under a right-to-left layout, where "forward" is
+                // the other way; anchors mirror on their own, a glyph does not.
+                source: root.LayoutMirroring.enabled ? "go-previous-symbolic" : "go-next-symbolic"
+                color: surface.contentColor
+            }
 
             HoverHandler {
                 enabled: root.available && root.hasDetail
@@ -216,6 +227,11 @@ Item {
 
             TapHandler {
                 enabled: root.available && root.hasDetail
+                // Exclusive, so a tap here does not ALSO reach the ripple's
+                // TapHandler underneath and flip the control the user meant
+                // to drill into. Both default to a passive DragThreshold
+                // grab, which excludes nobody.
+                gesturePolicy: TapHandler.ReleaseWithinBounds
                 onTapped: root.detailRequested()
             }
         }

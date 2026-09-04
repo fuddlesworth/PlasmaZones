@@ -107,4 +107,33 @@ TestCase {
         }
         compare(span, 3, "the span tracks the grid's column count");
     }
+
+    // The case above passes columns as an INITIAL property, so it only ever
+    // exercised the construction path through rebuild(). The grid reflows on
+    // a live `columns` change, and columnSpan is written imperatively, so
+    // without a change handler a spanning tile stays pinned to the old span:
+    // a slider built at two columns spanning two of three.
+    function test_span_follows_a_live_column_change() {
+        const cc = createTemporaryObject(controlCenterComp, testCase, {
+            "provider": provider,
+            "tileIds": ["slider"],
+            "columns": 2
+        });
+        const spanNow = function () {
+            let span = 0;
+            for (let i = 0; i < cc.children.length; ++i) {
+                const layer = cc.children[i];
+                for (let j = 0; j < layer.children.length; ++j) {
+                    const child = layer.children[j];
+                    if (child.spansRow !== undefined)
+                        span = child.Layout.columnSpan;
+                }
+            }
+            return span;
+        };
+        compare(spanNow(), 2, "starts at the initial column count");
+
+        cc.columns = 4;
+        compare(spanNow(), 4, "follows a column count changed after construction");
+    }
 }

@@ -47,7 +47,15 @@ FocusScope {
     // Escape, or whatever else the surface treats as "put me away".
     signal dismissed
 
+    // Anchors, positioners and layouts mirror under a right-to-left locale,
+    // but only when this is set; QML does not infer it from the application
+    // layout direction. Inherited so every row and the pill strip follow.
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
+
     // PopoutHost's contract: a content root carries its implicit sizes.
+    // Width is clamped by the host against the surface, since a card wider
+    // than the output would otherwise be cut off on both edges at once.
     implicitWidth: 640
     implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 

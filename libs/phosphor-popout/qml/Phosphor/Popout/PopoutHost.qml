@@ -505,16 +505,22 @@ FocusScope {
         // capsule's inset (Tokens.spacing_xl, the same inset BarHost uses)
         // and hang one spacing_m below the reserved band, so the popout
         // reads as belonging to the bar without knowing the bar's shape.
+        // Every arm rounds to a whole pixel. These bindings replaced an
+        // `anchors.centerIn`, whose alignWhenCentered default did that
+        // rounding for us; without it an odd difference between the surface
+        // and the frame lands the content on a half pixel and blurs its text.
+        // Also clamped to zero, so a frame that is somehow still wider than
+        // the surface starts at the edge rather than off it.
         x: {
             switch (root.placement) {
             case "barLeft":
                 return Tokens.spacing_xl;
             case "barRight":
-                return root.width - width - Tokens.spacing_xl;
+                return Math.max(0, Math.round(root.width - width - Tokens.spacing_xl));
             case "custom":
-                return root.customX;
+                return Math.round(root.customX);
             default:
-                return (root.width - width) / 2;
+                return Math.max(0, Math.round((root.width - width) / 2));
             }
         }
         y: {
@@ -522,11 +528,11 @@ FocusScope {
             case "barLeft":
             case "barCenter":
             case "barRight":
-                return root.reservedTop + Tokens.spacing_m;
+                return Math.round(root.reservedTop + Tokens.spacing_m);
             case "custom":
-                return root.customY;
+                return Math.round(root.customY);
             default:
-                return (root.height - height) / 2;
+                return Math.max(0, Math.round((root.height - height) / 2));
             }
         }
         // Bind to the visible delegate's intrinsic size. childrenRect
@@ -543,8 +549,14 @@ FocusScope {
         // > 0 would require an extra state machine and trade one
         // hidden transient for another; the opacity-gated transient
         // is preferable.
-        width: _visibleDelegate ? _visibleDelegate.implicitWidth : 0
-        height: _visibleDelegate ? _visibleDelegate.implicitHeight : 0
+        // Clamped to the surface. The host fills the output, and a delegate
+        // that reports an implicit size larger than the screen would be
+        // centred with a negative offset and cut off on BOTH sides at once,
+        // with no clip, scroll or shrink anywhere on the path. A short or
+        // portrait output, or a fractional scale that shrinks the logical
+        // size, reaches this with content that is fine on a typical display.
+        width: _visibleDelegate ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : 0
+        height: _visibleDelegate ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : 0
         opacity: root.open ? 1 : 0
         scale: root.open ? 1 : 0.96
 
