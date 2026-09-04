@@ -30,8 +30,10 @@ Column {
     property var queryTerms: []
     /// True while the sheet has a filter typed into it. Splits "everything is
     /// relevant" from "this row happens to match", which look identical from a
-    /// row's own point of view but should not render the same.
-    property bool queryActive: false
+    /// row's own point of view but should not render the same. Derived rather
+    /// than passed in alongside the terms, so a caller cannot set the two
+    /// inconsistently and leave the heading disagreeing with its own rows.
+    readonly property bool queryActive: root.queryTerms.length > 0
     /// How many of this category's collapsed unassigned rows answer the query.
     /// The disclosure line reports them, so a match hidden behind it is still
     /// announced without the sheet resizing itself to reveal it.
@@ -90,6 +92,14 @@ Column {
 
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
+            // Sized to its text, but capped so a long translated category
+            // cannot run past its column and paint over the neighbouring one.
+            // Width tracks the text rather than filling the row, because the
+            // rule anchors to this label's right edge and is what makes the
+            // heading read as the top of a block. The reserve keeps the rule
+            // visible even at the cap.
+            width: Math.min(implicitWidth, parent.width - Kirigami.Units.gridUnit)
+            elide: Text.ElideRight
             text: root.name
             // Capitalisation as a FONT property, not text.toUpperCase(): the
             // string stays intact for accessibility and for locales whose
@@ -156,7 +166,16 @@ Column {
         // With a query up, the line reports its own hidden matches instead of
         // its total, so the one thing worth clicking says so.
         text: root.expanded ? i18n("Hide unassigned actions") : (root.queryActive && root.unassignedMatches > 0 ? i18np("%n unassigned action matches", "%n unassigned actions match", root.unassignedMatches) : i18np("%n unassigned action", "%n unassigned actions", root.unassignedRows.length))
-        color: root.queryActive && root.unassignedMatches > 0 ? Kirigami.Theme.highlightColor : (disclosureArea.containsMouse ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor)
+        // Hover and keyboard focus both brighten it. The highlight state has
+        // its own hovered shade rather than dropping the feedback, since that
+        // is exactly the state where the line is worth activating.
+        readonly property bool disclosureHot: disclosureArea.containsMouse || disclosure.activeFocus
+        // Highlighted only while it is standing in for matches the reader
+        // cannot see. Once the rollup is open those rows are on screen and
+        // carry their own emphasis, so a highlighted "Hide unassigned actions"
+        // would be claiming to be a match itself.
+        readonly property bool disclosureStandsInForMatches: !root.expanded && root.queryActive && root.unassignedMatches > 0
+        color: disclosure.disclosureStandsInForMatches ? (disclosure.disclosureHot ? Qt.lighter(Kirigami.Theme.highlightColor, 1.25) : Kirigami.Theme.highlightColor) : (disclosure.disclosureHot ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor)
         // Dimmed along with the rest of a category that has nothing to offer
         // the query, but never below the rows it stands in for.
         opacity: !root.queryActive || root.unassignedMatches > 0 ? 1 : 0.35
@@ -165,6 +184,31 @@ Column {
         Accessible.role: Accessible.Button
         Accessible.name: disclosure.text
         Accessible.onPressAction: root.expandToggled()
+
+        // The rows behind this line are otherwise pointer-only. The sheet's
+        // search field takes focus on open and is the only other tab stop, so
+        // Tab walks field -> each disclosure in column order, which is also
+        // reading order. Space and Return activate, matching the button role
+        // already declared above.
+        activeFocusOnTab: true
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.expandToggled();
+                event.accepted = true;
+            }
+        }
+
+        // Focus needs to be visible, since the colour shift alone is easy to
+        // miss on a line that is already dim.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: -Kirigami.Units.smallSpacing / 2
+            visible: disclosure.activeFocus
+            color: "transparent"
+            border.width: 1
+            border.color: Kirigami.Theme.highlightColor
+            radius: Kirigami.Units.smallSpacing / 2
+        }
 
         MouseArea {
             id: disclosureArea

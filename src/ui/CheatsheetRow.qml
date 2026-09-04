@@ -129,7 +129,14 @@ RowLayout {
     }
 
     spacing: Kirigami.Units.smallSpacing
-    opacity: root.matched ? 1 : 0.32
+    // The row's opacity composites over its whole subtree, so it MULTIPLIES
+    // with the chips' own alphas rather than replacing them: a modifier cap
+    // already drawn at 0.6 text alpha lands at 0.6 x this. At 0.32 that put
+    // modifier text near 0.19 effective alpha, which is under any usable
+    // contrast floor. Raising the floor here rather than flattening the chip
+    // alphas keeps the recede-the-modifiers relationship exactly as designed
+    // and fixes the composition instead.
+    opacity: root.matched ? 1 : 0.5
     // Short enough not to lag the typing it responds to, long enough that the
     // sheet reads as re-weighting itself rather than flickering.
     Behavior on opacity {
@@ -143,7 +150,15 @@ RowLayout {
     // Announces every binding, and composes the unassigned state from the
     // SAME translated token the visible label shows, so a translator cannot
     // make the two diverge.
-    Accessible.name: root.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", root.modelData.label, root.modelData.triggers.join(", ")) : i18nc("shortcut row: action, state", "%1, %2", root.modelData.label, unassignedLabel.text)
+    readonly property string accessibleRowText: root.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", root.modelData.label, root.modelData.triggers.join(", ")) : i18nc("shortcut row: action, state", "%1, %2", root.modelData.label, unassignedLabel.text)
+    // While a query is up, the row's answer to it is carried in the name
+    // rather than in opacity alone. Dimming and the bold runs inside the label
+    // are the sighted signal, and neither reaches the accessibility tree: the
+    // label is deliberately ignored below, and opacity is not announced. So
+    // without this a screen-reader user typing a query hears the whole sheet
+    // read back unchanged. Only matching rows are marked, so the common case
+    // adds nothing to what is spoken.
+    Accessible.name: (root.queryTerms.length > 0 && root.matched) ? i18nc("a shortcut row that answers the current search, then the row itself", "Match, %1", root.accessibleRowText) : root.accessibleRowText
     Accessible.description: root.effectiveDescription
 
     // Plain-prose explanation from the catalog, on hover (long-press on
@@ -238,6 +253,12 @@ RowLayout {
                         required property int index
 
                         text: modelData
+                        // The key text is part of the search haystack, so a
+                        // query like "meta alt" matches on chips alone. The
+                        // label's bold runs cannot show that, and without this
+                        // such a query left its matched rows at full contrast
+                        // with nothing marked on them.
+                        highlighted: root.queryTerms.length > 0 && root.matched && root.queryTerms.some(term => modelData.toLocaleLowerCase().indexOf(term) >= 0)
                         // Positional, never a name match against a modifier
                         // list: these tokens come from QKeySequence in NATIVE
                         // text, so "Meta" is localised and may render as a

@@ -28,12 +28,18 @@ Rectangle {
     /// at full contrast, so a row can be read by its last chip alone.
     property bool dimmed: false
 
+    /// True when this cap's text answers the sheet's current query. The chip
+    /// picks up the accent the way a matched run of a label picks up bold,
+    /// which is the only way a query typed against key text can show where it
+    /// landed.
+    property bool highlighted: false
+
     implicitWidth: Math.max(keyLabel.implicitWidth + Kirigami.Units.smallSpacing * 2, implicitHeight)
     implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
     radius: Kirigami.Units.smallSpacing
-    color: root.dimmed ? "transparent" : Qt.alpha(Kirigami.Theme.textColor, 0.08)
+    color: root.highlighted ? Qt.alpha(Kirigami.Theme.highlightColor, 0.22) : Qt.alpha(Kirigami.Theme.textColor, root.dimmed ? 0 : 0.08)
     border.width: 1
-    border.color: Qt.alpha(Kirigami.Theme.textColor, root.dimmed ? 0.16 : 0.25)
+    border.color: root.highlighted ? Qt.alpha(Kirigami.Theme.highlightColor, 0.7) : Qt.alpha(Kirigami.Theme.textColor, root.dimmed ? 0.16 : 0.25)
 
     Label {
         id: keyLabel

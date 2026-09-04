@@ -45,9 +45,10 @@ Rectangle {
     readonly property int rowFontSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * fontSizeScale)
     readonly property string effectiveFamily: fontFamily.length > 0 ? fontFamily : Kirigami.Theme.defaultFont.family
 
-    /// Focus the field. Called by the host once the content is mounted; the
-    /// surface's keyboard grab lands asynchronously, so the host also
-    /// re-arms this on activeFocus changes rather than relying on one shot.
+    /// Focus the field. Called by the host once the content is mounted. One
+    /// shot is enough: forceActiveFocus is a scene-local claim, so the field
+    /// is already the scene's focus item by the time the compositor's
+    /// focus-in arrives, and the first keystroke lands here.
     function takeFocus() {
         field.forceActiveFocus();
     }
@@ -62,8 +63,8 @@ Rectangle {
         id: layout
 
         anchors.fill: parent
-        anchors.leftMargin: Kirigami.Units.smallSpacing * 1.5
-        anchors.rightMargin: Kirigami.Units.smallSpacing * 1.5
+        anchors.leftMargin: Math.round(Kirigami.Units.smallSpacing * 1.5)
+        anchors.rightMargin: Math.round(Kirigami.Units.smallSpacing * 1.5)
         spacing: Kirigami.Units.smallSpacing
 
         Kirigami.Icon {

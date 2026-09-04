@@ -18,9 +18,9 @@ import org.plasmazones.common as QFZCommon
  * position of every row are fixed for as long as the sheet is open.
  *
  * Data arrives via the host slot's bindings (C++ pushes `shortcuts`,
- * `currentMode`, `autotileAvailable`, `scrollingAvailable`, and
- * `layoutsAvailable` onto cheatsheetSlot; live mode switches re-push and
- * the group filter re-evaluates reactively).
+ * `currentMode`, `autotileAvailable`, `scrollingAvailable`,
+ * `layoutsAvailable` and `layoutsAreTemplates` onto cheatsheetSlot; live mode
+ * switches re-push and the group filter re-evaluates reactively).
  *
  * Keyboard: unlike the shell's other slots, this one HOLDS keyboard focus for
  * its lifetime so the search field can be typed into. OverlayService flips the
@@ -41,9 +41,11 @@ Item {
     /// shortcut with id, label, category, categoryOrder, rowOrder (the
     /// in-category sort position, already applied to the model), triggers (list of
     /// display strings), assigned (bool), mode
-    /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"|"managed"), and description (translated
+    /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"|"managed"), description (translated
     /// plain-prose explanation for the row tooltip; empty when the action
-    /// needs none). "layouts" is a capability tag rather than a fourth
+    /// needs none), and templatesDescription (the same, worded for a screen
+    /// that consumes layouts as sizing templates; present only on rows whose
+    /// meaning changes there, and falling back to description otherwise). "layouts" is a capability tag rather than a fourth
     /// tiling mode: currentMode can never equal it, and rows carrying it
     /// are gated purely by layoutsAvailable, independent of currentMode.
     property var shortcuts: []
@@ -89,6 +91,14 @@ Item {
     /// every delegate, and an Item reference would strand the latch on a
     /// destroyed row.
     property string latchedRowId: ""
+
+    // A re-push can drop the latched row's category outright (a live mode
+    // switch does exactly that). Its delegate goes with it, and the latch then
+    // has no one left to clear it: the writers are a tap on some surviving
+    // row, a flick, or that delegate's own tooltip closing. Harmless while it
+    // sits there, but it never returns to empty for the rest of the sheet's
+    // life, so clear it at the edge that can strand it.
+    onShortcutsChanged: root.latchedRowId = ""
 
     /// Live filter text from the search field.
     property string query: ""
@@ -209,8 +219,10 @@ Item {
     }
 
     /// Rows the current mode offers at all, ignoring the query. The
-    /// denominator of the search field's counter, so an over-narrow query
-    /// reads as "0 of 94" rather than as an unexplained blank card.
+    /// denominator of the search field's counter, so a query that narrows the
+    /// sheet still says what it narrowed from. An over-narrow query does not
+    /// reach this: the field substitutes its own no-matches wording once the
+    /// numerator hits zero, rather than reading "0 of 94".
     readonly property int modeRowCount: {
         let n = 0;
         for (let i = 0; i < root.shortcuts.length; ++i) {
@@ -243,8 +255,10 @@ Item {
         return root.expandedCategories[group.categoryOrder] === true;
     }
 
-    /// How many of a category's collapsed unassigned rows answer the query.
-    /// Zero while no query is active.
+    /// How many of a category's unassigned rows answer the query. Counts them
+    /// whether or not the rollup is open, since it is also what tells an open
+    /// rollup's line that it still has something to say. Zero while no query
+    /// is active.
     function unassignedMatchCount(group) {
         if (root.queryTerms.length === 0)
             return 0;
@@ -362,7 +376,12 @@ Item {
         // than 0: on an extremely short screen a zero budget would collapse
         // the scroller and leave a bare title with no hint that content
         // exists.
-        readonly property int chromeHeight: titleLabel.implicitHeight + modeLabel.implicitHeight + searchField.implicitHeight + footerLabel.implicitHeight + cardLayout.spacing * 3
+        // Four gaps, not three: the column runs title, mode, field, scroller,
+        // footer. The mode label's negative top margin claws one gap most of
+        // the way back, so it is added here rather than left out — counting
+        // four gaps without it would over-correct by nearly a whole gap in the
+        // other direction.
+        readonly property int chromeHeight: titleLabel.implicitHeight + modeLabel.implicitHeight + searchField.implicitHeight + footerLabel.implicitHeight + cardLayout.spacing * 4 + modeLabel.Layout.topMargin
         readonly property int maxContentHeight: Math.max(Kirigami.Units.gridUnit * 3, Math.round(root.height * 0.85) - paddingSide * 2 - chromeHeight)
     }
 
@@ -381,8 +400,13 @@ Item {
         id: container
 
         anchors.centerIn: parent
-        width: metrics.contentWidth + metrics.paddingSide * 2
-        height: cardLayout.implicitHeight + metrics.paddingSide * 2
+        // Clamped to the screen as well as to the content. columnWidth carries
+        // a minimum so a column never becomes unreadably narrow, and on an
+        // output too small to honour it the card would otherwise be centred
+        // while overhanging both edges, taking the search field's counter off
+        // screen with it. Clipping the card is the better failure.
+        width: Math.min(root.width, metrics.contentWidth + metrics.paddingSide * 2)
+        height: Math.min(root.height, cardLayout.implicitHeight + metrics.paddingSide * 2)
 
         // No container Accessible.name: the title label below is the single
         // announcement, matching LayoutPickerContent's card.
@@ -446,6 +470,30 @@ Item {
                 // wait: the field is already the focus item when the window
                 // becomes active, and the first keystroke lands in it.
                 Component.onCompleted: takeFocus()
+
+                // The field is the only focusable item on the card, so it is
+                // also the only place these keys can be caught. Without this
+                // the clipped rows on a short screen are reachable by wheel
+                // and touch alone, and the scroll indicator points at content
+                // a keyboard user cannot get to. Page keys are unambiguous
+                // here (the field is single-line, so they have nothing to do
+                // in the editor), which is why they and not the arrows carry
+                // this.
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_PageDown) {
+                        scroller.scrollByPage(1);
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_PageUp) {
+                        scroller.scrollByPage(-1);
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Home && event.modifiers & Qt.ControlModifier) {
+                        scroller.scrollToEnd(-1);
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_End && event.modifiers & Qt.ControlModifier) {
+                        scroller.scrollToEnd(1);
+                        event.accepted = true;
+                    }
+                }
             }
 
             // Empty state. Reachable two ways now: a query that matches
@@ -493,6 +541,24 @@ Item {
                 // off.
                 ScrollIndicator.vertical: ScrollIndicator {}
 
+                // Driven from the search field's key handler, which owns focus
+                // for the sheet's lifetime. Clamped here rather than at the
+                // call site so both entry points get the same bounds.
+                function scrollByPage(direction: int) {
+                    if (contentHeight <= height) {
+                        return;
+                    }
+                    const step = height * 0.9;
+                    contentY = Math.max(0, Math.min(contentHeight - height, contentY + direction * step));
+                }
+
+                function scrollToEnd(direction: int) {
+                    if (contentHeight <= height) {
+                        return;
+                    }
+                    contentY = direction < 0 ? 0 : contentHeight - height;
+                }
+
                 Row {
                     id: bucketsRow
 
@@ -522,7 +588,6 @@ Item {
                                     expanded: root.categoryExpanded(modelData)
                                     latchedRowId: root.latchedRowId
                                     queryTerms: root.queryTerms
-                                    queryActive: root.queryTerms.length > 0
                                     unassignedMatches: root.unassignedMatchCount(modelData)
                                     matcher: root.rowMatches
                                     scrollerMoving: scroller.moving
