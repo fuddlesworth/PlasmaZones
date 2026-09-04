@@ -462,6 +462,12 @@ void LayerPopoutTransport::closeSurface(const QString& handle)
     if (!it->hostItem) {
         // The host is already gone (surface failed, screen lost). Nothing to
         // animate; tear the entry down now.
+        //
+        // DEFENSIVE, and deliberately untested: every route that destroys a
+        // host emits its `dismissed` on the way out, which retires the entry
+        // through onHostDismissed before any close can reach this. The guard
+        // stays because the alternative, if a route ever does not, is an
+        // entry latched at closing=true that no later close can free.
         const Entry entry = *it;
         m_entries.erase(it);
         destroyEntry(handle, entry);

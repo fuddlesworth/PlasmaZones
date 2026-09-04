@@ -38,12 +38,20 @@ namespace {
 // argument with "Unknown method parameter type". The shell always has
 // QtQuick imported by the time screenOf runs; give the test engine the
 // same footing by loading one trivial QtQuick component.
-void importQtQuick(QQmlEngine& engine)
+// Returns whether the bootstrap loaded. A QVERIFY inside a void free
+// function returns from THAT function, not from the calling test slot, so a
+// failed bootstrap used to let the case carry on against an engine with no
+// QtQuick and fail somewhere less obvious.
+[[nodiscard]] bool importQtQuick(QQmlEngine& engine)
 {
     QQmlComponent bootstrap(&engine);
     bootstrap.setData("import QtQuick\nQtObject {}\n", QUrl());
     QScopedPointer<QObject> loaded(bootstrap.create());
-    QVERIFY2(loaded, qPrintable(bootstrap.errorString()));
+    if (!loaded) {
+        qWarning() << "QtQuick bootstrap failed:" << bootstrap.errorString();
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -86,7 +94,7 @@ void TestControlCenterController::screenOfNeverHandsTheScreenToTheJsGarbageColle
     // vacuous). Expose the controller the way the shell does — as a
     // context property — and invoke it from JS.
     QQmlEngine engine;
-    importQtQuick(engine);
+    QVERIFY(importQtQuick(engine));
     engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
     QQmlExpression call(engine.rootContext(), nullptr, QStringLiteral("ControlCenterRegistry.screenOf(null)"));
     const QVariant result = call.evaluate();
@@ -108,7 +116,7 @@ void TestControlCenterController::screenOfAnUnparentedItemFallsBackToThePrimary(
     // too, and for the same reason it is checked through the engine.
     QQuickItem orphan;
     QQmlEngine engine;
-    importQtQuick(engine);
+    QVERIFY(importQtQuick(engine));
     engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("orphan"), &orphan);
     QQmlExpression call(engine.rootContext(), nullptr, QStringLiteral("ControlCenterRegistry.screenOf(orphan)"));
