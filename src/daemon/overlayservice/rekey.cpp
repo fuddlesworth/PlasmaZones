@@ -120,8 +120,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // rely on that.
         donor = m_screenStates.find(oldKey);
         if (donor == m_screenStates.end()) {
+            // Unlike the bail-outs above, the lib has already moved its shell
+            // to newKey by this point, so a bare return would leave the lib
+            // keyed where the daemon has no entry and the caller's recreate
+            // fallback would try to build a second shell there. Put the lib
+            // back before giving up, so the failure is the clean no-op the
+            // caller's contract expects.
             qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
-                                 << "vanished during the target-side modal reset";
+                                 << "vanished during the target-side modal reset; reverting lib-side rekey";
+            m_shellHost->rekey(newKey, oldKey);
             return false;
         }
     }

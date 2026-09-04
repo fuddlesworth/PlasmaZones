@@ -61,8 +61,13 @@ Rectangle {
     /// Append a character the sheet caught on the user's behalf, after
     /// handing focus back here. Keeps the keystroke that started the typing
     /// instead of swallowing it.
+    ///
+    /// The caret follows the insert. Without that, a caret left mid-query
+    /// before the user tabbed away would stay there while this character
+    /// landed at the end, so the NEXT character would arrive before it.
     function appendText(t: string) {
         field.insert(field.length, t);
+        field.cursorPosition = field.length;
     }
 
     implicitHeight: layout.implicitHeight + Kirigami.Units.smallSpacing * 2
