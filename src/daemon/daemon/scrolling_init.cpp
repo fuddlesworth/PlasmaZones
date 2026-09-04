@@ -6,8 +6,10 @@
 //
 // Connects the ShortcutManager's scroll-specific signals to the concrete
 // ScrollEngine — the column vocabulary (including the group-width verbs,
-// equalize and minimize), the view page pan, the edge-stop/wrap focus
-// variants, the top/bottom window focus, and the one-way float verbs. The
+// equalize and minimize), the window-height vocabulary (the adjust and preset
+// pairs plus the maximize, grow-into-empty-space, minimize and equalize
+// verbs), the view page pan, the edge-stop/wrap focus variants, the top/bottom
+// window focus, and the one-way float verbs. The
 // GENERIC directional move/focus/swap chords and the mode-neutral
 // floating/tiling focus switch are not here: they route through the generic
 // navigation handlers (navigation.cpp), which reach the scroll engine via

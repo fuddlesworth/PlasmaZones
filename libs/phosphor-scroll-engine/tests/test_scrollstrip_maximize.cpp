@@ -300,7 +300,10 @@ void TestScrollStripMaximize::maximizeToEdgesRestoreIsJustTheStoredIntentAgain()
 //
 // EVERY clearing site in this file is driven, not a representative sample: the
 // contract is spelled out per verb across a dozen sites, so a slot that drove
-// four of them left deleting the clear from the other eight green. The one
+// four of them left deleting the clear from the other eight green. That is not
+// hypothetical — the three whole-size height verbs were added without being
+// added here, and the maximize toggle among them shipped an equality-gated
+// clear that refused forever on a column this slot would have caught. The one
 // site this fixture cannot reach is the per-member drop inside
 // equalizeVisibleColumnWidths' write loop: the fixture sets a 20px outer gap,
 // so a flagged column renders at the RAW main extent, fills the viewport
@@ -394,7 +397,7 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     QVERIFY(renderedMain() <= gappedMain);
 
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
-    QVERIFY2(strip.equalizeActiveColumnHeights(), "the height reset must report the drop");
+    QVERIFY2(strip.equalizeActiveColumnHeights(), "the height equalize must report the drop");
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 
@@ -407,6 +410,32 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
 
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QVERIFY2(strip.adjustActiveWindowHeight(-25.0, params), "the height adjust must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // The three whole-size height verbs. Each clears the override
+    // unconditionally while it is set, the rule setActiveWindowHeight states:
+    // under the override the stored intents are not rendered at all, so a
+    // press whose result equals the stored value is still a real change. The
+    // maximize toggle is the one that proves it — with the equality test it
+    // once carried, a tile already holding the intent the toggle would write
+    // refused forever and the column never left the override.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.toggleMaximizeActiveWindowHeight(params), "the height maximize toggle must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.minimizeActiveWindowHeight(params), "the height minimize must report the drop");
+    QVERIFY(!flagged());
+    QVERIFY(renderedMain() <= gappedMain);
+
+    // Expand drops the override BEFORE it measures, so that even a press it
+    // goes on to refuse still reports the drop rather than mutating silently:
+    // measured under the override every tile resolves to a share of the RAW
+    // cross extent, which is not the budget the verb compares against.
+    QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
+    QVERIFY2(strip.expandActiveWindowToAvailableHeight(params), "the height expand must report the drop");
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 

@@ -64,6 +64,8 @@ private Q_SLOTS:
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
     void aZeroMovementHeightPressStillReportsTheOwnershipClaim();
+    void aMinimizePressNeverHandsATabbedColumnToAnAutoOwner();
+    void growIntoEmptySpaceRefusesAFullTabbedColumnRatherThanUnMaximizingIt();
     void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
     void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
@@ -495,6 +497,102 @@ void TestScrollStripSizing::aZeroMovementHeightPressStillReportsTheOwnershipClai
     // nothing left to claim and nothing to move: now it must report false.
     QVERIFY2(!strip.adjustActiveWindowHeight(-subPixel, params),
              "with the claim already held and no movement there is nothing to report");
+}
+
+// The claim's other half, and the reason minimize cannot simply copy the slot
+// above. claimTabbedHeightOwnership moves the extent owner and writes NOTHING
+// else, so whoever claims must already hold the height the claim was made for.
+// The zero-movement ADJUST press above is allowed to leave the new owner on
+// Auto because its target IS the current extent, so there is no other value to
+// write. Minimize always has one — the smallest preset — and when the tile is
+// already sitting there the press moves no pixels and once bailed out before
+// writing it. That left the active tab owning the column while still carrying
+// the Auto it was inserted with, and tabbedColumnCrossPx resolves an Auto
+// owner to the WHOLE work area: a press asking to shrink grew the column to
+// full height instead.
+void TestScrollStripSizing::aMinimizePressNeverHandsATabbedColumnToAnAutoOwner()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // "a" is given exactly the extent the smallest preset resolves to, so the
+    // minimize press below has nothing to move and takes the no-movement arm.
+    // 1/3 of the gap-aware span, less the gap, is 260 (the ops suite pins the
+    // same literal).
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(260)));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 260);
+
+    // Show "b", which is still the Auto it was inserted with. It renders at
+    // the column "a" sized, which is the premise: the press that follows finds
+    // the pixels already where it wants them.
+    QVERIFY(strip.focusAdjacentTile(1));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Auto);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 260);
+
+    strip.minimizeActiveWindowHeight(params);
+
+    // A minimize press may never GROW the column. This is the assertion that
+    // fails on the unfixed engine, at 800 against 260.
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 260);
+    // And the owner and the intent agree: whichever tab ends up owning the
+    // extent is holding a height that resolves to it, never a bare Auto.
+    const WindowHeight ownerHeight = col->tiles.at(col->indexOfWindow(col->heightOwnerId)).height;
+    QVERIFY2(ownerHeight.kind != WindowHeight::Auto,
+             "the tab owning a tabbed column's extent must not be left on Auto by a minimize press");
+}
+
+// "Grow into empty space" on a TABBED column that is already full must refuse,
+// not un-maximize. The verb routes a tabbed column through the maximize toggle
+// because a tab has no leftover WITHIN the column — "fill what is left" means
+// the whole budget there — but the toggle has two arms, and reaching it while
+// the column is already at the budget lands on the wrong one. The width twin
+// takes its is_full_width early-out ahead of BOTH its toggle routes for
+// exactly this reason; the height verb once took the tabbed route first, so a
+// grow press on a full tab answered a cheerful true and threw the Fixed intent
+// away for an Auto. The pixels happen not to move (an Auto owner also resolves
+// to the whole extent), which is precisely why this asserts the INTENT.
+void TestScrollStripSizing::growIntoEmptySpaceRefusesAFullTabbedColumnRatherThanUnMaximizingIt()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // Short the column first, so the grow press below has something real to
+    // claim and the test is not starting from the answer.
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(400)));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 400);
+
+    // The grow press fills the column, through the toggle's maximize arm.
+    QVERIFY(strip.expandActiveWindowToAvailableHeight(params));
+    const int full = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), full);
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Fixed);
+
+    // The second press has nothing left to grow into and must say so.
+    QVERIFY2(!strip.expandActiveWindowToAvailableHeight(params),
+             "a grow press on a column that already fills its budget must refuse");
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QVERIFY2(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind == WindowHeight::Fixed,
+             "a refused grow press must not un-maximize the tab it declined to grow");
 }
 
 // The tab toggle is REVERSIBLE, which is the whole reason ownership is a

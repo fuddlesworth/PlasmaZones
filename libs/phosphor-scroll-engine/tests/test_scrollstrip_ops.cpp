@@ -77,7 +77,7 @@ private Q_SLOTS:
     void maximizeColumnToggle();
     void expandToAvailableWidth();
     void windowHeights();
-    void heightAdjustAndReset();
+    void heightAdjustAndEqualize();
     void heightMaximizeMinimizeAndExpand();
     void tabbedColumnLayout();
     void tabbedColumnBehavesLikeNormalStructurally();
@@ -462,7 +462,7 @@ void TestScrollStripOps::windowHeights()
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 598);
 }
 
-void TestScrollStripOps::heightAdjustAndReset()
+void TestScrollStripOps::heightAdjustAndEqualize()
 {
     const auto params = defaultParams();
     ScrollStrip strip;
@@ -520,17 +520,25 @@ void TestScrollStripOps::heightMaximizeMinimizeAndExpand()
     QVERIFY(!strip.minimizeActiveWindowHeight(params));
 
     // ── Grow into empty space ──
-    // Refused while a sibling is AUTO: that tile already absorbs the
-    // leftover, so there is no empty space in the column to claim.
+    // Refused while a sibling is AUTO. The Auto tile is resolved as a weighted
+    // share of whatever the fixed tiles leave, so the column's tiles already
+    // sum to the whole budget and the leftover test finds nothing to claim.
     QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
 
-    // With BOTH tiles at the smallest preset the column really does leave
-    // 790 - (260 + 10 + 260) = 260 empty, and the verb claims all of it.
+    // With BOTH tiles at the smallest preset the column leaves
+    // 790 - (260 + 260) = 270 empty, and the verb claims all of it. The gap is
+    // NOT subtracted here: the budget activeColumnCrossBudgetPx answers has
+    // already paid for it, and relayout keeps the gaps outside the tile rects.
     QVERIFY(strip.setWindowHeightIntent(QStringLiteral("a"), WindowHeight::makePreset(1.0 / 3.0)));
     QVERIFY(strip.expandActiveWindowToAvailableHeight(params));
     r = strip.relayout(params);
-    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 520);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 530);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 260);
+    // The column now tiles its budget exactly, which is the invariant that
+    // catches a gap counted on both sides: grown + sibling + the one inner gap
+    // is the whole cross extent, with nothing stranded.
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))) + Ax::crossLen(rectOf(r, QStringLiteral("a"))) + params.gap,
+             Ax::crossLen(params.workArea));
     // Nothing left over now.
     QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
 }
@@ -721,7 +729,7 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     const Column& col = strip.columns().at(0);
     QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Fixed);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 300);
-    // Reset returns the lone tile to Auto and the column's full cross extent.
+    // Equalize returns the lone tile to Auto and the column's full cross extent.
     QVERIFY(strip.equalizeActiveColumnHeights());
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 800);
     // The height verbs work on a lone tile too (the old refusal spammed a

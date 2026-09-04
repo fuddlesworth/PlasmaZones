@@ -402,8 +402,9 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Steps the focused window through the screen's size presets within its column, "
                               "in reverse."));
-        // The height twins of Maximize Column and Grow Column into Empty Space,
-        // in the order their width siblings appear above.
+        // The height twins of Maximize Column, Grow Column into Empty Space,
+        // Minimize Column Width and Equalize Column Widths, in the order their
+        // width siblings appear above.
         add(kIdScrollMaximizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Toggles the focused window between filling its column and sharing it evenly "

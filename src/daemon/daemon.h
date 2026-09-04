@@ -534,8 +534,9 @@ private:
     void connectShortcutSignals();
     void initializeAutotile();
     /// Wire the ShortcutManager's scrolling signals to the scroll engine:
-    /// the column verbs, the edge-stop/wrap focus and top/bottom window
-    /// focus, and the one-way float moves (scrolling_init.cpp).
+    /// the column verbs, the window-height verbs, the edge-stop/wrap focus and
+    /// top/bottom window focus, and the one-way float moves
+    /// (scrolling_init.cpp).
     void connectScrollingShortcuts();
     /// Push the derived scrolling screen set into the scroll engine —
     /// order seeding, per-context rule params, the TEMPLATE vocabulary
