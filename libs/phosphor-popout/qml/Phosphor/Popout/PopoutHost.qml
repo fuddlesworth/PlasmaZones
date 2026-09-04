@@ -75,6 +75,23 @@ FocusScope {
     // backdropShown check.
     property color backdropColor: "transparent"
 
+    // Where the content frame sits on the (full-bleed) surface. The
+    // transport sets these from PopoutRequest.anchor:
+    //   "center"     centred on the surface (ScreenCenter, and AtPointer
+    //                until a transport can supply a pointer position)
+    //   "barLeft" / "barCenter" / "barRight"
+    //                hung just below the top reserved band — the bar's
+    //                exclusive zone on this screen, in reservedTop — and
+    //                aligned to the bar capsule's inset edges
+    //   "custom"     top-left at (customX, customY) in surface coordinates
+    // Placement is the host's job, not the surface's: keeping the surface
+    // full-bleed is what keeps the scrim, click-outside dismissal and the
+    // keyboard grab exactly as they are for every placement.
+    property string placement: "center"
+    property int reservedTop: 0
+    property real customX: 0
+    property real customY: 0
+
     // Internal: duration token shared by the content frame's
     // opacity/scale Behaviors. Exposed as a property so the Behaviors
     // and any future timer/Animation referencing the content fade-out
@@ -483,7 +500,35 @@ FocusScope {
             _lastBound = root.contentItem;
         }
 
-        anchors.centerIn: parent
+        // Explicit x/y rather than anchors.centerIn: an anchor would fight
+        // every placement but "center". The bar placements align to the
+        // capsule's inset (Tokens.spacing_xl, the same inset BarHost uses)
+        // and hang one spacing_m below the reserved band, so the popout
+        // reads as belonging to the bar without knowing the bar's shape.
+        x: {
+            switch (root.placement) {
+            case "barLeft":
+                return Tokens.spacing_xl;
+            case "barRight":
+                return root.width - width - Tokens.spacing_xl;
+            case "custom":
+                return root.customX;
+            default:
+                return (root.width - width) / 2;
+            }
+        }
+        y: {
+            switch (root.placement) {
+            case "barLeft":
+            case "barCenter":
+            case "barRight":
+                return root.reservedTop + Tokens.spacing_m;
+            case "custom":
+                return root.customY;
+            default:
+                return (root.height - height) / 2;
+            }
+        }
         // Bind to the visible delegate's intrinsic size. childrenRect
         // would include invisible children, and a preloaded but
         // hidden contentItem would inflate the frame.

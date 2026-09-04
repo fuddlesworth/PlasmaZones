@@ -6,8 +6,10 @@
 #include <PhosphorShell/phosphorshell_export.h>
 
 #include <QHash>
+#include <QMargins>
 #include <QObject>
 #include <QPointer>
+#include <QScreen>
 #include <QSize>
 #include <QUrl>
 #include <QVariantMap>
@@ -64,6 +66,18 @@ public:
     /// then fails tears that engine down immediately.
     using EngineHook = std::function<void(QQmlEngine*)>;
     void addEngineHook(EngineHook hook);
+
+    /// The space this shell's own panels reserve on `screen`, per edge: the
+    /// largest exclusive zone advertised to the compositor on each edge by a
+    /// materialized panel there. Zero on every edge for a screen with no
+    /// reserving panel, and for a null screen.
+    ///
+    /// For a popout that wants to hang from the bar rather than float mid-
+    /// screen: its surface is full-bleed and cannot ask the compositor
+    /// where the bar ends, but this engine placed the bar and knows. Read
+    /// live, so a reload that changes a panel's thickness is reflected on
+    /// the next open.
+    [[nodiscard]] QMargins reservedMarginsFor(QScreen* screen) const;
 
 Q_SIGNALS:
     /// Emitted at the very top of a hot reload, BEFORE any teardown.
@@ -127,6 +141,21 @@ private:
     QPointer<QObject> m_rootRef;
     Deps m_deps;
     std::vector<std::unique_ptr<PhosphorLayer::Surface>> m_surfaces;
+    // What each materialized panel reserved, for reservedMarginsFor().
+    // Recorded beside the surface rather than re-derived from it: a
+    // Surface exposes its window, not the PanelWindow it adopted, and the
+    // zone actually sent to the compositor is the Role's, which is
+    // computed once at materialization and would otherwise be lost.
+    // Cleared with m_surfaces. QPointer: a screen can die before the
+    // reload that rebuilds this list, and a dead entry must read as "no
+    // screen", not as a match.
+    struct ReservedEdge
+    {
+        QPointer<QScreen> screen;
+        int edge = 0; // PanelWindow::Edge, kept as int to spare the header the include
+        int zone = 0;
+    };
+    std::vector<ReservedEdge> m_reserved;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_reloadTimer = nullptr;
     ScreenModel* m_screenModel = nullptr;

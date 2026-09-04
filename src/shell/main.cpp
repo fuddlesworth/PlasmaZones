@@ -315,6 +315,15 @@ int main(int argc, char* argv[])
         popoutTransport.setEngine(qmlEngine);
     });
 
+    // Bar-anchored popouts hang below the bar's reserved band. The popout
+    // surface is full-bleed and learns nothing about other surfaces' zones
+    // from the compositor, but this engine placed every panel and knows
+    // what each reserved. Read live per open, so a reload that changes the
+    // bar's thickness is reflected on the next popout.
+    popoutTransport.setReservedMarginsProvider([&engine](QScreen* screen) {
+        return engine.reservedMarginsFor(screen);
+    });
+
     // IpcTarget resolves its router from a property stashed on the engine,
     // so this has to run for every fresh engine, not once at startup.
     // Without it each target warns and stays inert, and `phosphorctl call`

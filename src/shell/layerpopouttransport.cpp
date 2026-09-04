@@ -51,6 +51,11 @@ void LayerPopoutTransport::setEngine(QQmlEngine* engine)
     m_engine = engine;
 }
 
+void LayerPopoutTransport::setReservedMarginsProvider(ReservedMarginsProvider provider)
+{
+    m_reservedMargins = std::move(provider);
+}
+
 void LayerPopoutTransport::drain()
 {
     // Note this DEFERS destruction: destroyEntry deleteLater()s each Surface,
@@ -113,21 +118,54 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         return {};
     }
 
-    // Every popout is full-bleed and centres its content in QML, so an anchor
-    // asking for a specific position has nowhere to apply yet. Warn only for
-    // those. BarCenter is the field's DEFAULT, so treating it as a request
-    // would warn on every open by a caller that never expressed an opinion.
+    // Placement. The surface stays full-bleed for every anchor — the scrim,
+    // click-outside dismissal and keyboard grab all live on it — and
+    // PopoutHost places the content frame within it. The bar anchors hang
+    // the frame below the top reserved band: the exclusive zone this
+    // shell's own panels advertise on that screen, which the surface cannot
+    // ask the compositor for but ShellEngine knows, reached through the
+    // provider main.cpp installs.
+    //
+    // BarCenter is the request's DEFAULT, and with placement implemented it
+    // means what it says: a caller that never expressed an opinion gets
+    // "below the bar, centred", the natural home for a bar-summoned popout.
+    // Anything that wants the middle of the screen (the power menu, the
+    // launcher) asks for ScreenCenter explicitly. AtPointer has no pointer
+    // position to work from and still centres, with a warning, so a caller
+    // asking for it hears that it did not get it.
+    QString placement = QStringLiteral("center");
+    int reservedTop = 0;
     switch (request.anchor) {
     case PhosphorPopout::Anchor::BarLeft:
-    case PhosphorPopout::Anchor::BarRight:
-    case PhosphorPopout::Anchor::AtPointer:
-    case PhosphorPopout::Anchor::Custom:
-        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "asked for a positional anchor"
-                                     << int(request.anchor) << "but this transport only centres on the screen";
+        placement = QStringLiteral("barLeft");
         break;
     case PhosphorPopout::Anchor::BarCenter:
+        placement = QStringLiteral("barCenter");
+        break;
+    case PhosphorPopout::Anchor::BarRight:
+        placement = QStringLiteral("barRight");
+        break;
+    case PhosphorPopout::Anchor::Custom:
+        placement = QStringLiteral("custom");
+        break;
+    case PhosphorPopout::Anchor::AtPointer:
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                     << "asked for AtPointer, which this transport cannot place yet; centring";
+        break;
     case PhosphorPopout::Anchor::ScreenCenter:
         break;
+    }
+    if (placement.startsWith(QLatin1String("bar"))) {
+        if (m_reservedMargins) {
+            reservedTop = m_reservedMargins(screen).top();
+        } else {
+            // Not fatal: the popout still opens, hanging from the screen's
+            // top edge instead of the bar's bottom edge. But that is a
+            // wiring omission in the host, so say so.
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "is bar-anchored but no reserved-margins provider is installed;"
+                                         << "hanging from the screen edge";
+        }
     }
 
     // Build the content from the SHELL engine so it sees the shell's context
@@ -234,6 +272,22 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     }
     if (!hostItem->setProperty("backdropColor", backdrop)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the backdropColor write";
+    }
+    // Placement, resolved above. Checked like the other host writes: a
+    // rejected write means the host renamed a property and every
+    // bar-anchored popout would silently land mid-screen.
+    if (!hostItem->setProperty("placement", placement)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the placement write";
+    }
+    if (!hostItem->setProperty("reservedTop", reservedTop)) {
+        qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the reservedTop write";
+    }
+    if (request.anchor == PhosphorPopout::Anchor::Custom) {
+        if (!hostItem->setProperty("customX", request.customAnchor.x())
+            || !hostItem->setProperty("customY", request.customAnchor.y())) {
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "— PopoutHost rejected the customAnchor write";
+        }
     }
     // Give the content a way back to its host so a delegate can close itself
     // without walking the parent chain.

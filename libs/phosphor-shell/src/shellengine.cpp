@@ -14,6 +14,8 @@
 #include <PhosphorShell/PopupWindow.h>
 #include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
+
+#include <algorithm>
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/SystemClock.h>
 #include <PhosphorShell/SystemUsage.h>
@@ -252,12 +254,46 @@ QQmlEngine* ShellEngine::engine() const
     return m_engine.get();
 }
 
+QMargins ShellEngine::reservedMarginsFor(QScreen* screen) const
+{
+    QMargins margins;
+    if (!screen) {
+        return margins;
+    }
+    for (const ReservedEdge& reserved : m_reserved) {
+        // A dead QPointer compares equal to nullptr, never to a live screen.
+        if (reserved.screen != screen || reserved.zone <= 0) {
+            continue;
+        }
+        // Largest wins per edge: two panels reserving the same edge overlap
+        // from the popout's point of view, they do not stack.
+        switch (static_cast<PanelWindow::Edge>(reserved.edge)) {
+        case PanelWindow::Top:
+            margins.setTop(std::max(margins.top(), reserved.zone));
+            break;
+        case PanelWindow::Bottom:
+            margins.setBottom(std::max(margins.bottom(), reserved.zone));
+            break;
+        case PanelWindow::Left:
+            margins.setLeft(std::max(margins.left(), reserved.zone));
+            break;
+        case PanelWindow::Right:
+            margins.setRight(std::max(margins.right(), reserved.zone));
+            break;
+        }
+    }
+    return margins;
+}
+
 void ShellEngine::teardown()
 {
     for (auto& surface : m_surfaces) {
         surface->hide();
     }
     m_surfaces.clear(); // unique_ptr destructors run, no manual delete
+    // The reservations describe the surfaces just torn down; a reload
+    // rebuilds both together.
+    m_reserved.clear();
     // Drop singleton entries before the QQmlEngine destroys their backing
     // PersistentProperties. QPointer auto-nulls on destruction, so the map
     // stays safe to query, but we'd accumulate one stale (null) entry per
@@ -683,6 +719,12 @@ bool ShellEngine::materializePanels(QString* failureReason)
         if (ownedSurface) {
             auto* surface = ownedSurface.get();
             m_surfaces.emplace_back(std::move(ownedSurface));
+            // What this panel reserved, for reservedMarginsFor(). The zone
+            // recorded is the Role's, i.e. what was actually advertised —
+            // an Overlay panel that asked for one gets -1 and reserves
+            // nothing, and that is what a popout hanging from it must see.
+            m_reserved.push_back(
+                {QPointer<QScreen>(panel->screen()), static_cast<int>(panel->edge()), role.exclusiveZone});
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
 
