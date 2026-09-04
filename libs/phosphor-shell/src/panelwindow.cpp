@@ -100,6 +100,31 @@ void PanelWindow::setShadowSize(int size)
     Q_EMIT shadowSizeChanged();
 }
 
+int PanelWindow::interactiveThickness() const
+{
+    return m_interactiveThickness;
+}
+
+void PanelWindow::setInteractiveThickness(int thickness)
+{
+    // Clamp to [0, INT_MAX]. 0 = follow `thickness` (the default, and what
+    // every panel that does not paint into its shadow strip wants);
+    // negative values are nonsense. No clamp against thickness + shadowSize
+    // here: visibleBand() already clamps the band to the surface, and the
+    // surface size is not known to this item.
+    const int clamped = qMax(0, thickness);
+    if (m_interactiveThickness == clamped) {
+        return;
+    }
+    m_interactiveThickness = clamped;
+    Q_EMIT interactiveThicknessChanged();
+}
+
+int PanelWindow::effectiveInputThickness() const
+{
+    return m_interactiveThickness > 0 ? m_interactiveThickness : m_thickness;
+}
+
 int PanelWindow::cornerCarveRadius() const
 {
     return m_cornerCarveRadius;

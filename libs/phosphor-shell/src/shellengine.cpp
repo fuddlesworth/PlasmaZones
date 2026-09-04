@@ -785,18 +785,28 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // current ownership graph happens to make that unreachable (the panel is
     // a QObject child of `window`), but the guard should mean what it says.
     const QPointer<PanelWindow> guardedPanel(panel);
-    // Edge and thickness are captured BY VALUE, matching the closing
-    // comment's contract: panel geometry is fixed at materialization
-    // (installDynamicAutoFit snapshots the same way). Sampling the live
-    // properties here would let a post-materialization QML write move the
-    // input band on the next resize tick while the surface size, anchors
-    // and exclusive zone stayed frozen — exactly the partially-applied
-    // state the "deliberately NOT connected" note below rules out.
-    const auto apply = [guardedPanel, window, edge = panel->edge(), thickness = panel->thickness()] {
+    // Edge is captured BY VALUE, matching the closing comment's contract:
+    // panel geometry is fixed at materialization (installDynamicAutoFit
+    // snapshots the same way). Sampling the live edge/thickness here would
+    // let a post-materialization QML write move the input band on the next
+    // resize tick while the surface size, anchors and exclusive zone stayed
+    // frozen — exactly the partially-applied state the "deliberately NOT
+    // connected" note below rules out.
+    //
+    // The band DEPTH is the one exception, and it is read live through
+    // effectiveInputThickness(). That resolves to the captured-equivalent
+    // `thickness` unless the panel sets `interactiveThickness`, which is
+    // the opt-in for a surface that paints into its shadow strip and needs
+    // clicks there — a bar with a popout growing out of it. Moving only the
+    // input region is exactly what that case wants: the surface, anchors
+    // and exclusive zone must NOT follow, or every window tiled below the
+    // bar would shift when a popout opened. The interactiveThicknessChanged
+    // connection below is what makes the live read take effect.
+    const auto apply = [guardedPanel, window, edge = panel->edge()] {
         if (!guardedPanel) {
             return;
         }
-        const QRect visible = PanelWindow::visibleBand(edge, thickness, window->size());
+        const QRect visible = PanelWindow::visibleBand(edge, guardedPanel->effectiveInputThickness(), window->size());
         if (visible.isEmpty()) {
             return;
         }
@@ -853,6 +863,18 @@ void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface*
     // builds an empty region first and then tests the transparent-input flag
     // to choose between it and the mask, so transparent-for-input wins and a
     // masked panel still goes fully click-through while hidden.
+
+    // Connected to interactiveThicknessChanged, unlike thicknessChanged
+    // below. This is the ONE post-materialization geometry write a panel
+    // may make, and it is safe for the exact reason the others are not: it
+    // moves the input region ALONE and is meant to. A bar that grows a
+    // popout into its shadow strip has to make that strip clickable while
+    // the popout is open, and must NOT disturb the surface size, anchors or
+    // exclusive zone doing it, or every window tiled below would shift.
+    // `thickness` cannot express that — widening it moves the exclusive
+    // zone — which is why the depth is a separate property rather than a
+    // relaxation of the rule below.
+    connect(panel, &PanelWindow::interactiveThicknessChanged, window, apply);
 
     // Deliberately NOT connected to thicknessChanged / edgeChanged.
     //

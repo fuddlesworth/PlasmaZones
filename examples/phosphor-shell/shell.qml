@@ -50,7 +50,39 @@ Item {
 
         model: PhosphorShell.screens
 
-        delegate: BarHost {}
+        // The control center grows out of THIS bar's capsule as one
+        // continuous painted surface (the connected-corner design), rather
+        // than opening as a separate centred popout.
+        //
+        // Everything the delegate reads must come from a CONTEXT PROPERTY,
+        // never an id in this file: PerScreenPanels builds each delegate
+        // with a fresh QQmlContext carrying `modelData`, so shell.qml's ids
+        // do not resolve inside one. Hence the open state lives on
+        // ControlCenterRegistry and the socket content is declared inline
+        // here, in the delegate's own scope.
+        delegate: BarHost {
+            id: bar
+
+            socketWidth: 380
+            socketDepth: 460
+            // Open only on the screen the registry says owns it, so a
+            // multi-head setup shows one panel, on the bar that summoned it.
+            //
+            // Read through PanelWindow.screen, NOT modelData.screen:
+            // PerScreenPanels deliberately withholds the screen role from
+            // modelData because that map snapshots a raw QScreen* which
+            // dangles on hot-unplug, while this property is QPointer-backed
+            // and simply reads null once the output dies. Hence the guard.
+            socketOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
+
+            socketContent: Component {
+                ControlCenter {
+                    provider: ControlCenterRegistry
+                    tileIds: ControlCenterRegistry.tileIds
+                    columns: 2
+                }
+            }
+        }
     }
 
     // The one live SessionHost in the process. It must be a singleton in
@@ -91,99 +123,26 @@ Item {
         PowerMenu {}
     }
 
-    // The control center, per docs/phosphor-shell-design/mockups/control-center.svg.
+    // The control center grows out of the bar's own capsule (the
+    // connected-corner socket), so it is NOT a popout: there is no separate
+    // surface to place, and BarHost paints the body as part of the bar's
+    // Shape. The bar delegate above mounts the content; all this file owns
+    // is the open/close verb.
     //
-    // ControlCenter renders into whatever it is parented to and owns no
-    // surface, so the presentation is chosen HERE. It is a Cooperative
-    // popout rather than the power menu's Modal one: a quick-settings
-    // panel should close when you click away or open something else, not
-    // dim the screen and suppress every other popout.
-    //
-    // The eventual connected-corner form grows this out of the bar through
-    // a BarCanvas socket, which is a change of anchor and transport in this
-    // file rather than a change to the surface.
-    // ControlCenter is a transparent Item that paints only its tiles, so
-    // the PANEL behind them is the host's to draw. It is deliberately not
-    // in the library: the connected-corner form paints the body as part of
-    // the bar's own Shape, where a separate panel rectangle would be wrong.
-    Component {
-        id: controlCenterComponent
-
-        Rectangle {
-            id: panel
-
-            // PopoutHost's contract: the content root MUST carry implicit
-            // sizes. contentFrame measures the delegate by them, and a root
-            // without them collapses the popout to 0x0 and renders empty.
-            implicitWidth: centre.implicitWidth
-            implicitHeight: centre.implicitHeight
-
-            radius: Tokens.radius_xl
-            color: Theme.surface_container
-
-            // Drops in from just above its resting place. PopoutHost fades
-            // and scales its content but never translates it, so without
-            // this the panel simply appears. Driven off Component.onCompleted
-            // rather than an `open` binding because the content is built on
-            // open and destroyed on close, so its whole life IS the open
-            // state.
-            y: -Tokens.spacing_l
-            opacity: 0
-
-            Component.onCompleted: {
-                y = 0;
-                opacity = 1;
-            }
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: Motion.duration_medium_2
-                    easing: Motion.emphasized
-                }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Motion.duration_medium_2
-                    easing: Motion.standard
-                }
-            }
-
-            ControlCenter {
-                id: centre
-
-                anchors.fill: parent
-                // The registry context property src/shell/main.cpp installs
-                // on every engine. tileIds comes from the registry too, so
-                // the catalog is declared in one place (the controller)
-                // instead of being restated here.
-                provider: ControlCenterRegistry
-                tileIds: ControlCenterRegistry.tileIds
-                columns: 2
-            }
-        }
-    }
-
-    function toggleControlCenter(): void {
-        Popouts.toggle({
-            "popoutId": "control-center",
-            "content": controlCenterComponent,
-            // BarCenter, which LayerPopoutTransport treats as "centre on
-            // the screen" — the only placement it implements. BarRight
-            // would be the right request (this hangs off a trailing bar
-            // button) but the transport rejects positional anchors with a
-            // warning and centres anyway, so asking for it would only add
-            // a log line. Bar-anchored placement arrives with the
-            // connected-corner socket, which positions the body by
-            // construction rather than by asking the transport.
-            "anchor": PhosphorPopout.Anchor.BarCenter,
-            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            "keyboardFocus": true,
-            "dismissOnFocusLoss": true
-        });
+    // That also means it does not go through PopoutController, so the
+    // Modal power menu does not close it automatically the way it would a
+    // Cooperative popout. Opening the power menu closes it explicitly
+    // below, which is the same outcome by a different road.
+    function toggleControlCenter(screenName: string): void {
+        ControlCenterRegistry.toggleOnScreen(screenName);
     }
 
     function togglePowerMenu(): void {
+        // The control center is painted into a bar capsule, not opened
+        // through PopoutController, so the Modal power menu's automatic
+        // "close every cooperative popout" does not reach it. Close it by
+        // hand so the two are never up together.
+        ControlCenterRegistry.close();
         // toggle rather than open: pressing the bar button (or Ctrl+Alt+Del)
         // a second time should put the menu away, and the controller rejects
         // a plain open for an id that is already showing.
@@ -210,17 +169,17 @@ Item {
     Connections {
         target: BarRegistry
 
-        // The signal also carries `source` (the bar widget that fired),
-        // dropped from this handler's signature because the session menu is
-        // screen-centred; a bar-anchored surface takes it to pick which
-        // output's bar it hangs from.
-        function onWidgetActivated(id: string): void {
+        // `source` is the bar widget that fired. The session menu is
+        // screen-centred and ignores it; the control center is anchored to
+        // a bar, so it uses the widget's window to pick which output's
+        // capsule to grow out of.
+        function onWidgetActivated(id: string, source: Item): void {
             if (id === "power")
                 root.togglePowerMenu();
             else if (id === "controlcenter")
-                // The bar widget's registered id (barcontroller.cpp), which
-                // is NOT the popout id below: the popout is "control-center".
-                root.toggleControlCenter();
+                // "controlcenter" is the bar widget's registered id
+                // (barcontroller.cpp), not the IPC target name below.
+                root.toggleControlCenter(ControlCenterRegistry.screenNameOf(source));
         }
     }
 
@@ -246,19 +205,46 @@ Item {
     }
 
     // The control center's wire surface, per the mockup's
-    // `phosphorctl call control-center.open`. Same show/toggle split and
-    // the same reason: bind a compositor key to toggle, and call show from
-    // a script that wants the panel up regardless of what is already open.
+    // `phosphorctl call control-center.open`. Same show/toggle split as the
+    // power menu, and the same reason: bind a compositor key to toggle, and
+    // call show from a script that wants the panel up regardless.
+    //
+    // The no-argument forms are the ones a keybind uses, so they must stay
+    // callable as `phosphorctl call control-center.toggle` — IpcTarget
+    // arity is strict, and a lone `toggle(screen)` would reject that with
+    // "argument count mismatch". The *OnScreen variants take the explicit
+    // output, for a keybind that should follow the pointer.
     IpcTarget {
         target: "control-center"
 
         function show(): void {
-            if (!Popouts.isOpen("control-center"))
-                root.toggleControlCenter();
+            showOnScreen(ControlCenterRegistry.screenNameOf(null));
         }
 
         function toggle(): void {
-            root.toggleControlCenter();
+            // Open anywhere means close; nothing open means open on the
+            // primary. Routing through toggleOnScreen with the primary name
+            // would instead MOVE a panel that is open on another output,
+            // which is not what a bare toggle means.
+            if (ControlCenterRegistry.openScreen !== "")
+                ControlCenterRegistry.close();
+            else
+                ControlCenterRegistry.toggleOnScreen(ControlCenterRegistry.screenNameOf(null));
+        }
+
+        function showOnScreen(screen: string): void {
+            // toggleOnScreen would CLOSE it if that screen already has it,
+            // which is not what a caller asking to show it means.
+            if (ControlCenterRegistry.openScreen !== screen)
+                ControlCenterRegistry.toggleOnScreen(screen);
+        }
+
+        function toggleOnScreen(screen: string): void {
+            root.toggleControlCenter(screen);
+        }
+
+        function hide(): void {
+            ControlCenterRegistry.close();
         }
     }
 }

@@ -24,7 +24,49 @@ private Q_SLOTS:
     void thicknessClampsToOneAndWarns();
     void shadowSizeAndCarveClampToZero();
     void settersNotifyOncePerRealChange();
+    void interactiveThicknessFollowsThicknessUntilSet();
 };
+
+// The input band's depth is the ONE panel geometry ShellEngine samples
+// live, so the "0 means follow thickness" rule has to hold exactly: a
+// wrong answer here either freezes a bar's popout pocket click-through or
+// makes the shadow strip permanently clickable.
+void TestPanelWindowSetters::interactiveThicknessFollowsThicknessUntilSet()
+{
+    PanelWindow panel;
+    panel.setThickness(44);
+    QCOMPARE(panel.interactiveThickness(), 0);
+    QCOMPARE(panel.effectiveInputThickness(), 44);
+
+    // A live thickness change still shows through while unset.
+    panel.setThickness(60);
+    QCOMPARE(panel.effectiveInputThickness(), 60);
+
+    // Set: the override wins, and it may exceed thickness — that is the
+    // whole point, since the extra depth is the shadow strip the popout
+    // paints into.
+    QSignalSpy spy(&panel, &PanelWindow::interactiveThicknessChanged);
+    panel.setInteractiveThickness(400);
+    QCOMPARE(panel.effectiveInputThickness(), 400);
+    QCOMPARE(spy.count(), 1);
+
+    // Change-gated, like every other setter here.
+    panel.setInteractiveThickness(400);
+    QCOMPARE(spy.count(), 1);
+
+    // Negative clamps to 0, which reverts to following thickness rather
+    // than producing an empty band.
+    panel.setInteractiveThickness(-5);
+    QCOMPARE(panel.interactiveThickness(), 0);
+    QCOMPARE(panel.effectiveInputThickness(), 60);
+    QCOMPARE(spy.count(), 2);
+
+    // Setting it back to 0 explicitly is the documented "close the pocket"
+    // path, and must not leave a stale override behind.
+    panel.setInteractiveThickness(300);
+    panel.setInteractiveThickness(0);
+    QCOMPARE(panel.effectiveInputThickness(), 60);
+}
 
 void TestPanelWindowSetters::thicknessClampsToOneAndWarns()
 {

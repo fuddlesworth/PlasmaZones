@@ -47,14 +47,11 @@ PanelWindow {
     // so tiled windows start immediately below the bar rather than leaving a
     // permanent strip of wallpaper there.
     thickness: panel.barThickness + panel.screenInset
-    // Extra surface below the exclusive zone so the capsule's drop shadow
-    // has room to render without being clipped at the panel's bottom edge.
-    //
-    // The strip is transparent but still part of the wl_surface, so it
-    // would swallow clicks along the top edge of whatever tiles beneath.
-    // ShellEngine masks the surface's input region down to `thickness`
-    // (PanelWindow.visibleBand), which excludes it.
-    shadowSize: Tokens.spacing_l
+    // The transparent strip below the exclusive zone is still part of the
+    // wl_surface, so it would swallow clicks along the top edge of whatever
+    // tiles beneath. ShellEngine masks the surface's input region down to
+    // the painted band (PanelWindow.visibleBand), which excludes it — see
+    // `shadowSize` and `interactiveThickness` above.
     alignment: PanelWindow.Fill
     // The bar never wants keyboard focus (Plasma-panel behaviour); attached
     // popouts take their own grab.
@@ -63,6 +60,71 @@ PanelWindow {
     // Capsule strip height and the inset from the screen edges.
     property int barThickness: 44
     property int screenInset: Tokens.spacing_xl
+
+    // ─── Bar-anchored popout (the connected-corner socket) ──────────────
+    //
+    // A popout that grows DOWNWARD out of the capsule as one continuous
+    // painted surface, per docs/phosphor-shell-design/mockups/control-center.svg.
+    // The host supplies the content; the bar owns the pocket geometry, the
+    // growth animation, and the surface plumbing that makes the pocket
+    // clickable.
+    //
+    // Content, mounted into the pocket when `socketOpen` first goes true.
+    property Component socketContent: null
+    // Whether the pocket is open. Animating `_socketDepth` off this is what
+    // grows the capsule.
+    property bool socketOpen: false
+    // Pocket width, and its natural (fully-open) depth. The host sizes
+    // these to whatever it is mounting.
+    property int socketWidth: 380
+    property int socketDepth: 420
+    // How much surface to reserve below the capsule for the open pocket.
+    // Reserved ONCE, at materialization: ShellEngine snapshots
+    // `thickness + shadowSize` when it creates the layer surface and never
+    // resizes it, so a pocket that needs room later must have it reserved
+    // now. Costs nothing while closed — the strip is transparent and, by
+    // default, outside the input region.
+    property int socketReserve: panel.socketDepth
+
+    // Emitted when the pocket has finished closing, so a host can tear its
+    // content down (or release a grab) only once nothing is visible.
+    signal socketClosed
+
+    // Animated pocket depth. The socket descriptor and the content clip
+    // both derive from this, so one animation drives the whole growth.
+    property real _socketDepth: panel.socketOpen ? panel.socketDepth : 0
+
+    Behavior on _socketDepth {
+        NumberAnimation {
+            id: socketAnim
+
+            duration: Motion.duration_long_2
+            easing: Motion.emphasized
+            onFinished: {
+                if (!panel.socketOpen)
+                    panel.socketClosed();
+            }
+        }
+    }
+
+    // Extra surface below the exclusive zone: the capsule's drop shadow
+    // plus room for the open pocket.
+    shadowSize: Tokens.spacing_l + panel.socketReserve
+
+    // Widen the INPUT REGION to cover the open pocket, and only then.
+    //
+    // The surface is permanently tall enough for the pocket, but
+    // ShellEngine masks input down to the painted band, so without this the
+    // pocket would paint and swallow nothing — every control in it dead.
+    // This is the one panel geometry ShellEngine samples live; see
+    // PanelWindow.interactiveThickness. Deliberately NOT `thickness`, which
+    // sets the exclusive zone: widening that would shove every tiled window
+    // down the screen each time a popout opened.
+    //
+    // 0 while fully closed hands the band back to `thickness`, so the
+    // shadow strip goes click-through again rather than staying live at the
+    // capsule's own depth.
+    interactiveThickness: panel._socketDepth > 0.5 ? panel.screenInset + panel.barThickness + Math.ceil(panel._socketDepth) : 0
 
     // Bar layout: each slot is a list of groups, and each group is an
     // array of widget ids sharing one island chip. Related widgets are
@@ -102,12 +164,62 @@ PanelWindow {
             level: 2
         }
 
-        // Popout sockets: empty until a bar-anchored popout opens. Bar-
-        // anchored popouts (control center, notification center, power
-        // menu) land in later phases and will push socket descriptors here
-        // so the capsule grows downward into them. Driving them will also
-        // mean growing `thickness` / `shadowSize` to match, since the
-        // layer-shell surface does not stretch on its own.
+        // The capsule has to be tall enough to paint the pocket it grows;
+        // BarCanvas draws the strip in its top `barHeight` band and the
+        // socket below that.
+        height: panel.barThickness + Math.max(0, panel._socketDepth)
+
+        // Pocket geometry. Centred on the capsule, matching the mockup.
+        //
+        // Below ~0.5 the socket reads as closed and BarCanvas degrades to a
+        // flat edge, so dropping the descriptor entirely there means the
+        // pocket grows out of nothing and leaves nothing behind. Same
+        // threshold the bar-canvas demo uses.
+        readonly property real socketX: (width - panel.socketWidth) / 2
+        sockets: panel._socketDepth > 0.5 ? [
+            {
+                "x": canvas.socketX,
+                "width": panel.socketWidth,
+                "depth": panel._socketDepth
+            }
+        ] : []
+
+        // Pocket content, drawn over the painted socket so the two read as
+        // one surface. Clipped to the pocket so the content is revealed by
+        // the growth rather than sliding around inside it.
+        Item {
+            id: pocket
+
+            x: canvas.socketX
+            y: panel.barThickness
+            width: panel.socketWidth
+            height: Math.max(0, panel._socketDepth)
+            clip: true
+            opacity: panel.socketOpen ? 1 : 0
+            // Gate input off the instant a close starts: an opacity-0 Item
+            // is still hit-testable, and the depth collapse outlasts the
+            // opacity fade, so without this the invisible controls stay
+            // clickable through the whole close. Same trap the bar-canvas
+            // demo documents.
+            enabled: panel.socketOpen
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Motion.duration_short_3
+                    easing: Motion.standard
+                }
+            }
+
+            Loader {
+                anchors.fill: parent
+                // Built on first open and kept thereafter: the tiles behind
+                // it hold live service connections, and rebuilding them on
+                // every open would re-enumerate NetworkManager, BlueZ and
+                // PipeWire each time the user glanced at the panel.
+                active: panel.socketOpen || item !== null
+                sourceComponent: panel.socketContent
+            }
+        }
 
         // Default children land in the bar strip (the top barHeight band of
         // BarCanvas), so `parent` below is that strip and verticalCenter

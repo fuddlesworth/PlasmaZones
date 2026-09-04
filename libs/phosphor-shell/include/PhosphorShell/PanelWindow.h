@@ -32,6 +32,29 @@ class PHOSPHORSHELL_EXPORT PanelWindow : public QQuickItem
     /// rendering the shadow in that extra strip — PanelWindow only
     /// hands it the surface space.
     Q_PROPERTY(int shadowSize READ shadowSize WRITE setShadowSize NOTIFY shadowSizeChanged)
+    /// Depth of the surface's INPUT REGION, when it should differ from
+    /// `thickness`. 0 (the default) means "follow thickness", which is
+    /// what every panel wants at rest.
+    ///
+    /// This exists for a surface that paints into its shadow strip and
+    /// needs clicks there: a bar with a popout growing out of it into the
+    /// space `shadowSize` reserved. The pocket is painted, so it must also
+    /// be clickable, but only while it is open.
+    ///
+    /// Unlike `thickness`, this IS sampled live: ShellEngine re-applies the
+    /// input region whenever it changes. That is deliberately the one
+    /// post-materialization geometry write a panel may make. It is safe
+    /// precisely because it moves nothing else — the surface size, the
+    /// anchors and the exclusive zone all stay frozen at their
+    /// materialization values, so a window tiled below the bar does not
+    /// shift when a popout opens. Widening `thickness` instead would move
+    /// the exclusive zone and shove every tiled window down the screen.
+    ///
+    /// Clamped by visibleBand() to the surface, so a value past
+    /// `thickness + shadowSize` simply makes the whole surface interactive
+    /// rather than producing a region that overhangs it.
+    Q_PROPERTY(int interactiveThickness READ interactiveThickness WRITE setInteractiveThickness NOTIFY
+                   interactiveThicknessChanged)
     /// Radius (logical pixels) of the concave quarter-arc carved into
     /// each corner of the visible panel where the panel meets the
     /// desktop area. 0 disables the carve. Larger values eat further
@@ -144,6 +167,14 @@ public:
     [[nodiscard]] int shadowSize() const;
     void setShadowSize(int size);
 
+    [[nodiscard]] int interactiveThickness() const;
+    void setInteractiveThickness(int thickness);
+
+    /// The input-region depth to actually apply: `interactiveThickness`
+    /// when set, otherwise `thickness`. One place so the "0 means follow
+    /// thickness" rule cannot be spelled differently by two callers.
+    [[nodiscard]] int effectiveInputThickness() const;
+
     [[nodiscard]] int cornerCarveRadius() const;
     void setCornerCarveRadius(int radius);
 
@@ -175,6 +206,7 @@ Q_SIGNALS:
     void edgeChanged();
     void thicknessChanged();
     void shadowSizeChanged();
+    void interactiveThicknessChanged();
     void cornerCarveRadiusChanged();
     void screenChanged();
     void panelLayerChanged();
@@ -189,6 +221,8 @@ private:
     Edge m_edge = Top;
     int m_thickness = 32;
     int m_shadowSize = 0;
+    // 0 = follow m_thickness. See the property docs above.
+    int m_interactiveThickness = 0;
     int m_cornerCarveRadius = 0;
     // QPointer so monitor hot-unplug doesn't leave us with a dangling
     // QScreen pointer. ScreenManager owns QScreen lifetimes externally.
