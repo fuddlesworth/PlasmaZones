@@ -192,9 +192,14 @@ void TestAppsProvider::capsTheResultCount()
 {
     AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
                           {QStringLiteral("KDE")});
+    // Establish that the query really has more than one answer FIRST.
+    // Without this the case passed whether the cap worked or the query
+    // simply matched one entry, which is the shape a vacuous test takes.
+    provider.setQuery(QStringLiteral("e"));
+    QVERIFY2(provider.results().size() > 1, "the uncapped query yields several rows");
+
     provider.setMaximumResults(1);
     QCOMPARE(provider.maximumResults(), 1);
-    // "t" is in Firefox? no. "e": Firefox, Nested Tool, kitty... several.
     provider.setQuery(QStringLiteral("e"));
     QCOMPARE(provider.results().size(), 1);
     // Clamped to at least one.

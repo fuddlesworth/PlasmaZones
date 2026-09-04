@@ -193,11 +193,19 @@ void TestDesktopEntry::scanFirstDirectoryWinsPerId()
 
     auto system = DesktopEntryScanner::scan({fixture("applications"), fixture("applications-local")}, QString(),
                                             {QStringLiteral("KDE")});
+    // Counted, not asserted inside an `if`. An assertion guarded by the id
+    // passes when the id is absent entirely, so a scan that returned nothing
+    // satisfied the reversed half of this test.
+    int systemFirefoxes = 0;
+    QString systemName;
     for (const auto& e : system) {
         if (e.id == QStringLiteral("firefox")) {
-            QCOMPARE(e.name, QStringLiteral("Firefox"));
+            ++systemFirefoxes;
+            systemName = e.name;
         }
     }
+    QCOMPARE(systemFirefoxes, 1);
+    QCOMPARE(systemName, QStringLiteral("Firefox"));
 }
 
 void TestDesktopEntry::scanIdFoldsSubdirectoriesWithDashes()

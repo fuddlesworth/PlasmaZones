@@ -172,6 +172,11 @@ void TestRoutingPopoutTransport::refusedOpenRecordsNoHandle()
     // The inner refusal (empty handle) must surface as a refusal, and must
     // leave no mapping behind: a later close of "" must not reach anyone.
     QVERIFY(router.openSurface(requestFor(QStringLiteral("control-center"))).isEmpty());
+    // The refusal came from the inner transport, which means the router DID
+    // route the open. Without this the case cannot tell a refusal from a
+    // router that never called anyone.
+    QCOMPARE(socket.opened, QStringList{QStringLiteral("control-center")});
+    QVERIFY(layer.opened.isEmpty());
     router.closeSurface(QString());
     QVERIFY(socket.closed.isEmpty());
     QVERIFY(layer.closed.isEmpty());
@@ -198,6 +203,11 @@ void TestRoutingPopoutTransport::dismissalsFromEitherSideReachTheOneCallback()
     layer.selfDismiss(lh);
     socket.selfDismiss(sh);
     QCOMPARE(seen, (QStringList{lh, sh}));
+    // Each open reached exactly one inner transport. Without this a
+    // mis-route that opened on both sides still produced the same two
+    // dismissals and passed.
+    QCOMPARE(layer.opened, QStringList{QStringLiteral("power")});
+    QCOMPARE(socket.opened, QStringList{QStringLiteral("control-center")});
 
     // A self-dismissed handle is forgotten too, so the controller's
     // follow-up close (if any) cannot re-close it on the inner side.
