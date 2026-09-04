@@ -10,7 +10,6 @@
 #include <QStringList>
 
 #include <functional>
-#include <memory>
 
 namespace PhosphorServiceClipboard {
 class ClipboardService;

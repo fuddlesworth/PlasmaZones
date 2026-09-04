@@ -21,6 +21,18 @@
 
 namespace {
 Q_LOGGING_CATEGORY(lcPopoutTransport, "phosphorshell.popout.transport")
+
+// The scrim is the only thing that distinguishes a modal popout from a
+// cooperative one visually, so the two alphas are a designed pair rather than
+// two independent numbers: the modal reads as "the rest is unavailable", the
+// cooperative as "this is on top of, not instead of".
+constexpr int kModalScrimAlpha = 160;
+constexpr int kCooperativeScrimAlpha = 60;
+
+// Handle prefix. RoutingPopoutTransport keys close-routing on the handle
+// string and documents these as disjoint by construction, so this must not
+// collide with the socket transport's own prefix.
+constexpr QLatin1String kLayerHandlePrefix("popout-");
 } // namespace
 
 namespace PhosphorShellApp {
@@ -291,10 +303,10 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     QColor backdrop;
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Modal:
-        backdrop = QColor(0, 0, 0, 160);
+        backdrop = QColor(0, 0, 0, kModalScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Cooperative:
-        backdrop = QColor(0, 0, 0, 60);
+        backdrop = QColor(0, 0, 0, kCooperativeScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Detached:
         backdrop = QColor(Qt::transparent);
@@ -376,7 +388,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         return {};
     }
 
-    const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
+    const QString handle = kLayerHandlePrefix + QString::number(++m_counter);
     // String-based connect: `dismissed` is declared in QML and has no
     // compile-time member pointer. Host and transport share the GUI thread, so
     // the default AutoConnection is already direct and the contract's

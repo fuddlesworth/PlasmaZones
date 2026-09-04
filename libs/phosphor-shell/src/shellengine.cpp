@@ -49,6 +49,16 @@
 #include <memory>
 #include <mutex>
 
+namespace {
+// Coalescing window for a rebuild. It serves TWO requirements, which is worth
+// knowing before retuning it: an editor writing shell.qml (often several
+// events per save), and a screen-topology change routed through the same
+// timer so a KVM switch or lid toggle does not rebuild once per output. A
+// physical transition can span longer than this, in which case it drives more
+// than one rebuild; raising it to fix that would also delay every hot reload.
+constexpr int kReloadDebounceMs = 100;
+} // namespace
+
 Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 
 namespace PhosphorShell {
@@ -59,7 +69,7 @@ ShellEngine::ShellEngine(Deps deps, QObject* parent)
 {
     m_reloadTimer = new QTimer(this);
     m_reloadTimer->setSingleShot(true);
-    m_reloadTimer->setInterval(100);
+    m_reloadTimer->setInterval(kReloadDebounceMs);
     connect(m_reloadTimer, &QTimer::timeout, this, &ShellEngine::onFileChanged);
 }
 
@@ -193,7 +203,16 @@ bool ShellEngine::buildAndMaterialize()
     // BEFORE the shell QML is parsed. Image providers, custom context
     // properties, and engine-scoped singletons all need to be in place
     // by the time QQmlComponent walks the QML tree.
-    for (const auto& hook : m_engineHooks) {
+    // Index, not a range-for. addEngineHook appends, and the header does not
+    // forbid a hook from registering another, so iterating by reference over
+    // a vector that can reallocate mid-loop is undefined behaviour. Snapshot
+    // the size too, so a hook added during this pass is not also driven here:
+    // addEngineHook already invokes a late arrival itself once the engine
+    // exists, and running it twice on the same engine is worse than not
+    // running it at all.
+    const size_t hookCount = m_engineHooks.size();
+    for (size_t i = 0; i < hookCount && i < m_engineHooks.size(); ++i) {
+        const auto& hook = m_engineHooks.at(i);
         if (hook) {
             hook(m_engine.get());
         }
@@ -321,11 +340,20 @@ void ShellEngine::setupWatcher()
 
     m_watcher = new QFileSystemWatcher(this);
 
+    // Both returns are checked. When the per-user inotify watch limit is
+    // exhausted these fail, and hot reload then stops working for the life of
+    // the process with nothing logged at any level: the re-arm below can only
+    // run from a reload, and the missing watch is what would have caused one.
     const QString filePath = m_shellUrl.toLocalFile();
-    m_watcher->addPath(filePath);
+    if (!m_watcher->addPath(filePath)) {
+        qCWarning(lcShellEngine) << "could not watch" << filePath
+                                 << "— hot reload is disabled (inotify watch limit reached?)";
+    }
 
     const QString dir = QFileInfo(filePath).absolutePath();
-    m_watcher->addPath(dir);
+    if (!m_watcher->addPath(dir)) {
+        qCWarning(lcShellEngine) << "could not watch" << dir << "— an atomic-rename save will not trigger a reload";
+    }
 
     auto kickReload = [this]() {
         m_reloadTimer->start();
@@ -372,8 +400,8 @@ void ShellEngine::onFileChanged()
     // had to restart the shell to recover.
     if (m_watcher) {
         const QString filePath = m_shellUrl.toLocalFile();
-        if (!m_watcher->files().contains(filePath)) {
-            m_watcher->addPath(filePath);
+        if (!m_watcher->files().contains(filePath) && !m_watcher->addPath(filePath)) {
+            qCWarning(lcShellEngine) << "could not re-arm the watch on" << filePath << "— hot reload is now disabled";
         }
         // The DIRECTORY watch can drop the same way: replacing or
         // recreating the shell.qml directory (atomic dir swaps, build
@@ -381,8 +409,9 @@ void ShellEngine::onFileChanged()
         // stop triggering reloads until restart. Re-arm it alongside the
         // file watch.
         const QString dirPath = QFileInfo(filePath).absolutePath();
-        if (!m_watcher->directories().contains(dirPath)) {
-            m_watcher->addPath(dirPath);
+        if (!m_watcher->directories().contains(dirPath) && !m_watcher->addPath(dirPath)) {
+            qCWarning(lcShellEngine) << "could not re-arm the watch on" << dirPath
+                                     << "— rename-style saves will not trigger a reload";
         }
     }
 

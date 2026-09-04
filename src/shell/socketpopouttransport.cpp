@@ -15,6 +15,11 @@
 
 namespace {
 Q_LOGGING_CATEGORY(lcSocketTransport, "phosphorshell.popout.socket")
+
+// Handle prefix. RoutingPopoutTransport keys close-routing on the handle
+// string and documents these as disjoint by construction, so this must not
+// collide with the layer transport's own prefix.
+constexpr QLatin1String kSocketHandlePrefix("socket-");
 }
 
 namespace PhosphorShellApp {
@@ -97,7 +102,7 @@ QString SocketPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& 
     qCDebug(lcSocketTransport) << "opening" << request.popoutId << "in the socket on" << screenName
                                << (fromRequest ? "(from request)" : "(primary fallback)");
 
-    m_openHandle = QStringLiteral("socket-%1").arg(++m_counter);
+    m_openHandle = kSocketHandlePrefix + QString::number(++m_counter);
     m_openScreenName = screenName;
     m_controller->setOpenScreen(screenName);
     // Deliberately returns the member rather than a pre-notify copy.

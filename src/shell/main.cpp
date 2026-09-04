@@ -39,6 +39,8 @@
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 
+#include "version.h"
+
 #include <QGuiApplication>
 #include <QIcon>
 #include <QLoggingCategory>
@@ -64,7 +66,7 @@ int main(int argc, char* argv[])
 
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("phosphor-shell"));
-    app.setApplicationVersion(QStringLiteral("0.1.0"));
+    app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setQuitOnLastWindowClosed(false);
 
     // Guarantee named freedesktop icons resolve (bar widgets use

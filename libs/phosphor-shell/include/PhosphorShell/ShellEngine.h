@@ -49,7 +49,33 @@ public:
     explicit ShellEngine(Deps deps, QObject* parent = nullptr);
     ~ShellEngine() override;
 
+    /// Build the shell from `shellUrl`. Returns true once the QML root and
+    /// every panel surface exist.
+    ///
+    /// SINGLE-SHOT for anything past the argument checks. The early guards
+    /// (empty URL, null dependency) leave the object untouched and CAN be
+    /// retried; a failure inside the build cannot, and a second call is
+    /// refused with `failed`. Recovery from that is a fresh ShellEngine, not
+    /// a retry on this one.
+    ///
+    /// On failure `failed` carries the reason. Note the two shapes it comes
+    /// in: a rejected call leaves a previously loaded shell running and
+    /// `engine()` non-null, while a failed build tears everything down and
+    /// leaves `engine()` null. `engine()` is the discriminator.
+    ///
+    /// After a failed FIRST load the file watcher stays armed, so editing
+    /// the file recovers. That recovery reports `reloaded`, never `loaded`:
+    /// `loaded` is emitted only by a successful load() call. A consumer that
+    /// mounts its UI on `loaded` alone stays dark after one bad shell.qml.
     bool load(const QUrl& shellUrl);
+
+    /// The current QML engine, or null before a successful load and after a
+    /// failed one.
+    ///
+    /// NON-OWNING, and NOT STABLE: every hot reload destroys this engine and
+    /// builds a fresh one, so a cached pointer dangles after the first file
+    /// save. Anything that must survive a reload belongs in an engine hook,
+    /// which is re-run against each new engine.
     [[nodiscard]] QQmlEngine* engine() const;
 
     /// Register a callback that fires whenever a fresh QQmlEngine is
@@ -64,6 +90,16 @@ public:
     /// A hook must tolerate being called for an engine that is destroyed
     /// moments later: hooks run before the QML is parsed, and a load that
     /// then fails tears that engine down immediately.
+    ///
+    /// Hooks cannot be removed, and the list is replayed on every reload, so
+    /// EVERYTHING A HOOK CAPTURES MUST OUTLIVE THIS ShellEngine. For a hook
+    /// capturing stack objects that means declaring them before the engine,
+    /// so reverse destruction takes the engine first.
+    ///
+    /// Registering a hook from inside a hook is permitted but does not join
+    /// the pass already running: addEngineHook invokes a late arrival itself
+    /// when an engine already exists, and the in-flight loop deliberately
+    /// does not pick it up, so it runs exactly once for that engine.
     using EngineHook = std::function<void(QQmlEngine*)>;
     void addEngineHook(EngineHook hook);
 
@@ -98,8 +134,21 @@ Q_SIGNALS:
     /// be idempotent.
     void aboutToReload();
 
+    /// A successful load() call. Emitted at most once per instance, and NOT
+    /// emitted when a shell that failed its first load later recovers
+    /// through the watcher; that reports `reloaded`. A consumer that mounts
+    /// on `loaded` alone stays dark after one bad shell.qml.
     void loaded();
+    /// A successful rebuild after a file or screen change, including the
+    /// first successful build following a failed load().
     void reloaded();
+    /// Something went wrong, with a human-readable reason.
+    ///
+    /// Two POSTCONDITIONS share this signal. A rejected call (empty URL,
+    /// null dependency, a second load()) leaves any running shell untouched
+    /// and `engine()` non-null. A failed build has already torn everything
+    /// down and leaves `engine()` null. Check `engine()` to tell them apart
+    /// before deciding whether to retry, fall back or exit.
     void failed(const QString& reason);
 
 private Q_SLOTS:

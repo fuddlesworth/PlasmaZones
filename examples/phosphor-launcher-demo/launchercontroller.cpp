@@ -10,9 +10,17 @@
 #include <PhosphorShellLauncher/CommandProvider.h>
 #include <PhosphorShellLauncher/LauncherModel.h>
 
-#include <QDebug>
+#include <QCoreApplication>
+#include <QLoggingCategory>
 
+#include <memory>
 #include <utility>
+
+namespace {
+// Categorised like the shell's own launcher log, so the demo's output can be
+// filtered through QT_LOGGING_RULES rather than always printing.
+Q_LOGGING_CATEGORY(lcLauncherDemo, "phosphorlauncherdemo")
+} // namespace
 
 namespace PhosphorLauncherDemo {
 
@@ -62,18 +70,27 @@ LauncherController::LauncherController(QObject* parent)
         m_registry.registerFactory(
             std::make_shared<FunctionProviderFactory>(id, name, QStringList{capability}, std::move(create)));
     };
-    reg(QStringLiteral("apps"), QStringLiteral("Applications"), QStringLiteral("apps.launch"), [](QObject* p) {
-        return new PhosphorShellLauncher::AppsProvider(p);
-    });
-    reg(QStringLiteral("calculator"), QStringLiteral("Calculator"), QStringLiteral("clipboard.write"), [](QObject* p) {
-        return new PhosphorShellLauncher::CalculatorProvider(p);
-    });
-    reg(QStringLiteral("command"), QStringLiteral("Run Command"), QStringLiteral("process.spawn"), [](QObject* p) {
-        return new PhosphorShellLauncher::CommandProvider(p);
-    });
-    reg(QStringLiteral("clipboard"), QStringLiteral("Clipboard"), QStringLiteral("clipboard.read"), [this](QObject* p) {
-        return new PhosphorShellLauncher::ClipboardProvider(m_clipboard, p);
-    });
+    reg(QStringLiteral("apps"), QCoreApplication::translate("PhosphorShellLauncher", "Applications"),
+        QStringLiteral("apps.launch"), [](QObject* p) {
+            return new PhosphorShellLauncher::AppsProvider(p);
+        });
+    // Same order as the shell's own registration, minus the windows
+    // provider this demo does not carry. Order is the pill order and the
+    // tie-break between equal best scores, so a different order here would
+    // make the demo rank results differently from the shell it exists to
+    // demonstrate.
+    reg(QStringLiteral("calculator"), QCoreApplication::translate("PhosphorShellLauncher", "Calculator"),
+        QStringLiteral("clipboard.write"), [](QObject* p) {
+            return new PhosphorShellLauncher::CalculatorProvider(p);
+        });
+    reg(QStringLiteral("clipboard"), QCoreApplication::translate("PhosphorShellLauncher", "Clipboard"),
+        QStringLiteral("clipboard.read"), [this](QObject* p) {
+            return new PhosphorShellLauncher::ClipboardProvider(m_clipboard, p);
+        });
+    reg(QStringLiteral("command"), QCoreApplication::translate("PhosphorShellLauncher", "Run Command"),
+        QStringLiteral("process.spawn"), [](QObject* p) {
+            return new PhosphorShellLauncher::CommandProvider(p);
+        });
 
     // Materialise each registered provider into the model. Registration
     // order is the pill order; a factory returning null is "unavailable
@@ -85,7 +102,7 @@ LauncherController::LauncherController(QObject* parent)
         }
         ILauncherProvider* provider = factory->createProvider(m_model);
         if (!provider) {
-            qInfo() << "launcher provider" << id << "unavailable in this environment";
+            qCInfo(lcLauncherDemo) << "launcher provider" << id << "unavailable in this environment";
             continue;
         }
         m_model->addProvider(provider);

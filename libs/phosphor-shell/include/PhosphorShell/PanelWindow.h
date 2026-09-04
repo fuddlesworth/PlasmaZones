@@ -173,6 +173,16 @@ public:
     /// The input-region depth to actually apply: `interactiveThickness`
     /// when set, otherwise `thickness`. One place so the "0 means follow
     /// thickness" rule cannot be spelled differently by two callers.
+    ///
+    /// Note WHICH of the two inputs a caller should expect to be live.
+    /// `interactiveThickness` is designed to change after materialization
+    /// (the bar's socket animates it) and ShellEngine re-applies the input
+    /// region when it does. `thickness` is not: the surface size, anchors
+    /// and exclusive zone are all fixed at materialization, so a panel that
+    /// changes `thickness` afterwards is already inconsistent with its own
+    /// surface, and the depth this returns will follow the new value on the
+    /// next re-apply. Treat a post-materialization `thickness` write as
+    /// unsupported rather than as a supported live property.
     [[nodiscard]] int effectiveInputThickness() const;
 
     [[nodiscard]] int cornerCarveRadius() const;

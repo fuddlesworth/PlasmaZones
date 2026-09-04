@@ -69,21 +69,26 @@ LauncherController::LauncherController(QObject* parent)
         m_registry.registerFactory(
             std::make_shared<FunctionProviderFactory>(id, name, QStringList{capability}, std::move(create)));
     };
-    reg(QStringLiteral("apps"), QStringLiteral("Applications"), QStringLiteral("apps.launch"), [](QObject* p) {
-        return new PhosphorShellLauncher::AppsProvider(p);
-    });
-    reg(QStringLiteral("windows"), QStringLiteral("Windows"), QStringLiteral("windows.activate"), [this](QObject* p) {
-        return new PhosphorShellLauncher::WindowsProvider(m_toplevels->model(), p);
-    });
-    reg(QStringLiteral("calculator"), QStringLiteral("Calculator"), QStringLiteral("clipboard.write"), [](QObject* p) {
-        return new PhosphorShellLauncher::CalculatorProvider(p);
-    });
-    reg(QStringLiteral("clipboard"), QStringLiteral("Clipboard"), QStringLiteral("clipboard.read"), [this](QObject* p) {
-        return new PhosphorShellLauncher::ClipboardProvider(m_clipboard, p);
-    });
-    reg(QStringLiteral("command"), QStringLiteral("Run Command"), QStringLiteral("process.spawn"), [](QObject* p) {
-        return new PhosphorShellLauncher::CommandProvider(p);
-    });
+    reg(QStringLiteral("apps"), QCoreApplication::translate("PhosphorShellLauncher", "Applications"),
+        QStringLiteral("apps.launch"), [](QObject* p) {
+            return new PhosphorShellLauncher::AppsProvider(p);
+        });
+    reg(QStringLiteral("windows"), QCoreApplication::translate("PhosphorShellLauncher", "Windows"),
+        QStringLiteral("windows.activate"), [this](QObject* p) {
+            return new PhosphorShellLauncher::WindowsProvider(m_toplevels->model(), p);
+        });
+    reg(QStringLiteral("calculator"), QCoreApplication::translate("PhosphorShellLauncher", "Calculator"),
+        QStringLiteral("clipboard.write"), [](QObject* p) {
+            return new PhosphorShellLauncher::CalculatorProvider(p);
+        });
+    reg(QStringLiteral("clipboard"), QCoreApplication::translate("PhosphorShellLauncher", "Clipboard"),
+        QStringLiteral("clipboard.read"), [this](QObject* p) {
+            return new PhosphorShellLauncher::ClipboardProvider(m_clipboard, p);
+        });
+    reg(QStringLiteral("command"), QCoreApplication::translate("PhosphorShellLauncher", "Run Command"),
+        QStringLiteral("process.spawn"), [](QObject* p) {
+            return new PhosphorShellLauncher::CommandProvider(p);
+        });
 
     for (const QString& id : m_registry.ids()) {
         const auto factory = m_registry.factory(id);
