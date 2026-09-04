@@ -409,7 +409,7 @@ FocusScope {
         // a delegate the host may never display.
         //
         // The `??` (nullish coalescing) operator requires Qt 6.4+ in
-        // QML's JS engine. The project pins QT_MIN_VERSION 6.6.0 (top-
+        // QML's JS engine. The project pins QT_MIN_VERSION 6.10.0 (top-
         // level CMakeLists.txt), so the operator is safe to use here.
         //
         // `Loader.item` is typed QObject, so the cast is what keeps this an

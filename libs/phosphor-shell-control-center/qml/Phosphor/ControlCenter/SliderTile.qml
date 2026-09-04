@@ -64,10 +64,30 @@ Item {
     // The user moved the slider. Carries the new value in [from, to].
     signal moved(real value)
     // The user activated the icon, which is the mute affordance on tiles
-    // that have one. Hosts without a mute concept leave it unconnected.
+    // that have one. Hosts without a mute concept leave it unconnected AND
+    // leave `hasIconAction` false, so the icon is presented as decoration
+    // rather than as a button that does nothing when pressed.
     signal iconActivated
+    // Whether the icon is an affordance at all. Brightness has no mute, so
+    // announcing its icon as a Mute button would tell a screen-reader user
+    // about a control that is not there.
+    property bool hasIconAction: false
     // The user asked for this tile's detail view.
     signal detailRequested
+
+    function _activateIcon(): void {
+        if (root.available && root.hasIconAction)
+            root.iconActivated();
+    }
+
+    function _activateIconFromKey(event: var): void {
+        // Autorepeat guard: a held key must not toggle mute twice. Same
+        // shape as Tile's own key activation.
+        if (event.isAutoRepeat)
+            return;
+        root._activateIcon();
+        event.accepted = true;
+    }
 
     // Width is a floor, not a target: the host stretches tiles to their
     // cell. Kept small enough that two half-width toggle cells, not this,
@@ -118,9 +138,22 @@ Item {
                     implicitWidth: 22
                     implicitHeight: 22
 
-                    Accessible.role: Accessible.Button
+                    // Announced as a button only when it is one. A tile with
+                    // no mute concept leaves hasIconAction false, and the icon
+                    // then reads as part of the tile rather than as a separate
+                    // control that does nothing.
+                    Accessible.role: root.hasIconAction ? Accessible.Button : Accessible.Graphic
+                    Accessible.ignored: !root.hasIconAction
                     Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
-                    Accessible.onPressAction: root.iconActivated()
+                    Accessible.onPressAction: root._activateIcon()
+
+                    // Reachable by keyboard, like DetailPanel's back button
+                    // and Tile's own surface. A control with a Button role
+                    // that only pointers can reach is not usable.
+                    activeFocusOnTab: root.available && root.hasIconAction
+                    Keys.onSpacePressed: event => root._activateIconFromKey(event)
+                    Keys.onReturnPressed: event => root._activateIconFromKey(event)
+                    Keys.onEnterPressed: event => root._activateIconFromKey(event)
 
                     Kirigami.Icon {
                         anchors.fill: parent
@@ -129,13 +162,13 @@ Item {
                     }
 
                     HoverHandler {
-                        enabled: root.available
+                        enabled: root.available && root.hasIconAction
                         cursorShape: Qt.PointingHandCursor
                     }
 
                     TapHandler {
-                        enabled: root.available
-                        onTapped: root.iconActivated()
+                        enabled: root.available && root.hasIconAction
+                        onTapped: root._activateIcon()
                     }
                 }
 

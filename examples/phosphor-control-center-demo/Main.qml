@@ -29,15 +29,18 @@ Window {
     Rectangle {
         anchors.fill: parent
 
+        // Derived from the theme's brand stops rather than hardcoded, the
+        // same way the launcher demo builds its backdrop, so both demos
+        // follow a palette change instead of one of them staying fixed.
         gradient: Gradient {
             GradientStop {
                 position: 0
-                color: "#0B1730"
+                color: Qt.darker(Theme.brand_stop_0, 1.6)
             }
 
             GradientStop {
                 position: 1
-                color: "#050916"
+                color: Qt.darker(Theme.brand_stop_2, 1.25)
             }
         }
 
@@ -78,10 +81,10 @@ Window {
 
                     onTileResolved: (tileId, created) => {
                         if (!created)
-                            log.append(qsTr("%1: unavailable on this machine").arg(tileId));
+                            log.append(qsTr("%1 is unavailable on this machine").arg(tileId));
                     }
-                    onDetailOpened: tileId => log.append(qsTr("%1: detail opened").arg(tileId))
-                    onDetailClosed: tileId => log.append(qsTr("%1: detail closed").arg(tileId))
+                    onDetailOpened: tileId => log.append(qsTr("%1 detail opened").arg(tileId))
+                    onDetailClosed: tileId => log.append(qsTr("%1 detail closed").arg(tileId))
                 }
             }
 

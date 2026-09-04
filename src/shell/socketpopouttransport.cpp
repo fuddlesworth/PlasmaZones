@@ -131,10 +131,8 @@ void SocketPopoutTransport::closeSurface(const QString& handle)
     if (handle.isEmpty() || handle != m_openHandle) {
         return;
     }
-    m_openHandle.clear();
-    if (m_controller) {
-        m_controller->setOpenScreen({});
-    }
+    // Same three steps as drain(), which is what this is for a live handle.
+    drain();
 }
 
 void SocketPopoutTransport::setSurfaceDismissedCallback(std::function<void(const QString&)> callback)

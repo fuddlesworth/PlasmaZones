@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.ControlCenter.BrightnessTile, the display brightness slider.
 //
-// Drives the first Display-kind device: the internal panel backlight.
-// Keyboard backlights and external DDC/CI monitors are deliberately not
-// what a tile labelled "Brightness" writes, so they are filtered out here
-// and belong to the detail view, which can list every device.
+// Drives the first Display-kind device: the internal panel backlight, or
+// an external display when there is no internal panel. Keyboard backlights
+// are deliberately not what a tile labelled "Brightness" writes, so they are
+// filtered out here and belong to the detail view, which can list every
+// device.
 //
 // A desktop with no internal panel and no DDC/CI monitor has no device at
 // all, and the tile goes inert rather than pretending to a control.

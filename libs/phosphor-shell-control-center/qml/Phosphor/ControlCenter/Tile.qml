@@ -106,6 +106,9 @@ Item {
             return;
         ripple.start(root.width / 2, root.height / 2);
         root.toggled();
+        // Accept, so a handled activation does not also propagate to an
+        // ancestor Keys handler and fire twice.
+        event.accepted = true;
     }
 
     Rectangle {

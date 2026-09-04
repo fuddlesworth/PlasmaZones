@@ -77,7 +77,10 @@ Tile {
         // qsTr's own plural form, not KDE's i18np: the phosphor-* libraries
         // are standalone and translate through Qt, the way every sibling
         // shell widget does.
-        return qsTr("%n device(s)", "", root._connectedCount);
+        // Qt uses the SOURCE string verbatim when no catalog is loaded, so a
+        // "%n device(s)" msgid renders literally as "2 device(s)" in an
+        // untranslated session. Branch explicitly instead.
+        return root._connectedCount === 1 ? qsTr("1 device") : qsTr("%1 devices").arg(root._connectedCount);
     }
     active: root._powered
     // No adapter means nothing to power on.

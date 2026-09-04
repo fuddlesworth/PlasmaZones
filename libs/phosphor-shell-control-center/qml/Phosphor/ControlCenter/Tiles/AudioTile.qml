@@ -51,6 +51,9 @@ SliderTile {
     to: 100
     value: Math.round(root._amplitude * 100)
     muted: root.node ? root.node.muted : false
+    // This tile's icon really is a mute button, so it is announced and
+    // reachable as one. Brightness leaves this false.
+    hasIconAction: true
     // Gate on a RESOLVED sink, not merely a live PipeWire connection: with
     // no sink there is nothing to drive, and a slider sitting at zero would
     // be a false readout rather than an absent one.

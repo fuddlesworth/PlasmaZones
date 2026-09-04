@@ -63,7 +63,7 @@ Window {
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: Tokens.spacing_l
-            text: qsTr("Type to search · these are your real apps, clipboard and PATH · Enter launches")
+            text: qsTr("Type to search. These are your real apps, clipboard and PATH, and Enter launches.")
             color: Theme.on_surface_variant
             font.family: Tokens.font_family
             font.pixelSize: Tokens.font_size_body_s
