@@ -40,8 +40,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 # freedesktop icon names through QIcon::fromTheme and falls back to its own
 # glyph for a name the theme lacks. REQUIRED, not QUIET: a missing Kirigami
 # should fail the configure rather than yield a surface whose every glyph
-# silently never loads. This is the third shell-tier library requiring KF6
-# Kirigami, alongside phosphor-shell-bar and phosphor-shell-power.
+# silently never loads. This is one of four shell-tier libraries requiring KF6
+# Kirigami, alongside phosphor-shell-bar, phosphor-shell-power and phosphor-shell-launcher.
 find_package(KF6Kirigami REQUIRED)
 
 # The tiles import Phosphor.Theme (tokens) and Phosphor.Widgets

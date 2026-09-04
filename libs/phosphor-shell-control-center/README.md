@@ -92,12 +92,22 @@ A tile is authored against the shared chrome:
 
 ```qml
 Tile {
-    iconName: "network-wireless"
+    id: root
+
+    // NetworkHost is registered as a creatable type, not a singleton, so
+    // the tile declares its own.
+    NetworkHost {
+        id: host
+    }
+
+    iconName: host.wirelessEnabled ? "network-wireless" : "network-wireless-disconnected"
     label: qsTr("Wi-Fi")
-    sublabel: NetworkHost.activeSsid
-    active: NetworkHost.wirelessEnabled
+    sublabel: host.connectivity === NetworkHost.Full ? qsTr("Connected") : qsTr("Not connected")
+    active: host.wirelessEnabled
     hasDetail: true
-    onToggled: NetworkHost.setWirelessEnabled(!active)
+    // No local latch: write the property and let the service's own change
+    // signal drive `active` back.
+    onToggled: host.wirelessEnabled = !host.wirelessEnabled
 }
 ```
 

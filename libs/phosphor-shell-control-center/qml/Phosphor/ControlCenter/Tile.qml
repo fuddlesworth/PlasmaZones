@@ -10,11 +10,13 @@
 // `sublabel`, `active`, and whatever detail content they carry.
 //
 //   Tile {
+//       // NetworkHost is a creatable type, not a singleton.
+//       NetworkHost { id: host }
 //       iconName: "network-wireless"
 //       label: qsTr("Wi-Fi")
-//       sublabel: NetworkHost.activeSsid
-//       active: NetworkHost.wirelessEnabled
-//       onToggled: NetworkHost.setWirelessEnabled(!active)
+//       sublabel: host.connectivity === NetworkHost.Full ? qsTr("Connected") : qsTr("Not connected")
+//       active: host.wirelessEnabled
+//       onToggled: host.wirelessEnabled = !host.wirelessEnabled
 //       hasDetail: true
 //   }
 //
@@ -70,13 +72,20 @@ Item {
     // An unavailable tile reads as dimmed rather than absent. Item.enabled
     // does not suppress pointer handlers, so every handler below is gated
     // on `available` explicitly.
-    opacity: root.available ? 1 : 0.38
+    opacity: root.available ? 1 : StateLayer.disabled_content
 
-    activeFocusOnTab: root.available
+    // Deliberately NOT gated on `available`. Dropping out of the tab order
+    // when a service disappears would shift focus order under the user,
+    // which is the instability the fixed-position layout above exists to
+    // avoid. The tile stays reachable and announceable; `_activate` and
+    // `_activateFromKey` already refuse when it is unavailable.
+    activeFocusOnTab: true
 
     Accessible.role: Accessible.Button
     Accessible.name: root.label
-    Accessible.description: root.sublabel
+    // Availability is part of what a screen reader must convey: without it
+    // an unavailable tile announces identically to a working one.
+    Accessible.description: root.available ? root.sublabel : (root.sublabel.length > 0 ? qsTr("%1 — unavailable").arg(root.sublabel) : qsTr("Unavailable"))
     Accessible.onPressAction: root._activate()
 
     Keys.onSpacePressed: event => root._activateFromKey(event)
@@ -164,7 +173,7 @@ Item {
                     Accessible.ignored: true
                     text: root.sublabel
                     color: surface.contentColor
-                    opacity: 0.75
+                    opacity: StateLayer.secondary_content
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_body_s
                     elide: Text.ElideRight

@@ -74,7 +74,7 @@ Item {
     // set the grid's natural width.
     implicitWidth: 160
     implicitHeight: 72
-    opacity: root.available ? 1 : 0.38
+    opacity: root.available ? 1 : StateLayer.disabled_content
 
     readonly property string _readout: {
         if (root.readout !== "")
@@ -154,7 +154,7 @@ Item {
                     Accessible.ignored: true
                     text: root._readout
                     color: surface.contentColor
-                    opacity: 0.75
+                    opacity: StateLayer.secondary_content
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_body_s
                 }

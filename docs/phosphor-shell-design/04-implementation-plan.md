@@ -1062,9 +1062,12 @@ surface of its own, but it still goes through `PopoutController`:
 `ControlCenterController.openScreen`, routed by popout id (never by anchor,
 because `BarCenter` is the request default). That is what lets the Modal
 power menu close it and refuses it while a modal is up, with no per-surface
-bookkeeping in shell.qml. `LayerPopoutTransport` still centres everything
-and warns on positional anchors; bar-anchored placement for
-surface-backed popouts remains unbuilt.
+bookkeeping in shell.qml. `LayerPopoutTransport` now maps a request's
+anchor onto a `PopoutHost` placement, so a bar-anchored popout hangs below
+the reserved top band that `ShellEngine::reservedMarginsFor()` reports.
+Centring is the fallback rather than the only behaviour: `AtPointer` still
+centres with a warning, and so does any bar anchor when no reserved-margins
+provider is installed, which is warned once per open.
 
 **A trap worth recording:** `screenOf()` returns a `QScreen*` to QML and a
 `QScreen` has no QObject parent, so QML's default for an invokable return is

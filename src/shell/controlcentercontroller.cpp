@@ -7,8 +7,8 @@
 
 #include <PhosphorServiceIdle/IdleService.h>
 
-#include <QDebug>
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -18,6 +18,13 @@
 #include <QVariantMap>
 
 #include <memory>
+
+namespace {
+// Categorised so the control center's diagnostics can be filtered through
+// QT_LOGGING_RULES like every sibling in the shell process. The bar
+// controller and its widget factory use lcBar for the same messages.
+Q_LOGGING_CATEGORY(lcControlCenter, "phosphorshell.controlcenter")
+} // namespace
 
 namespace PhosphorShellApp {
 
@@ -36,13 +43,20 @@ ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleServic
     // surface a plugin will.
     const auto reg = [this](const QString& id, const QString& name, const QString& type, const QString& capability,
                             const QVariantMap& initialProperties = {}) {
-        m_registry.registerFactory(std::make_shared<QmlComponentTileFactory>(id, name, kModule, type, initialProperties,
-                                                                             QStringList{capability}));
+        // Only advertise what actually registered. A duplicate id is refused
+        // by the registry, and appending regardless would list it twice in
+        // tileIds while createTile resolved both entries to the first
+        // factory, rendering the same tile twice.
+        if (!m_registry.registerFactory(std::make_shared<QmlComponentTileFactory>(
+                id, name, kModule, type, initialProperties, QStringList{capability}))) {
+            qCWarning(lcControlCenter) << "duplicate control-center tile id refused:" << id;
+            return;
+        }
         m_tileIds.append(id);
     };
 
     // Order here is the order they appear in the grid. The two sliders sit
-    // last because they span the full width, so the four half-width
+    // last because they span the full width, so the three half-width
     // toggles pack cleanly above them.
     reg(QStringLiteral("network"), QStringLiteral("Wi-Fi"), QStringLiteral("NetworkTile"),
         QStringLiteral("network.write"));
@@ -109,12 +123,12 @@ QQuickItem* ControlCenterController::createTile(const QString& id, QQuickItem* p
 {
     const auto factory = m_registry.factory(id);
     if (!factory) {
-        qWarning() << "ControlCenterController: no tile registered for id" << id;
+        qCWarning(lcControlCenter) << "no tile registered for id" << id;
         return nullptr;
     }
     QQmlEngine* engine = parent ? qmlEngine(parent) : nullptr;
     if (!engine) {
-        qWarning() << "ControlCenterController: no QML engine resolvable from parent for id" << id;
+        qCWarning(lcControlCenter) << "no QML engine resolvable from parent for id" << id;
         return nullptr;
     }
     return factory->createTile(engine, parent);

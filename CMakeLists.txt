@@ -169,7 +169,7 @@ option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in pro
 if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
     message(FATAL_ERROR
         "BUILD_PHOSPHOR_SHELL requires USE_KDE_FRAMEWORKS=ON: the shell tier "
-        "(libs/phosphor-shell-bar, libs/phosphor-shell-power) depends on KF6 "
+        "(libs/phosphor-shell-bar, libs/phosphor-shell-power, libs/phosphor-shell-control-center, libs/phosphor-shell-launcher) depends on KF6 "
         "Kirigami for icon rendering and has no Qt-only fallback.")
 endif()
 
@@ -397,7 +397,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
     add_subdirectory(libs/phosphor-shell-control-center) # Phosphor.ControlCenter tile surface (Phase 4.4); depends on theme + widgets + Kirigami
     add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
-    add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the three shell-tier libs that also require KF6 Kirigami
+    add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the four shell-tier libs that also require KF6 Kirigami
     add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
 endif()
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
