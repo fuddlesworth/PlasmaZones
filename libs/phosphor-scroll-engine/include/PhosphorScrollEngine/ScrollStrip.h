@@ -450,18 +450,31 @@ public:
     /// to a Fixed of the same extent and lose its anchor. A TABBED column
     /// toggles in the column's own space, the cycle and adjust verbs' rule.
     ///
-    /// KNOWN GAP, recorded because the fix is bigger than the verb: the
-    /// Fixed(budget) written here is the only memory that the tile is
-    /// maximized, and reconcileWindowSize overwrites it with whatever the
-    /// client acks. A client with size increments (a terminal) acks a
-    /// quantised height short of the applied one, so the intent stops reading
-    /// as maximized and the un-maximize arm is unreachable for the life of
-    /// that window; Equalize Window Heights is the way back to Auto. Refusing
-    /// the ack in reconcile is NOT the fix — it makes onWindowResized's
-    /// refused-ack branch schedule a retile that re-applies the same rect the
-    /// client quantises again, which is a self-driving loop. The real fix is a
-    /// per-tile latch that travels with the tile the way the width axis uses
-    /// m_preMaximizeColumnIdx, which is why that slot exists there.
+    /// The Fixed(budget) written here IS the memory that the tile is
+    /// maximized, and reconcileWindowSize overwrites the stored height with
+    /// whatever size a resize settles on. That is safe, and the reason is
+    /// worth writing down because it is not obvious from this file: reconcile
+    /// is reached from exactly one place, ScrollEngine::onWindowResized, which
+    /// the daemon calls only from WindowTrackingAdaptor::notifyWindowResized,
+    /// which the effect fires only from windowFinishUserMovedResized gated on
+    /// KWin's isUserResize(). So the ONLY thing that can overwrite the intent
+    /// is a user's finished interactive resize, and a user who has just
+    /// dragged this window to a size of their own SHOULD stop reading as
+    /// maximized. A client resizing itself — a terminal quantising to its
+    /// character cell — is never reported to the daemon at all and cannot
+    /// erase the maximize.
+    ///
+    /// Do not "fix" this by refusing the ack in reconcile. That makes
+    /// onWindowResized's refused-ack branch schedule a retile which re-applies
+    /// the same rect, and a client that will not take it quantises again: a
+    /// self-driving loop, which is what that branch's own comment describes.
+    ///
+    /// What this verb genuinely lacks is a remembered height to RESTORE, which
+    /// is why the un-maximize arm writes Auto rather than the height the tile
+    /// had before. The width axis keeps one in m_preMaximizeColumnIdx +
+    /// m_preMaximizeWidth; note that slot is a restore value only, since
+    /// toggleMaximizeColumnAt detects "am I maximized" from resolved pixels
+    /// exactly as this verb does.
     bool toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& params);
     /// The active tile at its shortest: the smallest preset height, or
     /// MinWindowHeightFraction of the work area's cross extent when the preset

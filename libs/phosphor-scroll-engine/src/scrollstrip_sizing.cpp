@@ -886,23 +886,30 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         // indicator eats the main axis or is not placed within the column.
         const WindowHeight ackedH =
             WindowHeight::makeFixed(params.axis.crossSize(ackedSize) + tabbedCrossReservationPx(col, params));
-        // The acked height is recorded even when it is SHORT of the one just
-        // applied, and deliberately so. A client with size increments (a
-        // terminal) acks a quantised height, and that ack is the only thing
-        // that lets the pair converge: refusing to record it returns false
-        // from here, which sends onWindowResized into its refused-ack branch,
-        // and that branch only excuses a displacement when the client is
-        // pinned LARGER than the applied rect (pinnedAtMinW/H both require
-        // newFrame > lastApplied). A short ack is not explained, so it
-        // schedules a retile, which re-applies the same rect, which the client
-        // quantises again — the self-driving loop that branch's own comment
+        // The settled height is recorded even when it is SHORT of the one just
+        // applied, and deliberately so on two counts.
+        //
+        // First, what reaches here is a USER's finished interactive resize and
+        // nothing else: onWindowResized is called only from the daemon's
+        // notifyWindowResized, which the effect fires only from
+        // windowFinishUserMovedResized gated on KWin's isUserResize(). A
+        // client resizing itself is never reported, so this arm cannot be a
+        // client overruling the engine — it is the user choosing a size, and
+        // recording it is the whole point of the function.
+        //
+        // Second, refusing to record it would not even be safe: returning
+        // false sends onWindowResized into its refused-ack branch, which only
+        // excuses a displacement when the client is pinned LARGER than the
+        // applied rect (pinnedAtMinW/H both require newFrame > lastApplied).
+        // A short frame is unexplained, so it schedules a retile, which
+        // re-applies the same rect, which a client that will not take it
+        // refuses again — the self-driving loop that branch's own comment
         // describes.
         //
-        // The cost is that toggleMaximizeActiveWindowHeight loses its only
-        // memory that the tile was maximized, since the Fixed(budget) it wrote
-        // is what gets overwritten. See that verb's note in ScrollStrip.h: the
-        // fix is a per-tile latch that travels with the tile, not a refusal
-        // here.
+        // toggleMaximizeActiveWindowHeight reads this intent back to decide
+        // whether the tile is maximized, so a user resize legitimately makes
+        // it stop reading as maximized. That is the intended interaction, not
+        // a casualty of one; ScrollStrip.h carries the full note.
         //
         // The dragged tab becomes the column's sole height owner, the same
         // claim the keyboard verbs make: without it a drag on tab B would
