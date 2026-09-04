@@ -514,32 +514,42 @@
         <translation>Развернуть до краёв экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
+        <source>Maximize Window Height</source>
+        <translation>Развернуть окно по высоте</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="444"/>
+        <source>Grow Window into Empty Space</source>
+        <translation>Расширить окно на свободное место</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="454"/>
         <source>Focus First Window in Column</source>
         <translation>Фокус на первое окно в столбце</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="451"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="459"/>
         <source>Focus Last Window in Column</source>
         <translation>Фокус на последнее окно в столбце</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="457"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="465"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
         <translation>Фокус на предыдущий столбец с остановкой у края</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="463"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="471"/>
         <source>Focus Next Column, Stopping at the Edge</source>
         <translation>Фокус на следующий столбец с остановкой у края</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="469"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="477"/>
         <source>Focus Previous Column, Wrapping</source>
         <translation>Фокус на предыдущий столбец по кругу</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="483"/>
         <source>Focus Next Column, Wrapping</source>
         <translation>Фокус на следующий столбец по кругу</translation>
     </message>
@@ -609,47 +619,52 @@
         <translation>Уменьшить высоту окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
-        <source>Reset Window Heights</source>
-        <translation>Сбросить высоты окон</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="449"/>
         <source>Center Visible Columns</source>
         <translation>Центрировать видимые столбцы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="488"/>
         <source>Move Window to Floating</source>
         <translation>Сделать окно плавающим</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="485"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="493"/>
         <source>Move Window to Tiled</source>
         <translation>Вернуть окно в мозаику</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="504"/>
         <source>Scroll View Back a Page</source>
         <translation>Прокрутить вид на страницу назад</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="509"/>
         <source>Scroll View Forward a Page</source>
         <translation>Прокрутить вид на страницу вперёд</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="514"/>
         <source>Equalize Column Widths</source>
         <translation>Выровнять ширину столбцов</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="511"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="519"/>
         <source>Minimize Column Width</source>
         <translation>Минимизировать ширину столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="518"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="524"/>
+        <source>Equalize Window Heights</source>
+        <translation>Выровнять высоту окон</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="529"/>
+        <source>Minimize Window Height</source>
+        <translation>Минимизировать высоту окна</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="536"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>Открыть справку по комбинациям клавиш</translation>
@@ -819,7 +834,7 @@
         <translation>Вытолкнуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="407"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="422"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
         <translation>Прокручивает вид так, чтобы активный столбец оказался по центру экрана.</translation>
     </message>
@@ -829,7 +844,7 @@
         <translation>Переключает активный столбец между стопкой окон и вкладками.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="421"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="436"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
         <translation>Переводит активное окно в полноэкранный режим, но окно остаётся на своём месте в столбце и не закрывает экран. Нажмите ещё раз для выхода.</translation>
     </message>
@@ -869,42 +884,32 @@
         <translation>Переключает активный столбец между заполнением рабочей области и меньшим размером.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="394"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
         <translation>Переключает активное окно по предустановкам размера, заданным для экрана, в пределах его столбца.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="398"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
         <translation>Переключает активное окно по предустановкам размера, заданным для экрана, в пределах его столбца в обратном порядке.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
         <source>Grows the focused window within its column by the configured step.</source>
         <translation>Увеличивает активное окно в пределах его столбца на заданный шаг.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="391"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="395"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
         <translation>Уменьшает активное окно в пределах его столбца на заданный шаг.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
-        <source>Clears manual window sizes in the focused column so its windows share the column&apos;s space evenly.</source>
-        <translation>Сбрасывает заданные вручную размеры окон в активном столбце, чтобы окна поделили его пространство поровну.</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="377"/>
-        <source>Grow into Empty Space</source>
-        <translation>Расширить на свободное место</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="378"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
         <translation>Расширяет активный столбец так, чтобы он занял свободное место на экране. Другие столбцы сохраняют размер.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
         <translation>Прокручивает вид так, чтобы полностью видимые столбцы располагались по центру как группа.</translation>
     </message>
@@ -919,48 +924,48 @@
         <translation>Переводит фокус на последнее окно активного столбца.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="427"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="442"/>
         <source>Move to Floating</source>
         <translation>Сделать плавающим</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="443"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
         <translation>Делает активное окно плавающим. В отличие от переключателя плавания, никогда не возвращает окно в мозаику.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="431"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="446"/>
         <source>Move to Tiled</source>
         <translation>Вернуть в мозаику</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
         <translation>Возвращает активное плавающее окно в его столбец. В отличие от переключателя плавания, никогда не делает окно плавающим.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="455"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="470"/>
         <source>Applies the numbered layout to this screen.</source>
         <translation>Применяет пронумерованную раскладку к этому экрану.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="456"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
         <source>Applies the numbered column template to this screen.</source>
         <translation>Применяет пронумерованный шаблон столбцов к этому экрану.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="471"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="486"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
         <translation>Отправляет активное окно в пронумерованное место на этом экране.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="611"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="626"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation>Применить раскладку %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
         <source>Cycle Window Height</source>
         <translation>Переключить высоту окна</translation>
     </message>
@@ -1000,7 +1005,7 @@
         <translation>Выделяет активное окно из общего столбца в сторону конца ленты. Окно, находящееся в столбце одно, вместо этого сливается со следующим столбцом.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="397"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
         <source>Cycle Window Height Back</source>
         <translation>Переключить высоту окна назад</translation>
     </message>
@@ -1050,57 +1055,77 @@
         <translation>Переключает активный столбец между заполнением всей рабочей области без зазоров и его обычным размером. Именно состояние заполнения показывает кнопка разворачивания окна.</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
+        <source>Toggles the focused window between filling its column and the height it had before, or an even share with the other windows there if it had none.</source>
+        <translation>Переключает активное окно между заполнением своего столбца и прежней высотой. Если прежней высоты не было, окно получает равную долю с другими окнами в этом столбце.</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
+        <source>Grows the focused window to fill the empty space left in its column. The other windows there keep their size.</source>
+        <translation>Расширяет активное окно так, чтобы оно заняло свободное место в своём столбце. Другие окна в нём сохраняют размер.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
+        <source>Shrinks the focused window to the smallest size preset.</source>
+        <translation>Уменьшает активное окно до наименьшей предустановки размера.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
+        <source>Gives every window in the focused column an equal share of it.</source>
+        <translation>Даёт каждому окну в активном столбце равную его долю.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="428"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Прокручивает вид на целый экран к началу ленты. Фокус остаётся на месте.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="417"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="432"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
         <translation>Прокручивает вид на целый экран к концу ленты. Фокус остаётся на месте.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="384"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="388"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
         <translation>Даёт каждому полностью видимому столбцу равную долю экрана. Столбцы, обрезанные краем, остаются без изменений.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="382"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
         <translation>Уменьшает активный столбец до наименьшей предустановки размера.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="577"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
         <source>Arrows</source>
         <translation>Стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="620"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="635"/>
         <source>Move Window</source>
         <translation>Переместить окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="627"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="642"/>
         <source>Move Focus</source>
         <translation>Переместить фокус</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="632"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="647"/>
         <source>Swap Window</source>
         <translation>Поменять окно местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="637"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="652"/>
         <source>Span Window</source>
         <translation>Растянуть окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="643"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="658"/>
         <source>Swap Screens</source>
         <translation>Поменять экраны местами</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1090"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1108"/>
         <source>Apply Layout %1</source>
         <translation>Применить раскладку %1</translation>
     </message>
@@ -1541,7 +1566,7 @@
         <translation>Службы не инициализированы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1108"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="1126"/>
         <source>Snap to Zone %1</source>
         <translation>Прилепить к зоне %1</translation>
     </message>
@@ -1995,6 +2020,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="60"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="43"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="162"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="390"/>
         <source>Tiling</source>
         <translation>Мозаичное размещение</translation>
     </message>
@@ -2009,7 +2035,7 @@
         <translation>Контекст</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="478"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="493"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="211"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
@@ -2265,7 +2291,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="212"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="466"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="481"/>
         <source>Zones</source>
         <translation>Зоны</translation>
     </message>
@@ -2430,6 +2456,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="30"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="40"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="393"/>
         <source>Snapping</source>
         <translation>Прилипание</translation>
     </message>
@@ -6852,7 +6879,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="50"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="313"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="522"/>
         <source>Keyboard Shortcuts</source>
         <translation>Комбинации клавиш</translation>
     </message>
@@ -9831,7 +9858,7 @@
         <translation>Изменение размера прилипанием (предпросмотр перетаскивания)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="616"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="631"/>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="496"/>
@@ -10088,7 +10115,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="450"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="465"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="214"/>
         <source>Layouts</source>
         <translation>Раскладки</translation>
@@ -10198,6 +10225,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="392"/>
         <source>Scrolling</source>
         <translation>Прокрутка</translation>
     </message>
@@ -20697,35 +20725,46 @@
         <translation>Выбор цвета</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="444"/>
         <source>Dismiss shortcut cheatsheet</source>
         <translation>Закрыть шпаргалку по сочетаниям клавиш</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="534"/>
+        <source>Filtered for %1 mode on this screen</source>
+        <comment>which placement mode the listed shortcuts belong to</comment>
+        <translation>Отфильтровано по режиму «%1» на этом экране</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="575"/>
         <source>No shortcuts apply in the current mode.</source>
         <translation>В текущем режиме нет действующих сочетаний клавиш.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="398"/>
-        <source>%1 (continued)</source>
-        <comment>category heading for a section that continues from the previous column</comment>
-        <translation>%1 (продолжение)</translation>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="702"/>
+        <source>Press Escape to close</source>
+        <translation>Нажмите Escape, чтобы закрыть</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="159"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, keys</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="159"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, state</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="167"/>
+        <source>Match, %1</source>
+        <comment>a shortcut row that answers the current search, then the row itself</comment>
+        <translation>Совпадение, %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetRow.qml.cpp" line="300"/>
         <source>Unassigned</source>
         <translation>Не назначено</translation>
     </message>
@@ -20742,7 +20781,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="382"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="791"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="796"/>
         <source>Dismiss notification</source>
         <translation>Закрыть уведомление</translation>
     </message>
@@ -20929,7 +20968,7 @@
         <translation>Поменяно местами с главным окном</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
         <source>Resized</source>
         <comment>@info:status the window was resized</comment>
         <translation>Размер изменён</translation>
@@ -21192,74 +21231,79 @@
         <translation>Раскладка обновлена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="557"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="559"/>
         <source>Column widths equalized</source>
         <translation>Ширины столбцов выровнены</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="561"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
+        <source>Window heights equalized</source>
+        <translation>Высоты окон выровнены</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="566"/>
         <source>Tabbed display toggled</source>
         <translation>Отображение вкладками переключено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="568"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="573"/>
         <source>Windowed fullscreen off</source>
         <translation>Полный экран в окне выключен</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="570"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="575"/>
         <source>Windowed fullscreen on</source>
         <translation>Полный экран в окне включён</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="572"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="577"/>
         <source>Window moved between columns</source>
         <translation>Окно перемещено между столбцами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="574"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
         <source>Window expelled into its own column</source>
         <translation>Окно вытолкнуто в собственный столбец</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="584"/>
         <source>Visible columns centered</source>
         <translation>Видимые столбцы центрированы</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="581"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="586"/>
         <source>Column centered</source>
         <translation>Столбец центрирован</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="586"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="591"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
         <translation>Прокручено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="589"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="594"/>
         <source>Virtual screens swapped</source>
         <translation>Виртуальные экраны поменяны местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="592"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="597"/>
         <source>Virtual screens rotated</source>
         <translation>Виртуальные экраны повёрнуты</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="594"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="599"/>
         <source>Action completed</source>
         <translation>Действие выполнено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="651"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="656"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="688"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="693"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation>Краткий отклик на действия с окнами и раскладками с клавиатуры</translation>
     </message>
@@ -23305,6 +23349,51 @@
         <source>Previous Tab</source>
         <comment>@title outgoing tab in the animation preview</comment>
         <translation>Предыдущая вкладка</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>Hide unassigned actions</source>
+        <translation>Скрыть неназначенные действия</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>%n unassigned action matches</source>
+        <translation>
+            <numerusform>%n неназначенное действие совпадает</numerusform>
+            <numerusform>%n неназначенных действия совпадают</numerusform>
+            <numerusform>%n неназначенных действий совпадают</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/ui/CheatsheetGroup.qml.cpp" line="180"/>
+        <source>%n unassigned action</source>
+        <translation>
+            <numerusform>%n неназначенное действие</numerusform>
+            <numerusform>%n неназначенных действия</numerusform>
+            <numerusform>%n неназначенных действий</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="105"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="116"/>
+        <source>Filter shortcuts</source>
+        <translation>Фильтровать сочетания клавиш</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="136"/>
+        <source>Clear the filter</source>
+        <translation>Очистить фильтр</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>
+        <source>No matches</source>
+        <translation>Нет совпадений</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetSearchField.qml.cpp" line="159"/>
+        <source>%1 of %2</source>
+        <comment>matching shortcuts out of the total</comment>
+        <translation>%1 из %2</translation>
     </message>
 </context>
 </TS>
