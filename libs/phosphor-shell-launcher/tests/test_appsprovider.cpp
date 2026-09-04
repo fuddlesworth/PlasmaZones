@@ -10,6 +10,8 @@
 #include <PhosphorShellLauncher/AppsProvider.h>
 
 #include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QtTest/QtTest>
 
@@ -41,7 +43,44 @@ private Q_SLOTS:
     void capsTheResultCount();
     void rowsCarryTheEntryFields();
     void activateRefusesUnknownAndAlternate();
+    void anInstalledApplicationAppearsWithoutARestart();
 };
+
+// The directory watcher is what makes an install visible without restarting
+// the shell, and it was the one wiring in this provider with no coverage: a
+// deleted connect, a watch never armed on a directory that did not exist at
+// construction, or a debounce that never fires all look identical to a suite
+// that only ever scans once.
+void TestAppsProvider::anInstalledApplicationAppearsWithoutARestart()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // Deliberately does not exist yet at construction: a fresh account has no
+    // ~/.local/share/applications until the first install creates it, and a
+    // watch armed only in the constructor would never cover it.
+    const QString appsDir = QDir(dir.path()).filePath(QStringLiteral("applications"));
+
+    AppsProvider provider({appsDir}, QString(), {QStringLiteral("KDE")});
+    provider.setQuery(QStringLiteral("late"));
+    QVERIFY(provider.results().isEmpty());
+
+    QVERIFY(QDir().mkpath(appsDir));
+    // The provider re-arms its watches on every rescan, so ask for one now
+    // that the directory exists, the way an existing sibling directory's
+    // change would.
+    provider.rescan();
+
+    QFile f(QDir(appsDir).filePath(QStringLiteral("late-arrival.desktop")));
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    f.write("[Desktop Entry]\nType=Application\nName=Late Arrival\nExec=true\n");
+    f.close();
+
+    QSignalSpy spy(&provider, &AppsProvider::resultsChanged);
+    // The watcher fires, the debounce coalesces, and the rescan follows.
+    QVERIFY(spy.wait(5000));
+    QCOMPARE(provider.results().size(), 1);
+    QCOMPARE(provider.results().first().title, QStringLiteral("Late Arrival"));
+}
 
 void TestAppsProvider::scansTheFixtureTreeOnConstruction()
 {

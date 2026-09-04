@@ -14,12 +14,18 @@
 #include <QLoggingCategory>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <algorithm>
 #include <utility>
 
 namespace {
 Q_LOGGING_CATEGORY(lcApps, "phosphor.launcher.apps")
+
+// Coalescing window for watcher-driven rescans. One package install emits
+// several directoryChanged events, and each rescan re-parses every file in
+// every applications directory.
+constexpr int kRescanDebounceMs = 250;
 
 QStringList currentDesktopFromEnvironment()
 {
@@ -34,28 +40,63 @@ using PhosphorRegistry::LauncherResult;
 
 AppsProvider::AppsProvider(QObject* parent)
     : AppsProvider(DesktopEntryScanner::defaultDirectories(), QLocale::system().name(), currentDesktopFromEnvironment(),
-                   parent)
+                   true, parent)
 {
 }
 
 AppsProvider::AppsProvider(QStringList directories, QString locale, QStringList currentDesktop, QObject* parent)
+    : AppsProvider(std::move(directories), std::move(locale), std::move(currentDesktop), false, parent)
+{
+}
+
+AppsProvider::AppsProvider(QStringList directories, QString locale, QStringList currentDesktop, bool deferFirstScan,
+                           QObject* parent)
     : ILauncherProvider(parent)
     , m_directories(std::move(directories))
     , m_locale(std::move(locale))
     , m_currentDesktop(std::move(currentDesktop))
     , m_watcher(new QFileSystemWatcher(this))
 {
-    // Watch whichever directories exist now. A directory created later
-    // (first app installed under ~/.local) is picked up on the next
-    // rescan triggered by an existing one; tracking creation of the
-    // directories themselves is not worth a second watcher.
+    armWatches();
+    // Coalesce. A package install or an `update-desktop-database` run emits
+    // several directoryChanged events in quick succession, and each one would
+    // otherwise drive a full recursive scan-and-parse of every applications
+    // directory.
+    m_rescanTimer = new QTimer(this);
+    m_rescanTimer->setSingleShot(true);
+    m_rescanTimer->setInterval(kRescanDebounceMs);
+    connect(m_rescanTimer, &QTimer::timeout, this, &AppsProvider::rescan);
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
+        m_rescanTimer->start();
+    });
+
+    // On the production path the scan is posted rather than run here. It
+    // walks every XDG applications directory and parses every file it finds,
+    // and the shell constructs this provider before its first frame, so doing
+    // it inline put roughly a thousand file opens on the startup critical
+    // path for a surface nobody has opened yet. The queued call lands once
+    // the event loop starts; recompute() then emits resultsChanged as usual
+    // and the model picks it up with no other change.
+    if (deferFirstScan) {
+        QMetaObject::invokeMethod(this, &AppsProvider::rescan, Qt::QueuedConnection);
+    } else {
+        rescan();
+    }
+}
+
+void AppsProvider::armWatches()
+{
+    // Re-armed on every rescan, not just at construction. A directory that
+    // did not exist yet (a fresh account with no ~/.local/share/applications)
+    // would otherwise never be watched, and QFileSystemWatcher drops a path
+    // permanently when its directory is deleted, which a package manager that
+    // replaces a directory rather than writing into it does routinely.
+    const QStringList watched = m_watcher->directories();
     for (const QString& dir : std::as_const(m_directories)) {
-        if (QFileInfo::exists(dir)) {
+        if (QFileInfo::exists(dir) && !watched.contains(dir)) {
             m_watcher->addPath(dir);
         }
     }
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &AppsProvider::rescan);
-    rescan();
 }
 
 AppsProvider::~AppsProvider() = default;
@@ -85,13 +126,14 @@ int AppsProvider::maximumResults() const
     return m_maximumResults;
 }
 
-const QList<DesktopEntry>& AppsProvider::entries() const
+QList<DesktopEntry> AppsProvider::entries() const
 {
     return m_entries;
 }
 
 void AppsProvider::rescan()
 {
+    armWatches();
     m_entries = DesktopEntryScanner::scan(m_directories, m_locale, m_currentDesktop);
     qCDebug(lcApps) << "scanned" << m_entries.size() << "application(s) from" << m_directories;
     recompute();

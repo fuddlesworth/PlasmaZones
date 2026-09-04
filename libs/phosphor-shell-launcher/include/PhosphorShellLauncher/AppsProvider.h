@@ -12,6 +12,7 @@
 
 QT_BEGIN_NAMESPACE
 class QFileSystemWatcher;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace PhosphorShellLauncher {
@@ -19,11 +20,15 @@ namespace PhosphorShellLauncher {
 // Installed applications, from the .desktop files on the XDG applications
 // path, fuzzy-matched on name, generic name and keywords.
 //
-// The scan runs once at construction and again whenever one of the
-// watched directories changes, so an install or removal shows up on the
-// next keystroke without the shell restarting. A rescan is a full walk;
-// applications directories are small enough that this is not worth
-// tracking per file.
+// The scan runs once at startup and again whenever one of the watched
+// directories changes, so an install or removal shows up on the next
+// keystroke without the shell restarting. Watcher-driven rescans are
+// coalesced, because one package install emits several change events. A
+// rescan is a full walk; applications directories are small enough that this
+// is not worth tracking per file.
+//
+// Whether the FIRST scan is synchronous depends on which constructor is
+// used; see each one.
 //
 // Ranking: each entry's score is the best fuzzy score across its name,
 // generic name and each keyword, with a fixed penalty on anything that was
@@ -36,9 +41,18 @@ class PHOSPHORSHELLLAUNCHER_EXPORT AppsProvider : public PhosphorRegistry::ILaun
 public:
     // Production wiring: the XDG applications directories, the system
     // locale, and XDG_CURRENT_DESKTOP.
+    //
+    // The first scan is DEFERRED to the event loop on this path. A shell
+    // constructs its providers before the first frame, and walking every
+    // applications directory there costs roughly a thousand file opens for a
+    // surface the user may never open.
     explicit AppsProvider(QObject* parent = nullptr);
     // Injectable wiring for tests and unusual hosts. `directories` in
     // precedence order (first wins per id).
+    //
+    // Scans SYNCHRONOUSLY, so results are available as soon as the object
+    // is: a caller passing its own directories is not on a shell's startup
+    // path and generally wants to query immediately.
     AppsProvider(QStringList directories, QString locale, QStringList currentDesktop, QObject* parent = nullptr);
     ~AppsProvider() override;
 
@@ -60,9 +74,21 @@ public:
 
     // Everything currently known, unfiltered. For tests and for a host
     // that wants to show a full app grid.
-    [[nodiscard]] const QList<DesktopEntry>& entries() const;
+    //
+    // Returned BY VALUE on purpose. The watcher replaces this list wholesale
+    // from the event loop when an application is installed or removed, so a
+    // reference handed out here would dangle across any turn of the event
+    // loop, which is exactly what a host showing a grid would do with it.
+    [[nodiscard]] QList<DesktopEntry> entries() const;
 
-    // Re-walk the directories now. Also triggered by the directory watcher.
+    // Re-walk the directories now. Also triggered by the directory watcher,
+    // through a short debounce.
+    //
+    // The CONSTRUCTOR does not call this inline: it walks every XDG
+    // applications directory and parses every file it finds, which is too
+    // much to put on a shell's pre-first-frame path for a surface the user
+    // may never open. The first scan is posted to the event loop instead, so
+    // results arrive shortly after startup rather than delaying it.
     void rescan();
 
     // Start `entry` the way the launcher would (detached, honouring
@@ -73,13 +99,23 @@ public:
     [[nodiscard]] static bool launch(const DesktopEntry& entry);
 
 private:
+    // Shared body for both public constructors. `deferFirstScan` decides
+    // whether the initial walk runs inline or is posted to the event loop.
+    AppsProvider(QStringList directories, QString locale, QStringList currentDesktop, bool deferFirstScan,
+                 QObject* parent);
+
     void recompute();
+    // Add a watch for every configured directory that exists and is not
+    // already watched. Re-run on each rescan, because a directory can be
+    // created later or replaced out from under an existing watch.
+    void armWatches();
 
     QStringList m_directories;
     QString m_locale;
     QStringList m_currentDesktop;
     QList<DesktopEntry> m_entries;
     QFileSystemWatcher* m_watcher = nullptr;
+    QTimer* m_rescanTimer = nullptr;
     QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
     int m_maximumResults = 24;
