@@ -339,7 +339,16 @@ FocusScope {
             // so the property is resolvable by the tooling rather than a
             // dynamic lookup on a bare Item.
             readonly property LauncherResultRow currentRow: list.currentItem as LauncherResultRow
-            text: qsTr("↑↓ navigate · ↵ %1 · Alt+↵ alternate · Tab cycles providers · Esc closes").arg(currentRow ? currentRow.primaryActionLabel : qsTr("Open"))
+            // The key names are baked into the msgid on purpose: a
+            // translator needs to see them in context to place them, and
+            // splitting the line into six fragments would make the word
+            // order untranslatable. The action label is substituted rather
+            // than written out because it comes from the provider.
+            //
+            // Lower case for the fallback, matching the surrounding verbs;
+            // a provider's own label is Titlecase and reads as a name, which
+            // is the distinction the line is making.
+            text: qsTr("↑↓ navigate · ↵ %1 · Alt+↵ alternate · Tab cycles providers · Esc closes").arg(currentRow ? currentRow.primaryActionLabel : qsTr("open"))
             textFormat: Text.PlainText
             color: Theme.on_surface_variant
             font.family: Tokens.font_family

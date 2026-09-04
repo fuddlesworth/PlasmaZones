@@ -37,6 +37,17 @@ using PhosphorLayer::Testing::MockTransport;
 using PhosphorPopout::PopoutRequest;
 using PhosphorShellApp::LayerPopoutTransport;
 
+namespace {
+// How long to wait for a close that runs through the host's dismiss
+// animation. PopoutHost drives that from its own Motion duration, which
+// this test cannot read (the host is built by the transport, inside a
+// surface, from a component this file does not own), so the wait is a
+// generous fixed ceiling rather than a derived one. Only cases asserting
+// that something did NOT happen pay it in full; the rest use QTRY, which
+// returns as soon as the state arrives.
+constexpr int kCloseAnimationCeilingMs = 1500;
+} // namespace
+
 class TestLayerPopoutTransport : public QObject
 {
     Q_OBJECT
@@ -304,7 +315,7 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
     // the controller already knows. The host's dismissEmitter guarantees the
     // emission after its close duration; give it a generous window.
     transport.closeSurface(handle);
-    QTest::qWait(1500);
+    QTest::qWait(kCloseAnimationCeilingMs);
     QVERIFY2(m_dismissed.isEmpty(), "controller-initiated close was reported back as a dismissal");
     QVERIFY2(window.isNull(), "the close really tore the surface down");
 
@@ -352,7 +363,7 @@ void TestLayerPopoutTransport::reopeningWhileClosingRetiresTheDrainingSurface()
     // and the retired surface must not resurrect a dismissal for a handle
     // the controller has already forgotten.
     transport.closeSurface(second);
-    QTest::qWait(1500);
+    QTest::qWait(kCloseAnimationCeilingMs);
     QVERIFY2(m_dismissed.isEmpty(), "a retired or controller-closed surface was reported as a dismissal");
 }
 
