@@ -20,9 +20,9 @@ namespace PhosphorRegistry {
 // IBarWidgetFactory's shape — the host (Control Center QML) iterates
 // the registry and instantiates each tile via createTile().
 //
-// Phase 1.3 shipped this interface as a documented header. The consuming
-// Control Center surface landed in Phase 4.4, so tile factories authored
-// against this contract are now driven by a real host: libs/phosphor-shell-
+// Phase 1.3 shipped this interface as a documented header, and the
+// consuming Control Center surface has since landed, so tile factories
+// authored against this contract are driven by a real host: libs/phosphor-shell-
 // control-center's ControlCenter.qml, over the registry that
 // src/shell/ControlCenterController populates.
 class PHOSPHORREGISTRY_EXPORT IControlCenterTileFactory : public IFactoryBase

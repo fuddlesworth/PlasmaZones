@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QtTest/QtTest>
 
@@ -42,6 +43,7 @@ private Q_SLOTS:
     void nameMatchOutranksKeywordMatchForTheSameText();
     void keywordsAndGenericNameStillMatch();
     void capsTheResultCount();
+    void activateRefusesAnIdThatWasNeverOffered();
     void rowsCarryTheEntryFields();
     void activateRefusesUnknownAndAlternate();
     void anInstalledApplicationAppearsWithoutARestart();
@@ -205,6 +207,27 @@ void TestAppsProvider::capsTheResultCount()
     // Clamped to at least one.
     provider.setMaximumResults(0);
     QCOMPARE(provider.maximumResults(), 1);
+}
+
+// The contract says an id the provider did not hand out is unknown. Resolving
+// against every scanned entry meant a stale id, for an application filtered
+// out of the current query or never listed at all, still launched it.
+void TestAppsProvider::activateRefusesAnIdThatWasNeverOffered()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    // A query that matches Firefox and not kitty, so kitty is a real,
+    // scanned, launchable entry that this query did not offer.
+    provider.setQuery(QStringLiteral("firefox"));
+    QStringList offered;
+    for (const auto& r : provider.results()) {
+        offered.append(r.id);
+    }
+    QVERIFY(offered.contains(QStringLiteral("firefox")));
+    QVERIFY2(!offered.contains(QStringLiteral("kitty")), "kitty is scanned but not offered here");
+
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unknown result")));
+    QVERIFY(!provider.activate(QStringLiteral("kitty"), ILauncherProvider::Activation::Primary));
 }
 
 void TestAppsProvider::rowsCarryTheEntryFields()

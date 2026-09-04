@@ -15,8 +15,14 @@ namespace PhosphorShellLauncher {
 //
 // Offered only when the first word resolves to an executable (on PATH,
 // or an absolute path), so ordinary searches like "fire" do not grow a
-// "run fire" row. Scores at the floor so an application that matches
-// the same text always outranks the raw command.
+// "run fire" row. Scores 1, which is below any solid fuzzy match, so an
+// application matching the same text outranks the raw command.
+//
+// Not a true floor, though the name suggests one: fuzzy scores go NEGATIVE
+// for a sparse, heavily gapped match, so a barely-matching application can
+// still rank below this row. That is the right order when it happens: a
+// command the user typed exactly beats a word the matcher had to stretch
+// to reach.
 class PHOSPHORSHELLLAUNCHER_EXPORT CommandProvider : public PhosphorRegistry::ILauncherProvider
 {
     Q_OBJECT

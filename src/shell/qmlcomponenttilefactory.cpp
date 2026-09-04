@@ -98,7 +98,13 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
         // Falling through to a plain QObject parent would hand back an item
         // with no visual parent, which never renders and says nothing about
         // why. Refuse, as the bar's widget factory does.
-        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id;
+        // Refused, not merely reported. Returning the item anyway left it
+        // with no visual parent, so it never appeared and the host counted
+        // it as a materialised tile. The bar factory does the same.
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id
+                                        << "— refusing rather than returning an item nothing will show";
+        delete item;
+        return nullptr;
         item->deleteLater();
         return nullptr;
     }

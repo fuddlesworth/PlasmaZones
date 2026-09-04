@@ -254,12 +254,24 @@ bool AppsProvider::activate(const QString& resultId, Activation activation)
     if (activation != Activation::Primary) {
         return false;
     }
+    // Resolved against the OFFERED rows, not against every scanned entry.
+    // The contract says an id the provider did not hand out is unknown, and
+    // searching the whole catalogue meant a stale id for an application that
+    // was filtered out, or never listed under this query at all, still
+    // launched it.
+    const bool offered = std::any_of(m_results.cbegin(), m_results.cend(), [&resultId](const LauncherResult& r) {
+        return r.id == resultId;
+    });
+    if (!offered) {
+        qCWarning(lcApps) << "activate: unknown result" << resultId;
+        return false;
+    }
     for (const DesktopEntry& entry : std::as_const(m_entries)) {
         if (entry.id == resultId) {
             return launch(entry);
         }
     }
-    qCWarning(lcApps) << "activate: unknown result" << resultId;
+    qCWarning(lcApps) << "activate: offered result" << resultId << "no longer in the catalogue";
     return false;
 }
 
