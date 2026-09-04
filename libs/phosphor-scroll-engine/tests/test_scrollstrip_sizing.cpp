@@ -66,6 +66,7 @@ private Q_SLOTS:
     void aZeroMovementHeightPressStillReportsTheOwnershipClaim();
     void aMinimizePressNeverHandsATabbedColumnToAnAutoOwner();
     void growIntoEmptySpaceRefusesAFullTabbedColumnRatherThanUnMaximizingIt();
+    void unMaximizingAWindowHeightPutsBackTheHeightItDisplaced();
     void tabbingAStackPicksTheShownTabAndUntabbingRestoresEveryHeight();
     void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
@@ -597,6 +598,69 @@ void TestScrollStripSizing::growIntoEmptySpaceRefusesAFullTabbedColumnRatherThan
     QVERIFY(col);
     QVERIFY2(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind == WindowHeight::Fixed,
              "a refused grow press must not un-maximize the tab it declined to grow");
+}
+
+// The maximize toggle remembers the height it displaced, so un-maximizing puts
+// that height back instead of dropping to Auto. Auto is only the answer when
+// there is nothing remembered — a tile that reached the budget by some other
+// route, which the round trip in the ops suite covers by entering from Auto.
+//
+// The second half is the other half of the contract: the memory is not
+// permanent. A height the user picks by ANY other means countermands the
+// maximize, and the settled frame of an interactive resize is one of those —
+// it arrives through reconcileWindowSize, which is reached only from a user's
+// finished resize gesture.
+void TestScrollStripSizing::unMaximizingAWindowHeightPutsBackTheHeightItDisplaced()
+{
+    const ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // "b" is active and given a height of its own. Budget is 800 - one 10px
+    // gap = 790, so the Auto sibling takes the 490 that is left.
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 300);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 490);
+
+    // Maximize. "a" is squeezed to the one-pixel floor, which is why "b"
+    // renders 789 rather than the 790 its intent asks for.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 789);
+
+    // Un-maximize returns the 300 the maximize displaced, NOT Auto's even
+    // share. This is the assertion the restore slot exists for: without it
+    // both tiles come back at 395.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 300);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 490);
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    const Tile& b = col->tiles.at(col->indexOfWindow(QStringLiteral("b")));
+    QCOMPARE(b.height.kind, WindowHeight::Fixed);
+    QCOMPARE(b.height.fixedPx, 300);
+    QVERIFY2(!b.preMaximizeHeight.has_value(), "un-maximizing must spend the slot, not keep it");
+
+    // Maximize again, then settle an interactive resize on top of it. The
+    // resize is the user choosing a height, so it replaces the memory rather
+    // than being undone by the next press.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), Ax::t(QSize(999, 500)), /*mainChanged=*/false,
+                                      /*crossChanged=*/true, params));
+    col = strip.activeColumn();
+    QVERIFY(col);
+    QVERIFY2(!col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).preMaximizeHeight.has_value(),
+             "a settled user resize must countermand the maximize it lands on");
+
+    // So the next press maximizes from 500, and the one after that comes back
+    // to 500 — never to the 300 from before the resize.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 500);
 }
 
 // The tab toggle is REVERSIBLE, which is the whole reason ownership is a

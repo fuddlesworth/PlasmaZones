@@ -780,6 +780,9 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
         // at are the closest thing to it, so they are left alone.
         if (defaultHeight) {
             for (Tile& tile : col.tiles) {
+                // Back to the layout's defaults means no window keeps a
+                // maximize to undo, the same reasoning equalize carries.
+                tile.preMaximizeHeight.reset();
                 if (!(tile.height == *defaultHeight)) {
                     tile.height = *defaultHeight;
                     changed = true;
@@ -918,6 +921,11 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         if (claimTabbedHeightOwnership(col, ti, ackedH)) {
             changed = true;
         }
+        // A user who has just dragged this window to a height of their own has
+        // countermanded the maximize, so the restore slot goes with it — the
+        // same rule every keyboard height verb follows, and the reason the
+        // toggle's next press maximizes rather than restoring.
+        col.tiles[ti].preMaximizeHeight.reset();
         if (!(col.tiles.at(ti).height == ackedH)) {
             col.tiles[ti].height = ackedH;
             changed = true;

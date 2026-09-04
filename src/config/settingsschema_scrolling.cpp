@@ -670,8 +670,8 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString,
          QStringLiteral("Shrinks the focused window within its column by the configured step.")},
         {CD::maximizeWindowHeightKey(), CD::scrollingMaximizeWindowHeightShortcut(), QMetaType::QString,
-         QStringLiteral("Toggles the focused window between filling its column and sharing it evenly with the other "
-                        "windows there.")},
+         QStringLiteral("Toggles the focused window between filling its column and the height it had before, or an "
+                        "even share with the other windows there if it had none.")},
         {CD::expandWindowKey(), CD::scrollingExpandWindowShortcut(), QMetaType::QString,
          QStringLiteral("Grows the focused window to fill the empty space left in its column. The other windows there "
                         "keep their size.")},

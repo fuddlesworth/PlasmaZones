@@ -65,6 +65,9 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
         return claimed || clearedEdges;
     }
     col->tiles[ti].height = height;
+    // Any height the user picks by another route countermands a maximize, so
+    // there is nothing left to restore. Every write below does the same.
+    col->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
 
@@ -141,6 +144,7 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
         return claimed || clearedEdges;
     }
     activeCol->tiles[ti].height = result;
+    activeCol->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
 
@@ -227,6 +231,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         return claimed || clearedEdges;
     }
     activeCol->tiles[ti].height = result;
+    activeCol->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
 
@@ -281,11 +286,18 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
                                    params.gap))
                 >= budget;
     const bool maximized = currentPx >= budget || maximizedByIntent;
-    const WindowHeight result = maximized ? WindowHeight::makeAuto() : WindowHeight::makeFixed(budget);
+    // Un-maximizing puts back the height the maximize press displaced, and
+    // falls to Auto only when there is nothing remembered — which is the case
+    // for a tile that reached the budget by another route (an adjust clamped
+    // there, a preset cycled to the top), where the user never asked this verb
+    // for anything and Auto is the height family's "the column decides".
+    const int ti = activeCol->activeTileIdx;
+    const std::optional<WindowHeight> remembered = activeCol->tiles.at(ti).preMaximizeHeight;
+    const WindowHeight result =
+        maximized ? remembered.value_or(WindowHeight::makeAuto()) : WindowHeight::makeFixed(budget);
     // Ownership before the no-change bail, and written through the COLUMN
     // rather than the cached tile pointer — cycleActiveWindowPresetHeight
     // carries both reasons.
-    const int ti = activeCol->activeTileIdx;
     const bool claimed = claimTabbedHeightOwnership(*activeCol, ti, result);
     // Unconditional while the flag is set, with no equality test against the
     // stored intent — setActiveWindowHeight carries the full reason. Under the
@@ -297,6 +309,17 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
     const bool clearedEdges = activeCol->maximizedToEdges;
     if (clearedEdges) {
         activeCol->maximizedToEdges = false;
+    }
+    // The restore slot is settled on BOTH arms and BEFORE the no-change bail,
+    // so a press that moves no pixels still leaves the memory right. The
+    // maximize arm never remembers the maximized height itself: that is what
+    // the inequality test is for, and without it a press that somehow found
+    // the tile already at the budget would record Fixed(budget) as the height
+    // to go back to, making un-maximize a permanent no-op.
+    if (maximized) {
+        activeCol->tiles[ti].preMaximizeHeight.reset();
+    } else if (!(activeCol->tiles.at(ti).height == result)) {
+        activeCol->tiles[ti].preMaximizeHeight = activeCol->tiles.at(ti).height;
     }
     if (activeCol->tiles.at(ti).height == result) {
         return claimed || clearedEdges;
@@ -404,10 +427,12 @@ bool ScrollStrip::minimizeActiveWindowHeight(const ScrollLayoutParams& params)
     if (targetPx == currentPx) {
         if (claimed) {
             activeCol->tiles[ti].height = target;
+            activeCol->tiles[ti].preMaximizeHeight.reset();
         }
         return claimed || clearedEdges;
     }
     activeCol->tiles[ti].height = target;
+    activeCol->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
 
@@ -510,6 +535,7 @@ bool ScrollStrip::expandActiveWindowToAvailableHeight(const ScrollLayoutParams& 
     // above), so the write goes straight in — through the COLUMN rather than
     // the cached tile pointer, cycleActiveWindowPresetHeight's reason.
     activeCol->tiles[activeCol->activeTileIdx].height = WindowHeight::makeFixed(target);
+    activeCol->tiles[activeCol->activeTileIdx].preMaximizeHeight.reset();
     return true;
 }
 
@@ -558,6 +584,13 @@ bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHei
     // must not take a tabbed column's extent away from the tab that owns it.
     // The owner itself is restored through setTabbedHeightOwner.
     const bool claimed = claimTabbedHeightOwnership(col, ti, height);
+    // Before the equality bail, because this is the addressed re-state the
+    // restore paths use (migration, unfloat, stash, drag commit): whatever the
+    // tile was doing before, it is now being told a height from outside, and a
+    // maximize the user could still undo is not part of what those paths
+    // carry. Clearing on the equal case too keeps that true for a re-state
+    // that happens to match.
+    col.tiles[ti].preMaximizeHeight.reset();
     if (col.tiles.at(ti).height == height) {
         return claimed;
     }
@@ -580,6 +613,12 @@ bool ScrollStrip::equalizeActiveColumnHeights()
     }
     for (Tile& tile : col->tiles) {
         const WindowHeight even = WindowHeight::makeAuto();
+        // Unconditional, and outside the height guard: an even split is the
+        // user saying "no window in this column is special", so nothing is
+        // left maximized to restore. Clearing costs nothing on a tile that
+        // holds no slot, and doing it here rather than beside the write keeps
+        // it true for a tile that already renders even.
+        tile.preMaximizeHeight.reset();
         if (!(tile.height == even)) {
             tile.height = even;
             changed = true;

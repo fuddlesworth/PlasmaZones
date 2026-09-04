@@ -10,6 +10,8 @@
 #include <QString>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorScrollEngine {
 
 /// Per-screen override-map keys for ScrollEngine::applyPerScreenConfig.
@@ -762,6 +764,29 @@ struct Tile
 {
     QString windowId;
     WindowHeight height;
+    /// The height this tile carried when toggleMaximizeActiveWindowHeight last
+    /// maximized it, so the un-maximize press can put it back instead of
+    /// falling to Auto. Empty means "not maximized by that verb", which is
+    /// also the answer for a tile that reached full height by another route
+    /// (an adjust clamped at the budget, a preset cycled to the top) — those
+    /// still un-maximize to Auto, since there is no remembered height to
+    /// restore and Auto is the height family's "the column decides".
+    ///
+    /// Held HERE rather than as a strip-level index the way the width axis
+    /// holds m_preMaximizeColumnIdx: an index has to be re-clamped by every
+    /// insert, removal, reorder, consume and expel (that bookkeeping is why
+    /// this verb originally shipped without a slot at all), while a field on
+    /// the tile travels with it through all of those for free, because every
+    /// one of those paths moves the Tile struct whole.
+    ///
+    /// Cleared by any other height write, including the one reconcileWindowSize
+    /// makes when a user finishes an interactive resize: the user has chosen a
+    /// height of their own, so there is no maximize left to undo. Deliberately
+    /// NOT serialized and not carried across a re-insert (migration, unfloat,
+    /// stash restore, drag commit), which is the same session-and-place scope
+    /// the width axis's slot has — a window that comes back from one of those
+    /// un-maximizes to Auto.
+    std::optional<WindowHeight> preMaximizeHeight;
     /// Minimized tiles keep their slot/order but are excluded from layout;
     /// unminimize restores the window into the same slot.
     bool minimized = false;

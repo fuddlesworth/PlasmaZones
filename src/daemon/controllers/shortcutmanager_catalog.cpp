@@ -407,8 +407,8 @@ CatalogMeta catalogMetaForId(const QString& id)
         // width siblings appear above.
         add(kIdScrollMaximizeWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Toggles the focused window between filling its column and sharing it evenly "
-                              "with the other windows there."));
+                              "Toggles the focused window between filling its column and the height it "
+                              "had before, or an even share with the other windows there if it had none."));
         add(kIdScrollExpandWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Grows the focused window to fill the empty space left in its column. "

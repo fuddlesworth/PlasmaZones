@@ -429,17 +429,17 @@ public:
     /// column-extent space the cycle measures in.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Toggle the active tile between filling its column's cross budget and
-    /// the even auto-split. The height twin of toggleMaximizeActiveColumn,
-    /// with ONE deliberate difference: there is no pre-maximize slot, so the
-    /// un-maximize arm writes Auto rather than a remembered height. A slot
-    /// would have to be re-indexed by every structural op the way
-    /// m_preMaximizeColumnIdx is, and the height family already treats Auto
-    /// as "the column decides", which is what un-maximizing a window inside a
-    /// STACK means. For a tile that is alone in its column Auto and the full
-    /// budget render identically, so the un-maximize press changes the stored
-    /// intent without moving anything — the toggle still answers true, because
-    /// the intent decides how the tile shares the column the moment a sibling
-    /// arrives.
+    /// the height it had before, falling back to the even auto-split when it
+    /// had none of its own. The height twin of toggleMaximizeActiveColumn,
+    /// restore included: the displaced height is kept in the tile's
+    /// @c preMaximizeHeight rather than in a strip-level index, so unlike
+    /// m_preMaximizeColumnIdx it needs no re-clamping from the structural ops.
+    /// Auto is what un-maximizing means for a tile that never had a height of
+    /// its own, since the height family reads Auto as "the column decides".
+    /// For a tile that is alone in its column Auto and the full budget render
+    /// identically, so that press changes the stored intent without moving
+    /// anything — the toggle still answers true, because the intent decides
+    /// how the tile shares the column the moment a sibling arrives.
     ///
     /// The maximized test reads the stored intent as well as the rendered
     /// extent: siblings held up by their client minimums can stop the tile
@@ -469,12 +469,17 @@ public:
     /// the same rect, and a client that will not take it quantises again: a
     /// self-driving loop, which is what that branch's own comment describes.
     ///
-    /// What this verb genuinely lacks is a remembered height to RESTORE, which
-    /// is why the un-maximize arm writes Auto rather than the height the tile
-    /// had before. The width axis keeps one in m_preMaximizeColumnIdx +
-    /// m_preMaximizeWidth; note that slot is a restore value only, since
-    /// toggleMaximizeColumnAt detects "am I maximized" from resolved pixels
-    /// exactly as this verb does.
+    /// The height the maximize displaced is remembered in the tile's
+    /// @c preMaximizeHeight, so un-maximizing puts it back; Auto is the answer
+    /// only when nothing was remembered, which is the case for a tile that
+    /// reached the budget by another route. That slot is a RESTORE value and
+    /// not the maximized test — the same division the width axis has, where
+    /// m_preMaximizeColumnIdx + m_preMaximizeWidth hold the restore while
+    /// toggleMaximizeColumnAt detects maximized state from resolved pixels.
+    /// It lives on the tile rather than in a strip-level index precisely so
+    /// the structural ops do not have to re-clamp it; Tile's own note carries
+    /// the rest, including why it is neither serialized nor carried across a
+    /// re-insert.
     bool toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& params);
     /// The active tile at its shortest: the smallest preset height, or
     /// MinWindowHeightFraction of the work area's cross extent when the preset
