@@ -55,9 +55,17 @@ public:
     // a bare literal. Public for the same reason as evaluate().
     [[nodiscard]] static bool isCalculation(QStringView expression);
 
-    // The display form: up to 10 significant digits, integers without a
-    // decimal point, in the C locale so "1000" never becomes "1,000" in
-    // a field the user may paste into a shell.
+    // The display form. An exact integer inside double's exact range prints
+    // in FULL and without a decimal point, however many digits that takes;
+    // everything else prints to at most 10 significant digits with trailing
+    // zeros trimmed. Truncating an exact integer would be a wrong answer
+    // rather than a rounded one.
+    //
+    // Always the C locale, even where the user's locale groups digits or
+    // uses a decimal comma. This string is both what the row shows and what
+    // activation copies, and a grouped "1 234,5" is not something that can be
+    // pasted into a shell or another calculator. Localising the display would
+    // mean carrying two strings; the pasteable one wins.
     [[nodiscard]] static QString format(double value);
 
 private:

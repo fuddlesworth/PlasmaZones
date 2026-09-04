@@ -50,6 +50,12 @@ public:
     {
         return !alternateActionLabel.isEmpty();
     }
+
+    // So a provider can tell whether a recompute actually changed anything
+    // before announcing it. Without this every provider emits on every
+    // recompute, and each emission costs the model a full reset, which drops
+    // the surface's selected row.
+    [[nodiscard]] bool operator==(const LauncherResult& other) const = default;
 };
 
 // The provider contract the launcher surface drives. This is the concrete

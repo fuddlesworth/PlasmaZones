@@ -112,6 +112,10 @@ void ClipboardProvider::setQuery(const QString& query)
 
 void ClipboardProvider::recompute()
 {
+    // See AppsProvider::recompute: this runs on every clipboard change for
+    // the whole session, including while the launcher is closed, and an
+    // unconditional emission would reset the model each time.
+    const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
     if (m_history) {
         const int rows = m_history->rowCount();
@@ -151,6 +155,9 @@ void ClipboardProvider::recompute()
             m_results.resize(m_maximumResults);
         }
     }
+    if (m_results == previous) {
+        return;
+    }
     Q_EMIT resultsChanged();
 }
 
@@ -185,11 +192,19 @@ bool ClipboardProvider::activate(const QString& resultId, Activation activation)
         return false;
     }
     const char* method = activation == Activation::Primary ? "copy" : "remove";
-    if (!QMetaObject::invokeMethod(m_service, method, Q_ARG(int, row))) {
-        qCWarning(lcClipboard) << "activate: clipboard service has no" << method << "(int)";
+    // The service reports whether it actually did the thing. Without that
+    // return, an entry whose content or mime type is empty was silently
+    // ignored while this reported success, and the surface closed on a copy
+    // that never happened.
+    bool done = false;
+    if (!QMetaObject::invokeMethod(m_service, method, Q_RETURN_ARG(bool, done), Q_ARG(int, row))) {
+        qCWarning(lcClipboard) << "activate: clipboard service has no bool" << method << "(int)";
         return false;
     }
-    return true;
+    if (!done) {
+        qCWarning(lcClipboard) << "activate: clipboard service refused" << method << "for row" << row;
+    }
+    return done;
 }
 
 } // namespace PhosphorShellLauncher

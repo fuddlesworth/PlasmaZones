@@ -48,11 +48,16 @@ public:
     /// Number of entries in the history.
     [[nodiscard]] int count() const;
 
-    /// Re-apply the entry at @p index to the clipboard selection. Out-of-range
-    /// indices are ignored.
-    Q_INVOKABLE void copy(int index);
-    /// Remove the entry at @p index from the history (and disk).
-    Q_INVOKABLE void remove(int index);
+    /// Re-apply the entry at @p index to the clipboard selection.
+    ///
+    /// Returns false when the index is out of range or the entry carries no
+    /// content or mime type, so a caller can tell a real copy from a silently
+    /// ignored one. The launcher needs that distinction: it keeps its surface
+    /// open on a refused activation rather than closing on a no-op.
+    Q_INVOKABLE bool copy(int index);
+    /// Remove the entry at @p index from the history (and disk). Returns
+    /// false when the index is out of range.
+    Q_INVOKABLE bool remove(int index);
     /// Clear the entire history (and disk).
     Q_INVOKABLE void clear();
 

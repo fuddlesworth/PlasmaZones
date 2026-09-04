@@ -147,6 +147,11 @@ void AppsProvider::setQuery(const QString& query)
 
 void AppsProvider::recompute()
 {
+    // Keep the previous answer so the emission below can be conditional.
+    // Every resultsChanged costs the model a full reset, which destroys every
+    // delegate and drops the surface's selected row, and a watcher-driven
+    // rescan that finds nothing new would otherwise do exactly that.
+    const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
     if (!m_query.isEmpty()) {
         struct Scored
@@ -200,6 +205,9 @@ void AppsProvider::recompute()
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Open");
             m_results.append(std::move(r));
         }
+    }
+    if (m_results == previous) {
+        return;
     }
     Q_EMIT resultsChanged();
 }

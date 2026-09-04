@@ -324,6 +324,12 @@ std::optional<double> CalculatorProvider::evaluate(QStringView expression)
     Parser parser(expression);
     const auto v = parser.run();
     if (!v || !std::isfinite(*v)) {
+        // Note this folds two outcomes into one: input that is not an
+        // expression, and an expression that overflowed to infinity.
+        // setQuery separates the second so it can say so rather than showing
+        // nothing. Division by zero is a third case and stays here: term()
+        // refuses to produce a value for it, which is the documented
+        // contract, so it never reaches the isfinite test.
         return std::nullopt;
     }
     return v;
@@ -335,6 +341,20 @@ bool CalculatorProvider::isCalculation(QStringView expression)
     const auto v = parser.run();
     return v.has_value() && std::isfinite(*v) && parser.sawOperator();
 }
+
+namespace {
+// Parsed as an expression with an operator, but the value is not
+// representable, which in practice means an overflow to infinity. Distinct
+// from "not an expression at all", which is what the user typing a word
+// produces, and from division by zero, which term() refuses outright so it
+// yields no value to test.
+bool parsesButIsNotFinite(QStringView expression)
+{
+    Parser parser(expression);
+    const auto v = parser.run();
+    return v.has_value() && !std::isfinite(*v) && parser.sawOperator();
+}
+} // namespace
 
 QString CalculatorProvider::format(double value)
 {
@@ -365,6 +385,18 @@ void CalculatorProvider::setQuery(const QString& query)
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Copy");
             m_results.append(std::move(r));
         }
+    } else if (parsesButIsNotFinite(query)) {
+        // It WAS an expression, it just has no representable answer:
+        // 2^5000, or a division by zero. Say so, rather than showing nothing
+        // and leaving the user to guess whether the syntax was wrong. No
+        // action label and no answer, so activation refuses.
+        LauncherResult r;
+        r.id = QStringLiteral("answer");
+        r.title = QCoreApplication::translate("PhosphorShellLauncher", "Result is out of range");
+        r.subtitle = query.trimmed();
+        r.iconName = iconName();
+        r.score = FuzzyMatcher::perfectScore(static_cast<int>(query.size())) + 1;
+        m_results.append(std::move(r));
     }
     Q_EMIT resultsChanged();
 }

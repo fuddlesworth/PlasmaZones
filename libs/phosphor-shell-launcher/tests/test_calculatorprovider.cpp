@@ -31,7 +31,35 @@ private Q_SLOTS:
     void deeplyNestedInputIsRejectedRatherThanCrashing();
     void functionNamesAreCaseInsensitive();
     void nonAsciiDigitsAreNotNumbers();
+    void anUnrepresentableResultSaysSoRatherThanVanishing();
 };
+
+// An expression the parser understood but cannot answer is a different
+// outcome from something that is not an expression at all, and showing
+// nothing for both reads as "I did not understand you" on a surface whose
+// whole job is answering what was typed.
+void TestCalculatorProvider::anUnrepresentableResultSaysSoRatherThanVanishing()
+{
+    CalculatorProvider provider;
+
+    provider.setQuery(QStringLiteral("2^5000"));
+    QCOMPARE(provider.results().size(), 1);
+    const auto overflow = provider.results().first();
+    QVERIFY(!overflow.title.isEmpty());
+    // No action is offered, because there is nothing to copy.
+    QVERIFY(overflow.primaryActionLabel.isEmpty());
+    QVERIFY(!provider.activate(QStringLiteral("answer"), ILauncherProvider::Activation::Primary));
+
+    // Division by zero is a different, documented case: the parser refuses
+    // to produce a value at all, so there is no result to call out of range
+    // and no row, which evaluate()'s own contract and its test already pin.
+    provider.setQuery(QStringLiteral("1/0"));
+    QVERIFY(provider.results().isEmpty());
+
+    // Something that is genuinely not an expression still yields no row.
+    provider.setQuery(QStringLiteral("firefox"));
+    QVERIFY(provider.results().isEmpty());
+}
 
 // The query comes straight from a text field, so the parse depth is
 // attacker-controlled in the ordinary sense that a paste can be any length.

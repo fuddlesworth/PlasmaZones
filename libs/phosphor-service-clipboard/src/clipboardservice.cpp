@@ -52,19 +52,23 @@ int ClipboardService::count() const
     return d->model.rowCount();
 }
 
-void ClipboardService::copy(int index)
+bool ClipboardService::copy(int index)
 {
     const ClipboardEntry entry = d->model.entryAt(index);
     if (entry.content.isEmpty() || entry.mimeType.isEmpty())
-        return;
+        return false;
     // Re-offer the materialized type. A loopback selection event re-reads it, but
     // dedup just moves the entry to the front rather than duplicating it.
     d->source.setSelection({{entry.mimeType, entry.content}});
+    return true;
 }
 
-void ClipboardService::remove(int index)
+bool ClipboardService::remove(int index)
 {
+    if (index < 0 || index >= d->model.rowCount())
+        return false;
     d->model.removeAt(index);
+    return true;
 }
 
 void ClipboardService::clear()

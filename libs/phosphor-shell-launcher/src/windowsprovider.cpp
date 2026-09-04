@@ -118,6 +118,9 @@ void WindowsProvider::setQuery(const QString& query)
 
 void WindowsProvider::recompute()
 {
+    // See AppsProvider::recompute: this runs on every window open and close
+    // for the whole session, including while the launcher is closed.
+    const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
     if (m_toplevels) {
         const int rows = m_toplevels->rowCount();
@@ -172,6 +175,9 @@ void WindowsProvider::recompute()
             m_results.resize(kMaximumResults);
         }
     }
+    if (m_results == previous) {
+        return;
+    }
     Q_EMIT resultsChanged();
 }
 
@@ -190,6 +196,11 @@ bool WindowsProvider::activate(const QString& resultId, Activation activation)
         qCWarning(lcWindows) << "activate: window is gone" << resultId;
         return false;
     }
+    // invokeMethod reports whether the method was CALLED, not whether it did
+    // anything: activate() returns void. That is as much as this provider can
+    // know, so the true it returns means "the request was delivered to a
+    // toplevel that still exists", which is what the row's id was re-resolved
+    // for immediately above.
     if (!QMetaObject::invokeMethod(toplevel, "activate")) {
         qCWarning(lcWindows) << "activate: toplevel object has no activate()";
         return false;

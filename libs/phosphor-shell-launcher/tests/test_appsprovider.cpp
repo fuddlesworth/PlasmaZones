@@ -101,8 +101,21 @@ void TestAppsProvider::nothingOnAnEmptyQuery()
     AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
                           {QStringLiteral("KDE")});
     QVERIFY(!provider.listsOnEmptyQuery());
+
+    // Go from rows to none, so there is a real change to announce. The
+    // contract is "emit whenever results() would now answer differently",
+    // not "emit on every setQuery": each emission costs the model a full
+    // reset, which drops the surface's selected row.
+    provider.setQuery(QStringLiteral("firefox"));
+    QVERIFY(!provider.results().isEmpty());
+
     QSignalSpy changed(&provider, &ILauncherProvider::resultsChanged);
     provider.setQuery(QString());
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(provider.results().isEmpty());
+
+    // Already empty, and empty again: nothing to announce.
+    provider.setQuery(QStringLiteral("zzqx"));
     QCOMPARE(changed.count(), 1);
     QVERIFY(provider.results().isEmpty());
 }
