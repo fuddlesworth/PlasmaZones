@@ -359,7 +359,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (last == caption) {
                 return;
             }
-            last = caption;
+            // Stamped only when the push can actually go out. pushWindowMetadata
+            // returns early with no daemon registered, and recording the caption
+            // regardless made the de-dupe suppress every LATER push of that same
+            // caption — so a title that settled while the daemon was down stayed
+            // stale in the registry until something else re-pushed it. The
+            // bringup sweep does re-push every live window, so this was bounded
+            // rather than permanent, but the de-dupe should record what was
+            // sent, not what was attempted.
+            if (m_daemonGate.serviceRegistered) {
+                last = caption;
+            }
             pushWindowMetadata(safeW, /*includeExtended=*/false);
             // A compositor-drawn tab pill shows this caption in the CHIPS
             // style; rebuild the strips that name the window, skipping screens
@@ -765,8 +775,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // A maximize claim taken during the gesture was never paid: the batch
         // arms insert membership and then skip the compositor call while the
         // user is dragging, and nothing re-drives them — this lambda replays
-        // geometry only, and its two other calls are gated on wasResize, so a
-        // MOVE end does nothing at all. The engine emits on change, so a drag
+        // geometry only, and its two GEOMETRY REPORTS are gated on wasResize,
+        // so a MOVE end reports nothing at all. (Other calls in this lambda do
+        // run unconditionally; the claim is about the geometry path.) The engine emits on change, so a drag
         // that leaves the strip alone schedules no batch either. This is the
         // one point that always runs at the end of a gesture.
         m_tilingHandler->reconcileMaximizeAfterGesture(window);
@@ -928,8 +939,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // and not to what the pointer is doing when its echo lands. An
                 // authored edge is still reported as authored during a drag,
                 // which is also what the interception wants to hear.
-                const bool effectAuthoredEdge =
-                    m_shaderManager.noteMaximizeEdge(window, !window->isUserMove() && !window->isUserResize());
+                const bool effectAuthoredEdge = m_shaderManager.noteMaximizeEdge(
+                    window, fullyMaximized, !window->isUserMove() && !window->isUserResize());
                 // IsMaximized is a matchable rule field with the same
                 // cache-key staleness as IsMinimized (see the minimizedChanged
                 // metadata lambda below) — invalidate on the genuine

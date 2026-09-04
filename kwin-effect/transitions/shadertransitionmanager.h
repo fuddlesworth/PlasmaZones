@@ -112,23 +112,34 @@ public:
         m_maximizeEdgeAtMs.remove(w);
     }
 
-    /// The fully-maximized state the maximize lambda last recorded for @p w.
+    /// Drop the authorship stamp for @p w without an edge consuming it.
     ///
-    /// Exposed for the authorship-stamp gate in
-    /// `TilingHandler::applyMaximizeSuppressed`, which must stamp exactly when
-    /// the write it is about to make will reach noteMaximizeEdge. That lambda
-    /// decides by comparing the incoming `horizontal && vertical` against THIS
-    /// value, so the gate reads it too and the correspondence holds by
-    /// construction rather than by argument — including where this value has
-    /// been pre-written to swallow an echo (noteMaximizeDemotedForSnap), which
-    /// makes the gate decline in the same breath.
-    bool lastFullyMaximized(KWin::EffectWindow* w) const
+    /// For the one write whose echo is guaranteed never to reach
+    /// noteMaximizeEdge: the snap demote pre-writes the edge tracker above so
+    /// that echo takes the no-edge branch, which means the stamp its write
+    /// leaves has nothing to match it and would sit until the deadline, where a
+    /// genuine user edge in the same direction would take it instead. Called
+    /// AFTER the write — the stamp does not exist before it.
+    void clearEffectAuthoredMaximizeWrite(KWin::EffectWindow* w)
     {
-        return m_lastFullyMaximized.value(w, false);
+        m_effectAuthoredMaximizeAtMs.remove(w);
     }
 
     /// Stamp @p w as having a maximize write the EFFECT ITSELF authored, so
     /// the edge that write produces is not mistaken for the user's own.
+    ///
+    /// @p wroteFullyMaximized is the direction written, and it is what makes
+    /// this exact rather than predictive. Earlier revisions tried to decide at
+    /// write time WHETHER the write would reach the consumer, first from the
+    /// requested mode and then from `lastFullyMaximized`, and each reading was
+    /// wrong in the window where the other was right: on Wayland a request and
+    /// its commit are a client round trip apart, so a write issued while the
+    /// user's own opposite request is in flight produces its edge only AFTER
+    /// that user edge has already moved the state the prediction read. Tagging
+    /// the direction removes the question. The consumer takes the stamp when an
+    /// edge arrives in the direction this write asked for, and leaves it alone
+    /// otherwise, so an edge that is not ours cannot spend it and ours is still
+    /// recognised whenever it lands.
     ///
     /// Called from `TilingHandler::applyMaximizeSuppressed`, which every
     /// maximize write the effect makes routes through, BEFORE the
@@ -148,14 +159,14 @@ public:
     /// already-agrees arm exists to absorb. A stamp outlives the bracket, so it
     /// answers wherever the echo lands.
     ///
-    /// Consumed by noteMaximizeEdge, so a stamp with no edge to take it back
-    /// off is not merely untidy: inside the deadline it swallows the user's
-    /// next genuine maximize, which is the failure the marker exists to fix.
-    /// The write site is therefore gated on `lastFullyMaximized` — the same
-    /// value the consumer's edge filter compares against — so it stamps if and
-    /// only if the write it is about to make will reach that consumer. The
-    /// deadline is the backstop under that gate, not the primary defence.
-    void noteEffectAuthoredMaximizeWrite(KWin::EffectWindow* w);
+    /// Consumed by noteMaximizeEdge on a matching-direction edge. A stamp whose
+    /// edge never arrives ages out, and until it does it can only be taken by
+    /// an edge in the direction it wrote — so the cost of one is bounded to a
+    /// single same-direction user edge inside the deadline, rather than to
+    /// whatever edge happens to come next. The one write known to produce no
+    /// edge at all clears its own stamp through
+    /// clearEffectAuthoredMaximizeWrite.
+    void noteEffectAuthoredMaximizeWrite(KWin::EffectWindow* w, bool wroteFullyMaximized);
 
     /// Arm the "this window just took a genuine maximize or restore edge"
     /// marker, from the windowMaximizedStateChanged hook.
@@ -187,12 +198,16 @@ public:
     /// as though it were a user's press. This is the only place that
     /// distinction is available: the stamp is one-shot and is consumed here,
     /// before the interception runs.
+    /// @p fullyMaximized is the direction of the edge that just arrived. A
+    /// stamp is taken only when it names the same direction, so an edge the
+    /// effect did not cause cannot spend one.
+    ///
     /// @p armingAllowed gates ONLY the arming. The authorship stamp is
     /// consumed either way, because the write site stamps when the write is
     /// issued while this is decided when the edge lands — a client round trip
     /// apart on Wayland — so making the consumption conditional would strand a
     /// stamp for every write issued during a gesture.
-    bool noteMaximizeEdge(KWin::EffectWindow* w, bool armingAllowed);
+    bool noteMaximizeEdge(KWin::EffectWindow* w, bool fullyMaximized, bool armingAllowed);
 
     /// Whether @p w took a genuine maximize OR restore edge of its own within
     /// the freshness window, CONSUMING the marker either way.
@@ -655,7 +670,12 @@ private:
     // Do not "fix" it by clearing the stamp whenever the gate declines: the
     // demote path depends on both sides declining together, and a clear-on-
     // decline would break that symmetry to chase a case that may not exist.
-    QHash<KWin::EffectWindow*, qint64> m_effectAuthoredMaximizeAtMs;
+    struct EffectAuthoredMaximize
+    {
+        qint64 atMs = 0;
+        bool wroteFullyMaximized = false;
+    };
+    QHash<KWin::EffectWindow*, EffectAuthoredMaximize> m_effectAuthoredMaximizeAtMs;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 
