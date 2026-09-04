@@ -45,6 +45,12 @@ class ControlCenterController : public QObject
     Q_OBJECT
     // Ids of the registered tiles, in registration order, so QML can feed
     // ControlCenter.tileIds without hard-coding the catalog in two places.
+    // CONSTANT because the catalogue is fixed at construction: this
+    // controller registers its built-ins in the constructor and nothing
+    // adds to the registry afterwards. BarController exposes an accessor
+    // and a refresh wired to the registry's notifier because widgets can
+    // arrive from plugins. The day a tile can, this has to grow a NOTIFY
+    // and the same wiring, or every consumer keeps the startup list.
     Q_PROPERTY(QStringList tileIds READ tileIds CONSTANT)
     /// Name of the screen whose bar currently shows the control center, or
     /// empty when it is closed everywhere.

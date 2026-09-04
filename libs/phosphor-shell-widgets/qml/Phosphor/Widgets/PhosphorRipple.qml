@@ -106,6 +106,18 @@ Item {
     // rounded rect, so the corners are exact by construction: the
     // gradient's opaque disc is the ripple, and everything past its edge
     // is transparent.
+    // NOTE for anyone binding a property of this Shape: the ripple
+    // animation below drives `opacity` through PropertyAction and
+    // NumberAnimation, which are imperative writes. The first ripple
+    // severs any binding on that property permanently, and the symptom
+    // is a value that simply stops updating. Bind a wrapper instead, or
+    // move the animation onto a helper property this one reads.
+    // NOTE for anyone binding a property of this Shape: the ripple
+    // animation below drives `opacity` through PropertyAction and
+    // NumberAnimation, which are imperative writes. The first ripple
+    // severs any binding on that property permanently, and the symptom
+    // is a value that simply stops updating. Bind a wrapper instead, or
+    // move the animation onto a helper property this one reads.
     Shape {
         id: sweep
 

@@ -169,12 +169,16 @@ private:
     /// `failureReason` (when non-null) receives the message for `failed`,
     /// which the CALLER emits after tearing down.
     [[nodiscard]] bool materializePanels(QString* failureReason);
-    void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
+    /// STATIC: touches no engine state. Everything it needs arrives as an
+    /// argument, and saying so in the signature keeps a future edit from
+    /// quietly reaching for a member.
+    static void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
     /// Mask the surface's input region down to the painted band, so the
     /// shadow strip beyond `thickness` stops accepting pointer events meant
     /// for the window underneath. Re-applied on resize and on changes to the
     /// geometry inputs it derives from.
-    void installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface);
+    /// STATIC, for the same reason as installDynamicAutoFit above.
+    static void installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface);
     void teardown();
     void setupWatcher();
     void savePersistentState();

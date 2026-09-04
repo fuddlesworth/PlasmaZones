@@ -139,6 +139,12 @@ Item {
     // button fired, so a multi-head setup grows the pocket on that bar.
     // No keyboard focus: a bar-painted pocket is not a surface that can
     // take a layer-shell grab.
+    // The control center and the launcher share the default popout
+    // scope, so opening one CLOSES the other. That is the intended
+    // behaviour for two full-attention surfaces triggered from the same
+    // bar, and it is worth stating because nothing at either call site
+    // hints at it: give one of them its own scope and they would happily
+    // sit open together.
     function toggleControlCenter(source: Item): void {
         // screenOf hands back a QScreen the C++ side owns; the controller
         // marks it CppOwnership before returning, so the JS GC cannot
@@ -227,6 +233,10 @@ Item {
     // `show` and `toggle` are separate because a method named show that hides
     // on the second call is a trap for anything scripting it. Bind a key to
     // toggle; call show from a script that wants the menu up regardless.
+    // No hide() on this one, unlike the control center and the launcher.
+    // The power menu is Modal and its own toggle() is the way back out,
+    // so a caller that wants it gone calls that. A hide() would give two
+    // ways to close one surface whose open state is already single-valued.
     IpcTarget {
         target: "power"
 
