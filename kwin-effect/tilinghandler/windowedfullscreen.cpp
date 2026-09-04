@@ -152,8 +152,13 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // Skipping the stamp alone would rest on KWin emitting nothing here — and
     // if it ever did emit, the edge would arrive unstamped and arm a false
     // marker. Declining the whole call needs no such assumption: no call, no
-    // edge, no stamp, on either platform and under either KWin semantic. What
-    // it skips is at most a re-assert of a mode already requested.
+    // edge, no stamp. What it skips is at most a re-assert of a mode already
+    // requested — and verified against KWin 6.7.4, exactly what KWin itself
+    // would skip: XdgToplevelWindow::maximize early-returns on
+    // `m_requestedMaximizeMode == mode` and X11Window::maximize on
+    // `max_mode == mode` (which on X11 is the same value, per
+    // Window::requestedMaximizeMode's own contract note). This gate is that
+    // condition, moved one frame earlier so the stamp is skipped with it.
     if (kw->requestedMaximizeMode() == mode) {
         return;
     }
@@ -183,6 +188,14 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     //
     // AUTHORSHIP STAMP, recorded for every write this helper makes and tagged
     // with the direction it wrote.
+    //
+    // The consumer's edge is the COMMITTED mode, and that is verified rather
+    // than assumed (KWin 6.7.4): X11Window::maximize assigns max_mode and only
+    // then emits maximizedChanged, XdgToplevelWindow::updateMaximizeMode does
+    // the same with m_maximizeMode on the client's ack, and EffectWindow's
+    // forwarder READS maximizeMode() inside that handler to build the
+    // horizontal/vertical pair. So by the time the maximize lambda runs, the
+    // committed mode already equals the edge it is being told about.
     //
     // WHICH edge it belongs to is settled by the tag, not by a prediction. Two
     // earlier revisions predicted instead — first from requestedMaximizeMode,

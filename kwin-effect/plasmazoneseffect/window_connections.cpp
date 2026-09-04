@@ -794,7 +794,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Departure-rect capture for the maximize morph wiring below. KWin
     // guarantees windowMaximizedStateAboutToChange fires before the
     // maximize/restore geometry change (effectwindow.h documents the
-    // ordering, and the stock maximize script relies on it the same way),
+    // ordering, the stock maximize script relies on it the same way, and it
+    // is verified in KWin 6.7.4: both X11Window::maximize and
+    // XdgToplevelWindow::maximize emit maximizedAboutToChange BEFORE assigning
+    // their mode member, X11 additionally under blockGeometryUpdates),
     // so frameGeometry() here is the rect the window is leaving — the only
     // point the old rect can be read. The state-changed edge below may fire
     // with the destination geometry already applied OR still pending the
