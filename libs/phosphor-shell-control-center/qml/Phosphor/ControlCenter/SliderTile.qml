@@ -109,7 +109,12 @@ Item {
         return Math.round(100 * (root.value - root.from) / (root.to - root.from)) + "%";
     }
 
-    Accessible.role: Accessible.Slider
+    // A GROUPING, not a Slider. The real slider is a child of this item and
+    // carries the Slider role itself, so declaring one here too announced
+    // two nested sliders, with the outer one exposing no value and no
+    // increase/decrease action. The tile is the container; the control
+    // inside it is the control.
+    Accessible.role: Accessible.Grouping
     Accessible.name: root.label
     Accessible.description: root._readout
 
@@ -205,6 +210,11 @@ Item {
                 from: root.from
                 to: root.to
                 value: root.value
+                // Named for what it controls. Without this the slider
+                // announced only its own value, leaving a screen-reader user
+                // to infer from the grouping which control they had reached.
+                Accessible.name: root.label
+                Accessible.description: root._readout
                 Layout.fillWidth: true
                 onMoved: v => root.moved(v)
             }

@@ -37,6 +37,12 @@ Item {
 
     Accessible.role: Accessible.ListItem
     Accessible.name: root.subtitle.length > 0 ? qsTr("%1, %2").arg(root.title).arg(root.subtitle) : root.title
+    // Announced as selected, and activatable. Without the press action a
+    // screen-reader user could read a result and had no way to open it:
+    // the row is not focusable (the text field keeps the keyboard, and the
+    // list is driven from there), so nothing else carried the action.
+    Accessible.selected: root.current
+    Accessible.onPressAction: root.clicked()
 
     Rectangle {
         id: surface
