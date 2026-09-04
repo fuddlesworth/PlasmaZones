@@ -368,6 +368,14 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //     animation-profile taxonomy defines no domain for it, so the library
     //     default is the intended motion for both legs, and the role doc
     //     points back at this list.
+    // Drop the host's borrowed pointer before the assignment below destroys
+    // the animator it points at. Assigning through the unique_ptr would leave
+    // ShellHost::m_surfaceAnimator dangling for the span between the two
+    // statements. Nothing calls into the host there today, and this runs once
+    // from the ctor, but the window costs nothing to close.
+    if (m_shellHost) {
+        m_shellHost->setSurfaceAnimator(nullptr);
+    }
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
