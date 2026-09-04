@@ -85,7 +85,9 @@ Tile {
     active: root._powered
     // No adapter means nothing to power on.
     available: root._adapter !== null
-    hasDetail: true
+    // No detailContent yet, so no chevron: hasDetail derives from whether
+    // there is something to show. Give this tile a `detailContent`
+    // Component (and a `detailTitle`) and the affordance returns.
 
     onToggled: {
         if (root._adapter)

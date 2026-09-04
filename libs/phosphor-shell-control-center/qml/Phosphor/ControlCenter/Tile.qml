@@ -17,7 +17,8 @@
 //       sublabel: host.connectivity === NetworkHost.Full ? qsTr("Connected") : qsTr("Not connected")
 //       active: host.wirelessEnabled
 //       onToggled: host.wirelessEnabled = !host.wirelessEnabled
-//       hasDetail: true
+//       detailTitle: qsTr("Wi-Fi")
+//       detailContent: Component { NetworkList { host: host } }
 //   }
 //
 // The `active` state is the tile's own truth, driven by the service it
@@ -55,9 +56,21 @@ Item {
     // not reflow as services come and go (a tile that vanished mid-session
     // would move every tile after it under the user's cursor).
     property bool available: true
+    // The detail view this tile drills into: a title for the panel header
+    // and a Component for its body. The host reads both when the chevron is
+    // pressed, so the tile owns what its detail view contains without
+    // knowing how the panel is presented.
+    property string detailTitle: ""
+    property Component detailContent: null
     // Whether this tile has a detail view worth expanding to. Drives the
-    // chevron affordance; the host decides what expanding means.
-    property bool hasDetail: false
+    // chevron affordance.
+    //
+    // Derived, not set: a tile that offers the chevron without supplying
+    // content sends the user to a blank panel they have to back out of, so
+    // the affordance appears exactly when there is something behind it. A
+    // tile can still force it off while its content is unavailable.
+    property bool detailEnabled: true
+    readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
     // Layout hint read by ControlCenter. A toggle occupies one cell; the
     // continuous SliderTile overrides this to take the full row.
     readonly property bool spansRow: false

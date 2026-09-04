@@ -54,7 +54,12 @@ Item {
     // services come and go.
     property bool available: true
     // Whether this tile has a detail view (a device picker, usually).
-    property bool hasDetail: false
+    // Same contract as Tile: the tile supplies the detail view, and the
+    // chevron appears only when there is one behind it.
+    property string detailTitle: ""
+    property Component detailContent: null
+    property bool detailEnabled: true
+    readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
     // Layout hint read by ControlCenter: this tile wants the full grid
     // width. A slider in a half-width cell is too short to aim at, and the
     // label + readout row needs the room. The host applies it as a column

@@ -58,7 +58,9 @@ SliderTile {
     // no sink there is nothing to drive, and a slider sitting at zero would
     // be a false readout rather than an absent one.
     available: root.node !== null
-    hasDetail: true
+    // No detailContent yet, so no chevron: hasDetail derives from whether
+    // there is something to show. Give this tile a `detailContent`
+    // Component (and a `detailTitle`) and the affordance returns.
 
     onMoved: v => {
         if (!root.node)

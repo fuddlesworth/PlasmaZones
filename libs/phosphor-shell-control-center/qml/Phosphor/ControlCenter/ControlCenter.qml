@@ -81,6 +81,11 @@ Item {
     // Open the detail view for `tileId`. Returns false when the tile has
     // no materialised instance (an unavailable tile cannot be drilled
     // into).
+    // The tile currently drilled into, or null. The detail panel reads its
+    // title and content from here, so a tile owns what its detail view
+    // contains without knowing how the panel presents it.
+    readonly property var _detailTile: priv.detailTileId !== "" ? (priv.tiles[priv.detailTileId] ?? null) : null
+
     function openDetail(tileId) {
         if (!tileId || priv.tiles[tileId] === undefined)
             return false;
@@ -214,6 +219,11 @@ Item {
         anchors.margins: Tokens.spacing_l
         tileId: priv.detailTileId
         open: priv.detailTileId !== ""
+        // Fed from the tile being drilled into. Without these the panel
+        // opened blank and untitled over a hidden grid, which is a dead end
+        // the user has to back out of.
+        title: root._detailTile ? (root._detailTile.detailTitle ?? "") : ""
+        contentComponent: root._detailTile ? (root._detailTile.detailContent ?? null) : null
         onDismissed: root.closeDetail()
     }
 }

@@ -37,6 +37,19 @@ Item {
     // rather than on top of the header.
     default property alias content: body.data
 
+    // Content supplied as a Component instead, which is how the host feeds
+    // it: a tile declares its own detail view and ControlCenter hands the
+    // Component over when that tile is drilled into. Instantiated only while
+    // the panel is open, so a detail view nobody has opened costs nothing.
+    property Component contentComponent: null
+
+    Loader {
+        parent: body
+        anchors.fill: parent
+        active: root.open && root.contentComponent !== null
+        sourceComponent: root.contentComponent
+    }
+
     visible: opacity > 0
     opacity: root.open ? 1 : 0
     // Slides up from slightly below as it fades in. Small offset: this is

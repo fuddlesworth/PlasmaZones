@@ -58,7 +58,9 @@ SliderTile {
     available: root._device !== null
     // Only worth drilling into when there is more than one device to pick
     // between; a laptop with a single panel has nothing to show.
-    hasDetail: host.deviceCount > 1
+    // No detailContent yet, so no chevron: hasDetail derives from whether
+    // there is something to show. Give this tile a `detailContent`
+    // Component (and a `detailTitle`) and the affordance returns.
 
     onMoved: v => {
         if (root._device)

@@ -59,7 +59,9 @@ Tile {
     // no radio to turn on, so the tile goes inert rather than offering a
     // toggle whose write NetworkManager will refuse.
     available: host.networkingEnabled
-    hasDetail: true
+    // No detailContent yet, so no chevron: hasDetail derives from whether
+    // there is something to show. Give this tile a `detailContent`
+    // Component (and a `detailTitle`) and the affordance returns.
 
     onToggled: host.wirelessEnabled = !host.wirelessEnabled
 }
