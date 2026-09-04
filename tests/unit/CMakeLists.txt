@@ -2258,8 +2258,8 @@ add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 # ═══════════════════════════════════════════════════════════════════════════════
 # shell/ - shell-process controllers, factories and popout transports
 # ═══════════════════════════════════════════════════════════════════════════════
-# Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. The target compiles the
-# four src/shell sources directly rather than linking the gated
+# Deliberately NOT gated on BUILD_PHOSPHOR_SHELL. These targets compile the
+# src/shell sources they need directly rather than linking the gated
 # phosphor-shell binary, those sources are unconditional files on disk, and
 # the only non-Qt dependency (PhosphorRegistry) is added unconditionally at
 # the top level. Gating would make these guard tests vanish from the default

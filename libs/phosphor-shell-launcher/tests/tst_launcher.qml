@@ -135,7 +135,12 @@ TestCase {
         compare(t.launcher.queryText, "", "reset clears the field, not just the model");
         compare(t.results.query, "", "reset clears the query");
         compare(t.results.providerFilter, "", "reset clears the filter");
-        verify(t.launcher.activeFocus || t.launcher.focus, "reset puts keyboard focus in the surface");
+        // Typed, not inspected. reset() promises the SEARCH FIELD has the
+        // keyboard, and asserting the surface root's focus passed even when
+        // the field itself was left dead. A keystroke reaching the query is
+        // the only proof that matters.
+        keyClick(Qt.Key_G);
+        compare(t.launcher.queryText, "g", "the field takes the next keystroke");
     }
 
     function test_typing_pushes_the_query() {

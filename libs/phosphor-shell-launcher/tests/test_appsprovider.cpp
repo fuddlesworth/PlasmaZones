@@ -45,6 +45,7 @@ private Q_SLOTS:
     void capsTheResultCount();
     void activateRefusesAnIdThatWasNeverOffered();
     void rowsCarryTheEntryFields();
+    void theSubtitleIsTheGenericNameOrTheComment();
     void activateRefusesUnknownAndAlternate();
     void anInstalledApplicationAppearsWithoutARestart();
 };
@@ -245,6 +246,24 @@ void TestAppsProvider::rowsCarryTheEntryFields()
     QVERIFY(r.score > 0);
     QVERIFY(!r.primaryActionLabel.isEmpty());
     QVERIFY(!r.hasAlternateAction());
+}
+
+// The subtitle is the GenericName, falling back to the Comment. Only
+// Firefox was checked, and it has a GenericName, so dropping the fallback
+// entirely still passed.
+void TestAppsProvider::theSubtitleIsTheGenericNameOrTheComment()
+{
+    AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
+                          {QStringLiteral("KDE")});
+    provider.setQuery(QStringLiteral("firefox"));
+    QCOMPARE(provider.results().size(), 1);
+    QCOMPARE(provider.results().first().subtitle, QStringLiteral("Web Browser"));
+
+    // kitty declares no GenericName, so its Comment stands in. Without the
+    // fallback the row would carry a blank second line.
+    provider.setQuery(QStringLiteral("kitty"));
+    QCOMPARE(provider.results().size(), 1);
+    QCOMPARE(provider.results().first().subtitle, QStringLiteral("Fast GPU terminal"));
 }
 
 void TestAppsProvider::activateRefusesUnknownAndAlternate()
