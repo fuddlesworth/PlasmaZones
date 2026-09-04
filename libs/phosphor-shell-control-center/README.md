@@ -104,7 +104,14 @@ Tile {
     label: qsTr("Wi-Fi")
     sublabel: host.connectivity === NetworkHost.Full ? qsTr("Connected") : qsTr("Not connected")
     active: host.wirelessEnabled
-    hasDetail: true
+    // The chevron appears because there is a detail view behind it.
+    // `hasDetail` is derived from this, not set.
+    detailTitle: qsTr("Wi-Fi")
+    detailContent: Component {
+        NetworkList {
+            host: host
+        }
+    }
     // No local latch: write the property and let the service's own change
     // signal drive `active` back.
     onToggled: host.wirelessEnabled = !host.wirelessEnabled

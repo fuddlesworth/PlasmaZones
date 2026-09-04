@@ -33,7 +33,23 @@ namespace {
 // the Tiles/ directory. qt_add_qml_module registers each QML file as a
 // type named after its basename, so the directory does not appear here.
 const QString kModule = QStringLiteral("Phosphor.ControlCenter");
-}
+
+// One built-in tile, as named fields rather than a run of positional
+// QStrings. The display name and the QML type name are both plain strings
+// with no validation between them, so a positional call let a rename swap
+// the two: the registry would then carry a human label where the type
+// belongs, every tile would fail to construct at runtime, and a test that
+// only checks the id order would stay green. Designated initialisers make
+// that swap a rename rather than a reorder.
+struct TileSpec
+{
+    QString id;
+    QString displayName;
+    QString typeName;
+    QString capability;
+    QVariantMap initialProperties;
+};
+} // namespace
 
 ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleService* idleService, QObject* parent)
     : QObject(parent)
@@ -41,32 +57,56 @@ ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleServic
     // Capabilities are advisory until the Phase 5 capability runtime lands,
     // but they are declared now so the built-ins exercise the same manifest
     // surface a plugin will.
-    const auto reg = [this](const QString& id, const QString& name, const QString& type, const QString& capability,
-                            const QVariantMap& initialProperties = {}) {
+    const auto reg = [this](const TileSpec& spec) {
         // Only advertise what actually registered. A duplicate id is refused
         // by the registry, and appending regardless would list it twice in
         // tileIds while createTile resolved both entries to the first
         // factory, rendering the same tile twice.
-        if (!m_registry.registerFactory(std::make_shared<QmlComponentTileFactory>(
-                id, name, kModule, type, initialProperties, QStringList{capability}))) {
-            qCWarning(lcControlCenter) << "duplicate control-center tile id refused:" << id;
+        if (!m_registry.registerFactory(std::make_shared<QmlComponentTileFactory>(spec.id, spec.displayName, kModule,
+                                                                                  spec.typeName, spec.initialProperties,
+                                                                                  QStringList{spec.capability}))) {
+            qCWarning(lcControlCenter) << "duplicate control-center tile id refused:" << spec.id;
             return;
         }
-        m_tileIds.append(id);
+        m_tileIds.append(spec.id);
     };
 
     // Order here is the order they appear in the grid. The two sliders sit
     // last because they span the full width, so the three half-width
     // toggles pack cleanly above them.
-    reg(QStringLiteral("network"), QStringLiteral("Wi-Fi"), QStringLiteral("NetworkTile"),
-        QStringLiteral("network.write"));
-    reg(QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("BluetoothTile"),
-        QStringLiteral("bluetooth.write"));
-    reg(QStringLiteral("idle"), QStringLiteral("Keep awake"), QStringLiteral("IdleTile"),
-        QStringLiteral("idle.inhibit"), QVariantMap{{QStringLiteral("service"), QVariant::fromValue(idleService)}});
-    reg(QStringLiteral("audio"), QStringLiteral("Volume"), QStringLiteral("AudioTile"), QStringLiteral("audio.write"));
-    reg(QStringLiteral("brightness"), QStringLiteral("Brightness"), QStringLiteral("BrightnessTile"),
-        QStringLiteral("brightness.write"));
+    reg({.id = QStringLiteral("network"),
+         .displayName = QStringLiteral("Wi-Fi"),
+         .typeName = QStringLiteral("NetworkTile"),
+         .capability = QStringLiteral("network.write"),
+         // Spelled out because GCC warns on a designated initialiser that
+         // skips a field, even one with a default.
+         .initialProperties = {}});
+    reg({.id = QStringLiteral("bluetooth"),
+         .displayName = QStringLiteral("Bluetooth"),
+         .typeName = QStringLiteral("BluetoothTile"),
+         .capability = QStringLiteral("bluetooth.write"),
+         // Spelled out because GCC warns on a designated initialiser that
+         // skips a field, even one with a default.
+         .initialProperties = {}});
+    reg({.id = QStringLiteral("idle"),
+         .displayName = QStringLiteral("Keep awake"),
+         .typeName = QStringLiteral("IdleTile"),
+         .capability = QStringLiteral("idle.inhibit"),
+         .initialProperties = QVariantMap{{QStringLiteral("service"), QVariant::fromValue(idleService)}}});
+    reg({.id = QStringLiteral("audio"),
+         .displayName = QStringLiteral("Volume"),
+         .typeName = QStringLiteral("AudioTile"),
+         .capability = QStringLiteral("audio.write"),
+         // Spelled out because GCC warns on a designated initialiser that
+         // skips a field, even one with a default.
+         .initialProperties = {}});
+    reg({.id = QStringLiteral("brightness"),
+         .displayName = QStringLiteral("Brightness"),
+         .typeName = QStringLiteral("BrightnessTile"),
+         .capability = QStringLiteral("brightness.write"),
+         // Spelled out because GCC warns on a designated initialiser that
+         // skips a field, even one with a default.
+         .initialProperties = {}});
 }
 
 ControlCenterController::~ControlCenterController() = default;

@@ -2491,3 +2491,15 @@ foreach(_pz_test IN LISTS _all_tests)
 endforeach()
 
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
+
+# Two outputs for the control-center controller, which the sweep above cannot
+# express because it gives every test the same single-screen offscreen QPA.
+# screenOf resolves an item's window screen and falls back to the primary, and
+# with one output those are the same pointer, so the resolution branch could be
+# deleted with the suite still green. Appended AFTER the sweep on purpose: the
+# environment list is read last-wins, so this overrides the plain offscreen
+# entry rather than fighting it.
+if(TARGET test_control_center_controller)
+    phosphor_append_test_environment(test_control_center_controller
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
+endif()

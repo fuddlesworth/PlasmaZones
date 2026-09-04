@@ -20,6 +20,7 @@
 #include <QQmlEngine>
 #include <QQmlExpression>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QScopedPointer>
 #include <QScreen>
 #include <QSignalSpy>
@@ -54,6 +55,7 @@ private Q_SLOTS:
     void screenOfNullFallsBackToThePrimary();
     void screenOfNeverHandsTheScreenToTheJsGarbageCollector();
     void screenOfAnUnparentedItemFallsBackToThePrimary();
+    void screenOfAnItemInAWindowResolvesThatWindowsScreen();
     void openScreenNotifiesOncePerRealChange();
     void tileIdsListTheBuiltInCatalogInOrder();
 };
@@ -114,6 +116,30 @@ void TestControlCenterController::screenOfAnUnparentedItemFallsBackToThePrimary(
     QCOMPARE(QQmlEngine::objectOwnership(QGuiApplication::primaryScreen()), QQmlEngine::CppOwnership);
 }
 
+void TestControlCenterController::screenOfAnItemInAWindowResolvesThatWindowsScreen()
+{
+    // The leg the other three cases cannot reach. Both of them pass either
+    // nullptr or an item with no window, so the primary-screen fallback is
+    // the right answer either way: deleting the whole window-resolution
+    // block left the suite green. This runs on a SECOND screen, so the
+    // resolved answer and the fallback are different pointers and the
+    // block has to actually run.
+    const auto screens = QGuiApplication::screens();
+    if (screens.size() < 2) {
+        QSKIP("needs two screens; the test is registered with the offscreen plugin's two-screen config");
+    }
+    QScreen* other = screens.at(0) == QGuiApplication::primaryScreen() ? screens.at(1) : screens.at(0);
+    QVERIFY(other != QGuiApplication::primaryScreen());
+
+    ControlCenterController controller(nullptr);
+    QQuickWindow window;
+    window.setScreen(other);
+    QQuickItem item(window.contentItem());
+    QCOMPARE(item.window(), &window);
+
+    QCOMPARE(controller.screenOf(&item), other);
+}
+
 void TestControlCenterController::openScreenNotifiesOncePerRealChange()
 {
     ControlCenterController controller(nullptr);
@@ -136,7 +162,7 @@ void TestControlCenterController::openScreenNotifiesOncePerRealChange()
 void TestControlCenterController::tileIdsListTheBuiltInCatalogInOrder()
 {
     ControlCenterController controller(nullptr);
-    // Grid order: four half-width toggles, then the two full-width sliders
+    // Grid order: three half-width toggles, then the two full-width sliders
     // so the toggles pack above them. shell.qml feeds this straight into
     // ControlCenter.tileIds, so the order here IS the on-screen order.
     const QStringList expected{QStringLiteral("network"), QStringLiteral("bluetooth"), QStringLiteral("idle"),
