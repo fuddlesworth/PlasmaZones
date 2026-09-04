@@ -13,19 +13,27 @@
 //   - rekey happy path migrates the entry across keys, preserving the
 //     heap-allocated ShellState* so borrowed pointers stay valid.
 //
-// Tests that need a live shellSurface are deferred - the lib's
-// SurfaceFactory contract requires a real PhosphorLayer::Surface, which
-// in turn needs a Wayland transport. These tests focus on the lib-side
-// state-machine paths that don't depend on a live surface.
+// Most cases here need no live shellSurface and cover the lib-side
+// state-machine paths that do not depend on one. The syncSurfaceState
+// keyboard cases DO need a live surface, and get one from phosphor-layer's
+// in-tree MockTransport rather than a real Wayland connection.
 
 #include <PhosphorOverlay/PhosphorOverlay.h>
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorLayer/Role.h>
+#include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/SurfaceConfig.h>
+#include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorShellPatterns/Patterns.h>
 
+#include "mocks/mockscreenprovider.h"
+#include "mocks/mocktransport.h"
+#include "mocks/testroles.h"
+
 #include <QObject>
+#include <QQuickItem>
 #include <QString>
 #include <QStringLiteral>
 #include <QtTest/QtTest>
@@ -64,6 +72,9 @@ private Q_SLOTS:
 
     void makePerInstanceRoleAppendsScreenAndGenerationToScope();
     void registerConfigForRoleIsNoOpWithoutAnimator();
+
+    // syncSurfaceState keyboard axis, over a mock-transport-backed surface
+    void syncSurfaceStateDrivesKeyboardInteractivity();
 };
 
 void TestOverlaySmoke::shellHostConstructsAndDestructs()
@@ -301,6 +312,85 @@ void TestOverlaySmoke::registerConfigForRoleIsNoOpWithoutAnimator()
     // without injection get nothing rather than a crash.
     const auto role = PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("phosphor-overlay-test"));
     host.registerConfigForRole(role, {});
+}
+
+// The keyboard axis fails SILENTLY in production in both directions: a grab
+// that never lands means the content simply never receives a keystroke, and
+// one that never releases means the user's focused window stops receiving
+// them. Neither raises an error or a log line, so nothing but a test notices.
+//
+// Two traps are load-bearing in how this is written:
+//
+//  - The factory MUST hand back a warmed surface. Surface::window() is null in
+//    State::Constructed, and syncSurfaceState early-returns on a null window,
+//    so a freshly-created surface would exercise nothing while every
+//    assertion below still passed.
+//  - MockTransportHandle::m_keyboard starts at None and attach() never seeds
+//    it, so an "expect None" assertion passes vacuously against a ShellHost
+//    whose keyboard block was deleted outright. Every None case here is
+//    therefore preceded by a transition to Exclusive, and asserts the change.
+void TestOverlaySmoke::syncSurfaceStateDrivesKeyboardInteractivity()
+{
+    using namespace PhosphorLayer;
+
+    // Declared before the host so the host is destroyed first: ~ShellHost runs
+    // destroyShell over every key, which touches the surface and its transport.
+    Testing::MockTransport transport;
+    Testing::MockScreenProvider screens;
+    SurfaceFactory factory(Testing::makeDeps(&transport, &screens));
+
+    PhosphorOverlay::ShellHost host;
+    const QString screenId = QStringLiteral("screen-0");
+
+    host.setSurfaceFactory([&](const QString&, QScreen* physScreen) -> Surface* {
+        SurfaceConfig cfg;
+        // Hud rather than Modal: it attaches kbd-None, matching the passive
+        // shell role this axis exists to flip at runtime.
+        cfg.role = Testing::makeHudRole();
+        // Inline content settles the state machine synchronously in one drive
+        // pass, so nothing here needs an event loop or a QTRY_.
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = physScreen;
+        cfg.debugName = QStringLiteral("kbd-axis");
+        auto* surface = factory.create(std::move(cfg));
+        // The attach is what gives the surface a window and a transport
+        // handle, and syncSurfaceState needs both.
+        surface->warmUp();
+        return surface;
+    });
+
+    auto* state = host.ensureShell(screenId, screens.primary());
+    QVERIFY(state != nullptr);
+    // Guard the trap rather than trusting it: without these, every assertion
+    // below would pass against a surface that never reached the write.
+    QVERIFY(state->shellWindow() != nullptr);
+    QVERIFY(state->shellSurface() != nullptr);
+    auto* handle = state->shellSurface()->transport();
+    QVERIFY(handle != nullptr);
+
+    // Visible and asking to type: the one combination that takes the keyboard.
+    host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
+
+    // The release edge the daemon depends on. The slot stays visible for its
+    // whole fade-out, so the flag dropping - not the slot hiding - is what has
+    // to hand the keyboard back.
+    host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = false});
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
+
+    // Asking to type while nothing is visible must not hold the session's
+    // keyboard on an unseen surface.
+    host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
+    host.syncSurfaceState(screenId, {.visible = false, .inputGrabbing = false, .keyboardGrabbing = true});
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
+
+    // Teardown hands the keyboard back before the surface goes, rather than
+    // leaving the grab live until the event loop next turns.
+    host.syncSurfaceState(screenId, {.visible = true, .inputGrabbing = false, .keyboardGrabbing = true});
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::Exclusive);
+    host.destroyShell(screenId);
+    QCOMPARE(transport.m_lastHandle->m_keyboard, KeyboardInteractivity::None);
 }
 
 QTEST_MAIN(TestOverlaySmoke)

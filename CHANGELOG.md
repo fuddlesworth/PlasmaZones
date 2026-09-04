@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The shortcut cheatsheet can be searched, and reads more clearly**: the sheet listed around ninety shortcuts across three dense columns with no way to look one up, so finding a key meant scanning the whole card. There is now a filter field at the top, focused as soon as the sheet opens, matching on action names, category names and the keys themselves, so typing "column width" or "meta alt" narrows the card as you go. The columns no longer cut a category in half and reprint its heading as "(continued)", which had left most headings pointing at the middle of a section. Each category is now kept whole with a heading that reads as one, the leading modifiers on each row are drawn lighter than the key they lead to so a row can be read by its last cap, and a category's unassigned actions collapse into a single line you can open. The sheet also says which placement mode it is filtered for, since it has always been filtered by the mode of the screen it opens on and never mentioned it, and it now says that Escape closes it.
+- **The shortcut cheatsheet can be filtered, and its categories are no longer split across columns**: the sheet listed every shortcut the current mode offers with no way to look one up, so finding a key meant reading the whole card. A filter field now sits at the top and takes focus as soon as the sheet opens. It matches on the action and category names as well as on the key sequences themselves, so typing "column width" or "meta alt" leaves the rows that answer at full contrast and dims the rest. The card keeps its size and its layout while you type, and a counter beside the field says how many rows answered out of the total. The columns no longer cut a category in half and reprint its heading as "(continued)", which had left most headings pointing at the middle of a section. Each category is now kept whole under one heading. The leading modifiers on a row are drawn lighter than the key they end on, so a row can be read by its last cap, and a category's unassigned actions collapse into one line you can open. The sheet also says which placement mode it is filtered for, since it has always been filtered by the mode of the screen it opens on and never mentioned it, and it now says that Escape closes it. ([#1059](https://github.com/fuddlesworth/PlasmaZones/pull/1059))
 
 ### Fixed
 
@@ -2162,7 +2162,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.10...HEAD
+[3.4.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.9...v3.4.10
 [3.4.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.8...v3.4.9
 [3.4.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.6...v3.4.8
 [3.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.5...v3.4.6
