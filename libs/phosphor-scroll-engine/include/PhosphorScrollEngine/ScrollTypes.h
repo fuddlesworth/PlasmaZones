@@ -779,21 +779,24 @@ struct Tile
     /// the tile travels with it through all of those for free, because every
     /// one of those paths moves the Tile struct whole.
     ///
-    /// Set ONLY by that verb's maximize arm, and cleared by every other write
-    /// that SETTLES a height on the tile. That includes an addressed re-state
-    /// landing on the height the tile already held (setActiveWindowHeight and
-    /// setWindowHeightIntent both clear above their equality bail: the caller
-    /// named a height and got it), and it includes the write
-    /// reconcileWindowSize makes when a user finishes an interactive resize,
-    /// since the user has chosen a height of their own and there is no
-    /// maximize left to undo.
+    /// Set ONLY by that verb's maximize arm. What clears it again divides on
+    /// who chose the height, not on whether the tile moved.
     ///
-    /// What does NOT clear it is a press the verb refuses. adjust, the preset
-    /// cycle, minimize and expand bail on "this press moved no pixels", and a
-    /// refusal is not a countermand — a held-down key sitting at its limit
-    /// must not erase the memory. Nor does dropping a column's
-    /// maximize-to-edges override on its own: that press reports a change, but
-    /// it has not settled a height. Because of that the
+    /// A height the CALLER names settles it, even when the tile already held
+    /// that value: setActiveWindowHeight and setWindowHeightIntent both clear
+    /// above their equality bail, reconcileWindowSize clears before comparing
+    /// the size a user's interactive resize settled on, resetToDefaults clears
+    /// as it applies the layout's default, and equalize clears every tile in
+    /// the column outright. In each of those someone asked for a specific
+    /// height and got it, so there is no maximize left to undo.
+    ///
+    /// A height the VERB computes does not, unless the write lands. adjust,
+    /// minimize and expand bail when the press would move no pixels, and the
+    /// preset cycle bails when the entry it picked is the one the tile already
+    /// holds; all four clear only past that bail. A refusal is not a
+    /// countermand — a held-down key sitting at its limit must not erase the
+    /// memory. Nor does dropping a column's maximize-to-edges override on its
+    /// own: that press reports a change, but it has not settled a height. Because of that the
     /// standing slot is also what the toggle READS to decide the tile is
     /// maximized: it cannot go stale the way the height itself does when the
     /// budget moves under it. Deliberately
