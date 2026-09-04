@@ -217,6 +217,7 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
     }
 
     m_monocleMaximizedWindows.remove(windowId);
+    m_monocleRestoreOwed.remove(windowId);
     // Screen ID (EDID-based) for daemon tracking D-Bus calls. Resolved below
     // the gate so the no-daemon path does not pay for it.
     const QString screenId = m_effect->getWindowScreenId(w);

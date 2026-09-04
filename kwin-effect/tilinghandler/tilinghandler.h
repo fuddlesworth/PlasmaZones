@@ -1916,6 +1916,15 @@ private:
     QString m_pendingAutotileFocusWindowId;
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
+    /// Monocle members whose RESTORE the effect still owes: unmaximizeMonocleWindow was asked to hand the bit
+    /// back while the window sat under an interactive move or resize, and skipped the write rather than
+    /// moveResize the window out from under the pointer. Membership in m_monocleMaximizedWindows is retained
+    /// (the bit is genuinely still held), and this set is what tells reconcileMaximizeAfterGesture that the
+    /// claim is to be RELEASED at the gesture end rather than re-driven — without it, that function's only
+    /// monocle action is to re-apply MaximizeFull, which would re-maximize a window the batch had just
+    /// demoted, or one the drag had just floated. Cancelled by the monocle Apply arm (the claim is owed
+    /// again), by a manual unmaximize, and by the same teardown that drops membership.
+    QSet<QString> m_monocleRestoreOwed;
     /// Windows whose KWin maximize bit this handler holds because the
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
     /// on the same terms as m_monocleMaximizedWindows: membership is shed

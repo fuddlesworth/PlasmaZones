@@ -777,6 +777,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // suppressed is describing the strip it is leaving, and the arriving
     // strip answers on its own first batch.
     m_maximizeToggleInFlight.remove(windowId);
+    m_monocleRestoreOwed.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a
     // reused windowId must not inherit an exhausted budget, and every direct
     // caller of this cleanup (not just onWindowClosed) must drop the

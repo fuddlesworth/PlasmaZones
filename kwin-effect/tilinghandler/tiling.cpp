@@ -1998,6 +1998,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
+                    // A batch that re-asserts monocle for this window owes it a
+                    // MAXIMIZE again, whatever a mid-drag release recorded
+                    // earlier — the engine has changed its mind inside the
+                    // gesture, and the gesture end must re-drive, not restore.
+                    m_monocleRestoreOwed.remove(snap.windowId);
                     // Same departure-rect fix the column arm takes, for the
                     // same reason and by the same mechanism. maximize() above
                     // has already moved the window to KWin's maximize area, so

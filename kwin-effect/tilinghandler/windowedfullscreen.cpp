@@ -48,11 +48,13 @@ bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w) {
         m_monocleMaximizedWindows.remove(windowId);
+        m_monocleRestoreOwed.remove(windowId);
         return false;
     }
     KWin::Window* kw = w->window();
     if (!kw) {
         m_monocleMaximizedWindows.remove(windowId);
+        m_monocleRestoreOwed.remove(windowId);
         return false;
     }
     // KWin's maximize() has NO fullscreen conditional: called on a
@@ -83,6 +85,31 @@ bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (kw->isRequestedFullScreen()) {
         return false;
     }
+    // MID-GESTURE IS A RETAIN TOO, and it is the retain every sibling maximize
+    // write in this file takes: maximize() moveResizes, so restoring here
+    // while the user is dragging snaps the window to its restore rect under
+    // the pointer with nothing committed behind it until the gesture ends.
+    // The batch's monocle Release branch is the reachable caller — a tile
+    // batch arriving mid-drag is exactly what the Apply arm's own gesture
+    // skip exists for, and this was the one arm of the pair without it.
+    //
+    // Retaining membership alone is NOT enough, and is why m_monocleRestoreOwed
+    // exists. reconcileMaximizeAfterGesture pays skipped claims at the gesture
+    // end, but its only monocle action is to re-apply MaximizeFull: a member
+    // it finds there is assumed to still be owed its maximize. Retain without
+    // recording the direction and it re-maximizes the window the batch was
+    // demoting — or, when the gesture is a drag-to-float, permanently
+    // maximizes the window the user just floated, since a floater gets no
+    // batch to undo it. Shedding membership instead strands the bit: the sole
+    // insert site is gated on the window NOT already being maximized, so no
+    // later batch re-establishes an entry for a window still holding
+    // MaximizeFull. So: keep the entry, and record that what it now owes is a
+    // restore. The gesture end reads that first and pays it.
+    if (w->isUserMove() || w->isUserResize()) {
+        m_monocleRestoreOwed.insert(windowId);
+        return false;
+    }
+    m_monocleRestoreOwed.remove(windowId);
     m_monocleMaximizedWindows.remove(windowId);
     // The write below is a no-op on a window KWin already reports restored
     // (maximize() emits nothing), so no windowMaximizedStateAboutToChange
@@ -414,13 +441,26 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // it. Pay the release the mid-drag skip owed instead: the gesture flags are
     // clear by now, so it performs the real restore and sheds the entry.
     //
-    // Monocle needs no such gate: unmaximizeMonocleWindow has no gesture
-    // retain, so a monocle member reaching here still holds a live claim.
+    // Monocle carries its direction explicitly instead. A monocle member
+    // reaching here holds a live claim in one of two states: still owed its
+    // maximize (the Apply arm skipped mid-drag), or owed a RESTORE
+    // (unmaximizeMonocleWindow skipped mid-drag and recorded that in
+    // m_monocleRestoreOwed). The set is what distinguishes them, and it is
+    // read before the re-apply below because the re-apply is the wrong answer
+    // for the second state — it would re-maximize the window the batch was
+    // demoting, or the one the drag just floated. The release is routed
+    // through unmaximizeMonocleWindow rather than written here so it takes
+    // that function's fullscreen guard and departure bookkeeping; the gesture
+    // flags are clear by now, so it performs the real restore and sheds.
     if (owesMaximizedToEdges && !isScrollTiledWindow(windowId, w)) {
         releaseMaximizedToEdges(windowId, w);
         if (!owesMonocle) {
             return;
         }
+    }
+    if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
+        unmaximizeMonocleWindow(windowId);
+        return;
     }
     if (kw->requestedMaximizeMode() == KWin::MaximizeFull) {
         return;
@@ -1149,6 +1189,11 @@ void TilingHandler::restoreAllMonocleMaximized()
     // is iterator invalidation in a compositor loop.
     const QStringList ids = m_monocleMaximizedWindows.values();
     m_monocleMaximizedWindows.clear();
+    // A recorded restore debt is paid or moot after this drain either way:
+    // every member gets the restore written below, and the one arm that
+    // retains (fullscreen) re-inserts membership without a direction, so the
+    // next real release pays it through the ordinary path.
+    m_monocleRestoreOwed.clear();
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
     const auto geomGuard = qScopeGuard([this, prevInApply] {
