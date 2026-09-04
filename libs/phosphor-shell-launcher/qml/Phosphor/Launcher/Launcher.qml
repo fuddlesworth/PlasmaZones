@@ -248,6 +248,17 @@ FocusScope {
             // and section headers use. Four section headers is the worst
             // case, one per provider.
             Layout.preferredHeight: Math.min(contentHeight, root._visibleRows * root._rowHeight + 4 * root._sectionHeight)
+            // Animated, because the popout frame CENTRES this card: an
+            // unanimated height means the whole card, search field
+            // included, jumps vertically on every keystroke that changes
+            // the result count. Easing it turns a jump into a settle the
+            // eye can follow.
+            Behavior on Layout.preferredHeight {
+                NumberAnimation {
+                    duration: Motion.duration_short_3
+                    easing: Motion.standard
+                }
+            }
             clip: true
             model: root.results
             currentIndex: 0

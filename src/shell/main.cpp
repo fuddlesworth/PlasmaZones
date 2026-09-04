@@ -333,6 +333,13 @@ int main(int argc, char* argv[])
     // from the compositor, but this engine placed every panel and knows
     // what each reserved. Read live per open, so a reload that changes the
     // bar's thickness is reflected on the next popout.
+    // Captures `engine` by reference into a callable the transport holds.
+    // Safe by DECLARATION ORDER, which is the only thing keeping it safe:
+    // the transport is declared before the engine, so reverse destruction
+    // takes the engine down first and then the transport, and nothing can
+    // call through this in between. Moving either declaration breaks that
+    // silently. There is no symmetric clear because the transport has no
+    // teardown hook that runs before its own destructor.
     popoutTransport.setReservedMarginsProvider([&engine](QScreen* screen) {
         return engine.reservedMarginsFor(screen);
     });

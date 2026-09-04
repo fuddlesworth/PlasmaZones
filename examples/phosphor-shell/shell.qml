@@ -76,6 +76,12 @@ Item {
             // and simply reads null once the output dies. Hence the guard.
             socketOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
 
+            // The pocket depth is a constant on the bar, and the pocket
+            // CLIPS: a tile set taller than the depth is cut off with no
+            // scroll and nothing to say so. Three toggles and two sliders
+            // fit the default comfortably, but adding tiles here means
+            // raising BarHost.socketDepth to match, since the surface
+            // reservation cannot grow after materialization.
             socketContent: Component {
                 ControlCenter {
                     provider: ControlCenterRegistry
