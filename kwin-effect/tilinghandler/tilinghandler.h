@@ -402,12 +402,16 @@ public:
     /// a REFUSED request writes the bit back, from the dispatch's reply
     /// handler.
     ///
-    /// The one echo of the effect's own that reaches the already-agrees arm
-    /// with a flight entry live is the refusal write-back's, and it is told
-    /// apart from a user press by MaximizeToggleFlight::writeBackEchoesPending
-    /// rather than by any per-window authorship record: the batch's own writes
-    /// never land there, because for a user-driven toggle KWin's bit is already
-    /// where the engine will put it and applyMaximizeSuppressed writes nothing.
+    /// The one echo of the effect's own that a USER-DRIVEN toggle sends to the
+    /// already-agrees arm with a flight entry live is the refusal write-back's,
+    /// and it is told apart from a user press by
+    /// MaximizeToggleFlight::writeBackEchoesPending rather than by any
+    /// per-window authorship record: the batch's own writes never land there,
+    /// because for such a toggle KWin's bit is already where the engine will
+    /// put it and applyMaximizeSuppressed writes nothing. An engine-driven
+    /// write (Meta+Alt+F) does echo, and one landing inside a press's round
+    /// trip can cost one unrequested toggle; that residual is bounded and
+    /// documented at the arm.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
 
     /// Put a scroll-managed tile's KWin maximize bit back after an AXIS-ONLY
@@ -1250,9 +1254,9 @@ private:
     /// captured departure rect; false on every skip (not a member, window
     /// gone, still fullscreen) and on a member that KWin already reports as
     /// restored, where maximize() emits nothing and the capture is stale.
-    /// The tile batch reads it to route the geometry leg onto
-    /// window.movement.maximize; most other callers discard it, which is why
-    /// there is no [[nodiscard]]. Mirrors releaseMaximizedToEdges.
+    /// The tile batch reads it to anchor the placement leg's origin at the
+    /// pre-maximize rect; most other callers discard it, which is why there
+    /// is no [[nodiscard]]. Mirrors releaseMaximizedToEdges.
     bool unmaximizeMonocleWindow(const QString& windowId);
 
     /**
@@ -1877,6 +1881,11 @@ private:
         /// On X11 the write-back commits synchronously under the suppression
         /// counter and never reaches the arm, so the reply handler does not
         /// count it there.
+        /// Debts are consumed by COUNT, not identity: any agreeing edge that
+        /// lands while one is outstanding pays it, so a press that happens to
+        /// agree (a double toggle inside the round trip) consumes the debt and
+        /// the real write-back echo is then recorded as a press. Bounded to
+        /// one extra toggle; inherent to counting rather than tagging echoes.
         int writeBackEchoesPending = 0;
     };
     QHash<QString, MaximizeToggleFlight> m_maximizeToggleInFlight;
@@ -1942,7 +1951,10 @@ private:
     /// claim is to be RELEASED at the gesture end rather than re-driven — without it, that function's only
     /// monocle action is to re-apply MaximizeFull, which would re-maximize a window the batch had just
     /// demoted, or one the drag had just floated. Cancelled by the monocle Apply arm (the claim is owed
-    /// again), by a manual unmaximize, and by the same teardown that drops membership.
+    /// again), by a manual unmaximize, and by the same teardown that drops membership. A gesture that ends
+    /// while the window is fullscreen makes reconcile bail before this is read; the fullscreen-exit repairs
+    /// in slotWindowFullScreenChanged then call unmaximizeMonocleWindow with the gesture flags clear and pay
+    /// the debt instead.
     QSet<QString> m_monocleRestoreOwed;
     /// Windows whose KWin maximize bit this handler holds because the
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER

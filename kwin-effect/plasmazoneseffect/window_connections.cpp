@@ -526,7 +526,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // time), so a crossfade pack has nothing meaningful to play, and the
         // soft-body sim omits KWin's resize edge-lock logic (mesh_sim.cpp) so
         // the move-physics packs have no real story there either. Discrete
-        // resizes are covered by the snapIn / layoutSwitch / maximize events.
+        // resizes are covered by the placeIn / placeOut / layoutSwitch events.
         // tryBeginShaderForEvent silently no-ops if the user didn't assign a
         // shader to the path.
         if (window && !window->isUserResize()) {
@@ -820,8 +820,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // KWin emits windowMaximizedStateChanged once per axis flip — a
     // user-driven left-half-snap → fully-maximize sequence fires twice
     // (vertical-only first, then fully-maximized). Without an edge filter
-    // we'd start the WindowMaximize shader for the intermediate state,
-    // then immediately install WindowMaximize on the next emission, with
+    // we'd start the placement morph for the intermediate state, then
+    // immediately install it again on the next emission, with
     // the timer-driven teardown of the first racing the install of the
     // second. Track the last fully-maximized state per window and only
     // fire on actual edge transitions.
@@ -934,8 +934,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // must: on XWayland maximize() emits this signal synchronously
             // with the counter still held, so the conjunct above is false
             // and control used to fall through to the shader install
-            // below — the engine-authored column maximize played a
-            // WindowMaximize morph on X11 and not on Wayland, where the
+            // below — the engine-authored column maximize played a second
+            // placement morph on X11 and not on Wayland, where the
             // committed echo arrives with the counter at 0 and the
             // interception claims it. Same deliberate skip, now on both
             // platforms. The edge tracking and the rule-cache
@@ -973,8 +973,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // move when the user grabs the maximized title bar and pulls
             // ("restore on drag"). The drag already owns the visuals — the
             // windowStartUserMovedResized hookup above installed the
-            // window.move shader as a HELD transition — and installing
-            // WindowMaximize here would supersede it: the move pack dies
+            // window.move shader as a HELD transition — and installing the
+            // placement morph here would supersede it: the move pack dies
             // mid-drag and a full-screen→cursor morph replays over the
             // pointer. The isUserResize branch is skipped for a different
             // reason: an interactive resize starts NO shader (the start
@@ -1379,19 +1379,35 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     // satisfies both families with the same values, and keeps the grid
     // anchoring contract intact (apply() builds the deform grid on
     // iToRect == the live frame).
+    //
+    // ON THE PLACEMENT NODES, not a maximize node of its own. Growing to the
+    // maximize area is a window arriving somewhere and rides placeIn; restoring
+    // is a window let go and rides placeOut — the same two legs every engine
+    // placement and release ride, so a user's "when windows change size" pack
+    // plays here too. The committed mode is the direction: this runs from the
+    // maximizedChanged handler (and its deferred completion), which KWin emits
+    // only after updating maximizeMode() — verified against 6.7.4, both
+    // X11Window::maximize and XdgToplevelWindow::updateMaximizeMode assign the
+    // member before emitting, and EffectWindow's forwarder reads it inside the
+    // handler.
+    const KWin::Window* kw = window->window();
+    const bool toMaximized = kw && kw->maximizeMode() == KWin::MaximizeFull;
     bool ownsMaximizeLeg = false;
-    tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs(),
+    tryBeginShaderForEvent(window,
+                           toMaximized ? PhosphorAnimation::ProfilePaths::WindowPlaceIn
+                                       : PhosphorAnimation::ProfilePaths::WindowPlaceOut,
+                           animationDurationMs(),
                            /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
                            /*animateMinimized=*/false, &ownsMaximizeLeg);
     // Geometry-morph endpoints — sibling of the drag-snap wiring in
-    // drag_snap.cpp. window.maximize is a geometry-contract event, so every
+    // drag_snap.cpp. The placement legs are geometry-contract events, so every
     // assignable pack derives its drawn rect from iFromRect/iToRect; leaving
     // them default-invalid pushes zero vec4s and a morph pack masks every
     // fragment outside a 0×0 rect at the origin — the window paints fully
     // transparent for the whole leg and pops in on teardown.
     //
     // Gate on the IDENTITY verdict, not on findTransition liveness: with no
-    // window.maximize pack assigned, tryBeginShaderForEvent installs nothing
+    // placement pack assigned, tryBeginShaderForEvent installs nothing
     // and findTransition hands back whatever unrelated leg is in flight
     // (window.open on a self-maximizing app is the reachable case). Writing
     // morph endpoints onto that leg re-anchors its drawn rect mid-flight and

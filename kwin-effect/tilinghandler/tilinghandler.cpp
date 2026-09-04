@@ -990,7 +990,7 @@ void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wind
                     QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
                     // Snap-out: leaving tile-managed sizing.
                     effect->applyWindowGeometry(wp, sizeRestored, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                                PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                                PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                     qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
                                      << savedH;
                 });

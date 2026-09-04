@@ -235,8 +235,8 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     // On Wayland the committed echo of this restore arrives with the
     // suppression counter back at 0 (the platform split window_connections.cpp
     // documents for the monocle writes) and would read as a genuine
-    // unmaximize edge: the maximize lambda would replay a WindowMaximize
-    // morph anchored at the full-monitor pre-frame over the snap-in leg.
+    // unmaximize edge: the maximize lambda would replay a placeOut morph
+    // anchored at the full-monitor pre-frame over the batch's placeIn leg.
     // Pre-write the edge tracker so the echo takes the no-edge branch — its
     // only side effect, cancelAxisOnlyMaximize, no-ops for a window that is
     // not scroll-tiled. That branch skips two writes the edge branch owed
@@ -342,6 +342,12 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
             return;
         }
     }
+    // The return leaves no maximized-to-edges claim behind it. A window in
+    // BOTH ledgers is unreachable: the column arm inserts only on a scrolling
+    // screen and the monocle arm only under a tiling algorithm, the modes are
+    // exclusive per screen, and a screen change routes through the release of
+    // whichever claim the window held before it can acquire the other. So
+    // when this arm fires, owesMaximizedToEdges was false or already paid.
     if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
         unmaximizeMonocleWindow(windowId);
         return;
@@ -494,7 +500,7 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // Correct, and it cost an extra visible jump on every press. KWin emits
     // frameGeometryChanged from inside maximize() BEFORE maximizedChanged, so
     // by the time this runs the window has already been moved once; cancelling
-    // moved it a second time, and only then did the batch's window.snapIn leg
+    // moved it a second time, and only then did the batch's placeIn leg
     // animate from wherever the cancel had left it. Two unanimated jumps and a
     // transition starting from the wrong origin, where the Meta+Alt+F path —
     // which never touches KWin's bit — plays one clean leg between two column
@@ -552,10 +558,17 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // consumes one per arrival instead of recording a press. A genuine press
     // queued behind the echo is recorded normally: committed edges arrive in
     // request order, so the write-back's echo is always the first to land.
-    // No other write of the effect's reaches here with an entry live — for a
-    // user-driven toggle the engine ADOPTS KWin's bit rather than re-writing
-    // it (applyMaximizeSuppressed's requested-mode early return), so the
-    // batch produces no echo at all.
+    // No write from a USER-DRIVEN toggle reaches here with an entry live: the
+    // engine ADOPTS KWin's bit rather than re-writing it
+    // (applyMaximizeSuppressed's requested-mode early return), so the batch
+    // produces no echo at all. An ENGINE-driven write can (Meta+Alt+F, or a
+    // neighbour's toggle re-resolving this column): its Wayland echo agrees
+    // with membership, and if it lands inside a button press's round trip with
+    // no debt outstanding it is recorded as a press and the reply re-dispatches
+    // one unrequested toggle. Bounded to that one, since the re-armed entry
+    // starts with pendingPress clear. Accepted residual; the counting is by
+    // arrival, not identity, so a press that happens to agree consumes a debt
+    // just the same (see writeBackEchoesPending).
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
@@ -808,14 +821,20 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         const auto geomGuard = qScopeGuard([this, prevInApply] {
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         });
+        // Whether THIS call writes: applyMaximizeSuppressed early-returns when
+        // the requested mode already matches, and an echo it did not author
+        // must not be counted as a debt (on Wayland requested can already
+        // equal engineState while the committed mode lags an earlier write).
+        const bool writesBack = kw->requestedMaximizeMode() != engineState;
         applyMaximizeSuppressed(kw, engineState);
-        // One more echo owed if the write has not committed yet. On Wayland it
-        // has not — the client round trip is still ahead, and its landing is
-        // the echo the already-agrees arm must consume rather than record. On
-        // X11 maximize() committed synchronously inside the call, under the
-        // suppression counter, so no echo will reach the arm and none is
-        // counted. The committed mode is the exact discriminator for both.
-        if (kw->maximizeMode() != engineState) {
+        // One more echo owed if this call wrote and the write has not
+        // committed yet. On Wayland it has not — the client round trip is
+        // still ahead, and its landing is the echo the already-agrees arm must
+        // consume rather than record. On X11 maximize() committed
+        // synchronously inside the call, under the suppression counter, so no
+        // echo will reach the arm and none is counted. The committed mode is
+        // the exact discriminator for both.
+        if (writesBack && kw->maximizeMode() != engineState) {
             ++writeBackEchoesPending;
         }
         // Tracker re-seed, pairing with the suppressed VS-crossing detectors

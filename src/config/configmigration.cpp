@@ -59,7 +59,7 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.migrations = {
         {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
         {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
-        {5, &ConfigMigration::migrateV5ToV6},
+        {5, &ConfigMigration::migrateV5ToV6}, {6, &ConfigMigration::migrateV6ToV7},
     };
     // clang-format on
     return s;

@@ -103,7 +103,7 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // KWin's maximize bit fighting the zone rect from its first frame.
         m_tilingHandler->demoteMaximizeForSnapPlacement(w, cached->geometry);
         applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
-                            PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                            PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                             /*demoteMaximizeOnDeferredReplay=*/true);
         return true;
     }

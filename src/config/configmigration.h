@@ -75,16 +75,22 @@ namespace PlasmaZones {
 /// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
 /// The premade Steam rule's correction rides the same path for the same reason
 /// (see repairSeededSteamRule): both fix a row this code seeded into the
-/// rules.json SIDECAR, which the version chain does not cover. Those two are
-/// the only cleanups that run outside the chain — anything else touching the
-/// config root needs a version bump.
+/// rules.json SIDECAR, which the version chain does not cover. The v7 rename of
+/// the window-movement animation events rides it too, for a different reason:
+/// a rule action scoped to a retired event lives in that same sidecar, so the
+/// v7 config step cannot reach it (see renameRetiredAnimationEventPaths).
+/// Those three are the only cleanups that run outside the chain — anything
+/// else touching the config root needs a version bump.
 /// v5: the per-mode Snapping/Tiling appearance and gap settings fold into the
 ///     unified Windows / Gaps groups (see migrateV4ToV5).
 /// v6: the snapping zone colours and the Windows border/tint colours become
 ///     theme-fallback strings (EMPTY means "follow the system palette"); the
 ///     Snapping.Zones.Colors/UseSystem bool and the "accent" token default
 ///     are retired (see migrateV5ToV6).
-inline constexpr int ConfigSchemaVersion = 6;
+/// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
+///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
+///     retired into them (see migrateV6ToV7).
+inline constexpr int ConfigSchemaVersion = 7;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -265,6 +271,21 @@ public:
     /// Stamps `_version = 6`.
     static void migrateV5ToV6(QJsonObject& root);
 
+    /// v6 → v7 schema step. The window-movement placement animation nodes
+    /// were still named for snapping (`window.movement.snapIn` /
+    /// `.snapOut`) although every placement mode rides them; v7 renames them
+    /// `placeIn` / `placeOut`. `window.movement.maximize` is retired: the
+    /// native maximize morph rides the two placement nodes, and an engine
+    /// placement that set KWin's maximize bit on the way is a placement. In
+    /// the `Animations/ShaderProfileTree` blob each override's `path` is
+    /// rewritten; a `maximize` override folds into `placeIn` when no placeIn
+    /// override will otherwise exist, and is dropped when one will (the
+    /// placement node's own assignment is the more general statement).
+    /// Rule actions scoped to those events are renamed by
+    /// renameRetiredAnimationEventPaths, since rules.json is outside this
+    /// chain. Stamps `_version = 7`.
+    static void migrateV6ToV7(QJsonObject& root);
+
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup
     /// path, so it executes for every already-converted user without consuming a
@@ -310,6 +331,20 @@ public:
     ///                 via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool repairSeededSteamRule(const QString& jsonPath);
+
+    /// Rename rule actions scoped to a retired window-movement animation event
+    /// (`window.movement.snapIn` / `.snapOut` / `.maximize`) onto the v7 nodes
+    /// (`placeIn` / `placeOut` / `placeIn`). Every event-scoped animation
+    /// action type is covered (shader, timing and curve overrides). Runs from
+    /// finalizeV4Conversion's cleanup path because the rule store is a sidecar
+    /// the version chain does not cover, and a rule left naming a retired
+    /// event would silently never match again. Idempotent: once renamed there
+    /// is nothing left to match.
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool renameRetiredAnimationEventPaths(const QString& jsonPath);
 
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store

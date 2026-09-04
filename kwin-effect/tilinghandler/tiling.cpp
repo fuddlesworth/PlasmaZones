@@ -325,7 +325,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                     // Re-seed the tracked screen: the comment above names
                     // the exact precondition (the restored rect may lie in
                     // a different virtual screen than the tiled rect), the
@@ -1984,7 +1984,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // nothing.
                     m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, monocleOrigin);
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceIn, monocleOrigin);
                 } else {
                     m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
@@ -2725,7 +2725,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // bit write's one effect on the animation is the departure
                     // rect, anchored above.
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
+                                                  PhosphorAnimation::ProfilePaths::WindowPlaceIn, originOverride,
                                                   visualTargetOverride);
                 }
             }

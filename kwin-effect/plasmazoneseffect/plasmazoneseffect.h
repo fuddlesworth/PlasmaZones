@@ -1069,10 +1069,10 @@ private:
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
     //
     // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
-    // hardcoded to "window.snapIn" inside applyWindowGeometry, which fired the same shader for every
-    // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
+    // hardcoded to one path inside applyWindowGeometry, which fired the same shader for every
+    // motion that flowed through this chokepoint — place, release, resnap, resize, restore, etc.
     // Callers now pass the logical event path so the shader tree can route each one independently.
-    // Default is WindowSnapIn (the kwin-effect's default snap-into-zone window animation).
+    // Default is WindowPlaceIn (the placement animation every engine's arrival leg rides).
     //
     // originOverride replaces the window's CURRENT frame as the animation's
     // departure rect. Normally the two are the same — a window animates from
@@ -1105,7 +1105,7 @@ private:
     // immediate path assumes the caller already demoted.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
-                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
                              bool demoteMaximizeOnDeferredReplay = false);
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:

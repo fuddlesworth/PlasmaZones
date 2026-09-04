@@ -231,11 +231,18 @@ QStringList AnimationsPageController::stockSuppressedEvents() const
         }
         return true;
     };
-    for (const QString& path :
-         {PhosphorAnimation::ProfilePaths::WindowMinimize, PhosphorAnimation::ProfilePaths::WindowMaximize}) {
-        if (packOwns(path)) {
-            owned.append(path);
-        }
+    if (packOwns(PhosphorAnimation::ProfilePaths::WindowMinimize)) {
+        owned.append(PhosphorAnimation::ProfilePaths::WindowMinimize);
+    }
+    // The stock maximize effect is unloaded when a pack owns EITHER placement
+    // node (the compositor gate is the same disjunction), because the unload
+    // is global and a window that maximizes on placeIn restores on placeOut.
+    // Both are therefore reported as suppressed together: a rule scoped to
+    // either has no stock effect left to conflict with.
+    if (packOwns(PhosphorAnimation::ProfilePaths::WindowPlaceIn)
+        || packOwns(PhosphorAnimation::ProfilePaths::WindowPlaceOut)) {
+        owned.append(PhosphorAnimation::ProfilePaths::WindowPlaceIn);
+        owned.append(PhosphorAnimation::ProfilePaths::WindowPlaceOut);
     }
     return owned;
 }

@@ -510,7 +510,7 @@ private Q_SLOTS:
         // than a leg; it gets its own compatibility check further down. There
         // are no resize legs at all — the interactive-resize and snapResize
         // events were dropped from the taxonomy.
-        for (const QString& geo : {PP::WindowSnapIn, PP::WindowSnapOut, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
+        for (const QString& geo : {PP::WindowPlaceIn, PP::WindowPlaceOut, PP::WindowLayoutSwitch}) {
             QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }
         // The geometry-classed cascade parent accepts a geometry effect too
@@ -530,7 +530,7 @@ private Q_SLOTS:
 
         const AnimationShaderEffect fade = universalPack();
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
-        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowPlaceIn));
         // The desktop class is opt-in: a universal single-surface effect must NOT
         // bleed onto a desktop path (its lone surface sampler would be unbound).
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
@@ -548,7 +548,7 @@ private Q_SLOTS:
         // compatible on appearance legs.
         const AnimationShaderEffect appearanceOnly = appearancePack();
         QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
-        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowPlaceIn));
         // A single-surface (non-desktop) effect never runs on a desktop path.
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopPeek));
@@ -596,7 +596,7 @@ private Q_SLOTS:
         const AnimationShaderEffect moveOnly = movePack();
         QVERIFY(shaderEffectAppliesToEventPath(moveOnly, PP::WindowMove));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowMovement));
-        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowPlaceIn));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopPeek));
@@ -611,7 +611,7 @@ private Q_SLOTS:
         const AnimationShaderEffect hybrid =
             packWith(QStringLiteral("hybrid"), {QStringLiteral("geometry"), QStringLiteral("move")});
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowMove));
-        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowPlaceIn));
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::Window));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::WindowOpen));
         // A hybrid that does NOT declare "desktop" is still refused on the
@@ -645,7 +645,7 @@ private Q_SLOTS:
         QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::ScrollingView));
         QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::Scrolling));
         QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowOpen));
-        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowPlaceIn));
         QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMove));
         QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::Window));
@@ -667,7 +667,7 @@ private Q_SLOTS:
         // conflate.
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::ScrollingView));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Scrolling));
-        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMaximize));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowPlaceOut));
 
         // A HYBRID that declares strip alongside a single-surface class is
         // accepted on BOTH — the classes are independent capabilities, not a
@@ -703,7 +703,7 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::ScrollingView));
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::Scrolling));
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowOpen));
-        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowPlaceIn));
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowMove));
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::Window));

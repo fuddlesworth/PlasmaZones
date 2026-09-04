@@ -137,7 +137,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // (durationMs == 0; the leg rides m_windowAnimator's timeline).
         // Time-based transitions (durationMs > 0; window.open / close /
         // focus / etc.) have their own QTimer teardown scheduled by
-        // tryBeginShaderForEvent — without this guard, a window.snapIn
+        // tryBeginShaderForEvent — without this guard, a placeIn
         // transition that's been superseded by another window.* event leaves
         // the original animator running its geometry tween, and that
         // animator's eventual completion would prematurely kill the

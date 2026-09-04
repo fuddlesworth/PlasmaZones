@@ -159,7 +159,8 @@ private Q_SLOTS:
 
         Profile userProfile;
         userProfile.duration = 2000.0;
-        m_registry.registerProfile(QStringLiteral("window.movement.snapIn"), userProfile, QStringLiteral("user-files"));
+        m_registry.registerProfile(QStringLiteral("window.movement.placeIn"), userProfile,
+                                   QStringLiteral("user-files"));
         m_registry.registerProfile(QStringLiteral("Global"), Profile{});
 
         // No tag configured: identical to snapshot().
@@ -169,7 +170,7 @@ private Q_SLOTS:
         const auto filtered = m_registry.snapshotExcludingLowPrecedence();
         QCOMPARE(filtered.size(), 2);
         QVERIFY(!filtered.contains(QStringLiteral("window")));
-        QVERIFY(filtered.contains(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(filtered.contains(QStringLiteral("window.movement.placeIn")));
         QVERIFY(filtered.contains(QStringLiteral("Global")));
 
         // Full snapshot still carries the seed for in-process consumers.
