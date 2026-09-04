@@ -135,7 +135,16 @@ PanelWindow {
     // 0 while fully closed hands the band back to `thickness`, so the
     // shadow strip goes click-through again rather than staying live at the
     // capsule's own depth.
-    interactiveThickness: panel._socketDepth > 0.5 ? panel.screenInset + panel.barThickness + Math.ceil(panel._socketDepth) : 0
+    //
+    // Quantised to open-or-closed rather than tracking the animated depth.
+    // Following the ramp changed the ceiling on nearly every frame, and
+    // PanelWindow dedups only equal ints, so one open animation issued a
+    // Wayland input-region update and a requestUpdate per frame. Input has
+    // exactly two interesting states here: the pocket is growing or open, in
+    // which case the whole pocket should take clicks, or it is shut. Opening
+    // the band early costs nothing, since the strip it covers is the bar's
+    // own shadow and the pocket painting into it.
+    interactiveThickness: panel._socketDepth > 0.5 ? panel.screenInset + panel.barThickness + panel._usableSocketDepth : 0
 
     // Bar layout: each slot is a list of groups, and each group is an
     // array of widget ids sharing one island chip. Related widgets are
