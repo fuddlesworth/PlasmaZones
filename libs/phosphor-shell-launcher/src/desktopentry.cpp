@@ -110,6 +110,35 @@ QStringList splitList(QStringView raw)
     return out;
 }
 
+// A `Key` or `Key[locale]` name, as the spec defines it: the bare name is
+// alphanumerics and hyphens, and the optional bracketed suffix is a locale.
+bool isValidKey(QStringView key)
+{
+    QStringView bare = key;
+    const qsizetype open = key.indexOf(u'[');
+    if (open >= 0) {
+        if (!key.endsWith(u']') || open == 0 || key.size() - open < 3) {
+            return false;
+        }
+        bare = key.left(open);
+        const QStringView locale = key.mid(open + 1, key.size() - open - 2);
+        for (QChar c : locale) {
+            if (!c.isLetterOrNumber() && c != u'_' && c != u'.' && c != u'@' && c != u'-') {
+                return false;
+            }
+        }
+    }
+    if (bare.isEmpty()) {
+        return false;
+    }
+    for (QChar c : bare) {
+        if (!c.isLetterOrNumber() && c != u'-') {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool parseBool(QStringView raw)
 {
     return raw.trimmed() == u"true";
@@ -262,6 +291,14 @@ std::optional<DesktopEntry> DesktopEntry::parse(const QString& filePath, const Q
         // duplicated key. QHash::insert overwrites, so a malformed file with
         // two Name= lines used to take the last one.
         const QString key = view.left(eq).trimmed().toString();
+        // Validated at the boundary. The spec's key is alphanumerics and
+        // hyphens, optionally followed by a bracketed locale. Anything else
+        // is a malformed line, and accepting it let a stray "Name[" shadow a
+        // real localised value in the lookup below.
+        if (!isValidKey(key)) {
+            qCDebug(lcDesktopEntry) << "ignoring malformed key in" << filePath << ":" << line;
+            continue;
+        }
         if (!group.contains(key)) {
             group.insert(key, view.mid(eq + 1).trimmed().toString());
         }
@@ -328,7 +365,11 @@ QStringList DesktopEntry::execArgs() const
     for (qsizetype i = 0; i < exec.size(); ++i) {
         const QChar c = exec[i];
         if (inQuotes) {
-            if (c == u'\\' && i + 1 < exec.size()) {
+            // Only " ` $ and \\ may be escaped inside quotes. A backslash
+            // before anything else is a literal backslash, and swallowing it
+            // corrupted a Windows-style path or a regex in an Exec line.
+            if (c == u'\\' && i + 1 < exec.size()
+                && (exec[i + 1] == u'"' || exec[i + 1] == u'`' || exec[i + 1] == u'$' || exec[i + 1] == u'\\')) {
                 current.append(exec[++i]);
             } else if (c == u'"') {
                 inQuotes = false;

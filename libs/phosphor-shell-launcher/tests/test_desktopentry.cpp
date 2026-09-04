@@ -38,6 +38,7 @@ private Q_SLOTS:
     void localisesALocaleNameCarryingAScriptSubtag();
     void aDuplicatedKeyKeepsItsFirstValue();
     void execArgsResolveQuotingAndDropFieldCodes();
+    void malformedInputDoesNotCorruptTheEntry();
     void rejectsWhatTheSpecSaysToTreatAsAbsent();
     void showsOnAppliesOnlyShowInThenNotShowIn();
     void scanDropsHiddenAndNoDisplay();
@@ -141,6 +142,41 @@ void TestDesktopEntry::execArgsResolveQuotingAndDropFieldCodes()
 
     e.exec.clear();
     QVERIFY(e.execArgs().isEmpty());
+}
+
+// The quoting rule, which used to corrupt otherwise valid data: only " ` $
+// and backslash may be escaped inside quotes, and swallowing a backslash
+// before anything else destroyed a path or a regex in an Exec line.
+//
+// The malformed key here is along for the ride. The parser validates key
+// names as boundary hygiene, but a stray bracket cannot actually shadow a
+// real value through the localised lookup, so that half of this case is a
+// smoke test rather than a regression guard.
+void TestDesktopEntry::malformedInputDoesNotCorruptTheEntry()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = QDir(dir.path()).filePath(QStringLiteral("edge.desktop"));
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    // A stray bracketed key that is not a locale suffix, written BEFORE the
+    // real one. Accepting it let a malformed name shadow a real value.
+    // And an Exec whose quoted argument holds a backslash that escapes
+    // nothing the spec lists, which was being swallowed.
+    f.write(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name[=Shadowed\n"
+        "Name=Real Name\n"
+        "Exec=tool \"C:\\\\path\\\\file\"\n");
+    f.close();
+
+    const auto e = DesktopEntry::parse(path, QString());
+    QVERIFY(e.has_value());
+    QCOMPARE(e->name, QStringLiteral("Real Name"));
+    const QStringList args = e->execArgs();
+    QCOMPARE(args.size(), 2);
+    QCOMPARE(args.at(1), QStringLiteral("C:\\path\\file"));
 }
 
 void TestDesktopEntry::rejectsWhatTheSpecSaysToTreatAsAbsent()
