@@ -208,7 +208,9 @@ Item {
         // Hidden, not merely covered, while a detail view is open. The
         // detail panel is a sibling rather than a child, so leaving the grid
         // visible underneath would keep every tile in the accessibility tree
-        // and the tab order behind a panel the user cannot see past.
+        // and in the tab order behind a panel the user cannot see past.
+        // Hiding it is exactly what takes them out of both, which is the
+        // intent: the grid is not reachable while the user is drilled in.
         visible: priv.detailTileId === ""
     }
 

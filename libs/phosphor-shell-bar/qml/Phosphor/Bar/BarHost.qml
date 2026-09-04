@@ -97,8 +97,13 @@ PanelWindow {
     // default, outside the input region.
     property int socketReserve: panel._usableSocketDepth
 
-    // Emitted when the pocket has finished closing, so a host can tear its
-    // content down (or release a grab) only once nothing is visible.
+    // Emitted when the pocket has finished closing.
+    //
+    // The pocket's content is built once and KEPT, so this is not a
+    // teardown cue and no host in this repo consumes it. It exists for a
+    // host that owns something the closed pocket should not hold: a
+    // keyboard grab, a running poll, a service subscription. Its one
+    // guarantee is timing, that nothing is on screen when it fires.
     signal socketClosed
 
     // Animated pocket depth. The socket descriptor and the content clip
@@ -234,13 +239,27 @@ PanelWindow {
                 }
             }
 
+            // Latched by a plain flag rather than by the Loader reading its
+            // own `item` inside its own `active` binding, which is a cycle
+            // through the very property the binding drives.
+            property bool everOpened: false
+
+            Connections {
+                target: panel
+
+                function onSocketOpenChanged() {
+                    if (panel.socketOpen)
+                        pocket.everOpened = true;
+                }
+            }
+
             Loader {
                 anchors.fill: parent
                 // Built on first open and kept thereafter: the tiles behind
                 // it hold live service connections, and rebuilding them on
                 // every open would re-enumerate NetworkManager, BlueZ and
                 // PipeWire each time the user glanced at the panel.
-                active: panel.socketOpen || item !== null
+                active: panel.socketOpen || pocket.everOpened
                 sourceComponent: panel.socketContent
             }
         }

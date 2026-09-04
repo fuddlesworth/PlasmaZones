@@ -50,7 +50,11 @@ FocusScope {
         sourceComponent: root.contentComponent
     }
 
-    visible: opacity > 0
+    // Bound to the discrete open state rather than to `opacity > 0`, which
+    // re-evaluated on every frame of the fade. The panel has to stay visible
+    // through the closing animation, so this cannot simply be `open`: the
+    // fade's own completion is what turns it off.
+    visible: root.open || fade.running
     opacity: root.open ? 1 : 0
 
     // Slides up from slightly below as it fades in. Small offset: this is
@@ -75,6 +79,8 @@ FocusScope {
 
     Behavior on opacity {
         NumberAnimation {
+            id: fade
+
             duration: Motion.duration_short_4
             easing: Motion.standard
         }
@@ -145,6 +151,10 @@ FocusScope {
                             return;
                         backRipple.start(width / 2, height / 2);
                         root.dismissed();
+                        // Accepted, so a handled activation does not also
+                        // propagate to an ancestor Keys handler and fire a
+                        // second time. Tile does the same.
+                        event.accepted = true;
                     }
 
                     HoverHandler {
