@@ -61,6 +61,7 @@ class TestPersistentPropertiesScan : public QObject
 private Q_SLOTS:
     void nestedStateIsRegisteredAsASingleton();
     void nestedStateSurvivesAReload();
+    void aRootPanelWithNoScreenFailsTheLoad();
 
 private:
     [[nodiscard]] static QObject* singletonFor(ShellEngine& engine, const QString& reloadId);
@@ -150,6 +151,47 @@ void TestPersistentPropertiesScan::nestedStateSurvivesAReload()
     QVERIFY2(after, "the rebuilt generation registers the nested state again");
     QVERIFY2(after != before, "the reload really did rebuild the object graph");
     QCOMPARE(after->property("counter").toInt(), 7);
+}
+
+// A root PanelWindow that cannot resolve a screen used to be skipped like
+// any other panel, and load() still returned true. The QML root IS that
+// panel, so the embedder was told the shell was up while nothing existed on
+// screen.
+void TestPersistentPropertiesScan::aRootPanelWithNoScreenFailsTheLoad()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("shell.qml"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY(file.write("import QtQuick\n"
+                       "import Phosphor.Shell\n"
+                       "PanelWindow {\n"
+                       "    edge: PanelWindow.Top\n"
+                       "    thickness: 30\n"
+                       "}\n")
+            > 0);
+    file.close();
+
+    PhosphorLayer::Testing::MockTransport transport;
+    PhosphorLayer::Testing::MockScreenProvider screens;
+    // No outputs at all, which is what a session losing its last display
+    // looks like from here.
+    screens.setScreens({});
+    screens.setFocused(nullptr);
+    PhosphorLayer::SurfaceFactory factory(PhosphorLayer::Testing::makeDeps(&transport, &screens));
+
+    ShellEngine::Deps deps;
+    deps.surfaceFactory = &factory;
+    deps.screenProvider = &screens;
+    ShellEngine engine(deps);
+
+    QSignalSpy failed(&engine, &ShellEngine::failed);
+    QVERIFY2(!engine.load(QUrl::fromLocalFile(path)), "a root panel with nowhere to go is a failed load");
+    QCOMPARE(failed.count(), 1);
+    // The failed-build postcondition: everything torn down and engine() null,
+    // which is how a caller tells this apart from a rejected call.
+    QVERIFY(!engine.engine());
 }
 
 QTEST_MAIN(TestPersistentPropertiesScan)

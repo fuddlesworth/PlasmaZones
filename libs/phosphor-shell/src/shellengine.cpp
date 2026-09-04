@@ -505,6 +505,24 @@ bool ShellEngine::materializePanels(QString* failureReason)
         }
         QScreen* targetScreen = panel->screen() ? panel->screen() : m_deps.screenProvider->primary();
         if (!targetScreen) {
+            // For the ROOT panel this is fatal, the same as a failed surface
+            // below: the QML root IS that panel, so skipping it leaves an
+            // engine with nothing on screen while load() still reports
+            // success and the embedder believes the shell is up. A child
+            // panel is skipped and the rest still build, which keeps a
+            // usable shell.
+            if (panel == rootPanel) {
+                qCCritical(lcShellEngine) << "Root PanelWindow has no screen available "
+                                          << "(neither panel.screen nor screenProvider.primary()) — aborting load";
+                m_surfaces.clear();
+                m_reserved.clear();
+                m_panels.clear();
+                if (failureReason) {
+                    *failureReason =
+                        QStringLiteral("ShellEngine: the root PanelWindow has no screen to materialize on");
+                }
+                return false;
+            }
             qCWarning(lcShellEngine) << "Skipping PanelWindow: no screen available "
                                      << "(neither panel.screen nor screenProvider.primary())";
             continue;
