@@ -51,6 +51,7 @@ private Q_SLOTS:
     void growIntoEmptySpaceRefusesAFullTabbedColumnRatherThanUnMaximizingIt();
     void unMaximizingAWindowHeightPutsBackTheHeightItDisplaced();
     void aBudgetChangeBetweenPressesDoesNotStrandTheMaximizeToggle();
+    void aRememberedHeightThatNoLongerFitsIsDroppedForAuto();
 };
 
 // The claim's other half, and the reason minimize cannot simply copy the slot
@@ -262,6 +263,51 @@ void TestScrollStripHeight::aBudgetChangeBetweenPressesDoesNotStrandTheMaximizeT
     QCOMPARE(c.height.kind, WindowHeight::Fixed);
     QCOMPARE(c.height.fixedPx, 300);
     QVERIFY2(!c.preMaximizeHeight.has_value(), "un-maximizing must spend the slot");
+}
+
+// The budget can move the OTHER way too, and then the remembered height is no
+// longer a height this column can give. A panel appearing, or the window
+// landing on a shorter screen, shrinks the cross extent under a maximized
+// tile.
+//
+// Putting such a height back would render clamped to the new budget, which
+// still reads as maximized on the intent test, so the un-maximize would cost a
+// second press to reach Auto and the first would look like it did nothing. The
+// verb drops the remembered height for Auto instead. This is the half of the
+// contract the budget-GROWTH slot above cannot reach: there the predicate is
+// never consulted, because a standing slot short-circuits the maximized test
+// before it.
+void TestScrollStripHeight::aRememberedHeightThatNoLongerFitsIsDroppedForAuto()
+{
+    const ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // "b" is given a height that fits the 790 budget comfortably, then
+    // maximized, so 600 is what the slot holds.
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(600)));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 600);
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+
+    // The work area loses 300 on both axes, which takes the cross extent to
+    // 500 whichever way the strip runs, so the budget is 490 and the
+    // remembered 600 no longer fits.
+    ScrollLayoutParams shrunk = params;
+    shrunk.workArea = params.workArea.adjusted(0, 0, -300, -300);
+    QCOMPARE(Ax::crossLen(shrunk.workArea), 500);
+
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(shrunk));
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    const Tile& b = col->tiles.at(col->indexOfWindow(QStringLiteral("b")));
+    QVERIFY2(b.height.kind == WindowHeight::Auto,
+             "a remembered height taller than the new budget must be dropped, not put back to render clamped");
+    QVERIFY2(!b.preMaximizeHeight.has_value(), "the slot is spent either way");
+    // And one press was enough: the tile is sharing the column, not sitting at
+    // the budget waiting for a second press.
+    QVERIFY(Ax::crossLen(rectOf(strip.relayout(shrunk), QStringLiteral("b"))) < 490);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripHeight)
