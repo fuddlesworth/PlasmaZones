@@ -752,9 +752,11 @@ private:
     /// gapped budget. expandActiveWindowToAvailableHeight drops the override
     /// before it measures for exactly that reason;
     /// toggleMaximizeActiveWindowHeight does NOT, and reads a raw-area share
-    /// against this budget — which only ever makes it decide the tile is
-    /// already maximized, so the press clears the override and returns rather
-    /// than sizing on a bad number. A
+    /// against this budget. That is safe either way: a LONE visible tile
+    /// measures the whole raw extent and so reads as already maximized, and in
+    /// a stack the raw share falls BELOW this budget, so the press reads as
+    /// not maximized and writes Fixed(budget) — the right maximize target
+    /// regardless. A
     /// TABBED column stacks nothing and spends no inner gaps, so its budget is
     /// the whole cross extent (tabbedColumnCrossPx caps its owner there).
     /// Answers -1 when there is no active column or the work area is

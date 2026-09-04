@@ -418,9 +418,11 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     // under the override the stored intents are not rendered at all, so a
     // press whose result equals the stored value is still a real change.
     //
-    // The maximize toggle is the one that proves it, and only from AUTO. Under
-    // the override the tile measures at the raw extent, so the toggle decides
-    // it is already maximized and its result is Auto; the equalize below puts
+    // The maximize toggle is the one that proves it, and only from AUTO. This
+    // fixture's column holds a single visible tile, so under the override it
+    // measures the WHOLE raw extent and the toggle decides it is already
+    // maximized, making its result Auto (in a stack the raw share falls under
+    // the budget and the toggle would answer Fixed instead). The equalize puts
     // the tile on Auto first so that result EQUALS the stored intent and the
     // unconditional clear is the only thing that can report a change. Driven
     // from the Fixed the adjust above leaves, the old equality-gated clear

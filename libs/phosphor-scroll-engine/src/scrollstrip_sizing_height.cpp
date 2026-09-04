@@ -379,22 +379,32 @@ bool ScrollStrip::minimizeActiveWindowHeight(const ScrollLayoutParams& params)
     if (clearedEdges) {
         activeCol->maximizedToEdges = false;
     }
-    // Written before the no-move bail WHEN THE CLAIM LANDED, and only then.
+    // The intent is written in BOTH arms below, and neither write is
+    // redundant. Keep both.
+    //
     // claimTabbedHeightOwnership moves the tabbed column's extent owner to
     // this tile and writes nothing else, so an owner must already hold the
-    // height the claim was made for. Bailing out without the write left the
-    // new owner carrying whatever it had — Auto for a tab inserted at the
-    // context default — and tabbedColumnCrossPx resolves an Auto owner to the
-    // WHOLE work area, so a minimize press GREW the column it was asked to
-    // shrink. Gated on `claimed` rather than written unconditionally: with no
-    // claim there is no owner to keep consistent, and an unconditional write
-    // would mutate the persisted intent on a press this verb goes on to report
-    // as a refusal. The verdict below still reads the rendered pixels, so a
-    // tile already seated at its floor reports no movement.
-    if (claimed) {
-        activeCol->tiles[ti].height = target;
-    }
+    // height the claim was made for. Returning from the no-move arm without a
+    // write left the new owner carrying whatever it had — Auto for a tab
+    // inserted at the context default — and tabbedColumnCrossPx resolves an
+    // Auto owner to the WHOLE work area, so a minimize press GREW the column
+    // it was asked to shrink. Hence the write inside that arm. It is gated on
+    // `claimed` because with no claim there is no owner to keep consistent,
+    // and writing anyway would mutate the persisted intent on a press this
+    // verb goes on to report as a refusal.
+    //
+    // The write AFTER the arm covers a case the claim declines: a tab that is
+    // already heightOwnerId but still holds Auto answers false from the claim,
+    // and its column then resolves to the whole work area, so targetPx differs
+    // from currentPx and control reaches here. That is the same grow bug by
+    // another route, and this write is the only thing that closes it.
+    //
+    // The verdict is the rendered pixels either way, so a tile already seated
+    // at its floor reports no movement.
     if (targetPx == currentPx) {
+        if (claimed) {
+            activeCol->tiles[ti].height = target;
+        }
         return claimed || clearedEdges;
     }
     activeCol->tiles[ti].height = target;
