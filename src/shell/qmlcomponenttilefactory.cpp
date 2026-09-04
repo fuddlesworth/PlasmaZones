@@ -3,13 +3,27 @@
 
 #include "QmlComponentTileFactory.h"
 
-#include <QDebug>
+#include <QLoggingCategory>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 
 #include <utility>
 
+namespace {
+// Categorised, so these diagnostics can be filtered through
+// QT_LOGGING_RULES like every other message the process emits. Bare
+// qWarning output cannot be turned off or turned up.
+// Distinct name from the controller's own lcControlCenter: both live in
+// anonymous namespaces, and a unity build merges the two translation
+// units, where identical names collide.
+Q_LOGGING_CATEGORY(lcControlCenterTiles, "phosphorshell.controlcenter.tiles")
+} // namespace
+
+// NOTE: examples/phosphor-control-center-demo/qmlcomponenttilefactory.cpp carries a copy of this class.
+// The duplication is deliberate, so the example stands alone and can be
+// lifted into another project, but the two have already drifted once.
+// A change here almost certainly belongs there too.
 namespace PhosphorShellApp {
 
 QmlComponentTileFactory::QmlComponentTileFactory(QString id, QString displayName, QString moduleUri, QString typeName,
@@ -41,14 +55,15 @@ QStringList QmlComponentTileFactory::capabilities() const
 QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* parent)
 {
     if (!engine) {
-        qWarning() << "QmlComponentTileFactory: null engine for" << m_id;
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: null engine for" << m_id;
         return nullptr;
     }
     // Resolve the tile type from its module by name (Qt 6.5+ ctor), so no
     // qrc path is hard-coded.
     QQmlComponent component(engine, m_moduleUri, m_typeName);
     if (component.isError()) {
-        qWarning() << "QmlComponentTileFactory: component error for" << m_id << "—" << component.errorString();
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: component error for" << m_id << "—"
+                                        << component.errorString();
         return nullptr;
     }
     // A component that is neither Ready nor Error is still loading, and
@@ -56,7 +71,8 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
     // failure below would log a blank reason. The bar's widget factory
     // carries the same guard.
     if (component.status() != QQmlComponent::Ready) {
-        qWarning() << "QmlComponentTileFactory: component not ready for" << m_id << "— status" << component.status();
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: component not ready for" << m_id << "— status"
+                                        << component.status();
         return nullptr;
     }
     // createWithInitialProperties, not create() + assignment: a tile may
@@ -67,13 +83,13 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
     if (!obj) {
         // create can fail at runtime even when isError() was false at
         // load; surface the actual error rather than the wrong-type message.
-        qWarning() << "QmlComponentTileFactory: component creation failed for" << m_id << "—"
-                   << component.errorString();
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: component creation failed for" << m_id << "—"
+                                        << component.errorString();
         return nullptr;
     }
     auto* item = qobject_cast<QQuickItem*>(obj);
     if (!item) {
-        qWarning() << "QmlComponentTileFactory: component is not a QQuickItem for" << m_id;
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: component is not a QQuickItem for" << m_id;
         obj->deleteLater();
         return nullptr;
     }
@@ -82,7 +98,7 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
         // Falling through to a plain QObject parent would hand back an item
         // with no visual parent, which never renders and says nothing about
         // why. Refuse, as the bar's widget factory does.
-        qWarning() << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id;
+        qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id;
         item->deleteLater();
         return nullptr;
     }

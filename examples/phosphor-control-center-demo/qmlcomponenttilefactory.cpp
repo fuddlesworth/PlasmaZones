@@ -3,13 +3,24 @@
 
 #include "QmlComponentTileFactory.h"
 
-#include <QDebug>
+#include <QLoggingCategory>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 
 #include <utility>
 
+namespace {
+// Categorised, so these diagnostics can be filtered through
+// QT_LOGGING_RULES like every other message the process emits. Bare
+// qWarning output cannot be turned off or turned up.
+Q_LOGGING_CATEGORY(lcControlCenterDemo, "phosphorcontrolcenterdemo")
+} // namespace
+
+// NOTE: src/shell/qmlcomponenttilefactory.cpp carries a copy of this class.
+// The duplication is deliberate, so the example stands alone and can be
+// lifted into another project, but the two have already drifted once.
+// A change here almost certainly belongs there too.
 namespace PhosphorControlCenterDemo {
 
 QmlComponentTileFactory::QmlComponentTileFactory(QString id, QString displayName, QString moduleUri, QString typeName,
@@ -41,14 +52,15 @@ QStringList QmlComponentTileFactory::capabilities() const
 QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* parent)
 {
     if (!engine) {
-        qWarning() << "QmlComponentTileFactory: null engine for" << m_id;
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: null engine for" << m_id;
         return nullptr;
     }
     // Resolve the tile type from its module by name (Qt 6.5+ ctor), so no
     // qrc path is hard-coded.
     QQmlComponent component(engine, m_moduleUri, m_typeName);
     if (component.isError()) {
-        qWarning() << "QmlComponentTileFactory: component error for" << m_id << "—" << component.errorString();
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: component error for" << m_id << "—"
+                                       << component.errorString();
         return nullptr;
     }
     // createWithInitialProperties, not create() + assignment: a tile may
@@ -59,13 +71,13 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
     if (!obj) {
         // create can fail at runtime even when isError() was false at
         // load; surface the actual error rather than the wrong-type message.
-        qWarning() << "QmlComponentTileFactory: component creation failed for" << m_id << "—"
-                   << component.errorString();
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: component creation failed for" << m_id << "—"
+                                       << component.errorString();
         return nullptr;
     }
     auto* item = qobject_cast<QQuickItem*>(obj);
     if (!item) {
-        qWarning() << "QmlComponentTileFactory: component is not a QQuickItem for" << m_id;
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: component is not a QQuickItem for" << m_id;
         obj->deleteLater();
         return nullptr;
     }

@@ -54,9 +54,13 @@ FocusScope {
     LayoutMirroring.childrenInherit: true
 
     // PopoutHost's contract: a content root carries its implicit sizes.
-    // Width is clamped by the host against the surface, since a card wider
-    // than the output would otherwise be cut off on both edges at once.
-    implicitWidth: 640
+    //
+    // Clamped HERE as well as by the host. 640 is the design width, but on
+    // an output narrower than that the card would be cut off on both edges
+    // at once, which is the one failure a centred surface cannot recover
+    // from. `Screen.width` is the output this item is shown on, so the card
+    // shrinks to fit a small display and stays 640 everywhere else.
+    implicitWidth: Math.min(640, Screen.width - 2 * Tokens.spacing_xl)
     implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 
     // What the user has typed. Read-only: the field is the only writer,
