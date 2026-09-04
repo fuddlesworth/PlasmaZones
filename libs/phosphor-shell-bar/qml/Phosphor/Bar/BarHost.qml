@@ -56,6 +56,16 @@ PanelWindow {
     alignment: PanelWindow.Fill
     // The bar never wants keyboard focus (Plasma-panel behaviour); attached
     // popouts take their own grab.
+    //
+    // CONSEQUENCE for socket-hosted content: a popout in the pocket has no
+    // surface of its own, so it inherits this and the compositor never
+    // routes a key to it. The control center's Escape, Tab and arrow
+    // handling is therefore inert on a real screen, though the code is
+    // correct and its tests pass. Pointer interaction is unaffected.
+    // Changing this is a policy decision about every bar, not a local fix;
+    // see the control-center section of
+    // docs/phosphor-shell-design/04-implementation-plan.md for the options
+    // and what each one costs.
     keyboardFocus: PanelWindow.None
 
     // Capsule strip height and the inset from the screen edges.

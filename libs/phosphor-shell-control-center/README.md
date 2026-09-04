@@ -45,6 +45,17 @@ how it appears:
 Neither choice reaches into this module, so switching is a wiring change
 in the shell rather than a rewrite here.
 
+The choice does decide whether the keyboard works, though. In the bar
+socket this surface has no window of its own, and the bar asks for no
+keyboard interactivity (`keyboardFocus: PanelWindow.None`, which is
+ordinary panel behaviour), so the compositor routes no key to it: the
+tiles' Tab order, the detail panel's Escape and every key handler in this
+module are inert there. All of it works in a standalone popout. Pointer
+interaction is the same either way, and nothing here is reachable only by
+keyboard. See the control-center section of
+`docs/phosphor-shell-design/04-implementation-plan.md` for what closing
+that would cost.
+
 ## Key types
 
 | Component       | Role                                                                                          |
@@ -147,9 +158,14 @@ The acceptance demo is `examples/phosphor-control-center-demo/`, a plain
 window that hosts the grid over the real services, so a tile whose service
 is missing on the machine reports itself unavailable rather than vanishing.
 
-Two things are deliberately unfinished. `DetailPanel` has no content path
-yet: a tile declaring `hasDetail` gets the chevron and the slide-over, but
-nothing supplies a title or a body. And the shipped mount is the bar's
-socket, whose surface requests no keyboard interactivity, so the tile and
-panel key handlers are inert there.
+One thing is deliberately unfinished. `DetailPanel` has a content path, and
+a tile supplies its own view through `detailTitle` and `detailContent`, but
+none of the five built-ins authors one yet. `hasDetail` is derived from
+whether that content exists, so a tile without it shows no chevron rather
+than a chevron leading to a blank panel.
+
+The other open item is not this module's to close: the shipped mount is the
+bar's socket, whose surface requests no keyboard interactivity, so the tile
+and panel key handlers are inert there. See "Presentation is the host's
+choice" above.
 

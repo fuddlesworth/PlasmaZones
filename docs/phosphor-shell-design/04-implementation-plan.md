@@ -1069,6 +1069,25 @@ Centring is the fallback rather than the only behaviour: `AtPointer` still
 centres with a warning, and so does any bar anchor when no reserved-margins
 provider is installed, which is warned once per open.
 
+**Known limitation: the panel's keyboard layer is inert.** The tiles are
+tab-reachable and announce themselves, the detail panel takes focus while
+open and handles Escape, and none of it fires on a real screen. A
+socket-hosted control center has no surface of its own: it lives inside the
+bar's, and `BarHost` requests `keyboardFocus: PanelWindow.None`, which is
+deliberate Plasma-panel behaviour. The compositor therefore never routes a
+key to it. Pointer interaction is unaffected, and everything the keyboard
+layer would drive is reachable by clicking.
+
+Closing this is a bar-surface policy decision, not a QML fix, and it is not
+free. Granting the bar keyboard interactivity would let it take focus from
+whatever the user is typing into, for every bar, whether or not a popout is
+open. The alternatives are on-demand interactivity, which means the bar
+surface changing its keyboard mode as the pocket opens and closes, or
+hosting the control center on its own layer surface the way the launcher
+and the power menu already are, which trades the connected-corner join for
+a working keyboard. The join is the reason the socket exists, so the choice
+is a real one.
+
 **A trap worth recording:** `screenOf()` returns a `QScreen*` to QML and a
 `QScreen` has no QObject parent, so QML's default for an invokable return is
 JavaScriptOwnership and the GC deleted the live screen (five crashes on
