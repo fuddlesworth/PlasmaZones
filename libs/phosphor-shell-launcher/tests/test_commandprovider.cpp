@@ -11,6 +11,10 @@
 
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QtTest/QtTest>
 
 using PhosphorRegistry::ILauncherProvider;
@@ -39,6 +43,20 @@ void TestCommandProvider::resolvesTheFirstWordOnPath()
 
     QVERIFY(CommandProvider::resolveProgram(QString()).isEmpty());
     QVERIFY(CommandProvider::resolveProgram(QStringLiteral("phosphor-no-such-binary-xyz")).isEmpty());
+
+    // An absolute path that EXISTS and is readable but is not executable.
+    // The only negative above fails both tests at once, so weakening the
+    // executable check to a mere existence check passed the suite while
+    // offering any readable file as a runnable command.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString notRunnable = QDir(dir.path()).filePath(QStringLiteral("data.txt"));
+    QFile f(notRunnable);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    f.write("not a program\n");
+    f.close();
+    QVERIFY(QFileInfo::exists(notRunnable));
+    QVERIFY(CommandProvider::resolveProgram(notRunnable).isEmpty());
     QVERIFY(CommandProvider::resolveProgram(QStringLiteral("/nonexistent/path/to/thing")).isEmpty());
     // An ordinary search term is not a command.
     QVERIFY(CommandProvider::resolveProgram(QStringLiteral("fire")).isEmpty());

@@ -63,6 +63,11 @@ QString CommandProvider::resolveProgram(const QString& commandLine)
 void CommandProvider::setQuery(const QString& query)
 {
     m_query = query.trimmed();
+    // Kept so the emission below can be conditional. Every resultsChanged
+    // costs the model a full reset, which destroys every delegate and drops
+    // the selected row, and most keystrokes here change nothing: the row is
+    // present or absent, and its content is the query itself.
+    const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
     if (!resolveProgram(m_query).isEmpty()) {
         LauncherResult r;
@@ -77,6 +82,9 @@ void CommandProvider::setQuery(const QString& query)
         r.alternateActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Run in terminal");
         m_results.append(std::move(r));
     }
+    if (m_results == previous) {
+        return;
+    }
     Q_EMIT resultsChanged();
 }
 
@@ -88,6 +96,15 @@ QList<LauncherResult> CommandProvider::results() const
 bool CommandProvider::activate(const QString& resultId, Activation activation)
 {
     if (resultId != QLatin1String("run") || m_query.isEmpty()) {
+        return false;
+    }
+    // Re-validated, not assumed. setQuery refuses to offer the row unless the
+    // program resolves, but the row the surface holds can outlive that: the
+    // binary is uninstalled, or $PATH changes, between typing and Enter.
+    // Without this the shell would be handed a line that cannot run and the
+    // failure would surface as a silent no-op.
+    if (resolveProgram(m_query).isEmpty()) {
+        qCWarning(lcCommand) << "refusing to run" << m_query << "— the program no longer resolves";
         return false;
     }
     // Through the shell, so pipes, globs and quoting mean what the user

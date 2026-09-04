@@ -12,6 +12,7 @@
 
 #include <PhosphorPopout/PopoutRequest.h>
 
+#include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
 #include <QTest>
@@ -93,6 +94,8 @@ private Q_SLOTS:
     void refusedOpenRecordsNoHandle();
     void dismissalsFromEitherSideReachTheOneCallback();
     void detachingTheCallbackDropsLaterDismissals();
+    void aMissingInnerTransportRefusesRatherThanCrashing();
+    void aDismissalAfterTheRouterDiesReachesNobody();
 };
 
 void TestRoutingPopoutTransport::socketHostedIdsGoToTheSocketTransport()
@@ -230,6 +233,52 @@ void TestRoutingPopoutTransport::detachingTheCallbackDropsLaterDismissals()
     layer.selfDismiss(h);
     QCOMPARE(calls, 0);
     QCOMPARE(layer.installs, 1);
+}
+
+// A null inner transport is a documented refusal, and nothing constructed
+// the router that way. Deleting the guard turned the refusal into a null
+// dereference with the suite still green.
+void TestRoutingPopoutTransport::aMissingInnerTransportRefusesRatherThanCrashing()
+{
+    FakeTransport layer(QStringLiteral("popout"));
+    RoutingPopoutTransport router(&layer, nullptr, {QStringLiteral("control-center")});
+
+    // control-center routes to the socket transport, which is absent.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no transport for its route")));
+    QVERIFY(router.openSurface(requestFor(QStringLiteral("control-center"))).isEmpty());
+
+    // The other route still works, so the refusal is per-route rather than
+    // the whole router giving up.
+    QVERIFY(!router.openSurface(requestFor(QStringLiteral("power"))).isEmpty());
+}
+
+// The router detaches from both inner transports as it dies. Every other
+// case lets the fakes outlive it with nothing dismissing in that window, so
+// deleting the destructor's detaches survived. Here the fakes outlive the
+// router AND dismiss afterwards, which is a call into freed memory without
+// them.
+void TestRoutingPopoutTransport::aDismissalAfterTheRouterDiesReachesNobody()
+{
+    FakeTransport layer(QStringLiteral("popout"));
+    FakeTransport socket(QStringLiteral("socket"));
+
+    int calls = 0;
+    QString handle;
+    {
+        RoutingPopoutTransport router(&layer, &socket, {QStringLiteral("control-center")});
+        router.setSurfaceDismissedCallback([&calls](const QString&) {
+            calls++;
+        });
+        handle = router.openSurface(requestFor(QStringLiteral("power")));
+        QVERIFY(!handle.isEmpty());
+        // Positive control while the router is alive.
+        layer.selfDismiss(handle);
+        QCOMPARE(calls, 1);
+        handle = router.openSurface(requestFor(QStringLiteral("power")));
+    }
+
+    layer.selfDismiss(handle);
+    QCOMPARE(calls, 1);
 }
 
 QTEST_GUILESS_MAIN(TestRoutingPopoutTransport)
