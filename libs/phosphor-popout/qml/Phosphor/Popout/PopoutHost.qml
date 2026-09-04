@@ -89,6 +89,15 @@ FocusScope {
     // keyboard grab exactly as they are for every placement.
     property string placement: "center"
     property int reservedTop: 0
+
+    // The horizontal inset a bar-anchored popout aligns to, matching the bar
+    // capsule's own inset from the screen edge.
+    //
+    // A property rather than a constant because BarHost exposes
+    // `screenInset` as settable and invites overriding it: a host that moves
+    // its capsule in from the edge has to move its popouts with it, or the
+    // two stop lining up. The default is the token both sides use.
+    property int barInset: Tokens.spacing_xl
     property real customX: 0
     property real customY: 0
 
@@ -502,7 +511,7 @@ FocusScope {
 
         // Explicit x/y rather than anchors.centerIn: an anchor would fight
         // every placement but "center". The bar placements align to the
-        // capsule's inset (Tokens.spacing_xl, the same inset BarHost uses)
+        // capsule's inset (`barInset`, defaulting to the token BarHost uses)
         // and hang one spacing_m below the reserved band, so the popout
         // reads as belonging to the bar without knowing the bar's shape.
         // Every arm rounds to a whole pixel. These bindings replaced an
@@ -514,9 +523,9 @@ FocusScope {
         x: {
             switch (root.placement) {
             case "barLeft":
-                return Tokens.spacing_xl;
+                return root.barInset;
             case "barRight":
-                return Math.max(0, Math.round(root.width - width - Tokens.spacing_xl));
+                return Math.max(0, Math.round(root.width - width - root.barInset));
             case "custom":
                 return Math.round(root.customX);
             default:
