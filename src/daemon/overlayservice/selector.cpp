@@ -729,8 +729,16 @@ void OverlayService::restoreZoneSelectorAfterHide(const QString& effectiveId)
     // picker), and the dismissed one's ANIMATED hide completion lands after
     // the replacement has already hidden this screen's selector for its own
     // show — an unguarded restore would re-show it under the live modal.
+    //
+    // The cheatsheet is listed for the same reason the other two are, even
+    // though the pair cannot currently be up together (the sheet refuses to
+    // open mid-drag, and the selector only shows during a drag). That
+    // suppression lives in another file, and this guard should not depend on
+    // it: the question here is whether an input-grabbing modal owns the
+    // screen, and all three of them do.
     if ((m_snapAssistVisible && m_snapAssistScreenId == effectiveId)
-        || (m_layoutPickerVisible && m_layoutPickerScreenId == effectiveId)) {
+        || (m_layoutPickerVisible && m_layoutPickerScreenId == effectiveId)
+        || (m_cheatsheetVisible && m_cheatsheetScreenId == effectiveId)) {
         return;
     }
     // The drag may still be active (m_zoneSelectorVisible stays true

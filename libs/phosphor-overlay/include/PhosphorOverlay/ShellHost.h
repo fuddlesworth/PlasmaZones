@@ -63,6 +63,15 @@ class PHOSPHOROVERLAY_EXPORT ShellHost : public QObject
     Q_OBJECT
 
 public:
+    /// What the consumer's live content wants from the shell surface on one
+    /// screen. See @ref syncSurfaceState for what each field drives.
+    struct SurfaceStateWants
+    {
+        bool visible = false;
+        bool inputGrabbing = false;
+        bool keyboardGrabbing = false;
+    };
+
     /// Consumer-provided factory for the per-screen layer-shell surface.
     /// The library does not know which Role / qmlSource / SurfaceManager
     /// the consumer wires through - the factory encapsulates all of
@@ -109,6 +118,12 @@ public:
     /// own a single instance and thread it through every consumer.
     void setSurfaceAnimator(PhosphorAnimationLayer::SurfaceAnimator* animator);
 
+    /// All methods on this class must be called on the GUI thread. It writes
+    /// QQuickWindow flags and masks and issues Wayland protocol requests
+    /// through the surface's transport, none of which is safe off-thread.
+    /// The constraint is an obligation on the consumer, not something the
+    /// class enforces or detects.
+    ///
     /// Idempotent: bring up (or return) the per-screen shell for
     /// @p screenId on @p physScreen. Returns a pointer to the ShellState
     /// on success. Returns nullptr when:
@@ -126,7 +141,16 @@ public:
     /// On the cached-live path (state exists and @c shellSurface() is
     /// non-null), the state's @c physScreen() is refreshed to the
     /// argument so callers that read it always see the most recent
-    /// @c ensureShell call's value.
+    /// @c ensureShell call's value, and @c shellWindow() is re-read from
+    /// @c Surface::window() alongside it.
+    ///
+    /// The PostCreateCallback runs with the state's mechanism fields already
+    /// populated, and its return value is the pointer this function hands
+    /// back. It may call @ref destroyShell for the same screen — the daemon
+    /// does exactly that to tear down a half-wired shell — in which case the
+    /// returned state is non-null with @c shellSurface() == nullptr. It must
+    /// NOT call @ref removeState or @ref rekey for that screen, since both
+    /// delete the object the caller is about to receive.
     ShellState* ensureShell(const QString& screenId, QScreen* physScreen);
 
     /// Tear down the shell for @p screenId. Fires the pre-destroy
@@ -139,7 +163,7 @@ public:
     /// Reconcile the shell's mapped state + pointer-input region with
     /// the consumer's view of what's live on this screen.
     ///
-    /// @p anyVisible - true when at least one slot wants the surface
+    /// @c wants.visible - true when at least one slot wants the surface
     /// mapped (driven by the consumer's slot-visibility check). Drives
     /// the Surface state machine in both directions: show() on
     /// false→true, hide() on true→false. The behavior of hide() is
@@ -152,23 +176,23 @@ public:
     /// to no-ops and do not interfere with per-slot animator state
     /// (which lives on different keys).
     ///
-    /// @p anyInputGrabbing - true when at least one modal slot
-    /// (consumer-defined; Phosphor today: snap-assist + layout picker) wants
-    /// pointer input. When false, OR when @p anyVisible is false, the shell's
+    /// @c wants.inputGrabbing - true when at least one modal slot
+    /// (consumer-defined; Phosphor today: snap-assist, layout picker and the
+    /// cheatsheet) wants pointer input. When false, OR when @p anyVisible is false, the shell's
     /// QQuickWindow is flagged Qt::WindowTransparentForInput so background
     /// windows stay interactable beneath non-modal slots (OSDs, main overlay,
-    /// zone selector during drag). The @p anyVisible term means this does not
+    /// zone selector during drag). The @c wants.visible term means this does not
     /// rest on the caller guaranteeing that a grabbing slot is a visible one:
     /// a grab with nothing visible would otherwise hand an unseen surface
     /// every click on the screen.
     ///
     /// Input is all-or-nothing for the whole shell surface: a visible modal
     /// grab takes every click the surface covers, and anything else leaves it
-    /// click-through. Every kbd-None slot shares one screen-sized surface, so
+    /// click-through. Every passive slot shares one screen-sized surface, so
     /// a slot wanting clicks only where it draws would need a sub-surface
     /// input region, which nothing asks for today.
     ///
-    /// @p anyKeyboardGrabbing - true when at least one slot needs to TYPE
+    /// @c wants.keyboardGrabbing - true when at least one slot needs to TYPE
     /// (consumer-defined; Phosphor today: the cheatsheet's search field).
     /// Drives the layer surface's keyboard interactivity between Exclusive
     /// and None at runtime, which wlr-layer-shell permits after the initial
@@ -185,11 +209,26 @@ public:
     /// drop the flag on the FIRST edge of dismissal rather than waiting for a
     /// hide animation to finish.
     ///
-    /// Gated on @p anyVisible for the same reason the input flag is: an
+    /// Gated on @c wants.visible for the same reason the input flag is: an
     /// invisible surface must never hold the session's keyboard.
     ///
-    /// No-op when the shell surface or window is not yet up.
-    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing, bool anyKeyboardGrabbing);
+    /// Per-screen, with no cross-screen arbitration: this call reads and
+    /// writes one screen's state and nothing else. When the keyboard-grabbing
+    /// slot MOVES between screens, the consumer must call this for the screen
+    /// being LEFT as well as the one being entered. Syncing the new screen
+    /// does not release the old one, and two surfaces asking for an exclusive
+    /// keyboard at once is resolved by the compositor, not here.
+    ///
+    /// No-op when the shell surface or window is not yet up, and the keyboard
+    /// write is additionally skipped when the surface has not attached yet
+    /// (null transport handle) — harmless, since the role attaches kbd-None.
+    ///
+    /// Taken as a struct rather than three bools in a row: the three are
+    /// independent, same-typed, and a transposition would compile silently
+    /// while producing exactly the failure this doc block warns about (a
+    /// pointer-modal slot taking the keyboard from the focused window).
+    /// Designated initialisers at the call site name each one.
+    void syncSurfaceState(const QString& screenId, const SurfaceStateWants& wants);
 
     /// Move the ShellState entry from @p oldKey to @p newKey, preserving
     /// the underlying heap-allocated state object (the borrowed pointer
@@ -198,6 +237,17 @@ public:
     ///   - oldKey has no live shell (no entry or shellSurface is nullptr)
     ///   - newKey already has a LIVE entry (refuses to clobber); a stale
     ///     zeroed entry under newKey is dropped to make room.
+    ///
+    /// That drop DELETES the stale state object, so this is a third delete
+    /// site alongside the destructor and @ref removeState, and any borrowed
+    /// pointer to the newKey entry dies with it. No PreDestroyCallback fires
+    /// for it — the dropped entry is non-live by construction, and the
+    /// callback is gated on a live shell surface, so @ref removeState would
+    /// not fire one for the same entry either.
+    ///
+    /// On success the sticky creation-failure flag at newKey is cleared, since
+    /// a live shell now backs that key. oldKey's flag is deliberately left
+    /// alone.
     ///
     /// Same-key (`oldKey == newKey`) is idempotent success: returns true
     /// iff a live entry exists under that key. The entry is at newKey
@@ -232,9 +282,18 @@ public:
     ///     (clear loader mode, release content state, restore siblings)
     ///     runs in either case.
     ///
-    /// Completion is dropped only when the call is a programmer-setup
-    /// error: animator not injected, empty @p screenId, or empty
-    /// @p slotKey - none have a recovery path the consumer could take.
+    /// Completion is dropped when the call is a programmer-setup error:
+    /// animator not injected, empty @p screenId, or empty @p slotKey - none
+    /// have a recovery path the consumer could take.
+    ///
+    /// It is ALSO dropped when the hide leg is cancelled before it settles,
+    /// which the animator does per its own cancellation contract. Hiding the
+    /// shell surface cancels every leg on that surface, and so does destroying
+    /// it, so a @ref syncSurfaceState that unmaps the surface or a
+    /// @ref destroyShell landing while a slot hide is in flight will strand
+    /// whatever that completion was going to clean up. Consumers must not rely
+    /// on this completion as the only path that clears parallel per-screen
+    /// state across a teardown.
     void hideSlot(const QString& screenId, const QString& slotKey, std::function<void()> completion = {});
 
     /// Read-write accessor. Returns the existing ShellState for
@@ -285,8 +344,12 @@ private:
     /// stay valid across QHash rehashes (QHash holds @c ShellState* by
     /// value, but the pointed-to objects are stable). Consumers cache
     /// these pointers on parallel per-screen state and need them stable.
-    /// The host's destructor and @ref removeState delete the pointed-to
-    /// objects.
+    /// The host's destructor, @ref removeState, and @ref rekey (which drops a
+    /// stale entry standing at its target key) delete the pointed-to objects.
+    /// Those three are the whole list, and a consumer holding a borrowed
+    /// pointer must drop it at each of them; the host publishes no destroyed
+    /// signal, so the PreDestroyCallback and the consumer's own call site are
+    /// the only notifications.
     ///
     /// @c std::unique_ptr cannot live in @c QHash (Qt 6's hash requires
     /// copy-constructible values), and @c std::shared_ptr would add

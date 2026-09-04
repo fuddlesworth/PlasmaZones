@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Shortcut cheatsheet overlay — a display-only reference card listing the
-// user's global shortcuts, grouped by category and filtered by the tiling
-// mode of the screen it opens on. Structural twin of the layout picker
-// (singleton passive-shell slot, animator-driven show/hide, dedicated
-// Escape ad-hoc grab wired daemon-side); diverges only in being
-// non-interactive and in taking its content pushed in by the daemon
-// (catalog + mode) rather than resolving it here.
+// Shortcut cheatsheet overlay — a reference card listing the user's global
+// shortcuts, grouped by category and filtered by the tiling mode of the screen
+// it opens on, with a filter field for looking one up. Structural twin of the
+// layout picker (singleton passive-shell slot, animator-driven show/hide,
+// dedicated Escape ad-hoc grab wired daemon-side). It diverges in taking its
+// content pushed in by the daemon (catalog + mode) rather than resolving it
+// here, and in being the one slot that asks the shared passive shell for the
+// keyboard, so its search field can receive typed characters.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -40,9 +41,15 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
 
     // Same-screen re-request while visible is a no-op (the daemon's toggle
     // handler flips to hideCheatsheet before calling us, so this only
-    // triggers for redundant programmatic calls); a DIFFERENT screen
-    // migrates the sheet there, mirroring the picker's cross-screen
-    // singleton handling.
+    // triggers for redundant programmatic calls). A DIFFERENT screen migrates
+    // the sheet there, mirroring the picker's cross-screen singleton handling.
+    //
+    // The migration arm is defensive rather than live: the sheet's only entry
+    // point is the toggle, which hides and returns when the sheet is already
+    // up, and showCheatsheet is on neither IOverlayService nor D-Bus. So
+    // m_cheatsheetVisible is false here today. It is kept correct, rather than
+    // dropped, because the singleton invariant is the picker's too and a
+    // second caller would arrive without it.
     if (m_cheatsheetVisible && m_cheatsheetScreenId == resolvedId) {
         return;
     }
@@ -63,12 +70,27 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
         return;
     }
 
+    // Latch the singleton state here, ahead of both the previous-screen hide
+    // and the content pushes, exactly as showLayoutPicker does. Two reasons,
+    // and neither is about this function's own reads. The lib's hideSlot runs
+    // its completion inline on every benign-no-op branch, so the handler can
+    // re-enter while we are still mid-show; and OverlayService is a QML context
+    // property, so a binding evaluated during a push can reach back in. Both
+    // must observe the sheet as visible-on-the-new-screen, or their hide takes
+    // the idempotent branch and the sheet ends up shown with nothing recording
+    // it. The keyboard predicate reads these two members too (see
+    // shellhost_bridge.cpp) — it has to, because releasing on the first edge of
+    // dismissal means it cannot key on a slot that stays visible for the whole
+    // fade-out — so they are also set before the sync at the end.
+    const QString prevScreenId = m_cheatsheetVisible ? m_cheatsheetScreenId : QString();
+    m_cheatsheetScreenId = resolvedId;
+    m_cheatsheetVisible = true;
+
     // Singleton across screens: with the new target validated, dismiss on
     // the previous screen before showing here. Animator-driven hideSlot
     // keys only the cheatsheet track, so sibling slots on the previous
     // shell keep animating cleanly.
-    if (m_cheatsheetVisible && !m_cheatsheetScreenId.isEmpty() && m_cheatsheetScreenId != resolvedId) {
-        const QString prevScreenId = m_cheatsheetScreenId;
+    if (!prevScreenId.isEmpty() && prevScreenId != resolvedId) {
         auto prevIt = m_screenStates.find(prevScreenId);
         if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
             && prevIt->cheatsheetSlot()) {
@@ -76,6 +98,15 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
                 onCheatsheetSlotHideCompleted(prevScreenId);
             });
         }
+        // Drop the previous surface's keyboard grab on this edge rather than
+        // waiting for its fade to finish. The slot stays visible for the whole
+        // hide animation, so deferring to the completion would leave two layer
+        // surfaces asking for an exclusive keyboard at once, which is the
+        // arrangement the release-on-first-edge rule exists to prevent. Safe
+        // to run after the latch: the predicate compares the cheatsheet's
+        // screen id against the id being synced, and that is now the new
+        // screen, so the previous one correctly computes kbd-None.
+        syncPassiveShellSurfaceState(prevScreenId);
     }
 
     auto* slot = state->cheatsheetSlot();
@@ -113,17 +144,9 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::Cheatsheet, []() { });
 
-    // Set BEFORE the sync, not after. The pointer-input predicate reads the
-    // slot's own visibility, which is already true above, but the keyboard
-    // predicate reads these two members (see shellhost_bridge.cpp) — it has to,
-    // because releasing on the first edge of dismissal means it cannot key on a
-    // slot that stays visible for the whole fade-out. Syncing first would
-    // compute kbd-None and the search field would never receive a keystroke.
-    m_cheatsheetScreenId = resolvedId;
-    m_cheatsheetVisible = true;
-
     // Modal — needs input for the backdrop click-to-dismiss, and the keyboard
-    // for the search field.
+    // for the search field. The singleton state was latched above, before the
+    // pushes, so the keyboard predicate reads the new screen here.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 
     qCInfo(lcOverlay) << "showCheatsheet: screen=" << resolvedId << "rows=" << model.size() << "mode=" << currentMode;

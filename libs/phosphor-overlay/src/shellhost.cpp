@@ -119,7 +119,14 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
     PhosphorLayer::Surface* surface = m_surfaceFactory(screenId, physScreen);
     if (!surface) {
         m_creationFailed.insert(screenId);
-        return nullptr;
+        // Same answer as the sticky short-circuit above: hand back the
+        // existing zeroed state when there is one, so a caller that already
+        // holds the pointer does not see it vanish for exactly one call and
+        // reappear on the next. Re-find rather than reusing the iterator from
+        // the top of the function - the factory ran in between, and anything
+        // it re-enters could have rehashed m_states.
+        const auto after = m_states.find(screenId);
+        return (after == m_states.end()) ? nullptr : after.value();
     }
 
     auto* state = ensureEntry(m_states, screenId);
@@ -157,6 +164,16 @@ void ShellHost::destroyShell(const QString& screenId)
     }
 
     if (state->m_shellSurface) {
+        // Hand the keyboard back before the teardown rather than relying on
+        // the surface's destruction to do it. deleteLater defers the actual
+        // destroy to the next event-loop pass, and until then the compositor
+        // still has an exclusive grab pointed at a surface that is on its way
+        // out. Ordering the release here makes the hand-back deterministic
+        // instead of a side effect of when the loop next turns. Null handle
+        // means the surface never attached, so there is nothing to release.
+        if (auto* handle = state->m_shellSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
+        }
         state->m_shellSurface->deleteLater();
     }
     state->m_shellSurface = nullptr;
@@ -165,8 +182,7 @@ void ShellHost::destroyShell(const QString& screenId)
     state->slots.clear();
 }
 
-void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,
-                                 bool anyKeyboardGrabbing)
+void ShellHost::syncSurfaceState(const QString& screenId, const SurfaceStateWants& wants)
 {
     auto it = m_states.find(screenId);
     if (it == m_states.end() || !it.value()->m_shellSurface || !it.value()->m_shellWindow) {
@@ -175,7 +191,7 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     auto& s = *it.value();
 
     // Show/hide are driven through the Surface state machine on every
-    // anyVisible transition. The behavior in each direction depends on
+    // wants.visible transition. The behavior in each direction depends on
     // the SurfaceConfig the consumer registered:
     //
     //   show()  - maps the wl_surface, warms the RHI, fires the
@@ -201,9 +217,9 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // (modal slot in / out) - this keeps non-modal slot dismissals
     // from re-entering the surface state machine for a pure
     // click-through change.
-    if (anyVisible && !s.m_shellSurface->isLogicallyShown()) {
+    if (wants.visible && !s.m_shellSurface->isLogicallyShown()) {
         s.m_shellSurface->show();
-    } else if (!anyVisible && s.m_shellSurface->isLogicallyShown()) {
+    } else if (!wants.visible && s.m_shellSurface->isLogicallyShown()) {
         s.m_shellSurface->hide();
     }
 
@@ -219,12 +235,12 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     //   visible modal up -> whole surface takes input (no mask).
     //   anything else    -> click-through.
     //
-    // The grab term is spelled `anyVisible && anyInputGrabbing` rather than
-    // bare `anyInputGrabbing` so the derivation does not rest on callers
+    // The grab term is spelled `wants.visible && wants.inputGrabbing` rather
+    // than bare `wants.inputGrabbing` so the derivation does not rest on callers
     // guaranteeing that a grabbing slot is also a visible one. Nothing in this
     // library enforces that, and if it were ever false the bare form would hand
     // an invisible surface the whole screen's clicks.
-    const bool wantTransparent = !(anyVisible && anyInputGrabbing);
+    const bool wantTransparent = !(wants.visible && wants.inputGrabbing);
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
@@ -241,12 +257,12 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // hide completion, screen add/remove), never a paint path.
     s.m_shellWindow->setMask(QRegion());
 
-    // Keyboard interactivity is a separate axis from the pointer flag above:
-    // the picker and snap assist are pointer-modal but deliberately leave the
-    // keyboard with the focused toplevel, because every key they answer to is
-    // a global shortcut the compositor routes before any surface sees it. Only
-    // a slot that has to TYPE asks for this, and while it holds it the user's
-    // focused window receives nothing.
+    // Keyboard interactivity is a separate axis from the pointer flag above.
+    // All three modal slots are pointer-modal, but the picker and snap assist
+    // deliberately leave the keyboard with the focused toplevel, because every
+    // key they answer to is a global shortcut the compositor routes before any
+    // surface sees it. Only a slot that has to TYPE asks for this, and while
+    // it holds it the user's focused window receives nothing.
     //
     // Runtime set_keyboard_interactivity is legal on wlr-layer-shell after the
     // initial configure (unlike the scope, which is immutable), so this rides
@@ -255,8 +271,9 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // attached; a pre-attach call would be dropped, and the role's own
     // KeyboardInteractivity::None is the correct value to attach with anyway.
     if (auto* handle = s.m_shellSurface->transport()) {
-        const auto wantKeyboard = (anyVisible && anyKeyboardGrabbing) ? PhosphorLayer::KeyboardInteractivity::Exclusive
-                                                                      : PhosphorLayer::KeyboardInteractivity::None;
+        const auto wantKeyboard = (wants.visible && wants.keyboardGrabbing)
+            ? PhosphorLayer::KeyboardInteractivity::Exclusive
+            : PhosphorLayer::KeyboardInteractivity::None;
         handle->setKeyboardInteractivity(wantKeyboard);
     }
 }
@@ -400,6 +417,13 @@ void ShellHost::removeState(const QString& screenId)
     }
     delete it.value();
     m_states.erase(it);
+    // The sticky failure flag exists to stop ensureShell retrying while a
+    // state object stands for that screen. With the entry gone there is
+    // nothing left for it to guard, and a leftover flag would short-circuit
+    // the next ensureShell for a key that has no state at all. Consumers
+    // sweeping by their own id grammar (clearFailure) still work; this just
+    // means removeState no longer depends on them doing it.
+    m_creationFailed.remove(screenId);
 }
 
 QStringList ShellHost::screenIds() const

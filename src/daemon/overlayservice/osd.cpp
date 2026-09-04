@@ -866,9 +866,8 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
 
 // syncPassiveShellSurfaceState / syncPassiveShellSurfaceStateForSurface
 // are extracted to overlayservice/shellhost_bridge.cpp - they translate
-// PZ-content slot visibility into the booleans ShellHost::syncSurfaceState
-// expects, conceptually part of the shell-host bridge rather than the
-// OSD pipeline.
+// PZ-content state into the predicates ShellHost::syncSurfaceState expects,
+// conceptually part of the shell-host bridge rather than the OSD pipeline.
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
                                        const QString& sourceZoneId, const QString& targetZoneId,
