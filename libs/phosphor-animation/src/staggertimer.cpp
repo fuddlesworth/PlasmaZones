@@ -33,6 +33,13 @@ void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequence
         // timer fires.
         auto sharedOnComplete =
             onComplete ? std::make_shared<std::function<void()>>(onComplete) : std::shared_ptr<std::function<void()>>();
+        // applyFn shares the same way, and needs to more than onComplete does.
+        // It is the one that carries the batch: a caller typically captures the
+        // whole placement list in it, so a by-value capture per timer made a
+        // count=N cascade hold N-1 copies of that list — quadratic in the
+        // window count, for the lifetime of the longest delay. onComplete was
+        // given this treatment and applyFn was left behind.
+        auto sharedApply = std::make_shared<std::function<void(int)>>(applyFn);
         // qint64 intermediate + clamp prevents silent negative-overflow
         // for large counts: QTimer::singleShot takes int ms, so plain
         // (i * staggerInterval) can wrap. Clamp at INT_MAX — the delay
@@ -43,8 +50,8 @@ void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequence
             const int delay = rawDelay > std::numeric_limits<int>::max() ? std::numeric_limits<int>::max()
                                                                          : static_cast<int>(rawDelay);
             const bool isLast = (i == count - 1);
-            QTimer::singleShot(delay, parent, [applyFn, sharedOnComplete, i, isLast]() {
-                applyFn(i);
+            QTimer::singleShot(delay, parent, [sharedApply, sharedOnComplete, i, isLast]() {
+                (*sharedApply)(i);
                 if (isLast && sharedOnComplete && *sharedOnComplete) {
                     (*sharedOnComplete)();
                 }

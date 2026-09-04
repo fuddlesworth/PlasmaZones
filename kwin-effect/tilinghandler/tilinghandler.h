@@ -295,7 +295,10 @@ public:
     /// serviceUnregistered handler for what belongs there and why.
     ///
     /// Two further deliberate exceptions, both self-healing rather than drained: m_maximizeToggleInFlight entries
-    /// expire on read via MaximizeToggleFlightMs, and m_windowedFsClearInFlight is reply-gated — a toggle or clear
+    /// expire on read via MaximizeToggleFlightMs — except one carrying a recorded press, which is KEPT
+    /// (stamped armedAtMs = 0) so a reply landing tens of seconds later cannot toggle a window the user
+    /// gave up on, and which the reply's own take or cleanupAutotileTracking collects — and
+    /// m_windowedFsClearInFlight is reply-gated — a toggle or clear
     /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
     /// so a drain here would only race the same cleanup.
     void clearPerSessionDaemonState();

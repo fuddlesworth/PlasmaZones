@@ -409,37 +409,39 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
-        if (indices.size() <= 1) {
+        // == 1, not <= 1: the map is append-only, so a bucket that exists has
+        // at least one index and the two tests are the same test. It was
+        // written as a <= 1 outer with an == 1 inner, which read as if an empty
+        // bucket were reachable.
+        if (indices.size() == 1) {
             // No candidates.size() > 1 term: the map only admits entries with
             // a non-empty candidate vector, and Entry::candidates is only ever
             // assigned when that vector already has more than one element, so
             // the test could never be false here.
-            if (indices.size() == 1) {
-                Entry& e = entries[indices[0]];
-                QPoint targetCenter = e.geometry.center();
-                KWin::EffectWindow* best = nullptr;
-                qreal bestDist = 1e9;
-                for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
-                    if (claimedByExact.contains(c)) {
-                        continue;
-                    }
-                    QPointF cf = c->frameGeometry().center();
-                    qreal d = QPointF(targetCenter - cf).manhattanLength();
-                    if (d < bestDist) {
-                        bestDist = d;
-                        best = c;
-                    }
+            Entry& e = entries[indices[0]];
+            QPoint targetCenter = e.geometry.center();
+            KWin::EffectWindow* best = nullptr;
+            qreal bestDist = 1e9;
+            for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
+                if (claimedByExact.contains(c)) {
+                    continue;
                 }
-                if (best) {
-                    e.window = best;
-                } else {
-                    // Every candidate was claimed by an exact entry: the drop
-                    // is correct (the alternative is a double-apply) but must
-                    // not be silent — this is the "window never tiled" outcome
-                    // the claimed-set diagnostics exist to surface.
-                    qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
-                                        << "claimed by exact entries — dropping";
+                QPointF cf = c->frameGeometry().center();
+                qreal d = QPointF(targetCenter - cf).manhattanLength();
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = c;
                 }
+            }
+            if (best) {
+                e.window = best;
+            } else {
+                // Every candidate was claimed by an exact entry: the drop
+                // is correct (the alternative is a double-apply) but must
+                // not be silent — this is the "window never tiled" outcome
+                // the claimed-set diagnostics exist to surface.
+                qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
+                                    << "claimed by exact entries — dropping";
             }
             continue;
         }
@@ -1943,10 +1945,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // insert, the departure-rect read and the terminal geometry
                     // apply as well; narrowing it to the write alone would let
                     // anything that apply emits reach the maximize lambda
-                    // unsuppressed, and — now that the lambda arms a
-                    // maximize-edge marker — arm one with no authorship stamp
-                    // behind it. The counter is a counter, so the helper's own
-                    // bracket nests inside this one harmlessly.
+                    // unsuppressed, and be answered there as a user's request:
+                    // a dispatched interception toggle, and a second shader
+                    // install over the leg this arm is placing. The counter is a
+                    // counter, so the helper's own bracket nests inside this one
+                    // harmlessly.
+                    //
+                    // What the counter does NOT protect is the maximize-edge
+                    // marker, and it is worth being exact about that because
+                    // the two look alike. noteMaximizeEdge is armed above the
+                    // suppression skip in that lambda, so the counter never
+                    // reaches it on either platform — see the contract note on
+                    // noteEffectAuthoredMaximizeWrite. The marker is kept
+                    // honest by the authorship stamp instead, which
+                    // applyMaximizeSuppressed writes for the maximize() call
+                    // below.
                     ++m_suppressMaximizeChanged;
                     const auto maxSuppressGuard = qScopeGuard([this] {
                         --m_suppressMaximizeChanged;
@@ -2001,6 +2014,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // marker was consumed above the split, so the `||` here is
                     // a plain test of two locals with nothing to short-circuit
                     // past.
+                    //
+                    // maximizeBitWrittenThisBatch is left out of this
+                    // disjunction because the pair is unreachable, NOT because
+                    // folding it in would be wrong. The column block above is
+                    // gated only on isScrollingScreen, with no !snap.isMonocle
+                    // term, so a monocle entry on a scrolling screen would
+                    // compute it — and in that case the column arm would have
+                    // written the bit for this same window, wasAlreadyMaximized
+                    // would read true, monocleBitWritten would be false, and
+                    // this leg would play snapIn over a maximize that really
+                    // happened. Folding it in would be the CORRECT attribution
+                    // there. It is omitted only because no emitter pairs
+                    // monocle with a scrolling screen today, which is a
+                    // daemon-side claim this file cannot check. If the pair
+                    // ever becomes reachable, revisit this line first.
                     const bool monocleMaximizeLeg = monocleBitWritten || userMaximizeEdge;
                     QRectF monocleOrigin;
                     if (monocleMaximizeLeg) {

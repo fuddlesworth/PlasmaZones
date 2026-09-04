@@ -826,6 +826,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // reload, the first maximize on an already-column-maximized window
     // un-maximizes and re-maximizes before the batch re-establishes the
     // record.
+    // Re-takes w->window() rather than reusing the `kw` from the top of this
+    // function, deliberately: the seed belongs beside the lambda it seeds and
+    // the paragraph explaining it, not seven hundred lines up in an unrelated
+    // scope. It still lands before that lambda is connected, which is the only
+    // ordering that matters.
     if (KWin::Window* kwSeed = w->window()) {
         m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
     }
@@ -945,7 +950,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // handler would supersede that one — the same reasoning as the
                 // drag-restore guard below. One owner per leg, and for an
                 // engine-authored maximize the owner is the batch.
-                if (m_tilingHandler && !m_tilingHandler->isSuppressingMaximizeChanged()
+                if (!m_tilingHandler->isSuppressingMaximizeChanged()
                     && m_tilingHandler->interceptMaximizeRequest(window, effectAuthoredEdge)) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
@@ -985,7 +990,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // m_preMaximizeFrame capture the batch anchored on). One leg,
                 // one owner, on both platforms; the echo is absorbed rather
                 // than skipped.
-                if (m_tilingHandler && m_tilingHandler->isSuppressingMaximizeChanged()) {
+                if (m_tilingHandler->isSuppressingMaximizeChanged()) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     return;
                 }
@@ -1164,11 +1169,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Converges in one step: the guard compares against the
                 // position it is about to install, so the synchronous
                 // frameGeometryChanged this emits re-enters and does nothing.
-                if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()
-                    && scrollManagedOutputFor(safeW.data())) {
+                //
+                // Cheapest test first, and the ordering is load-bearing for
+                // cost rather than correctness. scrollManagedOutputFor memoises
+                // only WITHIN a paint pass, and this lambda runs off the paint
+                // cycle, so once any screen is scrolling — its own first test
+                // is hasScrollingScreens, which costs nothing when none is —
+                // every call pays a tracked-screen resolve, a float probe and
+                // an output lookup uncached. Asking it before the
+                // offered-column probe made every window's every geometry tick
+                // pay that, including plain snap and autotile windows that miss
+                // the map. The hash probe answers the common case for one
+                // lookup. Body -1 above already orders it this way.
+                if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()) {
                     const QString scrollId = getWindowId(safeW.data());
                     const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
-                    if (colIt != m_scrollOfferedColumn.constEnd()) {
+                    if (colIt != m_scrollOfferedColumn.constEnd() && scrollManagedOutputFor(safeW.data())) {
                         const QRect live = safeW->frameGeometry().toRect();
                         if (live.size() != colIt->size() && !live.size().isEmpty()) {
                             // Same centring as the strip apply and the paint

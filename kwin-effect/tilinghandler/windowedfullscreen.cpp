@@ -684,6 +684,12 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
     // write is also idempotent: it early-returns when KWin already agrees with
     // membership.
     if (!m_effect->m_daemonGate.serviceRegistered) {
+        // Logged for the same reason the two re-check arms in the reply's
+        // pending-press guard are: that guard re-enters HERE, so a coalesced
+        // second click can be dropped on this line after its flight entry has
+        // already been taken, and without this nothing anywhere records it.
+        qCDebug(lcEffect) << "Maximize toggle: dropping request for" << windowId << "on" << screenId
+                          << "— no daemon registered to answer it";
         return;
     }
     // ARM BEFORE THE CALL. A batch can arrive before the reply, and the arm
@@ -738,8 +744,16 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
             if (!flight.pendingPress) {
                 return;
             }
+            // Both re-check arms LOG before dropping. This is the user's
+            // second click, and a drop here is indistinguishable at the screen
+            // from a double-click that simply did not register — every sibling
+            // refusal in this family (the interception's two declines, the two
+            // refusal arms above) records itself, and this one used to be the
+            // only place a press could vanish silently.
             KWin::EffectWindow* pw2 = m_effect->findWindowByIdExact(windowId);
             if (!pw2 || pw2->isDeleted() || !isTiledWindow(windowId)) {
+                qCDebug(lcEffect) << "Maximize toggle: dropping coalesced press for" << windowId
+                                  << "— window is gone or no longer tiled";
                 return;
             }
             QString pendingScreenId = m_notifiedWindowScreens.value(windowId);
@@ -747,6 +761,8 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
                 pendingScreenId = m_effect->getWindowScreenId(pw2);
             }
             if (!isScrollingScreen(pendingScreenId)) {
+                qCDebug(lcEffect) << "Maximize toggle: dropping coalesced press for" << windowId << "— screen"
+                                  << pendingScreenId << "is no longer scrolling";
                 return;
             }
             dispatchMaximizeToEdgesToggle(pendingScreenId, windowId);

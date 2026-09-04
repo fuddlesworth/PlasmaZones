@@ -453,12 +453,12 @@ public:
     // → ResolvedActions assembly) per visible window per frame —
     // paying 2× the cost the cascade was designed for.
     //
-    // Cache layout:
-    //   `m_frameOpacityComputed.contains(w)` → "lookup already done this
-    //                                           frame"; value is the
-    //                                           resolved std::optional<qreal>
-    //                                           (nullopt = no SetOpacity
-    //                                           rule matched).
+    // Cache layout: ONE map, `m_frameOpacityCache`, where PRESENCE of the key
+    // means "lookup already done this frame" and the value is the resolved
+    // std::optional<qreal> (nullopt = no SetOpacity rule matched). The
+    // presence/value split is what lets a no-match be cached as cheaply as a
+    // match, which is the common case and the one the per-frame cost is paid
+    // for.
     //
     // Lifetime: populated by prePaintWindow's resolve, consumed by
     // paintWindow's resolve, cleared at postPaintScreen so the next frame
