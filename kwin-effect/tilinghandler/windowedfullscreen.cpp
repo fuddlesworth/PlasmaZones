@@ -168,7 +168,7 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     const auto suppressGuard = qScopeGuard([this] {
         --m_suppressMaximizeChanged;
     });
-    // AUTHORSHIP STAMP, and the reason it is not just the counter above.
+    // Why an authorship stamp exists at all, before the contract below.
     //
     // The counter is held only across the call, which answers on X11 where
     // maximize() re-enters windowMaximizedStateChanged synchronously — but on
@@ -201,14 +201,41 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // So the question is not asked. The stamp names the direction, and
     // noteMaximizeEdge takes it only when an edge arrives in that direction:
     // ours is recognised whenever it lands, an edge that is not ours cannot
-    // spend it, and one whose edge never comes expires. The axis-only writes
-    // the old gate existed to refuse (partial→Restore, Restore→partial) are
-    // handled by the same rule — the edge they produce is filtered out above
-    // the consumer, so their stamp is simply never matched and ages out.
+    // spend it, and one whose edge never comes expires.
+    //
+    // AND ONLY FOR A WRITE THAT CAN FLIP THE BIT, judged on the REQUESTED mode.
+    // A stamp is not inert while it waits: it can be taken by any later edge in
+    // its direction, so one left by a write that produces no full-maximize edge
+    // at all — partial→Restore from a quick tile, and Restore→partial — sits
+    // for the deadline and is then spent by the user's own next edge in that
+    // direction, losing that edge its marker. Those writes therefore do not
+    // stamp.
+    //
+    // This predicate is safe where the two earlier ones were not, and the
+    // difference is which clock it reads. Those asked what the CONSUMER would
+    // see, through `lastFullyMaximized`, which trails the commit by a client
+    // round trip. This asks only whether the write it is about to issue changes
+    // the mode the window is ASKED to hold — the thing KWin acts on, known
+    // exactly here. It is not a prediction about the edge; the direction tag
+    // handles that. It only refuses writes for which no edge is possible. The
+    // in-flight case that holed the old gate is admitted correctly: a batch
+    // writing Full while the user's Restore is in flight reads
+    // requested=Restore, sees the bit flip, and stamps.
     //
     // Before the call, not after: on X11 the handler has already run by the
     // time maximize() returns.
-    if (KWin::EffectWindow* ew = kw->effectWindow(); ew != nullptr) {
+    const bool willFlipFullyMaximized =
+        (mode == KWin::MaximizeFull) != (kw->requestedMaximizeMode() == KWin::MaximizeFull);
+    if (KWin::EffectWindow* ew = kw->effectWindow(); ew == nullptr) {
+        // The write still goes out, so its edge will reach noteMaximizeEdge
+        // with nothing to identify it and arm the user marker for a maximize
+        // the effect made. Believed unreachable — a Window this handler is
+        // acting on has an EffectWindow, that being how it got here — but a
+        // silent miss here is a mis-anchored morph somewhere else entirely, so
+        // it is worth a line in a support report rather than nothing.
+        qCWarning(lcEffect) << "Maximize write with no EffectWindow — authorship unrecorded, a following"
+                            << "placement may take the maximize leg";
+    } else if (willFlipFullyMaximized) {
         m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew, mode == KWin::MaximizeFull);
     }
     kw->maximize(mode);
@@ -291,7 +318,7 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     // unmaximize inside that window — the same direction this wrote — would
     // take it and lose its marker. Every other authored write is answered by
     // its own edge and needs no cleanup.
-    m_effect->m_shaderManager.clearEffectAuthoredMaximizeWrite(w);
+    m_effect->m_shaderManager.clearEffectAuthoredMaximizeWrite(w, /*wroteFullyMaximized=*/false);
 }
 
 void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
@@ -961,9 +988,17 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         // What was HANDED BACK, not what was held: both maximize releases
         // RETAIN membership when they skip a still-fullscreen window, so a
         // pre-read contains() reports true for a claim the effect is still
-        // holding. The struct documents itself as what the call actually
-        // released, and a caller gating a repaint or a decoration re-resolve
-        // on it would act on a bit that never moved.
+        // holding.
+        //
+        // Precisely: these two fields report MEMBERSHIP DROPPED, which is not
+        // the same as "the bit was written back". The unresolvable-window arms
+        // in both releases shed membership without writing anything, so the
+        // delta reads true there too. That is the right answer for a caller
+        // asking "does the effect still owe this window a restore", and the
+        // wrong one for a caller gating a repaint or a decoration re-resolve on
+        // an actual geometry change — that caller wants the releases' own bool
+        // returns. Today's only consumer (applyPassiveFloatShed) reads
+        // windowedFullscreen alone, so nothing depends on the distinction yet.
         const bool hadMonocle = m_monocleMaximizedWindows.contains(windowId);
         unmaximizeMonocleWindow(windowId);
         result.monocle = hadMonocle && !m_monocleMaximizedWindows.contains(windowId);
@@ -1040,12 +1075,17 @@ void TilingHandler::restoreAllMaximizedToEdges()
         // reconcileMaximizeAfterGesture, which with the flags clear either
         // re-drives the claim or routes it to releaseMaximizedToEdges. Which of
         // those it picks turns on isScrollTiledWindow, and that is why the
-        // ENGINE-DISABLE caller pays rather than re-maximizing: the same
-        // setActiveScreens(QSet()) that raises this signal also raises
-        // slotScreensChanged, whose setScrollingScreens empties the scrolling
-        // set, so by the gesture end the window is no longer scroll-tiled and
-        // the release arm is the one that fires. A daemon loss additionally
-        // gets the bring-up drain. Unload is the one caller that cannot pay,
+        // ENGINE-DISABLE caller normally pays rather than re-maximizing: the
+        // scroll engine's setActiveScreens(QSet()) raises Scrolling's own
+        // scrollingScreensChanged alongside the enabled flip, and
+        // slotScrollingScreensChanged empties the scrolling set, so the window
+        // is no longer scroll-tiled at the gesture end and the release arm
+        // fires. (Not slotScreensChanged — that one carries the MANAGED set and
+        // never touches the scrolling one.) Those are two separate D-Bus
+        // emissions, so a gesture ending in the gap between them still sees a
+        // scroll-tiled window and re-maximizes it; that window is sub-frame and
+        // is the residual, not the common case. A daemon loss additionally gets
+        // the bring-up drain. Unload is the one caller that cannot pay,
         // the set being about to be destroyed — accepted, because the effect is
         // going away and the alternative is snapping a window under the pointer
         // on the way out.

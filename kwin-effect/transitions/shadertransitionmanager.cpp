@@ -12,10 +12,12 @@ namespace {
 // Consume a timestamped one-shot entry from @p hash, answering whether it was
 // there AND still inside kMaximizeEventDeadlineMs.
 //
-// Erased on the stale hit too, and that is the point of sharing the helper
-// between the two maximize one-shots: an entry that outlived its deadline is
-// never going to become fresh again, and leaving it behind would let a LATER
-// consumer read a stamp that was never armed for it.
+// Erased on the stale hit too, which is the property the maximize-edge marker
+// needs: an entry that outlived its deadline is never going to become fresh
+// again, and leaving it behind would let a LATER consumer read a marker that
+// was never armed for it. One caller now — the authorship stamp grew a
+// direction tag and a typed hash of its own, so it consumes inline rather than
+// through here.
 bool takeFreshStamp(QHash<KWin::EffectWindow*, qint64>& hash, KWin::EffectWindow* w)
 {
     if (!w) {
@@ -67,7 +69,7 @@ void ShaderTransitionManager::noteEffectAuthoredMaximizeWrite(KWin::EffectWindow
     if (!w) {
         return;
     }
-    m_effectAuthoredMaximizeAtMs.insert(w, {ShaderInternal::shaderClockNowMs(), wroteFullyMaximized});
+    m_effectAuthoredMaximizeWrites.insert(w, {ShaderInternal::shaderClockNowMs(), wroteFullyMaximized});
 }
 
 bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w, bool fullyMaximized, bool armingAllowed)
@@ -102,14 +104,14 @@ bool ShaderTransitionManager::noteMaximizeEdge(KWin::EffectWindow* w, bool fully
     // moment earlier must not claim it. An ordinary authored write re-purposes
     // nothing — a user edge no batch has answered yet is still owed its leg,
     // and the batch that answers it is still the right one to spend it.
-    const auto authoredIt = m_effectAuthoredMaximizeAtMs.find(w);
-    if (authoredIt != m_effectAuthoredMaximizeAtMs.end()) {
+    const auto authoredIt = m_effectAuthoredMaximizeWrites.find(w);
+    if (authoredIt != m_effectAuthoredMaximizeWrites.end()) {
         const bool fresh =
             ShaderInternal::shaderClockNowMs() - authoredIt->atMs <= ShaderInternal::kMaximizeEventDeadlineMs;
         if (!fresh) {
-            m_effectAuthoredMaximizeAtMs.erase(authoredIt);
+            m_effectAuthoredMaximizeWrites.erase(authoredIt);
         } else if (authoredIt->wroteFullyMaximized == fullyMaximized) {
-            m_effectAuthoredMaximizeAtMs.erase(authoredIt);
+            m_effectAuthoredMaximizeWrites.erase(authoredIt);
             return true;
         }
     }

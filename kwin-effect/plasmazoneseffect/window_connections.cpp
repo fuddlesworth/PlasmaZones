@@ -359,15 +359,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (last == caption) {
                 return;
             }
-            // Stamped only when the push can actually go out. pushWindowMetadata
-            // returns early with no daemon registered, and recording the caption
+            // Stamped only when the push can actually go out, mirroring BOTH of
+            // pushWindowMetadata's early returns. Recording the caption
             // regardless made the de-dupe suppress every LATER push of that same
-            // caption — so a title that settled while the daemon was down stayed
-            // stale in the registry until something else re-pushed it. The
-            // bringup sweep does re-push every live window, so this was bounded
-            // rather than permanent, but the de-dupe should record what was
-            // sent, not what was attempted.
-            if (m_daemonGate.serviceRegistered) {
+            // caption — so a title that settled while the daemon was down, or
+            // while the window had no resolvable instance id, stayed stale in
+            // the registry until something else re-pushed it. The bringup sweep
+            // does re-push every live window, so this was bounded rather than
+            // permanent, but the de-dupe should record what was sent, not what
+            // was attempted. The cost of not recording is that a chatty title
+            // re-runs this lambda's tail per tick while the daemon is absent,
+            // which is a hash probe and a push that returns at its own gate.
+            if (m_daemonGate.serviceRegistered && !getWindowInstanceId(safeW.data()).isEmpty()) {
                 last = caption;
             }
             pushWindowMetadata(safeW, /*includeExtended=*/false);
@@ -777,8 +780,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // user is dragging, and nothing re-drives them — this lambda replays
         // geometry only, and its two GEOMETRY REPORTS are gated on wasResize,
         // so a MOVE end reports nothing at all. (Other calls in this lambda do
-        // run unconditionally; the claim is about the geometry path.) The engine emits on change, so a drag
-        // that leaves the strip alone schedules no batch either. This is the
+        // run unconditionally; the claim is about the geometry path.) The
+        // engine emits on change, so a drag that leaves the strip alone
+        // schedules no batch either. This is the
         // one point that always runs at the end of a gesture.
         m_tilingHandler->reconcileMaximizeAfterGesture(window);
     });

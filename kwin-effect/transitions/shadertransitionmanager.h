@@ -112,7 +112,8 @@ public:
         m_maximizeEdgeAtMs.remove(w);
     }
 
-    /// Drop the authorship stamp for @p w without an edge consuming it.
+    /// Drop the authorship stamp for @p w without an edge consuming it, but
+    /// only if it is the one @p wroteFullyMaximized describes.
     ///
     /// For the one write whose echo is guaranteed never to reach
     /// noteMaximizeEdge: the snap demote pre-writes the edge tracker above so
@@ -120,9 +121,19 @@ public:
     /// leaves has nothing to match it and would sit until the deadline, where a
     /// genuine user edge in the same direction would take it instead. Called
     /// AFTER the write — the stamp does not exist before it.
-    void clearEffectAuthoredMaximizeWrite(KWin::EffectWindow* w)
+    ///
+    /// Direction-matched for the same reason noteMaximizeEdge is. The slot
+    /// holds one in-flight write per window, so a bare remove would also
+    /// discard a DIFFERENT write's stamp that happened to be sitting there,
+    /// and that write's echo would then arrive unidentified and arm a false
+    /// marker. Removing only what this caller wrote keeps the damage of the
+    /// one-slot limitation where it already is instead of widening it.
+    void clearEffectAuthoredMaximizeWrite(KWin::EffectWindow* w, bool wroteFullyMaximized)
     {
-        m_effectAuthoredMaximizeAtMs.remove(w);
+        const auto it = m_effectAuthoredMaximizeWrites.constFind(w);
+        if (it != m_effectAuthoredMaximizeWrites.constEnd() && it->wroteFullyMaximized == wroteFullyMaximized) {
+            m_effectAuthoredMaximizeWrites.erase(it);
+        }
     }
 
     /// Stamp @p w as having a maximize write the EFFECT ITSELF authored, so
@@ -659,23 +670,23 @@ private:
     // writes once per iteration, and unmaximizeMonocleWindow and
     // releaseMaximizedToEdges are mutually exclusive with it — but that
     // reasoning is per-batch, and on Wayland a write and its echo are a client
-    // round trip apart. Two batches inside one round trip could therefore leave
-    // two writes outstanding against a single slot, and if KWin then delivered
-    // both edges rather than coalescing them, the second would find no stamp
-    // and arm the marker for a write the effect made. Unverified, because it
-    // needs KWin's echo behaviour for a Full-then-Restore pair inside one round
-    // trip, and bounded to one mis-chosen animation leg if it happens. A future
-    // deliberate double-write must clear or count rather than rely on this.
-    //
-    // Do not "fix" it by clearing the stamp whenever the gate declines: the
-    // demote path depends on both sides declining together, and a clear-on-
-    // decline would break that symmetry to chase a case that may not exist.
+    // round trip apart. Two OPPOSITE writes inside one round trip could
+    // therefore leave two outstanding against a single slot (two writes in the
+    // same direction cannot: the second hits applyMaximizeSuppressed's
+    // requested-mode early return). The survivor is the later write, which is
+    // right for its own edge; the loser's edge then finds a mismatching stamp,
+    // is left unmatched, and arms the marker for a write the effect made — and
+    // the abandoned stamp lingers until a same-direction edge or the deadline
+    // takes it. Unverified, because it needs KWin's echo behaviour for a
+    // Full-then-Restore pair inside one round trip, and bounded to one
+    // mis-chosen animation leg. A future deliberate double-write must count
+    // rather than rely on this.
     struct EffectAuthoredMaximize
     {
         qint64 atMs = 0;
         bool wroteFullyMaximized = false;
     };
-    QHash<KWin::EffectWindow*, EffectAuthoredMaximize> m_effectAuthoredMaximizeAtMs;
+    QHash<KWin::EffectWindow*, EffectAuthoredMaximize> m_effectAuthoredMaximizeWrites;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 
