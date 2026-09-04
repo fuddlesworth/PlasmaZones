@@ -143,6 +143,10 @@ void TestDesktopEntry::scanDropsHiddenAndNoDisplay()
     QVERIFY(ids.contains(QStringLiteral("kitty")));
     // NoDisplay=true.
     QVERIFY(!ids.contains(QStringLiteral("hidden-tool")));
+    // Hidden=true, which the spec calls "deleted". A separate leg of the
+    // same filter, and previously no fixture set it, so that leg could be
+    // removed with the whole suite green.
+    QVERIFY(!ids.contains(QStringLiteral("deleted-tool")));
     // OnlyShowIn=GNOME against a KDE session.
     QVERIFY(!ids.contains(QStringLiteral("gnome-only")));
     // Not an application / missing TryExec never make it either.

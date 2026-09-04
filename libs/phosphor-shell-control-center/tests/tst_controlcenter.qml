@@ -32,6 +32,12 @@ TestCase {
     property int tilesDestroyed: 0
 
     Component {
+        id: detailPanelComp
+
+        DetailPanel {}
+    }
+
+    Component {
         id: tileComp
 
         Tile {
@@ -186,6 +192,33 @@ TestCase {
 
         audio.detailRequested();
         compare(cc.detailTileId, "audio", "the tile's own id was routed, not another's");
+    }
+
+    function test_escape_dismisses_the_detail_panel() {
+        const panel = createTemporaryObject(detailPanelComp, testCase, {
+            "tileId": "network",
+            "title": "Wi-Fi",
+            "width": 200,
+            "height": 200
+        });
+        verify(panel, "DetailPanel instantiates");
+        const dismissals = [];
+        panel.dismissed.connect(function () {
+            dismissals.push(1);
+        });
+
+        // Closed: the key belongs to whatever else would handle it.
+        keyClick(Qt.Key_Escape);
+        compare(dismissals.length, 0, "a closed panel does not eat Escape");
+
+        panel.open = true;
+        // A plain Item never takes focus, so the handler used to be
+        // unreachable no matter what the surface granted.
+        tryVerify(function () {
+            return panel.activeFocus;
+        }, 2000, "an open panel holds focus");
+        keyClick(Qt.Key_Escape);
+        compare(dismissals.length, 1, "Escape returns to the grid");
     }
 
     function test_no_provider_builds_nothing() {

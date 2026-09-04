@@ -8,6 +8,7 @@
 #include <PhosphorShellLauncher/FuzzyMatcher.h>
 
 #include <QCoreApplication>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLocale>
@@ -92,9 +93,21 @@ void AppsProvider::armWatches()
     // permanently when its directory is deleted, which a package manager that
     // replaces a directory rather than writing into it does routinely.
     const QStringList watched = m_watcher->directories();
-    for (const QString& dir : std::as_const(m_directories)) {
+    const auto watch = [this, &watched](const QString& dir) {
         if (QFileInfo::exists(dir) && !watched.contains(dir)) {
             m_watcher->addPath(dir);
+        }
+    };
+    for (const QString& dir : std::as_const(m_directories)) {
+        watch(dir);
+        // Subdirectories too, because the SCAN is recursive: the spec's
+        // vendor-prefix layout puts entries in `applications/kde4/` and
+        // friends, and a distribution that installs there would have had its
+        // apps found at startup and then never refreshed, since the only
+        // watched directory never changed.
+        QDirIterator it(dir, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            watch(it.next());
         }
     }
 }

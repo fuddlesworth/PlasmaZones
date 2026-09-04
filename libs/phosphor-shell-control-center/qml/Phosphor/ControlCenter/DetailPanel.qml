@@ -18,7 +18,7 @@ import org.kde.kirigami as Kirigami
 import Phosphor.Theme
 import Phosphor.Widgets
 
-Item {
+FocusScope {
     id: root
 
     // The tile this panel is showing, or "" when closed. Presentation
@@ -52,9 +52,26 @@ Item {
 
     visible: opacity > 0
     opacity: root.open ? 1 : 0
+
     // Slides up from slightly below as it fades in. Small offset: this is
     // a view change inside one surface, not a new surface arriving.
-    y: root.open ? 0 : Tokens.spacing_l
+    //
+    // A TRANSFORM, not a `y` binding. The host anchors this panel to fill
+    // its parent, and an anchor owns the item's position outright, so a `y`
+    // binding beside it is overwritten on every layout pass and the slide
+    // never happened. A translation composes with the anchors instead.
+    transform: Translate {
+        id: slide
+
+        y: root.open ? 0 : Tokens.spacing_l
+
+        Behavior on y {
+            NumberAnimation {
+                duration: Motion.duration_short_4
+                easing: Motion.emphasized
+            }
+        }
+    }
 
     Behavior on opacity {
         NumberAnimation {
@@ -63,16 +80,24 @@ Item {
         }
     }
 
-    Behavior on y {
-        NumberAnimation {
-            duration: Motion.duration_short_4
-            easing: Motion.emphasized
-        }
-    }
-
     // Escape returns to the grid, the same as the back button. Only while
     // open, so a closed panel does not eat the key from whatever else
     // would handle it.
+    //
+    // Reaching this needs focus, and a plain Item never takes it: the
+    // handler was unreachable, whatever the surface did. As a FocusScope
+    // that claims focus while open, the panel is where the key arrives, and
+    // the back button inside it stays tab-reachable.
+    //
+    // The surface still has to grant keyboard focus at the layer-shell
+    // level for any of this to fire on a real screen. That is a bar-surface
+    // policy question, not something this file can settle.
+    focus: root.open
+    onOpenChanged: {
+        if (root.open)
+            root.forceActiveFocus();
+    }
+
     Keys.onEscapePressed: event => {
         if (root.open) {
             root.dismissed();

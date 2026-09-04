@@ -37,6 +37,7 @@ class TestAppsProvider : public QObject
 
 private Q_SLOTS:
     void scansTheFixtureTreeOnConstruction();
+    void anInstallIntoAVendorSubdirectoryIsNoticed();
     void nothingOnAnEmptyQuery();
     void nameMatchOutranksKeywordMatchForTheSameText();
     void keywordsAndGenericNameStillMatch();
@@ -82,6 +83,32 @@ void TestAppsProvider::anInstalledApplicationAppearsWithoutARestart()
     QCOMPARE(provider.results().first().title, QStringLiteral("Late Arrival"));
 }
 
+// The scan is recursive, so the watch has to be too. A vendor subdirectory
+// was scanned at startup and then never re-scanned, because the only watched
+// path was the root and installing into the subdirectory does not touch it.
+void TestAppsProvider::anInstallIntoAVendorSubdirectoryIsNoticed()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString appsDir = QDir(dir.path()).filePath(QStringLiteral("applications"));
+    const QString vendorDir = QDir(appsDir).filePath(QStringLiteral("kde4"));
+    QVERIFY(QDir().mkpath(vendorDir));
+
+    AppsProvider provider({appsDir}, QString(), {QStringLiteral("KDE")});
+    provider.setQuery(QStringLiteral("vendored"));
+    QVERIFY(provider.results().isEmpty());
+
+    QFile f(QDir(vendorDir).filePath(QStringLiteral("vendored-app.desktop")));
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    f.write("[Desktop Entry]\nType=Application\nName=Vendored App\nExec=true\n");
+    f.close();
+
+    QSignalSpy spy(&provider, &AppsProvider::resultsChanged);
+    QVERIFY2(spy.wait(5000), "the subdirectory was watched, not just the root");
+    QCOMPARE(provider.results().size(), 1);
+    QCOMPARE(provider.results().first().title, QStringLiteral("Vendored App"));
+}
+
 void TestAppsProvider::scansTheFixtureTreeOnConstruction()
 {
     AppsProvider provider({QDir(kFixtures).filePath(QStringLiteral("applications"))}, QString(),
@@ -94,6 +121,7 @@ void TestAppsProvider::scansTheFixtureTreeOnConstruction()
     QVERIFY(ids.contains(QStringLiteral("kitty")));
     QVERIFY(ids.contains(QStringLiteral("vendor-nested-tool")));
     QVERIFY(!ids.contains(QStringLiteral("hidden-tool")));
+    QVERIFY(!ids.contains(QStringLiteral("deleted-tool")));
 }
 
 void TestAppsProvider::nothingOnAnEmptyQuery()
