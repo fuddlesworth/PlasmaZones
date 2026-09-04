@@ -98,7 +98,10 @@ Item {
     // cell. Kept small enough that two half-width toggle cells, not this,
     // set the grid's natural width.
     implicitWidth: 160
-    implicitHeight: 72
+    // A FLOOR, not a fixed size. 72 is the design height, but the label and
+    // readout are text: at a larger font scale the content outgrows it and
+    // the tile would clip, taking the grid's row height with it.
+    implicitHeight: Math.max(72, content.implicitHeight + 2 * Tokens.spacing_m)
     opacity: root.available ? 1 : StateLayer.disabled_content
 
     readonly property string _readout: {
@@ -133,6 +136,8 @@ Item {
         readonly property color contentColor: root.muted ? Theme.on_surface_variant : Theme.on_surface
 
         ColumnLayout {
+            id: content
+
             anchors.fill: parent
             anchors.margins: Tokens.spacing_m
             anchors.rightMargin: root.hasDetail ? Tokens.spacing_m + chevron.width + Tokens.spacing_s : Tokens.spacing_m

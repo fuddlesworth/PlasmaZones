@@ -70,7 +70,9 @@ Launcher {
 
 `tests/` is Qt Test over the core (matcher orderings and the exact
 perfect score, parser and scanner over a fixture tree, the pure-logic
-providers' gates and ranking (apps, calculator, command), the model's grouping/ordering/filter/activation) plus a
+providers' gates and ranking (apps, calculator, command), the two
+model-backed providers against fakes of the sources they duck-type
+(clipboard, windows), the model's grouping/ordering/filter/activation) plus a
 QtQuickTest harness for the surface's keyboard contract against a fake
 model. Every claim with a mutation-shaped failure mode was verified by
 mutation: disabling the matcher's run-bonus inheritance, the scanner's

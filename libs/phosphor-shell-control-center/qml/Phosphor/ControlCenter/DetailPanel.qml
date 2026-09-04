@@ -54,6 +54,11 @@ FocusScope {
     // re-evaluated on every frame of the fade. The panel has to stay visible
     // through the closing animation, so this cannot simply be `open`: the
     // fade's own completion is what turns it off.
+    // What this panel needs to show its header and body without clipping.
+    // The host maxes this against the grid, so drilling into a tall detail
+    // view grows the surface rather than cutting the bottom off.
+    implicitHeight: header.implicitHeight + body.implicitHeight + 3 * Tokens.spacing_m
+
     visible: root.open || fade.running
     opacity: root.open ? 1 : 0
 
@@ -128,6 +133,8 @@ FocusScope {
             spacing: Tokens.spacing_m
 
             RowLayout {
+                id: header
+
                 Layout.fillWidth: true
                 spacing: Tokens.spacing_s
 

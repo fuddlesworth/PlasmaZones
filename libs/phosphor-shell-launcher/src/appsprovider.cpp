@@ -38,8 +38,25 @@ namespace PhosphorShellLauncher {
 
 using PhosphorRegistry::LauncherResult;
 
+namespace {
+// The locale name to scan with, honouring $LANGUAGE.
+//
+// $LANGUAGE is gettext's ordered preference list ("de:fr" means German, then
+// French), and a user who reads more than one language sets it to say which
+// they want first. Only its FIRST entry is used here, because the parser
+// resolves one locale name into the spec's own fallback chain and cannot
+// express a second, independent chain after it. That is still the difference
+// between showing such a user their first choice and their system default.
+QString preferredLocaleName()
+{
+    const QString language = qEnvironmentVariable("LANGUAGE");
+    const QStringList preferred = language.split(u':', Qt::SkipEmptyParts);
+    return preferred.isEmpty() ? QLocale::system().name() : preferred.first();
+}
+} // namespace
+
 AppsProvider::AppsProvider(QObject* parent)
-    : AppsProvider(DesktopEntryScanner::defaultDirectories(), QLocale::system().name(), currentDesktopFromEnvironment(),
+    : AppsProvider(DesktopEntryScanner::defaultDirectories(), preferredLocaleName(), currentDesktopFromEnvironment(),
                    true, parent)
 {
 }

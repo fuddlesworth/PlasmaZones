@@ -56,7 +56,11 @@ Item {
     signal detailClosed(string tileId)
 
     implicitWidth: grid.implicitWidth + 2 * Tokens.spacing_l
-    implicitHeight: grid.implicitHeight + 2 * Tokens.spacing_l
+    // The taller of the two views, not just the grid. A host that sizes
+    // itself to this would otherwise clip a detail view taller than the
+    // grid behind it, and neither view scrolls or clips, so the overflow
+    // would simply be cut off.
+    implicitHeight: Math.max(grid.implicitHeight, detail.implicitHeight) + 2 * Tokens.spacing_l
 
     QtObject {
         id: priv
