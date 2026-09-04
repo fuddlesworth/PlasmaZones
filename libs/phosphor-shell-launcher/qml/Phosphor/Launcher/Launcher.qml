@@ -192,6 +192,10 @@ FocusScope {
         Flow {
             id: pills
 
+            // Named so a test can reach the strip; the delegates inside are
+            // built by a Repeater and have no ids of their own.
+            objectName: "providerPills"
+
             Layout.fillWidth: true
             spacing: Tokens.spacing_s
             visible: list.count > 0 || root.results.providerFilter !== ""
@@ -234,6 +238,10 @@ FocusScope {
 
         ListView {
             id: list
+
+            // Named so a test can reach the view and its rows; the rows are
+            // built by a delegate and have no ids of their own.
+            objectName: "resultList"
 
             Layout.fillWidth: true
             // Capped at a screenful, derived from the same metrics the rows

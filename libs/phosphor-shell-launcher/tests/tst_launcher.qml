@@ -227,6 +227,43 @@ TestCase {
         compare(t.results.cycles, [1, -1], "Tab forward, Shift+Tab back");
     }
 
+    // The pointer paths, which the keyboard cases above never reach. Both
+    // move state the keyboard also moves, so a regression in either is
+    // invisible to a suite that only types.
+    function test_clicking_a_row_selects_and_activates_it() {
+        const t = makeLauncher();
+        const activated = createTemporaryObject(spyComp, testCase, {
+            "target": t.launcher,
+            "signalName": "activated"
+        });
+        const list = findChild(t.launcher, "resultList");
+        verify(list, "the result list is reachable");
+        const second = list.itemAtIndex(1);
+        verify(second, "the second row exists");
+
+        mouseClick(second);
+        compare(t.results.activations.length, 1, "the click activated");
+        compare(t.results.activations[0].row, 1, "the row that was clicked, not the selected one");
+        compare(t.results.activations[0].alternate, false, "a click is the primary action");
+        compare(activated.count, 1, "and the host is told to close");
+    }
+
+    function test_clicking_a_provider_pill_filters() {
+        const t = makeLauncher();
+        const pills = findChild(t.launcher, "providerPills");
+        verify(pills, "the pill strip is reachable");
+        // The first pill is All, the second is the one provider the fake
+        // reports.
+        const providerPill = pills.children[1];
+        verify(providerPill, "a provider pill exists");
+
+        mouseClick(providerPill);
+        compare(t.results.providerFilter, "apps", "the pill set the filter");
+
+        mouseClick(pills.children[0]);
+        compare(t.results.providerFilter, "", "All clears it again");
+    }
+
     function test_escape_dismisses() {
         const t = makeLauncher();
         const dismissed = createTemporaryObject(spyComp, testCase, {
