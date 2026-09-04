@@ -450,10 +450,9 @@ public:
     /// to a Fixed of the same extent and lose its anchor. A TABBED column
     /// toggles in the column's own space, the cycle and adjust verbs' rule.
     ///
-    /// The Fixed(budget) written here IS the memory that the tile is
-    /// maximized, and reconcileWindowSize overwrites the stored height with
-    /// whatever size a resize settles on. That is safe, and the reason is
-    /// worth writing down because it is not obvious from this file: reconcile
+    /// reconcileWindowSize overwrites the stored height with whatever size a
+    /// resize settles on, and clears the restore slot with it. That is safe,
+    /// and the reason is worth writing down because it is not obvious: reconcile
     /// is reached from exactly one place, ScrollEngine::onWindowResized, which
     /// the daemon calls only from WindowTrackingAdaptor::notifyWindowResized,
     /// which the effect fires only from windowFinishUserMovedResized gated on
@@ -472,10 +471,22 @@ public:
     /// The height the maximize displaced is remembered in the tile's
     /// @c preMaximizeHeight, so un-maximizing puts it back; Auto is the answer
     /// only when nothing was remembered, which is the case for a tile that
-    /// reached the budget by another route. That slot is a RESTORE value and
-    /// not the maximized test — the same division the width axis has, where
-    /// m_preMaximizeColumnIdx + m_preMaximizeWidth hold the restore while
-    /// toggleMaximizeColumnAt detects maximized state from resolved pixels.
+    /// reached the budget by another route.
+    ///
+    /// That slot is BOTH the restore value and the first half of the maximized
+    /// test, and this is where the height axis deliberately DIVERGES from the
+    /// width axis rather than mirroring it. The width toggle keeps its restore
+    /// in m_preMaximizeColumnIdx + m_preMaximizeWidth and re-infers maximized
+    /// state from resolved pixels, which it can afford because a column's main
+    /// budget is the whole viewport and does not move. A column's CROSS budget
+    /// does move — it is the cross extent less one gap per inter-tile seam, so
+    /// closing a sibling or tabbing the column grows it — and a tile holding
+    /// Fixed(the old budget) then re-infers as NOT maximized. Consulting the
+    /// slot first is what stops that press re-entering the maximize arm and
+    /// overwriting the user's remembered height with a near-full one. The
+    /// pixel and intent tests stay behind it for the tile that reached full
+    /// height by another route and so has no slot.
+    ///
     /// It lives on the tile rather than in a strip-level index precisely so
     /// the structural ops do not have to re-clamp it; Tile's own note carries
     /// the rest, including why it is neither serialized nor carried across a

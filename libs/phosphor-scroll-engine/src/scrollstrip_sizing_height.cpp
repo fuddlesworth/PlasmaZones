@@ -61,13 +61,19 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
     if (clearedEdges) {
         col->maximizedToEdges = false;
     }
+    // Above the bail, unlike the adjust and cycle verbs. Theirs test "this
+    // press moved no pixels", which is a refusal and not a countermand, so
+    // clearing there would let a held-down key at its limit wipe the memory.
+    // This one tests INTENT equality: the caller named a height and got it,
+    // even when the tile already held it, so the maximize it may have been
+    // sitting in is over. Reachable because a slot-bearing tile holds exactly
+    // Fixed(the budget at maximize time), which a rule or a D-Bus caller can
+    // name.
+    col->tiles[ti].preMaximizeHeight.reset();
     if (col->tiles.at(ti).height == height) {
         return claimed || clearedEdges;
     }
     col->tiles[ti].height = height;
-    // Any height the user picks by another route countermands a maximize, so
-    // there is nothing left to restore. Every write below does the same.
-    col->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
 

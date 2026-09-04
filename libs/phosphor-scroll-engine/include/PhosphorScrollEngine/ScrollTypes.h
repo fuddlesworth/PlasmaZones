@@ -779,12 +779,14 @@ struct Tile
     /// the tile travels with it through all of those for free, because every
     /// one of those paths moves the Tile struct whole.
     ///
-    /// Set ONLY by that verb's maximize arm and cleared by every other height
-    /// write that LANDS, including the one reconcileWindowSize makes when a
-    /// user finishes an interactive resize: the user has chosen a height of
-    /// their own, so there is no maximize left to undo. A press those verbs
-    /// refuse changes nothing and so clears nothing — they bail on "no
-    /// movement", and a refusal is not a countermand. Because of that the
+    /// Set ONLY by that verb's maximize arm, and cleared by every other write
+    /// that changes the tile's HEIGHT, including the one reconcileWindowSize
+    /// makes when a user finishes an interactive resize: the user has chosen a
+    /// height of their own, so there is no maximize left to undo. A press
+    /// those verbs refuse changes no height and so clears nothing — they bail
+    /// on "no movement", and a refusal is not a countermand. Nor does dropping
+    /// a column's maximize-to-edges override, which several of them do before
+    /// that bail: the press reports a change, but not a change of height. Because of that the
     /// standing slot is also what the toggle READS to decide the tile is
     /// maximized: it cannot go stale the way the height itself does when the
     /// budget moves under it. Deliberately
