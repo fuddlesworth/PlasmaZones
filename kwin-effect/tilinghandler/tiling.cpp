@@ -1914,7 +1914,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // Safe above the writes below because no write routed through
             // applyMaximizeSuppressed can re-arm it: that helper stamps its own
             // authorship and noteMaximizeEdge declines on the stamp. Every
-            // maximize write this iteration makes goes through it.
+            // maximize write this iteration makes goes through it, and the
+            // stamp is written for the WRITE rather than for whatever the
+            // pointer is doing when its echo lands — which is what makes this
+            // hold for a mid-gesture write too, whose Wayland echo can arrive
+            // after the drag has ended.
             //
             // What the hoist COSTS, stated because it is a real trade and not
             // a free fix: a batch that reaches here and then declines to commit
@@ -2130,9 +2134,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // logical-geometry change of 1600x900 to 1280x720: both tiles
                 // held their stacked column rects and neither took KWin's
                 // maximize area. The engine's apply lands last and wins.
+                //
+                // The gesture pair, which this arm was the one member of its
+                // family to omit. Its three twins all carry it and all name the
+                // same failure (pretilegeometry, and both screenschanged
+                // copies): maximize() moveResizes, and the geometry apply below
+                // defers during a drag, so a batch landing mid-gesture snapped
+                // the window to its restore rect under the pointer with nothing
+                // committed behind it until the gesture ended.
+                //
+                // Skipping is a trade, not free, because this arm is not
+                // ledger-backed and nothing re-drives it at the gesture end.
+                // The condition is recomputed per entry from the live maximize
+                // mode, so the NEXT batch carrying this window pays it; a drag
+                // that changes no layout schedules no batch, and the window
+                // keeps a stray maximize bit against its tile rect until one
+                // arrives. That is the same bounded staleness the column Apply
+                // arm and both screenschanged twins already accept in writing.
                 if (KWin::Window* kw = snap.window->window(); kw && !snap.isMaximizedToEdges
                     && kw->maximizeMode() != KWin::MaximizeRestore && !kw->isFullScreen()
-                    && !kw->isRequestedFullScreen()) {
+                    && !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
                 QRect geo = snap.geometry;

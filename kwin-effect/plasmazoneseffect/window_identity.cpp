@@ -301,7 +301,7 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // an uncached rule resolve over a freshly built ruleQuery, and
         // animated geometry fired it hundreds of times per second
         // (discussion #816). The decoration resync deliberately stayed per
-        // tick in the stash lambda (window_lifecycle.cpp): it is cheap and
+        // tick in the stash lambda (window_connections.cpp): it is cheap and
         // deferring it let a re-decorated title bar flash for the throttle
         // window. QPointer nulls if the window died since the stash; a dead
         // or excluded window contributes no daemon push.

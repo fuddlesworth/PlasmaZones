@@ -1056,8 +1056,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &TilingHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work: deferred maximize completion, first-frame suppression
-    // release, and debounced daemon push. Keeping the latter two as separate
+    // per-tick work, in the order the bodies run: a strip-animation retarget
+    // onto the rect the client actually committed (Body -1), the offered-column
+    // centring for a client that would not take its column (Body -0.5),
+    // deferred maximize completion (Body 0), first-frame suppression release
+    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two as separate
     // connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
@@ -1084,14 +1087,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
                 // isDeleted() alongside the null test, as the other lambdas
                 // over this signal and its maximize siblings do. A window held
-                // alive under WindowClosedGrabRole still emits this, and every
-                // body below is meaningless for a corpse — the centring one
-                // actively wrong, since it would move() a closed window. The two that
-                // reach shared state already declined on their own
-                // (flushPendingFrameGeometry skips a deleted window,
-                // slotWindowClosed has already dropped the suppression entry),
-                // so this adds no new suppression; it stops the work earlier
-                // and puts the guard where its siblings keep theirs.
+                // alive under WindowClosedGrabRole still emits this, and no body
+                // below is owed anything for a corpse — but this is an EARLY-OUT,
+                // not a hazard fix, and it is worth being exact about that so
+                // nobody later removes a real guard believing this one covers
+                // it. Each body already declined on its own: the two scroll
+                // bodies sit behind scrollManagedOutputFor, which refuses a
+                // deleted window; the maximize completion's pending entry
+                // belongs to the windowDeleted sweep; the suppression entry was
+                // dropped by slotWindowClosed; and flushPendingFrameGeometry
+                // skips a deleted window. What this adds is stopping the work
+                // at the top, and putting the guard where its siblings keep
+                // theirs.
                 if (!safeW || safeW->isDeleted()) {
                     return;
                 }

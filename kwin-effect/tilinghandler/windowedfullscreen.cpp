@@ -208,13 +208,24 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // mode today; the rows are enumerated because what makes this correct is
     // the correspondence with the consumer, not the current caller set.
     //
-    // The gesture flags for the same reason: the consumer's call site skips
-    // arming under an interactive move or resize, so a write issued during one
-    // would strand its stamp too. Exact on X11, where the echo is synchronous
-    // and both tests read the same instant. On Wayland a round trip separates
-    // them, so a gesture that starts or ends inside it is the residual gap —
-    // every caller already refuses to write mid-gesture, which leaves only a
-    // stamp stranded by a drag begun in that window, bounded by the deadline.
+    // NO GESTURE TEST HERE, deliberately, and it used to have one. The
+    // consumer skips ARMING under an interactive move or resize, so mirroring
+    // that here looked like the same correspondence the rest of this gate is
+    // built on. It is not: the consumer evaluates those flags when the ECHO
+    // lands, and this evaluates them when the WRITE is issued, and on Wayland a
+    // client round trip sits between the two. A write made during a drag whose
+    // drag ends before its echo therefore went out unstamped and came back to a
+    // consumer that was arming again — arming the user-maximize marker for a
+    // write the effect made, which is the one thing this stamp exists to
+    // prevent. Stamping unconditionally closes that: authorship is a property
+    // of the write, not of what the pointer is doing a round trip later.
+    //
+    // The reverse case is the cost, and it is the cheaper one. A write whose
+    // gesture is STILL running when the echo lands meets a consumer that skips
+    // arming, so the stamp goes unconsumed and sits until the deadline, where
+    // it could swallow one genuine maximize. That needs the user to press
+    // maximize within a second of ending the drag; a false marker needs
+    // nothing, and mis-animates a placement they did not ask for.
     //
     // Read from the consumer's OWN state, `lastFullyMaximized`, and not from
     // this window's requested or committed mode. The sibling maximize
@@ -235,7 +246,7 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     //
     // Before the call, not after: on X11 the handler has already run by the
     // time maximize() returns.
-    if (KWin::EffectWindow* ew = kw->effectWindow(); ew && !ew->isUserMove() && !ew->isUserResize()) {
+    if (KWin::EffectWindow* ew = kw->effectWindow(); ew != nullptr) {
         if ((mode == KWin::MaximizeFull) != m_effect->m_shaderManager.lastFullyMaximized(ew)) {
             m_effect->m_shaderManager.noteEffectAuthoredMaximizeWrite(ew);
         }

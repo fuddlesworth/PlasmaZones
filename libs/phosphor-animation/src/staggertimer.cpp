@@ -19,12 +19,12 @@ void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequence
         }
         return;
     }
-    // applyFn is null-checked for the same reason onComplete is at all three
-    // of its call sites: an empty std::function throws bad_function_call, and
-    // in the compositor process that is the session. Every caller passes a
-    // real lambda today, so this is hardening — but the count and parent
-    // guards above already show this function does not trust its inputs, and
-    // applyFn was the one input it did.
+    // applyFn is null-checked for the same reason onComplete is at each of its
+    // invocation sites: an empty std::function throws bad_function_call, and in
+    // the compositor process that is the session. Every caller passes a real
+    // lambda today, so this is hardening — but the count guard above and the
+    // parent guard below already show this function does not trust its inputs,
+    // and applyFn was the one input it did.
     if (!applyFn) {
         if (onComplete) {
             onComplete();
