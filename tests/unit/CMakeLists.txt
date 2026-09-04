@@ -2415,6 +2415,26 @@ if(TARGET PhosphorRegistry::PhosphorRegistry AND TARGET PhosphorServiceIdle::Pho
             PhosphorServiceIdle::PhosphorServiceIdle
     )
     add_test(NAME test_control_center_controller COMMAND test_control_center_controller)
+
+    # The tile factory on its own. Pure engine-testable logic that had no
+    # test, including the JavaScriptOwnership hand-off the control-center
+    # surface depends on to destroy the tiles it built.
+    add_executable(test_qml_component_tile_factory
+        shell/test_qml_component_tile_factory.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_qml_component_tile_factory PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_qml_component_tile_factory
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+    )
+    add_test(NAME test_qml_component_tile_factory COMMAND test_qml_component_tile_factory)
 endif()
 
 # SocketPopoutTransport, the bar-pocket popout transport.
