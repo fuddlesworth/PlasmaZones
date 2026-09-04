@@ -238,7 +238,7 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+PgDown"));
         // Off Meta+Alt+0, where it read as a tenth quick-layout digit; now
         // the Alt twin of Retile's T beside Equalize's Shift twin.
-        QCOMPARE(ConfigDefaults::scrollingResetWindowHeightsShortcut(), QStringLiteral("Meta+Ctrl+Alt+T"));
+        QCOMPARE(ConfigDefaults::scrollingEqualizeWindowHeightsShortcut(), QStringLiteral("Meta+Ctrl+Alt+T"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
         // The no-focus PAGE pan, on a free letter of the Meta+Alt pool. The
         // step pan is the wheel's (Meta+Shift+wheel, an effect-side axis

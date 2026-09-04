@@ -394,7 +394,7 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     QVERIFY(renderedMain() <= gappedMain);
 
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
-    QVERIFY2(strip.resetActiveColumnHeights(), "the height reset must report the drop");
+    QVERIFY2(strip.equalizeActiveColumnHeights(), "the height reset must report the drop");
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 

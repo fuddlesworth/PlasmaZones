@@ -78,6 +78,7 @@ private Q_SLOTS:
     void expandToAvailableWidth();
     void windowHeights();
     void heightAdjustAndReset();
+    void heightMaximizeMinimizeAndExpand();
     void tabbedColumnLayout();
     void tabbedColumnBehavesLikeNormalStructurally();
     void reconcileAppResize();
@@ -473,11 +474,65 @@ void TestScrollStripOps::heightAdjustAndReset()
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 475);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 475);
 
-    QVERIFY(strip.resetActiveColumnHeights());
+    QVERIFY(strip.equalizeActiveColumnHeights());
     r = strip.relayout(params);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 395);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 395);
-    QVERIFY(!strip.resetActiveColumnHeights()); // already even
+    QVERIFY(!strip.equalizeActiveColumnHeights()); // already even
+}
+
+void TestScrollStripOps::heightMaximizeMinimizeAndExpand()
+{
+    const auto params = defaultParams();
+    // Cross budget: the 800px cross extent less the one 10px inner gap the
+    // two-tile stack spends, so 790, and the even split is 395 each.
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // ── Maximize ──
+    // b takes the whole budget as Fixed(790). It cannot RENDER at 790: the
+    // Auto sibling keeps a one-pixel floor, so the Fixed/Preset budget is
+    // 789 and b is renormalized down to it. That gap between intent and
+    // pixels is exactly why the toggle tests the intent too.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 789);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 1);
+
+    // The second press must UN-maximize even though b renders a pixel short
+    // of the budget. On a pixel-only test this press would maximize again,
+    // forever.
+    QVERIFY(strip.toggleMaximizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 395);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 395);
+
+    // ── Minimize ──
+    // The smallest preset is 1/3, which resolves the way relayout resolves a
+    // Preset: 1/3 of the gap-aware 810 span is 270, less the 10px gap = 260.
+    QVERIFY(strip.minimizeActiveWindowHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 260);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - 260);
+    // Already there: the second press refuses rather than reporting a no-op
+    // as success, its width twin's rule.
+    QVERIFY(!strip.minimizeActiveWindowHeight(params));
+
+    // ── Grow into empty space ──
+    // Refused while a sibling is AUTO: that tile already absorbs the
+    // leftover, so there is no empty space in the column to claim.
+    QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
+
+    // With BOTH tiles at the smallest preset the column really does leave
+    // 790 - (260 + 10 + 260) = 260 empty, and the verb claims all of it.
+    QVERIFY(strip.setWindowHeightIntent(QStringLiteral("a"), WindowHeight::makePreset(1.0 / 3.0)));
+    QVERIFY(strip.expandActiveWindowToAvailableHeight(params));
+    r = strip.relayout(params);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 520);
+    QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 260);
+    // Nothing left over now.
+    QVERIFY(!strip.expandActiveWindowToAvailableHeight(params));
 }
 
 void TestScrollStripOps::tabbedColumnLayout()
@@ -667,7 +722,7 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Fixed);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 300);
     // Reset returns the lone tile to Auto and the column's full cross extent.
-    QVERIFY(strip.resetActiveColumnHeights());
+    QVERIFY(strip.equalizeActiveColumnHeights());
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 800);
     // The height verbs work on a lone tile too (the old refusal spammed a
     // failure OSD per press): shrink by 10% of the 800px cross extent.

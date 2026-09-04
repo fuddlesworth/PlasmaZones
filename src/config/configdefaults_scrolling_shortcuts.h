@@ -21,9 +21,16 @@ public:
     //
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
     // Meta+Ctrl families in configdefaults.h, with two deliberate exceptions:
-    // Equalize Column Widths (Meta+Ctrl+Shift+T) and Reset Window Heights
+    // Equalize Column Widths (Meta+Ctrl+Shift+T) and Equalize Window Heights
     // (Meta+Ctrl+Alt+T) are the Shift and Alt twins of Retile's Meta+Ctrl+T
-    // (see scrollingEqualizeColumnWidthsShortcut). NOTE: the
+    // (see scrollingEqualizeColumnWidthsShortcut).
+    //
+    // The sizing verbs come in width/height PAIRS that do the same thing on
+    // the two axes, and the pairing is spelled in the chord: Meta+Alt+<key>
+    // sizes the column along the strip, Meta+Ctrl+Alt+<key> sizes the window
+    // across it. Maximize (F), grow into empty space (E) and its Shift'd
+    // minimize all follow that; the equalize pair is the exception above.
+    // NOTE: the
     // Meta+Alt family is SHARED with the layouts pair (Meta+Alt+[ ]), the
     // cheatsheet (Meta+Alt+/), cycle-in-zone (Meta+Alt+, .), the quick-layout
     // digit slots (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) and every other
@@ -178,14 +185,20 @@ public:
     {
         return QStringLiteral("Meta+Alt+Shift+H");
     }
-    static QString scrollingResetWindowHeightsShortcut()
+    static QString scrollingMaximizeWindowHeightShortcut()
     {
-        // The Alt twin of Retile's Meta+Ctrl+T, beside Equalize Column
-        // Widths' Shift twin (see scrollingEqualizeColumnWidthsShortcut):
-        // all three re-flow the strip's sizes, so they share the letter.
-        // NOT Meta+Alt+0 — that read as a tenth quick-layout digit beside
-        // Meta+Alt+1-9.
-        return QStringLiteral("Meta+Ctrl+Alt+T");
+        // Ctrl added to the width verb's chord, which is how the whole
+        // height family is spelled now that it mirrors the width one verb for
+        // verb: Meta+Alt+<key> sizes the column along the strip,
+        // Meta+Ctrl+Alt+<key> sizes the window across it. F is Maximize
+        // Column's letter (scrollingMaximizeColumnShortcut).
+        return QStringLiteral("Meta+Ctrl+Alt+F");
+    }
+    static QString scrollingExpandWindowShortcut()
+    {
+        // The Ctrl twin of Grow Column into Empty Space's E, per the family
+        // rule in scrollingMaximizeWindowHeightShortcut.
+        return QStringLiteral("Meta+Ctrl+Alt+E");
     }
     static QString scrollingCenterVisibleColumnsShortcut()
     {
@@ -279,6 +292,25 @@ public:
         // narrowest. Opposed ends of the same axis, per the family's
         // letter+Shift convention, and no new letter consumed.
         return QStringLiteral("Meta+Alt+Shift+E");
+    }
+    static QString scrollingEqualizeWindowHeightsShortcut()
+    {
+        // The Alt twin of Retile's Meta+Ctrl+T, beside Equalize Column
+        // Widths' Shift twin (see scrollingEqualizeColumnWidthsShortcut):
+        // all three re-flow the strip's sizes, so they share the letter. It
+        // is also the Ctrl twin of nothing on the width axis, which is why
+        // this one keeps the T rather than following the Meta+Ctrl+Alt+<width
+        // letter> rule its three siblings use.
+        // NOT Meta+Alt+0 — that read as a tenth quick-layout digit beside
+        // Meta+Alt+1-9.
+        return QStringLiteral("Meta+Ctrl+Alt+T");
+    }
+    static QString scrollingMinimizeWindowHeightShortcut()
+    {
+        // Shift added to Grow Window into Empty Space's chord, mirroring
+        // exactly what Minimize Column Width does to Grow Column into Empty
+        // Space on the width axis.
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+E");
     }
 };
 

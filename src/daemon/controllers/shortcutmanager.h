@@ -269,7 +269,8 @@ Q_SIGNALS:
     void scrollExpandColumnRequested();
     void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);
-    void scrollResetWindowHeightsRequested();
+    void scrollMaximizeWindowHeightRequested();
+    void scrollExpandWindowRequested();
     void scrollCenterVisibleColumnsRequested();
     /// false = top of the column, true = bottom.
     void scrollFocusWindowEndRequested(bool bottom);
@@ -288,6 +289,8 @@ Q_SIGNALS:
     void scrollViewRequested(int deltaPercent);
     void scrollEqualizeColumnWidthsRequested();
     void scrollMinimizeColumnWidthRequested();
+    void scrollEqualizeWindowHeightsRequested();
+    void scrollMinimizeWindowHeightRequested();
 
 private:
     struct Entry

@@ -199,8 +199,17 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollAdjustWindowHeightRequested, intVerb([](Scroll* s, const QString& id, int percent) {
         s->adjustWindowHeight(percent, id);
     }));
-    wire(&ShortcutManager::scrollResetWindowHeightsRequested, plainVerb([](Scroll* s, const QString& id) {
-        s->resetWindowHeights(id);
+    wire(&ShortcutManager::scrollMaximizeWindowHeightRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->maximizeWindowHeight(id);
+    }));
+    wire(&ShortcutManager::scrollExpandWindowRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->expandWindowToAvailableHeight(id);
+    }));
+    wire(&ShortcutManager::scrollEqualizeWindowHeightsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->equalizeWindowHeights(id);
+    }));
+    wire(&ShortcutManager::scrollMinimizeWindowHeightRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->minimizeWindowHeight(id);
     }));
     wire(&ShortcutManager::scrollCenterVisibleColumnsRequested, plainVerb([](Scroll* s, const QString& id) {
         s->centerVisibleColumns(id);

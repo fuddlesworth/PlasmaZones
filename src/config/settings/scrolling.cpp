@@ -785,9 +785,12 @@ P_STORE_SET_STRING(setScrollingIncreaseWindowHeightShortcut, shortcutsScrollingG
 P_STORE_GET(QString, scrollingDecreaseWindowHeightShortcut, shortcutsScrollingGroup, decreaseWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingDecreaseWindowHeightShortcut, shortcutsScrollingGroup, decreaseWindowHeightKey,
                    scrollingDecreaseWindowHeightShortcutChanged)
-P_STORE_GET(QString, scrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey, QString)
-P_STORE_SET_STRING(setScrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey,
-                   scrollingResetWindowHeightsShortcutChanged)
+P_STORE_GET(QString, scrollingMaximizeWindowHeightShortcut, shortcutsScrollingGroup, maximizeWindowHeightKey, QString)
+P_STORE_SET_STRING(setScrollingMaximizeWindowHeightShortcut, shortcutsScrollingGroup, maximizeWindowHeightKey,
+                   scrollingMaximizeWindowHeightShortcutChanged)
+P_STORE_GET(QString, scrollingExpandWindowShortcut, shortcutsScrollingGroup, expandWindowKey, QString)
+P_STORE_SET_STRING(setScrollingExpandWindowShortcut, shortcutsScrollingGroup, expandWindowKey,
+                   scrollingExpandWindowShortcutChanged)
 P_STORE_GET(QString, scrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey, QString)
 P_STORE_SET_STRING(setScrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey,
                    scrollingCenterVisibleColumnsShortcutChanged)
@@ -828,5 +831,11 @@ P_STORE_SET_STRING(setScrollingEqualizeColumnWidthsShortcut, shortcutsScrollingG
 P_STORE_GET(QString, scrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey, QString)
 P_STORE_SET_STRING(setScrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey,
                    scrollingMinimizeColumnWidthShortcutChanged)
+P_STORE_GET(QString, scrollingEqualizeWindowHeightsShortcut, shortcutsScrollingGroup, equalizeWindowHeightsKey, QString)
+P_STORE_SET_STRING(setScrollingEqualizeWindowHeightsShortcut, shortcutsScrollingGroup, equalizeWindowHeightsKey,
+                   scrollingEqualizeWindowHeightsShortcutChanged)
+P_STORE_GET(QString, scrollingMinimizeWindowHeightShortcut, shortcutsScrollingGroup, minimizeWindowHeightKey, QString)
+P_STORE_SET_STRING(setScrollingMinimizeWindowHeightShortcut, shortcutsScrollingGroup, minimizeWindowHeightKey,
+                   scrollingMinimizeWindowHeightShortcutChanged)
 
 } // namespace PlasmaZones

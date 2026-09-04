@@ -428,8 +428,47 @@ public:
     /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
     /// column-extent space the cycle measures in.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
-    /// Back to the even auto-split for EVERY tile in the active column.
-    bool resetActiveColumnHeights();
+    /// Toggle the active tile between filling its column's cross budget and
+    /// the even auto-split. The height twin of toggleMaximizeActiveColumn,
+    /// with ONE deliberate difference: there is no pre-maximize slot, so the
+    /// un-maximize arm writes Auto rather than a remembered height. A slot
+    /// would have to be re-indexed by every structural op the way
+    /// m_preMaximizeColumnIdx is, and the height family already treats Auto
+    /// as "the column decides", which is exactly what un-maximizing a window
+    /// inside a stack means.
+    ///
+    /// The maximized test reads the stored intent as well as the rendered
+    /// extent: siblings held up by their client minimums can stop the tile
+    /// reaching the budget on screen, and a pixel-only test would then
+    /// maximize forever and never come back. A TABBED column toggles in the
+    /// column's own space, the cycle and adjust verbs' rule.
+    bool toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& params);
+    /// The active tile at its shortest: the smallest preset height, or
+    /// MinWindowHeightFraction of the work area's cross extent when the preset
+    /// list is empty. The height twin of minimizeActiveColumnWidth, and the
+    /// empty-list arm is reachable only from a test or an embedder for the
+    /// same reason. Height has no Proportion spelling, so that fallback is
+    /// written as Fixed pixels rather than as a fraction.
+    /// Refuses when the tile already renders there.
+    bool minimizeActiveWindowHeight(const ScrollLayoutParams& params);
+    /// Grow the active tile into the empty cross space left in its column.
+    /// The height twin of expandActiveColumnToAvailableWidth. Empty space
+    /// inside a column exists only when no tile is Auto: an Auto tile absorbs
+    /// the leftover by weight in the relayout, so with one present the
+    /// measurement below finds nothing to claim and the verb refuses.
+    ///
+    /// One case routes through toggleMaximizeActiveWindowHeight rather than
+    /// writing Fixed pixels, the expand-column verb's rule: the active tile is
+    /// the only visible one in its column (or the column is tabbed, where
+    /// every tab is committed at the column's own rect and there is no
+    /// leftover WITHIN it), so the result is the whole budget and going
+    /// through the toggle leaves a way back out.
+    bool expandActiveWindowToAvailableHeight(const ScrollLayoutParams& params);
+    /// Back to the even auto-split for EVERY tile in the active column: the
+    /// height twin of equalizeVisibleColumnWidths. Auto IS the even share, so
+    /// unlike the width verb this one names the split rather than computing
+    /// it, and it needs no params.
+    bool equalizeActiveColumnHeights();
     /// Record the size a client/user resize actually settled on. The acked
     /// MAIN extent becomes the column's Fixed width intent only when
     /// @p mainChanged (the engine compares against the last applied rect) — a
@@ -681,6 +720,25 @@ private:
     /// tile is dropped from the relayout entirely). Shortcut-rate path, not
     /// per-frame — both height verbs call it once per press.
     int activeTileCrossPx(const ScrollLayoutParams& params) const;
+    /// The cross-axis budget the active column's tiles divide: the work area's
+    /// cross extent net of the inner gaps BETWEEN its visible tiles, floored
+    /// at one pixel per tile. This is relayout's @c availH for that column, so
+    /// a height a verb clamps to it is a height that will actually render. A
+    /// TABBED column stacks nothing and spends no inner gaps, so its budget is
+    /// the whole cross extent (tabbedColumnCrossPx caps its owner there).
+    /// Answers -1 when there is no active column or the work area is
+    /// degenerate.
+    int activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const;
+    /// The shortest the active tile may be written, in the space the height
+    /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
+    /// is already added). MinWindowHeightFraction of the work area's cross
+    /// extent, raised to the client minimum while @c respectMinimumSize is on
+    /// — and while tabbed, to the tallest minimum in the whole tab set, since
+    /// every visible tab is committed at that one rect. Capped at the work
+    /// area's cross extent so a client minimum larger than the screen cannot
+    /// invert a qBound. Answers -1 when there is no active tile or the work
+    /// area is degenerate.
+    int activeWindowHeightFloorPx(const ScrollLayoutParams& params) const;
     /// Make @p tileIdx the tab whose height decides @p c's cross extent, when
     /// @p c is tabbed and @p incoming is a height worth owning it for. Writes
     /// only Column::heightOwnerId — no tile's height is touched, so the tabs
