@@ -33,6 +33,7 @@ class SurfaceFactory;
 namespace PhosphorShell {
 
 class PanelWindow;
+class PersistentProperties;
 class ScreenModel;
 class ShellGlobal;
 
@@ -178,6 +179,16 @@ private:
     void setupWatcher();
     void savePersistentState();
     void restorePersistentState();
+    /// Every PersistentProperties in this generation's object graph.
+    ///
+    /// Not a plain findChildren from the root: materializePanels detaches
+    /// each PanelWindow from the QML root and hands it to a Surface, so a
+    /// PersistentProperties declared inside a non-root panel is no longer a
+    /// descendant of m_rootRef. Scanning only the root would silently drop
+    /// its state across a hot reload and never register it as a
+    /// ShellGlobal singleton. The root is scanned too, and the result is
+    /// deduplicated because the root may itself be one of the panels.
+    [[nodiscard]] QList<PersistentProperties*> collectPersistentProperties() const;
 
     QUrl m_shellUrl;
     std::unique_ptr<QQmlEngine> m_engine;
@@ -190,6 +201,12 @@ private:
     QPointer<QObject> m_rootRef;
     Deps m_deps;
     std::vector<std::unique_ptr<PhosphorLayer::Surface>> m_surfaces;
+    // The panels materialized in this generation, in creation order. They
+    // are owned by their Surface's wrapper window, not by this, so these
+    // are QPointers: a surface torn down out of band leaves a null entry
+    // rather than a dangling one. Kept so the PersistentProperties scans
+    // can reach inside a panel that was detached from the QML root.
+    std::vector<QPointer<PanelWindow>> m_panels;
     // What each materialized panel reserved, for reservedMarginsFor().
     // Recorded beside the surface rather than re-derived from it: a
     // Surface exposes its window, not the PanelWindow it adopted, and the

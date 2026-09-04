@@ -313,6 +313,9 @@ void ShellEngine::teardown()
     // The reservations describe the surfaces just torn down; a reload
     // rebuilds both together.
     m_reserved.clear();
+    // Same generation, same lifetime. savePersistentState() runs before
+    // teardown, so clearing here does not cost the state it collected.
+    m_panels.clear();
     // Drop singleton entries before the QQmlEngine destroys their backing
     // PersistentProperties. QPointer auto-nulls on destruction, so the map
     // stays safe to query, but we'd accumulate one stale (null) entry per
@@ -760,6 +763,10 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // reserving space.
             m_reserved.push_back(
                 {QPointer<QScreen>(targetScreen), static_cast<int>(panel->edge()), role.exclusiveZone});
+            // The panel is no longer a descendant of the QML root (it was
+            // detached above and handed to the Surface), so record it here
+            // or collectPersistentProperties() cannot see inside it.
+            m_panels.emplace_back(panel);
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
 
@@ -794,6 +801,7 @@ bool ShellEngine::materializePanels(QString* failureReason)
                 // that describe destroyed surfaces here would bite the first
                 // time this function grows a second failure exit.
                 m_reserved.clear();
+                m_panels.clear();
                 // Report rather than emit. `failed` has to reach the consumer
                 // AFTER teardown, or a handler that synchronously rebuilds
                 // would have its fresh engine destroyed by the teardown that
@@ -813,15 +821,38 @@ bool ShellEngine::materializePanels(QString* failureReason)
     // takes ownership via cfg.contentItem). m_rootRef (QPointer) still
     // tracks the live root regardless of which path we took, so
     // findChildren works for both rootPanel and Item-rooted shells.
-    if (m_rootRef) {
-        const auto persists = m_rootRef->findChildren<PersistentProperties*>();
-        for (auto* p : persists) {
-            if (!p->reloadId().isEmpty()) {
-                m_shellGlobal->registerSingleton(p->reloadId(), p);
-            }
+    const auto persists = collectPersistentProperties();
+    for (auto* p : persists) {
+        if (!p->reloadId().isEmpty()) {
+            m_shellGlobal->registerSingleton(p->reloadId(), p);
         }
     }
     return true;
+}
+
+QList<PersistentProperties*> ShellEngine::collectPersistentProperties() const
+{
+    QList<PersistentProperties*> found;
+    const auto absorb = [&found](QObject* subtree) {
+        if (!subtree) {
+            return;
+        }
+        const auto children = subtree->findChildren<PersistentProperties*>();
+        for (auto* p : children) {
+            // The root may itself be one of the materialized panels, and a
+            // panel nested inside another would be reached twice, so dedupe
+            // rather than registering or saving the same object repeatedly.
+            if (!found.contains(p)) {
+                found.append(p);
+            }
+        }
+    };
+
+    absorb(m_rootRef);
+    for (const auto& panel : m_panels) {
+        absorb(panel);
+    }
+    return found;
 }
 
 void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface)
@@ -1057,17 +1088,12 @@ void ShellEngine::installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surfa
 
 void ShellEngine::savePersistentState()
 {
-    // Use m_rootRef (non-owning QPointer) instead of m_rootObject because the
-    // root may have been a PanelWindow whose ownership was transferred to a
-    // Surface in materializePanels — m_rootObject is then released, but the
-    // QObject is still alive (parented to the wrapper window) and m_rootRef
-    // still tracks it.
     if (!m_rootRef) {
         return;
     }
 
     m_persistentState.clear();
-    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
+    const auto persists = collectPersistentProperties();
     for (const auto* p : persists) {
         if (!p->reloadId().isEmpty()) {
             m_persistentState[p->reloadId()] = p->saveState();
@@ -1082,7 +1108,7 @@ void ShellEngine::restorePersistentState()
         return;
     }
 
-    const auto persists = m_rootRef->findChildren<PersistentProperties*>();
+    const auto persists = collectPersistentProperties();
     for (auto* p : persists) {
         if (m_persistentState.contains(p->reloadId())) {
             p->restoreState(m_persistentState[p->reloadId()]);
