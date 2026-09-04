@@ -131,6 +131,13 @@ public:
     // or the last-used output.
     QScreen* targetScreen = nullptr;
 
+    // Where the popout sits. The default is BarCenter, which used to be a
+    // harmless synonym for "centred" because every anchor centred; it now
+    // routes to the bar-hang branch, so a caller that expresses no opinion
+    // gets a popout hanging below the bar rather than in the middle of the
+    // screen. That IS the right default for this shell, where every popout
+    // is triggered from the bar, but it is no longer a neutral value: a
+    // caller that wants the middle of the screen must ask for ScreenCenter.
     Anchor anchor = Anchor::BarCenter;
 
     // Used only when anchor == Custom. Interpreted by the transport
