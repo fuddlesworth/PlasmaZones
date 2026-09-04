@@ -106,6 +106,13 @@ Item {
     /// Per-category disclosure state for the unassigned rollup, keyed on
     /// categoryOrder. Replaced wholesale rather than mutated so the bindings
     /// reading it actually re-evaluate.
+    ///
+    /// This survives a live re-push, which is correct: categoryOrder is a
+    /// compile-time sort key on the catalog's category table, so one value
+    /// always denotes the same category whatever the mode. A category still
+    /// present after a mode switch keeps the disclosure the user left it in,
+    /// and one that is gone leaves an entry nothing reads. A show does reset
+    /// it, since the Loader re-instantiates this component.
     property var expandedCategories: ({})
 
     signal dismissRequested
@@ -166,14 +173,31 @@ Item {
     /// cursor and a row could move out from under the eye that was reading
     /// it. The card's geometry is fixed by the mode filter alone, and the
     /// query only decides which rows stay at full contrast.
+    /// Lowercased search text per catalog id, built once per model push rather
+    /// than per keystroke. rowMatches is called for every row several times
+    /// over on each key (once for the counter, once for each row's own dim
+    /// state, once inside its group's heading state), and rebuilding and
+    /// case-folding the same strings each time was the bulk of the typing
+    /// cost. The catalog only changes when C++ re-pushes it.
+    readonly property var haystacks: {
+        let map = ({});
+        for (let i = 0; i < root.shortcuts.length; ++i) {
+            const row = root.shortcuts[i];
+            let hay = row.label + " " + row.category;
+            if (row.assigned)
+                hay += " " + row.triggers.join(" ");
+            map[row.id] = hay.toLocaleLowerCase();
+        }
+        return map;
+    }
+
     function rowMatches(row) {
         if (root.queryTerms.length === 0)
             return true;
 
-        let hay = row.label + " " + row.category;
-        if (row.assigned)
-            hay += " " + row.triggers.join(" ");
-        hay = hay.toLocaleLowerCase();
+        const hay = root.haystacks[row.id];
+        if (hay === undefined)
+            return false;
         for (let i = 0; i < root.queryTerms.length; ++i) {
             if (hay.indexOf(root.queryTerms[i]) < 0)
                 return false;
@@ -232,6 +256,12 @@ Item {
         return n;
     }
 
+    /// Rows answering the query, counted across the whole mode-filtered
+    /// catalog. Deliberately includes rows sitting behind a collapsed rollup:
+    /// the counter reports what the query found, not what is currently on
+    /// screen, and the rollup line says separately how many of the hidden ones
+    /// are its own. The two numbers come from different paths on purpose, so
+    /// do not "reconcile" them by subtracting one from the other.
     readonly property int matchedRowCount: {
         if (root.queryTerms.length === 0)
             return root.modeRowCount;

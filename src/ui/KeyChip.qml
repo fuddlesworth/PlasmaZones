@@ -20,6 +20,17 @@ Rectangle {
     /// labels at every scale.
     property string fontFamily: ""
     property real fontSizeScale: 1
+
+    /// Same two derivations as CheatsheetRow, CheatsheetGroup and
+    /// CheatsheetSearchField. Each of the four takes the sheet's raw font
+    /// inputs and resolves them itself, because each is a component with its
+    /// own boundary rather than a member of a shared scope. Factoring them out
+    /// would mean a new QML singleton, which this qrc-loaded tree has no
+    /// mechanism for; naming them the same way in every file is the part that
+    /// actually keeps them honest.
+    readonly property string effectiveFamily: fontFamily.length > 0 ? fontFamily : Kirigami.Theme.defaultFont.family
+    readonly property int rowFontSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * fontSizeScale)
+
     /// Draw as a leading modifier rather than the key the row is really
     /// about: no fill, dimmer text. A cheatsheet repeats the same two or
     /// three modifiers on nearly every row, and at uniform weight the eye
@@ -45,8 +56,8 @@ Rectangle {
         id: keyLabel
 
         anchors.centerIn: parent
-        font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
-        font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.9 * root.fontSizeScale)
+        font.family: root.effectiveFamily
+        font.pixelSize: Math.round(root.rowFontSize * 0.9)
         color: root.dimmed ? Qt.alpha(Kirigami.Theme.textColor, 0.6) : Kirigami.Theme.textColor
         // The hosting shortcut row announces a composed "action, keys" name;
         // the per-token caps must not be announced a second time.

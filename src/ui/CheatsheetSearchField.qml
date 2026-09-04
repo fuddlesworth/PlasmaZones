@@ -106,6 +106,32 @@ Rectangle {
             Accessible.description: counter.text
         }
 
+        // Clearing is otherwise Backspace or Ctrl+A, since Escape closes the
+        // sheet outright rather than emptying the field. One visible way back
+        // to the full card, on the one control that changes what it shows.
+        Kirigami.Icon {
+            source: "edit-clear"
+            implicitWidth: root.rowFontSize
+            implicitHeight: root.rowFontSize
+            visible: root.hasQuery
+            opacity: clearArea.containsMouse ? 1 : 0.6
+            Accessible.role: Accessible.Button
+            Accessible.name: i18n("Clear the filter")
+            Accessible.onPressAction: field.clear()
+
+            MouseArea {
+                id: clearArea
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    field.clear();
+                    field.forceActiveFocus();
+                }
+            }
+        }
+
         Label {
             id: counter
 

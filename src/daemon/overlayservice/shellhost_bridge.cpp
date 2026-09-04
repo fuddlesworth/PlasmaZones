@@ -116,6 +116,13 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // overwrite this immediately via syncPassiveShellSurfaceState
     // (anyInputGrabbing=true), so the brief redundant write happens
     // entirely within a single event-loop tick.
+    //
+    // The keyboard axis deliberately gets no equivalent default here. It is
+    // owned solely by syncSurfaceState, which the modal-show paths call in the
+    // same tick, and unlike the input flag it has no stale-inheritance hazard
+    // to guard: the re-entry case this defends against keeps the same
+    // transport handle, and the only writer of that handle's interactivity is
+    // the sync itself.
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }

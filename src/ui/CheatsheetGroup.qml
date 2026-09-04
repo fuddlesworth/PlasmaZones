@@ -27,7 +27,7 @@ Column {
     property bool expanded: false
     /// Catalog id of the row whose tooltip the sheet has latched open.
     property string latchedRowId: ""
-    property var queryTerms: []
+    property list<string> queryTerms: []
     /// True while the sheet has a filter typed into it. Splits "everything is
     /// relevant" from "this row happens to match", which look identical from a
     /// row's own point of view but should not render the same. Derived rather
@@ -57,8 +57,15 @@ Column {
     /// True when this row answers the query, or when there is no query. Rows
     /// that do not are dimmed rather than dropped.
     function rowMatched(row) {
-        if (!root.queryActive || !root.matcher)
+        if (!root.queryActive)
             return true;
+        // A query with no matcher would silently mark every row as answering
+        // it, while the sheet's own counter said zero. Treat it as the setup
+        // error it is rather than rendering a lie.
+        if (!root.matcher) {
+            console.warn("CheatsheetGroup: query active with no matcher; category", root.name);
+            return false;
+        }
         return root.matcher(row);
     }
 

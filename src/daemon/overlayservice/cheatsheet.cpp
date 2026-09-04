@@ -27,6 +27,26 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// The sheet's whole content surface, in one place. Both entry points push the
+/// identical set, and a field added to one and not the other is a divergence
+/// the compiler cannot catch: the sheet would simply keep stale content after
+/// a live mode switch.
+void writeCheatsheetContent(QQuickItem* slot, const QVariantList& model, const QString& currentMode,
+                            bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
+                            bool layoutsAreTemplates)
+{
+    writeQmlProperty(slot, QStringLiteral("shortcuts"), model);
+    writeQmlProperty(slot, QStringLiteral("currentMode"), currentMode);
+    writeQmlProperty(slot, QStringLiteral("autotileAvailable"), autotileAvailable);
+    writeQmlProperty(slot, QStringLiteral("scrollingAvailable"), scrollingAvailable);
+    writeQmlProperty(slot, QStringLiteral("layoutsAvailable"), layoutsAvailable);
+    writeQmlProperty(slot, QStringLiteral("layoutsAreTemplates"), layoutsAreTemplates);
+}
+
+} // namespace
+
 void OverlayService::showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
                                     bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
                                     bool layoutsAreTemplates)
@@ -113,12 +133,8 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     auto* shellSurface = state->shell->shellSurface();
     auto* shellWindow = state->shell->shellWindow();
 
-    writeQmlProperty(slot, QStringLiteral("shortcuts"), model);
-    writeQmlProperty(slot, QStringLiteral("currentMode"), currentMode);
-    writeQmlProperty(slot, QStringLiteral("autotileAvailable"), autotileAvailable);
-    writeQmlProperty(slot, QStringLiteral("scrollingAvailable"), scrollingAvailable);
-    writeQmlProperty(slot, QStringLiteral("layoutsAvailable"), layoutsAvailable);
-    writeQmlProperty(slot, QStringLiteral("layoutsAreTemplates"), layoutsAreTemplates);
+    writeCheatsheetContent(slot, model, currentMode, autotileAvailable, scrollingAvailable, layoutsAvailable,
+                           layoutsAreTemplates);
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     // Same SurfaceDecoration host the picker uses, retargeted to the
@@ -157,7 +173,11 @@ void OverlayService::hideCheatsheet()
     if (!m_cheatsheetVisible) {
         // Always emit dismissed so the daemon's Escape-grab release path
         // runs even on idempotent calls — multiple call sites converge
-        // here (toggle re-press, backdrop, Escape).
+        // here (toggle re-press, backdrop, Escape). A deliberate exception to
+        // the emit-only-when-the-value-changed rule: the signal is carrying a
+        // grab release, not a state change, and making it conditional would
+        // strand the Escape grab on exactly the paths that converge here.
+        // Do not "fix" it to match the rule.
         Q_EMIT cheatsheetDismissed();
         return;
     }
@@ -215,12 +235,8 @@ void OverlayService::refreshCheatsheet(const QVariantList& model, const QString&
         return;
     }
     auto* slot = it->cheatsheetSlot();
-    writeQmlProperty(slot, QStringLiteral("shortcuts"), model);
-    writeQmlProperty(slot, QStringLiteral("currentMode"), currentMode);
-    writeQmlProperty(slot, QStringLiteral("autotileAvailable"), autotileAvailable);
-    writeQmlProperty(slot, QStringLiteral("scrollingAvailable"), scrollingAvailable);
-    writeQmlProperty(slot, QStringLiteral("layoutsAvailable"), layoutsAvailable);
-    writeQmlProperty(slot, QStringLiteral("layoutsAreTemplates"), layoutsAreTemplates);
+    writeCheatsheetContent(slot, model, currentMode, autotileAvailable, scrollingAvailable, layoutsAvailable,
+                           layoutsAreTemplates);
 }
 
 void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)

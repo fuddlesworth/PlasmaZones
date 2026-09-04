@@ -97,6 +97,13 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
         // holds today, but re-reading is cheap insurance against
         // future Surface internals that could swap the window across
         // a transport reattach.
+        //
+        // Note this refreshes what the state REPORTS, not where the surface
+        // actually sits: the layer surface's output and its baked anchors were
+        // fixed at attach time. A consumer reading physScreen() to decide
+        // which monitor a shell belongs to is reading the most recent claim,
+        // which is only the truth because every path that genuinely moves a
+        // shell between monitors destroys and recreates it.
         it.value()->m_physScreen = physScreen;
         it.value()->m_shellWindow = it.value()->m_shellSurface->window();
         return it.value();
@@ -267,9 +274,11 @@ void ShellHost::syncSurfaceState(const QString& screenId, const SurfaceStateWant
     // Runtime set_keyboard_interactivity is legal on wlr-layer-shell after the
     // initial configure (unlike the scope, which is immutable), so this rides
     // the same structural edges as the input flag rather than needing a
-    // surface rebuild. The transport handle is null until the surface has
-    // attached; a pre-attach call would be dropped, and the role's own
-    // KeyboardInteractivity::None is the correct value to attach with anyway.
+    // surface rebuild. The transport handle is null in two cases, and the
+    // no-op is right for both: before the surface has attached, where the
+    // role's own KeyboardInteractivity::None is the correct value to attach
+    // with anyway, and after it has detached, where there is no compositor-
+    // side grab left to release.
     if (auto* handle = s.m_shellSurface->transport()) {
         const auto wantKeyboard = (wants.visible && wants.keyboardGrabbing)
             ? PhosphorLayer::KeyboardInteractivity::Exclusive
