@@ -184,32 +184,19 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // AUTHORSHIP STAMP, recorded for every write this helper makes and tagged
     // with the direction it wrote.
     //
-    // It does NOT try to decide whether the write will reach the consumer, and
-    // that is the point. Two earlier revisions did, first from
-    // requestedMaximizeMode and then from lastFullyMaximized, and each was
-    // wrong exactly where the other was right. On Wayland a request and its
-    // commit are a client round trip apart, so a write issued while the user's
-    // own opposite request is in flight lands its edge only after the user's
-    // edge has already moved whichever state the prediction was reading — and
-    // the effect's write then arrived unstamped and armed the user-maximize
-    // marker for itself, which is the failure this whole mechanism exists to
-    // prevent. The mirror error, over-stamping, strands a stamp that swallows
-    // the user's next genuine maximize inside the deadline. There is no reading
-    // available here that avoids both, because the answer depends on a commit
-    // that has not happened yet.
+    // WHICH edge it belongs to is settled by the tag, not by a prediction. Two
+    // earlier revisions predicted instead — first from requestedMaximizeMode,
+    // then from lastFullyMaximized — and each was wrong exactly where the other
+    // was right, because on Wayland a request and its commit are a client round
+    // trip apart and the answer depends on a commit that has not happened yet.
+    // noteMaximizeEdge now takes a stamp only when an edge arrives in the
+    // direction it names: ours is recognised whenever it lands, an edge that is
+    // not ours cannot spend it, and one whose edge never comes expires.
     //
-    // So the question is not asked. The stamp names the direction, and
-    // noteMaximizeEdge takes it only when an edge arrives in that direction:
-    // ours is recognised whenever it lands, an edge that is not ours cannot
-    // spend it, and one whose edge never comes expires.
-    //
-    // AND ONLY FOR A WRITE THAT CAN FLIP THE BIT, judged on the REQUESTED mode.
-    // A stamp is not inert while it waits: it can be taken by any later edge in
-    // its direction, so one left by a write that produces no full-maximize edge
-    // at all — partial→Restore from a quick tile, and Restore→partial — sits
-    // for the deadline and is then spent by the user's own next edge in that
-    // direction, losing that edge its marker. Those writes therefore do not
-    // stamp.
+    // WHETHER to stamp at all is the remaining question, and it is asked
+    // because a stamp is not inert while it waits. One left by a write that can
+    // produce no full-maximize edge sits for the deadline and is then taken by
+    // the user's own next edge in that direction.
     //
     // BOTH CLOCKS, because neither alone is safe and their errors point
     // opposite ways. The requested mode is what KWin acts on; the committed
@@ -223,12 +210,23 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     // admits an edge.
     //
     // The asymmetry is deliberate, because the two errors are not equally bad.
-    // Over-stamping leaves a stamp no edge collects; the direction tag stops
-    // any edge but a same-direction one taking it, and the deadline bounds even
-    // that, so the cost is at most one mis-chosen leg. Under-stamping arms a
-    // false marker for a write the effect made, every time, which is the defect
-    // this whole mechanism exists to prevent. Where the two clocks disagree,
-    // erring toward stamping is the cheaper mistake.
+    // Under-stamping arms a false marker for a write the effect made, every
+    // time it happens, and that is the defect this whole mechanism exists to
+    // prevent. Over-stamping leaves a stamp no edge collects, and the direction
+    // tag plus the deadline confine the damage to a single same-direction user
+    // edge inside one second — a mis-chosen leg, or, on a scroll-managed tile,
+    // a maximize press SWALLOWED: interceptMaximizeRequest reads the stolen
+    // stamp as its own echo, claims the event and dispatches nothing, so the
+    // engine is never asked and KWin's bit stands against the strip's rect
+    // until something else corrects it. That is worse than a wrong animation
+    // and is stated plainly here rather than glossed, but it is still a bounded
+    // in-flight race against an unconditional failure. Closing it properly
+    // needs the stamp to carry more identity than one slot per window.
+    //
+    // Both over-stamping rows (a write whose requested and committed modes
+    // disagree in the direction being written) predate the committed disjunct;
+    // adding it introduced no new ones, and removed the only row where a real
+    // edge went unstamped.
     //
     // This is still not a prediction about the edge — the direction tag settles
     // that. It only refuses writes for which NEITHER clock allows one.
@@ -327,10 +325,15 @@ void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const 
     });
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
     // The one authored write whose stamp no edge can consume, so it is dropped
-    // by hand — when there is one to drop. The stamp gate above can decline for
-    // this write (both clocks reading not-fully-maximized), in which case this
-    // is a no-op, which is why it is written as a conditional remove rather
-    // than an assertion that something was there. The pre-write above forced lastFullyMaximized false precisely so
+    // by hand, and on the ordinary path there really is one. The pre-write above
+    // forces only the effect's own mirror false; KWin's committed mode still
+    // reads Full for a genuinely maximized window, so the stamp gate's
+    // committed disjunct admits this write and stamps it — while that same
+    // pre-written mirror guarantees the echo reads as a no-edge and never
+    // collects it. So this clear is load-bearing, not a tidy-up. It no-ops only
+    // for a window that was not fully maximized to begin with, which is why it
+    // is a conditional remove rather than an assertion that something was
+    // there. The pre-write above forced lastFullyMaximized false precisely so
     // this write's echo reads as a no-edge and never reaches noteMaximizeEdge —
     // which also means the stamp it just left has nothing to match it. Left
     // standing it would wait out the deadline, and the first genuine user
