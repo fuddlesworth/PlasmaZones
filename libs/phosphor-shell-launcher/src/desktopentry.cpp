@@ -71,9 +71,13 @@ QString unescape(QStringView raw)
     return out;
 }
 
-// A `;`-separated list value. `\;` is a literal semicolon. Empty elements
-// are dropped wherever they occur, not only the trailing one the spec's
-// convention produces, so `A;;B;` and `A;B;` parse alike.
+// A `;`-separated list value. `\;` is a literal semicolon.
+//
+// Empty elements are dropped WHEREVER they occur, not only the trailing one
+// the spec's convention produces, so `A;;B;` and `A;B;` parse alike. The
+// spec does not describe an empty element, and a launcher has nothing to do
+// with one: an empty keyword matches every query and an empty category
+// names no category.
 QStringList splitList(QStringView raw)
 {
     QStringList out;
@@ -119,15 +123,19 @@ QStringList localeCandidates(const QString& locale)
     if (locale.isEmpty()) {
         return {};
     }
+    // Modifier first, then encoding, each index taken from the string it is
+    // applied to. Computing the dot up front and applying it after the
+    // truncation happened to work, because '@' follows '.' in a well-formed
+    // name, but it was out of step by construction.
     QString base = locale;
-    const qsizetype dot = base.indexOf(u'.');
     QString modifier;
     const qsizetype at = base.indexOf(u'@');
     if (at >= 0) {
         modifier = base.mid(at + 1);
         base.truncate(at);
     }
-    if (dot >= 0 && dot < base.size()) {
+    const qsizetype dot = base.indexOf(u'.');
+    if (dot >= 0) {
         base.truncate(dot);
     }
     // The spec's shape is lang_COUNTRY, but Qt hands back a SCRIPT subtag

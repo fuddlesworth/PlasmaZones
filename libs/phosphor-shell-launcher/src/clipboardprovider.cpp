@@ -143,7 +143,10 @@ void ClipboardProvider::recompute()
             // rendering of the history, which is exactly the window an
             // activation lives in, and rowFor re-derives the same pair.
             r.id = m_history->data(idx, m_timestampRole).toString() + u'#' + QString::number(row);
-            // A single line for the row; the entry itself keeps its newlines.
+            // A single line for the row; the entry itself keeps its
+            // newlines. Simplified here rather than trusted from the model:
+            // the "preview" role is a duck-typed contract with no guarantee
+            // that a future service, or a test's fake, collapses whitespace.
             r.title = preview.simplified();
             r.subtitle = m_history->data(idx, m_mimeRole).toString();
             r.iconName = iconName();

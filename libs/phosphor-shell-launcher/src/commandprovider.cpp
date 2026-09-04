@@ -124,6 +124,11 @@ bool CommandProvider::activate(const QString& resultId, Activation activation)
         return false;
     }
     const QString program = argv.takeFirst();
+    // The HOME directory, deliberately, where an application launch uses the
+    // entry's own Path. A typed command has no declared working directory,
+    // and inheriting the shell process's would tie the result to wherever
+    // the session happened to start; home is what a terminal would have
+    // given the same line.
     const bool started = QProcess::startDetached(program, argv, QDir::homePath());
     if (!started) {
         qCWarning(lcCommand) << "failed to start" << program << argv;

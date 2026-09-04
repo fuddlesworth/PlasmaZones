@@ -243,10 +243,12 @@ target_link_libraries(PhosphorShellLauncherQml
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        # PhosphorRipple in the rows paints with a QtQuick.Shapes Shape;
-        # found in this scope so the static plugin's dependency walk
-        # resolves it without a configure warning.
-        Qt6::QuickShapes
+        # No Qt6::QuickShapes here, matching the bar: this module's own QML
+        # imports no QtQuick.Shapes. The Shape comes from PhosphorRipple in
+        # phosphor-shell-widgets, whose target links QuickShapes and
+        # propagates it. The find_package above still runs in this scope so
+        # the static plugin's dependency walk resolves the target without a
+        # configure warning.
         KF6::Kirigami
         PhosphorShellLauncher::PhosphorShellLauncher
 )
