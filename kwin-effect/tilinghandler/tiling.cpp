@@ -1815,6 +1815,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // skip has the same shape in the other direction: it takes
             // membership without calling maximize().
             bool maximizeBitWrittenThisBatch = false;
+            // DIRECTION of that write, for the placement node the geometry
+            // apply below rides. Written only on the Release arm, so it is
+            // false for the Apply arm and for every batch that touched no
+            // maximize bit at all.
+            bool maximizeBitReleasedThisBatch = false;
             if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
@@ -1891,6 +1896,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
                     maximizeBitWrittenThisBatch = releaseMaximizedToEdges(snap.windowId, snap.window);
+                    maximizeBitReleasedThisBatch = maximizeBitWrittenThisBatch;
                 }
             }
 
@@ -2717,16 +2723,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         skipScrollAnimation = true;
                         originOverride = QRectF();
                     }
-                    // ALWAYS the placement node. A window this batch maximized or
-                    // restored on the way is still a window this batch PLACED,
-                    // and the node a user assigns "Maximized" to must not play
-                    // for it. The KWin-native path (beginMaximizeShaderMorph) is
-                    // what answers a maximize the engine had no part in. The
-                    // bit write's one effect on the animation is the departure
-                    // rect, anchored above.
+                    // ALWAYS a placement node, never a maximize node of its own:
+                    // a window this batch maximized or restored on the way is
+                    // still a window this batch PLACED, and the retired
+                    // "Maximized" node does not come back for it. The
+                    // KWin-native path (beginMaximizeShaderMorph) is what
+                    // answers a maximize the engine had no part in.
+                    //
+                    // WHICH of the two placement legs is the direction of the
+                    // maximize bit this iteration wrote. A window growing to
+                    // the maximize area is arriving somewhere and rides
+                    // placeIn; handing the bit back is a window let go and
+                    // rides placeOut — the same pairing beginMaximizeShaderMorph
+                    // makes for the KWin-native maximize, and the reason a user
+                    // who assigns a pack to "Released" sees it play when they
+                    // un-maximize a scroll-managed tile. Both the column
+                    // release arm and the monocle release reach here; every
+                    // other placement (a plain retile, a maximize apply) is an
+                    // arrival and keeps placeIn. Same evidence the departure
+                    // rect is anchored on above, so the two cannot disagree.
+                    const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
-                                                  PhosphorAnimation::ProfilePaths::WindowPlaceIn, originOverride,
-                                                  visualTargetOverride);
+                                                  releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
+                                                                    : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
+                                                  originOverride, visualTargetOverride);
                 }
             }
 
