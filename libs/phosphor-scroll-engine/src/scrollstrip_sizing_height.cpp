@@ -285,16 +285,40 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
                     proportionalPx(nearestPresetValue(params.presetWindowHeights, tile->height.presetFraction), workH,
                                    params.gap))
                 >= budget;
-    const bool maximized = currentPx >= budget || maximizedByIntent;
+    const int ti = activeCol->activeTileIdx;
+    const std::optional<WindowHeight> remembered = activeCol->tiles.at(ti).preMaximizeHeight;
+    // A standing restore slot is the FIRST answer to "am I maximized", ahead of
+    // both the pixel and the intent tests, because it is the only one that
+    // cannot go stale. The budget is not a constant — it is the cross extent
+    // less one gap per inter-tile seam, and it grows when a sibling closes or
+    // the column is tabbed — so a tile left holding Fixed(oldBudget) reads as
+    // NOT maximized against the larger budget. Re-entering the maximize arm
+    // there overwrote the remembered height with the near-full one it had just
+    // displaced, and the toggle then alternated between two full heights
+    // forever with the user's real height gone and Auto unreachable. The slot
+    // is set only by the arm below and cleared by every other height write, so
+    // "it has a value" means exactly "this verb maximized this tile and nothing
+    // has countermanded it since".
+    const bool maximized = remembered.has_value() || currentPx >= budget || maximizedByIntent;
     // Un-maximizing puts back the height the maximize press displaced, and
     // falls to Auto only when there is nothing remembered — which is the case
     // for a tile that reached the budget by another route (an adjust clamped
     // there, a preset cycled to the top), where the user never asked this verb
     // for anything and Auto is the height family's "the column decides".
-    const int ti = activeCol->activeTileIdx;
-    const std::optional<WindowHeight> remembered = activeCol->tiles.at(ti).preMaximizeHeight;
+    //
+    // A remembered height that no longer FITS is treated as nothing
+    // remembered: the work area can shrink under a maximized tile, and putting
+    // back a height at or above the current budget would render clamped, still
+    // read as maximized, and cost a second press to reach Auto.
+    const bool rememberedStillFits = remembered
+        && (remembered->kind == WindowHeight::Auto
+            || (remembered->kind == WindowHeight::Fixed && remembered->fixedPx < budget)
+            || (remembered->kind == WindowHeight::Preset
+                && proportionalPx(nearestPresetValue(params.presetWindowHeights, remembered->presetFraction), workH,
+                                  params.gap)
+                    < budget));
     const WindowHeight result =
-        maximized ? remembered.value_or(WindowHeight::makeAuto()) : WindowHeight::makeFixed(budget);
+        maximized ? (rememberedStillFits ? *remembered : WindowHeight::makeAuto()) : WindowHeight::makeFixed(budget);
     // Ownership before the no-change bail, and written through the COLUMN
     // rather than the cached tile pointer — cycleActiveWindowPresetHeight
     // carries both reasons.
@@ -312,10 +336,10 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
     }
     // The restore slot is settled on BOTH arms and BEFORE the no-change bail,
     // so a press that moves no pixels still leaves the memory right. The
-    // maximize arm never remembers the maximized height itself: that is what
-    // the inequality test is for, and without it a press that somehow found
-    // the tile already at the budget would record Fixed(budget) as the height
-    // to go back to, making un-maximize a permanent no-op.
+    // maximize arm remembers only a height it is actually displacing: writing
+    // the slot when the tile already holds the result would record the
+    // maximized height as the height to go back to, and un-maximize would be a
+    // permanent no-op.
     if (maximized) {
         activeCol->tiles[ti].preMaximizeHeight.reset();
     } else if (!(activeCol->tiles.at(ti).height == result)) {
