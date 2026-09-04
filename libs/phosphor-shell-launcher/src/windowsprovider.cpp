@@ -47,6 +47,10 @@ WindowsProvider::WindowsProvider(QAbstractItemModel* toplevels, QObject* parent)
     connect(m_toplevels, &QAbstractItemModel::rowsRemoved, this, refresh);
     connect(m_toplevels, &QAbstractItemModel::modelReset, this, refresh);
     connect(m_toplevels, &QAbstractItemModel::dataChanged, this, refresh);
+    // A model that reorders through moveRows or layoutChanged rather than
+    // insert/remove would otherwise leave the cached rows stale.
+    connect(m_toplevels, &QAbstractItemModel::rowsMoved, this, refresh);
+    connect(m_toplevels, &QAbstractItemModel::layoutChanged, this, refresh);
 }
 
 WindowsProvider::~WindowsProvider() = default;

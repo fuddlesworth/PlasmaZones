@@ -86,6 +86,11 @@ Item {
                 Text {
                     Accessible.ignored: true
                     text: root.title
+                    // Titles and subtitles carry window titles and clipboard
+                    // contents, so they are arbitrary text from other clients.
+                    // AutoText would run Qt's rich-text heuristic over that and
+                    // let markup restyle the row or reference local files.
+                    textFormat: Text.PlainText
                     color: surface.contentColor
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_body_l
@@ -97,6 +102,7 @@ Item {
                 Text {
                     Accessible.ignored: true
                     text: root.subtitle
+                    textFormat: Text.PlainText
                     color: surface.mutedColor
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_body_s
@@ -111,10 +117,16 @@ Item {
             Text {
                 Accessible.ignored: true
                 visible: root.current
-                text: root.hasAlternateAction ? qsTr("↵ %1 · ⌥↵ %2").arg(root.primaryActionLabel).arg(root.alternateActionLabel) : qsTr("↵ %1").arg(root.primaryActionLabel)
+                text: root.hasAlternateAction ? qsTr("↵ %1 · Alt+↵ %2").arg(root.primaryActionLabel).arg(root.alternateActionLabel) : qsTr("↵ %1").arg(root.primaryActionLabel)
+                textFormat: Text.PlainText
                 color: surface.mutedColor
                 font.family: Tokens.font_family
                 font.pixelSize: Tokens.font_size_label_s
+                // The action labels come from the provider and grow under
+                // translation. Without a ceiling this squeezes the title
+                // column, which is the opposite of the intended priority.
+                elide: Text.ElideRight
+                Layout.maximumWidth: root.width * 0.4
             }
         }
 

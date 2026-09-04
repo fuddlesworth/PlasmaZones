@@ -55,6 +55,10 @@ FocusScope {
     // top, keyboard in the field. The host calls this on open rather than
     // rebuilding the surface, so provider state (the apps scan) survives.
     function reset(): void {
+        // The field is the only writer of results.query, so clearing the
+        // model without clearing the field leaves the two disagreeing until
+        // the next keystroke, which then re-sends the stale prefix.
+        field.text = "";
         root.results.query = "";
         root.results.providerFilter = "";
         list.currentIndex = 0;
@@ -90,7 +94,7 @@ FocusScope {
             id: field
 
             Layout.fillWidth: true
-            placeholderText: qsTr("Search apps and windows, run commands, do sums")
+            placeholderText: qsTr("Search apps, windows and commands")
             focus: true
 
             onTextChanged: {
@@ -161,8 +165,11 @@ FocusScope {
 
                     required property var modelData
 
-                    visible: pill.modelData.count > 0
-                    text: qsTr("%1 %2").arg(pill.modelData.name).arg(pill.modelData.count)
+                    // The selected pill stays visible even at zero, so a
+                    // filter that survives a query change keeps the reason
+                    // for the empty list on screen.
+                    visible: pill.modelData.count > 0 || pill.selected
+                    text: qsTr("%1 %2", "provider filter pill: provider name, then its result count").arg(pill.modelData.name).arg(pill.modelData.count)
                     selected: root.results.providerFilter === pill.modelData.id
                     onClicked: {
                         root.results.providerFilter = pill.modelData.id;
@@ -202,6 +209,7 @@ FocusScope {
                     anchors.leftMargin: Tokens.spacing_s
                     anchors.verticalCenter: parent.verticalCenter
                     text: parent.section
+                    textFormat: Text.PlainText
                     color: Theme.on_surface_variant
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_label_s
@@ -229,15 +237,30 @@ FocusScope {
             }
         }
 
-        // The mockup's hint line. Only when there is something to act on.
+        // Empty state. Without this the card is a bare text field: no pills,
+        // no rows, and the hint line hidden, which is exactly the moment the
+        // user most needs to be told what to do and how to leave.
         Text {
             Layout.fillWidth: true
-            visible: list.count > 0
+            visible: list.count === 0
+            text: root.results.query.length > 0 ? qsTr("No results for %1").arg(root.results.query) : qsTr("Type to search")
+            textFormat: Text.PlainText
+            color: Theme.on_surface_variant
+            font.family: Tokens.font_family
+            font.pixelSize: Tokens.font_size_body_s
+            elide: Text.ElideRight
+        }
+
+        // The mockup's hint line. Always present, so the key legend does not
+        // disappear in the empty state.
+        Text {
+            Layout.fillWidth: true
             // The current row's own action label, read through a typed cast
             // so the property is resolvable by the tooling rather than a
             // dynamic lookup on a bare Item.
             readonly property LauncherResultRow currentRow: list.currentItem as LauncherResultRow
-            text: qsTr("↑↓ navigate · ↵ %1 · ⌥↵ alternate · Tab cycles providers · Esc closes").arg(currentRow ? currentRow.primaryActionLabel : qsTr("open"))
+            text: qsTr("↑↓ navigate · ↵ %1 · Alt+↵ alternate · Tab cycles providers · Esc closes").arg(currentRow ? currentRow.primaryActionLabel : qsTr("Open"))
+            textFormat: Text.PlainText
             color: Theme.on_surface_variant
             font.family: Tokens.font_family
             font.pixelSize: Tokens.font_size_label_s

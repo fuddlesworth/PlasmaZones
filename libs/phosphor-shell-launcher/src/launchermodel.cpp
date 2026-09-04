@@ -238,12 +238,18 @@ bool LauncherModel::activate(int row, bool alternate)
     if (row < 0 || row >= m_rows.size()) {
         return false;
     }
-    const Row& r = m_rows.at(row);
-    if (alternate && !r.result.hasAlternateAction()) {
+    // Copy out before calling. A provider's activate can drive its source
+    // model synchronously (the clipboard's remove does), which re-enters
+    // rebuild() and reassigns m_rows, destroying the row this reference and
+    // its id point into while the call is still on the stack.
+    ILauncherProvider* const provider = m_rows.at(row).provider;
+    const QString resultId = m_rows.at(row).result.id;
+    const bool hasAlternate = m_rows.at(row).result.hasAlternateAction();
+    if (alternate && !hasAlternate) {
         return false;
     }
-    return r.provider->activate(
-        r.result.id, alternate ? ILauncherProvider::Activation::Alternate : ILauncherProvider::Activation::Primary);
+    return provider->activate(
+        resultId, alternate ? ILauncherProvider::Activation::Alternate : ILauncherProvider::Activation::Primary);
 }
 
 } // namespace PhosphorShellLauncher

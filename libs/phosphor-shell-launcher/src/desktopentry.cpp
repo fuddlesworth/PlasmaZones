@@ -129,6 +129,21 @@ QStringList localeCandidates(const QString& locale)
     return out;
 }
 
+// Pick the most specific localised value present for `key`, without
+// unescaping. List-valued keys need the raw text, because splitList does its
+// own unescape per element and a second pass over an already-unescaped value
+// consumes the backslash that was protecting a separator.
+QString localisedRaw(const QHash<QString, QString>& group, const QString& key, const QStringList& locales)
+{
+    for (const QString& loc : locales) {
+        const auto it = group.constFind(key + u'[' + loc + u']');
+        if (it != group.constEnd()) {
+            return it.value();
+        }
+    }
+    return group.value(key);
+}
+
 // Pick the most specific localised value present for `key`.
 QString localised(const QHash<QString, QString>& group, const QString& key, const QStringList& locales)
 {
@@ -208,7 +223,7 @@ std::optional<DesktopEntry> DesktopEntry::parse(const QString& filePath, const Q
     entry.icon = unescape(group.value(QStringLiteral("Icon")));
     entry.exec = unescape(group.value(QStringLiteral("Exec")));
     entry.path = unescape(group.value(QStringLiteral("Path")));
-    entry.keywords = splitList(localised(group, QStringLiteral("Keywords"), locales));
+    entry.keywords = splitList(localisedRaw(group, QStringLiteral("Keywords"), locales));
     entry.categories = splitList(group.value(QStringLiteral("Categories")));
     entry.terminal = parseBool(group.value(QStringLiteral("Terminal")));
     entry.noDisplay = parseBool(group.value(QStringLiteral("NoDisplay")));

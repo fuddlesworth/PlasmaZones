@@ -42,6 +42,7 @@ ClipboardProvider::ClipboardProvider(QObject* service, QObject* parent)
     connect(m_history, &QAbstractItemModel::modelReset, this, refresh);
     connect(m_history, &QAbstractItemModel::dataChanged, this, refresh);
     connect(m_history, &QAbstractItemModel::layoutChanged, this, refresh);
+    connect(m_history, &QAbstractItemModel::rowsMoved, this, refresh);
 }
 
 ClipboardProvider::~ClipboardProvider() = default;
