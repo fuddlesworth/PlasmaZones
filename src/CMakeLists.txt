@@ -719,6 +719,11 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/routingpopouttransport.cpp
         shell/SocketPopoutTransport.h
         shell/socketpopouttransport.cpp
+        # The launcher's registry owner: built-in providers, the model the
+        # launcher popout binds, and the clipboard + Toplevels services the
+        # providers read that nothing else in the shell owns yet.
+        shell/LauncherController.h
+        shell/launchercontroller.cpp
     )
 
     target_link_libraries(phosphor-shell
@@ -738,6 +743,14 @@ if(BUILD_PHOSPHOR_SHELL)
             # registerQmlTypes() block in shell/main.cpp already publishes.
             PhosphorShellControlCenter::PhosphorShellControlCenterQml
             PhosphorShellControlCenterQmlplugin
+            # The launcher: its core (LauncherModel + the built-in providers
+            # LauncherController materialises), the Phosphor.Launcher module
+            # + registrar for shell.qml's launcher popout, and the clipboard
+            # service the controller owns for the clipboard provider.
+            PhosphorShellLauncher::PhosphorShellLauncher
+            PhosphorShellLauncher::PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
+            PhosphorServiceClipboard::PhosphorServiceClipboard
             # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
             # The router has to be installed on each engine (see main.cpp)
             # or every IpcTarget logs a warning and stays inert.

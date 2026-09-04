@@ -12,6 +12,7 @@
 import Phosphor.Bar
 import Phosphor.ControlCenter
 import Phosphor.Ipc
+import Phosphor.Launcher
 import Phosphor.Popout
 import Phosphor.Power
 import Phosphor.Shell
@@ -242,6 +243,65 @@ Item {
             // close() on an empty handle is a no-op, so this is safe when
             // nothing is open.
             Popouts.close(Popouts.handleFor("control-center"));
+        }
+    }
+
+    // The launcher, per docs/phosphor-shell-design/mockups/launcher-spotlight.svg:
+    // a screen-centred Cooperative popout that takes keyboard focus (it is
+    // a search field) and goes away on focus loss. Cooperative, not Modal:
+    // it should close when you click away, not dim the screen and
+    // suppress every other popout; and being Cooperative is what lets the
+    // Modal power menu close it.
+    //
+    // Launcher paints its own card, so unlike the control center it needs
+    // no panel wrapped around it. Everything it reads comes from the
+    // LauncherResults context property src/shell/main.cpp installs on
+    // every engine, and Popouts is a context property too, so this
+    // Component is safe to build against the root context the transport
+    // uses (the constraint that bit the power menu).
+    Component {
+        id: launcherComponent
+
+        Launcher {
+            results: LauncherResults
+            // Built fresh on every open by the transport, so the reset that
+            // clears the query and takes focus belongs here; the providers
+            // behind the model are process-global and keep their state.
+            Component.onCompleted: reset()
+            onActivated: Popouts.close(Popouts.handleFor("launcher"))
+            onDismissed: Popouts.close(Popouts.handleFor("launcher"))
+        }
+    }
+
+    function toggleLauncher(): void {
+        Popouts.toggle({
+            "popoutId": "launcher",
+            "content": launcherComponent,
+            "anchor": PhosphorPopout.Anchor.ScreenCenter,
+            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
+            "keyboardFocus": true,
+            "dismissOnFocusLoss": true
+        });
+    }
+
+    // The launcher's wire surface, per the mockup's
+    // `phosphorctl call launcher.toggle`. Argument-free, the form a
+    // compositor keybind uses (Meta / Alt+Space bound to
+    // `phosphorctl call launcher.toggle`).
+    IpcTarget {
+        target: "launcher"
+
+        function show(): void {
+            if (!Popouts.isOpen("launcher"))
+                root.toggleLauncher();
+        }
+
+        function toggle(): void {
+            root.toggleLauncher();
+        }
+
+        function hide(): void {
+            Popouts.close(Popouts.handleFor("launcher"));
         }
     }
 }

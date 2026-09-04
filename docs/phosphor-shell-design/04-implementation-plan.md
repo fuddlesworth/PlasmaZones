@@ -997,7 +997,7 @@ Order is rough, each surface is independent enough to slip. Recommended sequence
 
 Visible win: bar feels alive and distinct.
 
-### 4.2: Launcher (M2) *(core, providers, surface and demo shipped; shell mount pending)*
+### 4.2: Launcher (M2) *(shipped; Connected/Standalone skins and Emoji later)*
 
 Lives in `libs/phosphor-shell-launcher/`: a C++ core library
 (`PhosphorShellLauncher`, linkable without the UI) and the
@@ -1015,7 +1015,7 @@ Kirigami.
 | `qml/Phosphor/Launcher/Launcher.qml` + `LauncherResultRow.qml` (Spotlight skin)          | ✓ shipped | Renders into whatever it is parented to. Keyboard entirely from the field: ↑↓, ↵, ⌥↵, Tab/⇧Tab, Esc. A refused activation keeps it open. |
 | `examples/phosphor-launcher-demo/`                                                         | ✓ shipped | The surface over this machine's real applications, clipboard and PATH, providers supplied by a `Registry<ILauncherProviderFactory>`. |
 | Connected and Standalone skins                                                             | later  | The plan's own sequencing. |
-| Shell mount (`LauncherController` in `src/shell`, `launcher.{show,toggle,hide}` IPC, popout) | next | |
+| Shell mount (`LauncherController` in `src/shell`, `launcher.{show,toggle,hide}` IPC, popout) | ✓ shipped | A screen-centred Cooperative popout with keyboard focus, so the Modal power menu closes it and it goes on focus loss. The controller is process-global and owns the clipboard service and a second `Toplevels` instance (the QML singleton dies with its engine on reload; a provider bound to it would go inert). Live-verified: open, Modal closes it, reopen under the modal refused, reopen + hide, and a hot reload with it open. |
 
 Tests: seven suites (matcher, parser/scanner over fixtures, each provider's
 gate and ranking, the model over fakes, and a QtQuickTest of the surface's

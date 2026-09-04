@@ -3,9 +3,12 @@
 
 #include "BarController.h"
 #include "ControlCenterController.h"
+#include "LauncherController.h"
 #include "LayerPopoutTransport.h"
 #include "RoutingPopoutTransport.h"
 #include "SocketPopoutTransport.h"
+
+#include <PhosphorShellLauncher/LauncherModel.h>
 
 #include <PhosphorServiceIdle/IdleService.h>
 
@@ -233,6 +236,13 @@ int main(int argc, char* argv[])
     PhosphorServiceIdle::IdleService idleService;
     PhosphorShellApp::ControlCenterController controlCenterController(&idleService);
 
+    // The launcher's registry owner, process-global for the same reason
+    // as the two controllers above: the apps scan, clipboard history and
+    // window list it holds must survive every hot-reload engine rebuild.
+    // Declared before the engine so reverse destruction tears the engine
+    // (and every QML binding to LauncherResults) down first.
+    PhosphorShellApp::LauncherController launcherController;
+
     // The IPC router every IpcTarget in the shell's QML registers with.
     // Declared before the engine for the same reverse-destruction reason as
     // the others: targets unregister themselves on destruction and must find
@@ -355,6 +365,15 @@ int main(int argc, char* argv[])
     // shell builds, startup and each hot reload alike.
     engine.addEngineHook([&controlCenterController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controlCenterController);
+    });
+
+    // The launcher's results model, bound the same way. shell.qml's
+    // launcher popout reads it as `results: LauncherResults`, the same
+    // context-property name the launcher demo uses, so the two bind
+    // identically. A plain QObject owned by C++, re-installed on every
+    // engine the shell builds.
+    engine.addEngineHook([&launcherController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherResults"), launcherController.model());
     });
 
     if (!engine.load(shellUrl)) {
