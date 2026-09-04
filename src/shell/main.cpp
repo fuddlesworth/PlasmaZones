@@ -339,18 +339,21 @@ int main(int argc, char* argv[])
     // (it is declared after the transport, so it is destroyed first).
     // Auto-disconnect has to key on whichever capture dies first, or the
     // lambda outlives one of the references it holds.
-    QObject::connect(&engine, &PhosphorShell::ShellEngine::aboutToReload, &popouts, [&popoutTransport, &popouts] {
+    // One body, two triggers. These are the only teardown paths for the
+    // popout stack, so defining the work once keeps them from drifting.
+    // Both inner transports drain: the socket one holds the bar pocket's
+    // open state, which would otherwise survive a reload.
+    const auto drainPopouts = [&popoutTransport, &socketTransport, &popouts] {
         popouts.closeAll();
         popoutTransport.drain();
-    });
+        socketTransport.drain();
+    };
+    QObject::connect(&engine, &PhosphorShell::ShellEngine::aboutToReload, &popouts, drainPopouts);
 
     // Surfaces must be gone before the QML engine and the Wayland
     // connection unwind. Without this the transport tears down during
     // static destruction, which is where Qt object graphs misbehave.
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, &popouts, [&popoutTransport, &popouts] {
-        popouts.closeAll();
-        popoutTransport.drain();
-    });
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &popouts, drainPopouts);
 
     engine.addEngineHook([&popouts](QQmlEngine* qmlEngine) {
         // Context property rather than qmlRegisterSingletonInstance: the
@@ -383,6 +386,16 @@ int main(int argc, char* argv[])
     // engine the shell builds.
     engine.addEngineHook([&launcherController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherResults"), launcherController.model());
+    });
+
+    // A failure after the initial load is not fatal to the process: the
+    // engine tears down, re-arms its watcher and recovers on the next save or
+    // screen change. But a monitor hotplug can drive that path, and without
+    // this the shell would sit there with no surfaces, no engine and nothing
+    // in its own log category saying why. The engine fails loudly precisely
+    // so its embedder can react.
+    QObject::connect(&engine, &PhosphorShell::ShellEngine::failed, &app, [](const QString& reason) {
+        qCCritical(lcShell) << "shell engine failed:" << reason << "— the shell is now headless until the next reload";
     });
 
     if (!engine.load(shellUrl)) {

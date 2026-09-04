@@ -7,6 +7,7 @@
 
 #include <PhosphorPopout/PopoutRequest.h>
 
+#include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QScreen>
 
@@ -21,6 +22,44 @@ namespace PhosphorShellApp {
 SocketPopoutTransport::SocketPopoutTransport(ControlCenterController* controller)
     : m_controller(controller)
 {
+    // The layer sibling gets this repair from Surface::screenLost. This
+    // transport owns no surface, so it has to watch the outputs directly:
+    // when the one holding the open pocket goes away, its BarHost is
+    // destroyed and nothing paints, but the handle and openScreen would
+    // otherwise stay set forever, swallowing the next toggle and leaving the
+    // IPC show verb permanently inert.
+    if (auto* app = qGuiApp) {
+        QObject::connect(app, &QGuiApplication::screenRemoved, app, [this](QScreen* screen) {
+            if (!screen || m_openHandle.isEmpty() || screen->name() != m_openScreenName) {
+                return;
+            }
+            qCInfo(lcSocketTransport) << "output" << m_openScreenName << "went away with the socket open; dismissing";
+            selfDismiss();
+        });
+    }
+}
+
+SocketPopoutTransport::~SocketPopoutTransport()
+{
+    drain();
+}
+
+void SocketPopoutTransport::drain()
+{
+    m_openHandle.clear();
+    m_openScreenName.clear();
+    if (m_controller) {
+        m_controller->setOpenScreen({});
+    }
+}
+
+void SocketPopoutTransport::selfDismiss()
+{
+    const QString handle = m_openHandle;
+    drain();
+    if (m_dismissed && !handle.isEmpty()) {
+        m_dismissed(handle);
+    }
 }
 
 QString SocketPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& request)
@@ -44,12 +83,28 @@ QString SocketPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& 
     // is invisible by eye because the primary is the only output that
     // matters.
     const bool fromRequest = request.targetScreen != nullptr;
-    const QString screenName = fromRequest ? request.targetScreen->name() : m_controller->screenOf(nullptr)->name();
+    const QScreen* const target = fromRequest ? request.targetScreen : m_controller->screenOf(nullptr);
+    // screenOf() falls back to the primary and guards its own use of the
+    // result, so it is nullable when the session has no outputs at all.
+    const QString screenName = target ? target->name() : QString();
+    // An empty name means "closed everywhere" to the controller, so opening
+    // with one would set a live handle that paints nothing and then block
+    // every later open. Refuse instead, before anything is recorded.
+    if (screenName.isEmpty()) {
+        qCWarning(lcSocketTransport) << "refusing" << request.popoutId << "— no named output to open the socket on";
+        return {};
+    }
     qCDebug(lcSocketTransport) << "opening" << request.popoutId << "in the socket on" << screenName
                                << (fromRequest ? "(from request)" : "(primary fallback)");
 
     m_openHandle = QStringLiteral("socket-%1").arg(++m_counter);
+    m_openScreenName = screenName;
     m_controller->setOpenScreen(screenName);
+    // Deliberately returns the member rather than a pre-notify copy.
+    // setOpenScreen drives live QML bindings, so a reaction can round-trip
+    // back through closeSurface and clear it; reporting the refusal sentinel
+    // in that case is correct, because by the time this returns the socket is
+    // genuinely closed and the caller must not record a row for it.
     return m_openHandle;
 }
 

@@ -82,11 +82,18 @@ generate_export_header(PhosphorShellLauncher
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/PhosphorShellLauncher/phosphorshelllauncher_export.h
 )
 
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
 target_include_directories(PhosphorShellLauncher
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
 )
 
 target_compile_features(PhosphorShellLauncher PUBLIC cxx_std_20)
@@ -94,13 +101,71 @@ target_compile_features(PhosphorShellLauncher PUBLIC cxx_std_20)
 target_link_libraries(PhosphorShellLauncher
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         PhosphorRegistry::PhosphorRegistry
+    PRIVATE
+        # Gui is needed for exactly one thing, the calculator copying its
+        # answer through QGuiApplication::clipboard(). No public header names
+        # a QtGui type, so keeping it PRIVATE avoids leaking the dependency
+        # to every consumer of this library.
+        Qt6::Gui
 )
 
 set_target_properties(PhosphorShellLauncher PROPERTIES
     VERSION ${PHOSPHORSHELLLAUNCHER_VERSION}
     SOVERSION 0
+    # Match every sibling shared library in the tree: hide by default so the
+    # EXPORT macro on the public types is load-bearing rather than decorative,
+    # and keep the sources in separate translation units.
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    UNITY_BUILD OFF
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Install
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# phosphor-shell links this library and is itself installed, so without these
+# rules an installed shell has a DT_NEEDED on a libPhosphorShellLauncher.so.0
+# that lands nowhere. The QML module below is STATIC and correctly installs
+# nothing, since it rides inside the binary.
+
+install(TARGETS PhosphorShellLauncher
+    EXPORT PhosphorShellLauncherTargets
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${KDE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES ${phosphorshelllauncher_public_HDRS}
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShellLauncher
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/PhosphorShellLauncher/phosphorshelllauncher_export.h
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShellLauncher
+)
+
+install(EXPORT PhosphorShellLauncherTargets
+    FILE PhosphorShellLauncherTargets.cmake
+    NAMESPACE PhosphorShellLauncher::
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShellLauncher
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhosphorShellLauncherConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellLauncherConfig.cmake"
+    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShellLauncher
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellLauncherConfigVersion.cmake"
+    VERSION ${PHOSPHORSHELLLAUNCHER_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellLauncherConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellLauncherConfigVersion.cmake"
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShellLauncher
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

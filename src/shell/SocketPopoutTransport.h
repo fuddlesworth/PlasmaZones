@@ -34,22 +34,35 @@ class ControlCenterController;
 // serialises opens per popout id, so this only triggers if a second
 // socket-hosted id is ever registered without a second pocket to hold it.
 //
-// The dismissed callback is stored to honour the contract but never fired
-// today: the pocket has no scrim, so nothing closes it on its own. Every
-// close is controller-initiated and arrives through closeSurface.
+// The pocket has no scrim, so nothing closes it on its own and every
+// ordinary close is controller-initiated through closeSurface. The dismissed
+// callback exists for the one case the transport must report upward on its
+// own: the output holding the open pocket going away. Without that, the
+// handle and the controller's openScreen would both stay set for an output
+// that no longer exists, the arbiter would keep believing the popout is open,
+// and every later open would be refused.
 class SocketPopoutTransport : public PhosphorPopout::IPopoutTransport
 {
 public:
     explicit SocketPopoutTransport(ControlCenterController* controller);
-    ~SocketPopoutTransport() override = default;
+    ~SocketPopoutTransport() override;
     Q_DISABLE_COPY_MOVE(SocketPopoutTransport)
 
     [[nodiscard]] QString openSurface(const PhosphorPopout::PopoutRequest& request) override;
     void closeSurface(const QString& handle) override;
     void setSurfaceDismissedCallback(std::function<void(const QString&)> callback) override;
 
+    // Drop any open socket without notifying, for shutdown and hot reload.
+    // The layer sibling carries the same verb for the same reason.
+    void drain();
+
 private:
+    // Clear the open state and report it upward, for a close this transport
+    // decided on rather than one the controller asked for.
+    void selfDismiss();
+
     ControlCenterController* m_controller;
+    QString m_openScreenName;
     QString m_openHandle;
     int m_counter = 0;
     std::function<void(const QString&)> m_dismissed;

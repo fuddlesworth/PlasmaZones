@@ -364,6 +364,18 @@ StatusNotifierHost::StatusNotifierHost(QObject* parent)
     d->nameWatcher = new QDBusServiceWatcher(watcherService(), QDBusConnection::sessionBus(),
                                              QDBusServiceWatcher::WatchForRegistration, this);
     connect(d->nameWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
+        // Our own promotion claims this name, and because the prior owner
+        // released it first the bus reports the claim with an empty previous
+        // owner, which is exactly the shape this watcher fires on. Re-entering
+        // registerHost() there would issue a second seed with the zombie
+        // reaper armed, against our own freshly promoted watcher whose item
+        // set is still empty, and reap every inherited item. The promotion
+        // handler has already issued the correct seed, and there is no foreign
+        // watcher to re-register with when we are the owner.
+        if (d->watcher && d->watcher->isServiceOwner()) {
+            qCDebug(lcSniHost) << "watcher name registered by our own promotion; keeping the promotion's seed";
+            return;
+        }
         d->registerHost();
     });
 

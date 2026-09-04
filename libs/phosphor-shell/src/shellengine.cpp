@@ -723,8 +723,14 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // recorded is the Role's, i.e. what was actually advertised —
             // an Overlay panel that asked for one gets -1 and reserves
             // nothing, and that is what a popout hanging from it must see.
+            // Record the RESOLVED screen, not the panel's own property. A
+            // panel that leaves `screen` unset is materialized on the primary
+            // output, and storing the unset value would leave a null QPointer
+            // here that never matches a live screen, so reservedMarginsFor()
+            // would report zero margins for a panel that is genuinely
+            // reserving space.
             m_reserved.push_back(
-                {QPointer<QScreen>(panel->screen()), static_cast<int>(panel->edge()), role.exclusiveZone});
+                {QPointer<QScreen>(targetScreen), static_cast<int>(panel->edge()), role.exclusiveZone});
             qCDebug(lcShellEngine) << "Created panel surface on edge" << panel->edge() << "alignment"
                                    << panel->alignment() << "size" << panelSize;
 
@@ -754,6 +760,11 @@ bool ShellEngine::materializePanels(QString* failureReason)
             if (wasRootPanel) {
                 qCCritical(lcShellEngine) << "Root panel surface creation failed — aborting load";
                 m_surfaces.clear();
+                // Keep the two in step. The caller's failure path runs
+                // teardown(), which clears both, but leaving reservations
+                // that describe destroyed surfaces here would bite the first
+                // time this function grows a second failure exit.
+                m_reserved.clear();
                 // Report rather than emit. `failed` has to reach the consumer
                 // AFTER teardown, or a handler that synchronously rebuilds
                 // would have its fresh engine destroyed by the teardown that
