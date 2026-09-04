@@ -180,7 +180,11 @@ Item {
     /// case-folding the same strings each time was the bulk of the typing
     /// cost. The catalog only changes when C++ re-pushes it.
     readonly property var haystacks: {
-        let map = ({});
+        // Prototype-free, matching the grouping map below: a catalog id equal
+        // to an Object.prototype member ("constructor", "toString") would
+        // otherwise resolve to a function, and the miss check in rowMatches
+        // would sail past it and throw on indexOf.
+        let map = Object.create(null);
         for (let i = 0; i < root.shortcuts.length; ++i) {
             const row = root.shortcuts[i];
             let hay = row.label + " " + row.category;
@@ -441,6 +445,39 @@ Item {
         // No container Accessible.name: the title label below is the single
         // announcement, matching LayoutPickerContent's card.
 
+        // Scrolling keys live on the CARD, not on the search field, so they
+        // keep working once Tab has moved focus to a disclosure line. Key
+        // events bubble up the item parent chain from whichever descendant
+        // holds focus, so one handler here covers every focus position on the
+        // sheet. Page keys rather than arrows: the field is single-line, so
+        // they have nothing to do in the editor and are unambiguous here.
+        //
+        // The printable fall-through is the other half of that. A disclosure
+        // is a tab stop but not a text sink, so without this a user who tabbed
+        // to one and started typing would have their keystrokes go nowhere,
+        // with the filter field visibly unchanged.
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_PageDown) {
+                scroller.scrollByPage(1);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_PageUp) {
+                scroller.scrollByPage(-1);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Home && (event.modifiers & Qt.ControlModifier)) {
+                scroller.scrollToEnd(-1);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_End && (event.modifiers & Qt.ControlModifier)) {
+                scroller.scrollToEnd(1);
+                event.accepted = true;
+            } else if (event.text.length > 0 && !searchField.fieldHasFocus) {
+                // Typing anywhere on the sheet returns to the filter and keeps
+                // the character, rather than dropping it.
+                searchField.takeFocus();
+                searchField.appendText(event.text);
+                event.accepted = true;
+            }
+        }
+
         // Absorb clicks inside the card so they never reach the backdrop —
         // same sibling z-order contract as LayoutPickerContent. Declared
         // FIRST so the interactive content below it (search field, disclosure
@@ -502,28 +539,7 @@ Item {
                 Component.onCompleted: takeFocus()
 
                 // The field is the only focusable item on the card, so it is
-                // also the only place these keys can be caught. Without this
-                // the clipped rows on a short screen are reachable by wheel
-                // and touch alone, and the scroll indicator points at content
-                // a keyboard user cannot get to. Page keys are unambiguous
-                // here (the field is single-line, so they have nothing to do
-                // in the editor), which is why they and not the arrows carry
-                // this.
-                Keys.onPressed: event => {
-                    if (event.key === Qt.Key_PageDown) {
-                        scroller.scrollByPage(1);
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_PageUp) {
-                        scroller.scrollByPage(-1);
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Home && event.modifiers & Qt.ControlModifier) {
-                        scroller.scrollToEnd(-1);
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_End && event.modifiers & Qt.ControlModifier) {
-                        scroller.scrollToEnd(1);
-                        event.accepted = true;
-                    }
-                }
+                // also the only place these keys can be caught.
             }
 
             // Empty state. Reachable two ways now: a query that matches
@@ -557,7 +573,13 @@ Item {
                 // instead — hide the (empty) scroller so exactly one item owns
                 // it.
                 visible: root.groups.length > 0
-                contentWidth: width
+                // Normally the columns are sized to fit, so contentWidth is the
+                // viewport and there is nothing to pan. The exception is an
+                // output too narrow to honour the column minimum, where the
+                // card is clamped to the screen: taking the content width from
+                // the row there keeps the overflowing columns reachable by
+                // flick instead of clipping them away permanently.
+                contentWidth: Math.max(width, bucketsRow.implicitWidth)
                 contentHeight: bucketsRow.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -587,6 +609,25 @@ Item {
                         return;
                     }
                     contentY = direction < 0 ? 0 : contentHeight - height;
+                }
+
+                // Bring a keyboard-focused item into view. A Flickable does
+                // not do this for its descendants, so a tab stop inside the
+                // clipped strip would otherwise be reachable but invisible.
+                // Only scrolls when the item is actually outside the viewport,
+                // so tabbing through what is already on screen does not jump.
+                function ensureVisible(target: Item) {
+                    if (!target || contentHeight <= height) {
+                        return;
+                    }
+                    const top = target.mapToItem(bucketsRow, 0, 0).y;
+                    const bottom = top + target.height;
+                    const margin = Kirigami.Units.largeSpacing;
+                    if (top < contentY) {
+                        contentY = Math.max(0, top - margin);
+                    } else if (bottom > contentY + height) {
+                        contentY = Math.min(contentHeight - height, bottom - height + margin);
+                    }
                 }
 
                 Row {
@@ -625,6 +666,7 @@ Item {
                                     fontFamily: root.fontFamily
                                     fontSizeScale: root.fontSizeScale
                                     onExpandToggled: root._toggleCategory(modelData.categoryOrder)
+                                    onFocusScrollRequested: target => scroller.ensureVisible(target)
                                     onLatchRequested: rowId => root.latchedRowId = rowId
                                     onLatchCleared: root.latchedRowId = ""
                                 }

@@ -53,6 +53,18 @@ Rectangle {
         field.forceActiveFocus();
     }
 
+    /// True while the field itself owns focus. The sheet uses this to tell
+    /// "the user is typing into the filter" from "the user has tabbed to a
+    /// disclosure line", which decides whether a printable key belongs here.
+    readonly property bool fieldHasFocus: field.activeFocus
+
+    /// Append a character the sheet caught on the user's behalf, after
+    /// handing focus back here. Keeps the keystroke that started the typing
+    /// instead of swallowing it.
+    function appendText(t: string) {
+        field.insert(field.length, t);
+    }
+
     implicitHeight: layout.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: Kirigami.Units.smallSpacing
     color: Qt.alpha(Kirigami.Theme.textColor, 0.06)

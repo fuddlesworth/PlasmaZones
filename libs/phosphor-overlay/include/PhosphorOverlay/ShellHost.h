@@ -178,7 +178,7 @@ public:
     ///
     /// @c wants.inputGrabbing - true when at least one modal slot
     /// (consumer-defined; Phosphor today: snap-assist, layout picker and the
-    /// cheatsheet) wants pointer input. When false, OR when @p anyVisible is false, the shell's
+    /// cheatsheet) wants pointer input. When false, OR when @c wants.visible is false, the shell's
     /// QQuickWindow is flagged Qt::WindowTransparentForInput so background
     /// windows stay interactable beneath non-modal slots (OSDs, main overlay,
     /// zone selector during drag). The @c wants.visible term means this does not
@@ -196,7 +196,7 @@ public:
     /// (consumer-defined; Phosphor today: the cheatsheet's search field).
     /// Drives the layer surface's keyboard interactivity between Exclusive
     /// and None at runtime, which wlr-layer-shell permits after the initial
-    /// configure. Separate from @p anyInputGrabbing because the two are
+    /// configure. Separate from @c wants.inputGrabbing because the two are
     /// genuinely different asks: snap-assist and the layout picker are modal
     /// for the pointer but must NOT take the keyboard away from the focused
     /// toplevel, since they are driven entirely by global shortcuts the

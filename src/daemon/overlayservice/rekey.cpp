@@ -28,6 +28,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
@@ -110,6 +112,18 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // move the donor's still-live modal id onto newKey, and this reset
         // would then dismiss the sheet that actually survived the move.
         resetModalSingletonsForDestroyedId(newKey);
+        // That fired dismissal signals. No receiver touches m_screenStates
+        // today (they release shortcut grabs and nothing else), but the donor
+        // iterator has to survive to the move below, and an iterator held
+        // across a signal emission is the kind of thing that stays correct
+        // only until someone connects the wrong slot. Re-find rather than
+        // rely on that.
+        donor = m_screenStates.find(oldKey);
+        if (donor == m_screenStates.end()) {
+            qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
+                                 << "vanished during the target-side modal reset";
+            return false;
+        }
     }
 
     PerScreenOverlayState state = std::move(donor.value());

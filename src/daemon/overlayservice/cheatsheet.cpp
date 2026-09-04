@@ -252,6 +252,14 @@ void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)
     // applyDecoration again, which rewrites it.
     writeQmlProperty(it->cheatsheetSlot(), QStringLiteral("backdropTexture"), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
+    // Symmetric with every other modal's hide completion (snap assist, the
+    // picker, the OSD): the zone selector suppresses its restore while an
+    // input-grabbing modal owns the screen, so whichever modal was owning it
+    // has to hand the screen back on its way out. The sheet cannot currently
+    // be up during a drag, so this restores nothing today; leaving it out
+    // would make the selector's guard depend on that suppression holding
+    // forever, in a different file.
+    restoreZoneSelectorAfterHide(effectiveId);
 }
 
 void OverlayService::onCheatsheetDismissRequested()

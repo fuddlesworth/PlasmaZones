@@ -50,6 +50,10 @@ Column {
     signal expandToggled
     signal latchRequested(string rowId)
     signal latchCleared
+    /// Emitted when an item inside this group takes keyboard focus, so the
+    /// sheet can scroll it into view. The group cannot do it itself: the
+    /// Flickable that clips it belongs to the sheet.
+    signal focusScrollRequested(Item target)
 
     readonly property string effectiveFamily: fontFamily.length > 0 ? fontFamily : Kirigami.Theme.defaultFont.family
     readonly property int rowFontSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * fontSizeScale)
@@ -104,8 +108,9 @@ Column {
             // Width tracks the text rather than filling the row, because the
             // rule anchors to this label's right edge and is what makes the
             // heading read as the top of a block. The reserve keeps the rule
-            // visible even at the cap.
-            width: Math.min(implicitWidth, parent.width - Kirigami.Units.gridUnit)
+            // visible even at the cap. Floored at 0 for the first frame,
+            // before the column has a width to subtract from.
+            width: Math.max(0, Math.min(implicitWidth, parent.width - Kirigami.Units.gridUnit))
             elide: Text.ElideRight
             text: root.name
             // Capitalisation as a FONT property, not text.toUpperCase(): the
@@ -198,6 +203,14 @@ Column {
         // reading order. Space and Return activate, matching the button role
         // already declared above.
         activeFocusOnTab: true
+        // A Flickable does not bring a focused descendant into view, and these
+        // sit inside the clipped column strip. Without this, Tab on a short
+        // screen can land on a focus ring below the fold and nothing appears
+        // to happen. The sheet owns the scroller, so ask rather than reach.
+        onActiveFocusChanged: {
+            if (disclosure.activeFocus)
+                root.focusScrollRequested(disclosure);
+        }
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                 root.expandToggled();
