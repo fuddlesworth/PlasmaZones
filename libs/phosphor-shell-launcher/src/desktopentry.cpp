@@ -130,25 +130,43 @@ QStringList localeCandidates(const QString& locale)
     if (dot >= 0 && dot < base.size()) {
         base.truncate(dot);
     }
-    QString lang = base;
+    // The spec's shape is lang_COUNTRY, but Qt hands back a SCRIPT subtag
+    // for languages that need one: QLocale::system().name() is "sr_Latn_RS",
+    // not "sr_RS". Splitting on the first underscore alone left "Latn_RS" as
+    // the country, so the only candidates were the full string and the bare
+    // language, and an entry translated as Name[sr_RS] was never found.
+    const QStringList parts = base.split(u'_', Qt::SkipEmptyParts);
+    const QString lang = parts.isEmpty() ? base : parts.first();
+    QString script;
     QString country;
-    const qsizetype under = base.indexOf(u'_');
-    if (under >= 0) {
-        lang = base.left(under);
-        country = base.mid(under + 1);
+    if (parts.size() == 2) {
+        country = parts.at(1);
+    } else if (parts.size() >= 3) {
+        script = parts.at(1);
+        country = parts.at(2);
     }
 
+    // Most specific first. Each form is offered with the modifier before the
+    // form without it, which is the order the spec prescribes.
     QStringList out;
-    if (!country.isEmpty() && !modifier.isEmpty()) {
-        out.append(lang + u'_' + country + u'@' + modifier);
+    const auto offer = [&out, &modifier](const QString& form) {
+        if (form.isEmpty()) {
+            return;
+        }
+        if (!modifier.isEmpty()) {
+            out.append(form + u'@' + modifier);
+        }
+        out.append(form);
+    };
+    if (!script.isEmpty() && !country.isEmpty()) {
+        offer(lang + u'_' + script + u'_' + country);
+        offer(lang + u'_' + country);
+        offer(lang + u'_' + script);
+    } else if (!country.isEmpty()) {
+        offer(lang + u'_' + country);
     }
-    if (!country.isEmpty()) {
-        out.append(lang + u'_' + country);
-    }
-    if (!modifier.isEmpty()) {
-        out.append(lang + u'@' + modifier);
-    }
-    out.append(lang);
+    offer(lang);
+    out.removeDuplicates();
     return out;
 }
 

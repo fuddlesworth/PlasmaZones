@@ -4,6 +4,10 @@
 Type=Application
 Name=kitty
 Name[de]=Katze
+# Serbian written in Latin script, keyed by language and COUNTRY. Qt hands
+# back "sr_Latn_RS" for this locale, so a fallback that split on the first
+# underscore alone read the country as "Latn_RS" and never found this key.
+Name[sr_RS]=Maca
 Comment=Fast\sGPU\sterminal
 Icon=kitty
 Exec=kitty

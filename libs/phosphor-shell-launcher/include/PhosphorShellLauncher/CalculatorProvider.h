@@ -66,6 +66,11 @@ public:
     // activation copies, and a grouped "1 234,5" is not something that can be
     // pasted into a shell or another calculator. Localising the display would
     // mean carrying two strings; the pasteable one wins.
+    //
+    // The INPUT side is not symmetric: the parser accepts the reader's own
+    // decimal separator as well as '.', so typing what a French or German
+    // keyboard and locale produce is understood. Only the answer is
+    // normalised.
     [[nodiscard]] static QString format(double value);
 
 private:

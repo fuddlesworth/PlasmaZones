@@ -32,6 +32,7 @@ class TestDesktopEntry : public QObject
 private Q_SLOTS:
     void parsesTheFieldsALauncherNeeds();
     void localisesWithTheSpecFallbackOrder();
+    void localisesALocaleNameCarryingAScriptSubtag();
     void execArgsResolveQuotingAndDropFieldCodes();
     void rejectsWhatTheSpecSaysToTreatAsAbsent();
     void showsOnAppliesOnlyShowInThenNotShowIn();
@@ -82,6 +83,25 @@ void TestDesktopEntry::localisesWithTheSpecFallbackOrder()
     QVERIFY(fr->terminal);
     // \s in a value is a space.
     QCOMPARE(fr->comment, QStringLiteral("Fast GPU terminal"));
+}
+
+// Qt's locale names carry a SCRIPT subtag for languages that need one, and
+// the spec's key shape has no slot for it.
+void TestDesktopEntry::localisesALocaleNameCarryingAScriptSubtag()
+{
+    const QString path = fixture("applications/kitty.desktop");
+    auto sr = DesktopEntry::parse(path, QStringLiteral("sr_Latn_RS"));
+    QVERIFY(sr.has_value());
+    QCOMPARE(sr->name, QStringLiteral("Maca"));
+
+    // The plain shape still works, and an unrelated locale still falls all
+    // the way back to the unlocalised name.
+    auto de = DesktopEntry::parse(path, QStringLiteral("de_AT"));
+    QVERIFY(de.has_value());
+    QCOMPARE(de->name, QStringLiteral("Katze"));
+    auto none = DesktopEntry::parse(path, QStringLiteral("fi_FI"));
+    QVERIFY(none.has_value());
+    QCOMPARE(none->name, QStringLiteral("kitty"));
 }
 
 void TestDesktopEntry::execArgsResolveQuotingAndDropFieldCodes()

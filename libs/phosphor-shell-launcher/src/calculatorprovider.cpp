@@ -256,7 +256,12 @@ private:
             ++m_pos;
             digits = true;
         }
-        if (m_pos < m_text.size() && m_text[m_pos] == u'.') {
+        // The locale's own decimal separator is accepted alongside '.', so
+        // a user who types what their keyboard and their locale produce
+        // ("3,5" in French) gets an answer rather than a parse failure.
+        const QChar localPoint =
+            QLocale::system().decimalPoint().isEmpty() ? QChar(u'.') : QLocale::system().decimalPoint().front();
+        if (m_pos < m_text.size() && (m_text[m_pos] == u'.' || m_text[m_pos] == localPoint)) {
             ++m_pos;
             while (m_pos < m_text.size() && isAsciiDigit(m_text[m_pos])) {
                 ++m_pos;
@@ -281,8 +286,11 @@ private:
             }
         }
         bool ok = false;
-        // C locale: the parser only ever accepts '.' as the separator.
-        const double v = QLocale::c().toDouble(m_text.mid(start, m_pos - start), &ok);
+        // Normalised to the C form before conversion, so one code path
+        // handles both separators.
+        QString literal = m_text.mid(start, m_pos - start).toString();
+        literal.replace(localPoint, u'.');
+        const double v = QLocale::c().toDouble(literal, &ok);
         if (!ok) {
             return std::nullopt;
         }
@@ -358,6 +366,13 @@ bool parsesButIsNotFinite(QStringView expression)
 
 QString CalculatorProvider::format(double value)
 {
+    // The C locale, deliberately, for the reason the header gives: this one
+    // string is both what the row shows and what activation copies, and a
+    // grouped or comma-pointed answer is not something that can be pasted
+    // back into a shell, a field, or this calculator. The INPUT side accepts
+    // the reader's own separator (see number()), so a user who types "3,5"
+    // is understood even though the answer comes back with a point.
+    //
     // Integers (within double's exact range) print without a point;
     // everything else with up to 10 significant digits, trailing zeros
     // trimmed by 'g'.
