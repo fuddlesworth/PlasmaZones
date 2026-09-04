@@ -305,7 +305,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 }
                 // Snap-out: leaving zone-managed sizing.
                 m_effect->applyWindowGeometry(safeW, restoreRect, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                              PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                 // Re-seed the tracked screen from the applied position: the gate
                 // above suppressed the VS-crossing detectors whose early return sits
                 // before their tracker write, and applyWindowGeometry does not

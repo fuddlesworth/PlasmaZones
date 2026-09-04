@@ -25,6 +25,7 @@
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -539,6 +540,40 @@ private Q_SLOTS:
 
         // The physical ID itself has the override
         QCOMPARE(engine.effectiveInnerGap(physId), 50);
+    }
+
+    // =========================================================================
+    // Gap ceiling — a per-screen override cannot exceed the shared clamp
+    // =========================================================================
+
+    void overrideCascade_gapsAreClampedToTheSharedCeiling()
+    {
+        // The gap ceiling is shared by the snapping, tiling and scrolling arms
+        // (static_asserted in daemon.cpp), and every UI that offers a gap
+        // bounds against it. Nothing pinned the ENGINE-side clamp, so a raised
+        // or lowered ceiling could silently stop being enforced here. Compared
+        // against the constant rather than a literal so retuning it moves this
+        // test with it.
+        using PhosphorTiles::AutotileDefaults::MaxGap;
+        using PhosphorTiles::AutotileDefaults::MinGap;
+
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("Dell:U2722D:115107");
+        engine.setAutotileScreens({screen});
+
+        QVariantMap tooLarge;
+        tooLarge[QStringLiteral("InnerGap")] = MaxGap + 1;
+        tooLarge[QStringLiteral("OuterGap")] = MaxGap + 1;
+        engine.applyPerScreenConfig(screen, tooLarge);
+        QCOMPARE(engine.effectiveInnerGap(screen), MaxGap);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, MaxGap);
+
+        QVariantMap negative;
+        negative[QStringLiteral("InnerGap")] = -1;
+        negative[QStringLiteral("OuterGap")] = -1;
+        engine.applyPerScreenConfig(screen, negative);
+        QCOMPARE(engine.effectiveInnerGap(screen), MinGap);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, MinGap);
     }
 
     void overrideCascade_eachVirtualScreenIndependent()

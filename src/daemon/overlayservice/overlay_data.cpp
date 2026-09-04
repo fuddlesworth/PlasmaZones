@@ -259,8 +259,14 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Always include appearance properties so QML can use them when useCustomColors is true
     map[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] = zone->activeOpacity();
     map[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-    map[::PhosphorZones::ZoneJsonKeys::BorderWidth] = zone->borderWidth();
-    map[::PhosphorZones::ZoneJsonKeys::BorderRadius] = zone->borderRadius();
+    // Bounded like the shader keys further down. Zone::fromJson deliberately
+    // does not clamp, so a legacy layout can hold a per-zone border wider than
+    // any surface now offers; without this the Rectangle-based overlays and
+    // snap assist would draw it while the shader overlay and the editor
+    // preview drew the clamped value.
+    map[::PhosphorZones::ZoneJsonKeys::BorderWidth] = qBound(0, zone->borderWidth(), ConfigDefaults::borderWidthMax());
+    map[::PhosphorZones::ZoneJsonKeys::BorderRadius] =
+        qBound(0, zone->borderRadius(), ConfigDefaults::borderRadiusMax());
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Overlay display mode cascade: zone → context rule → layout → global
@@ -333,14 +339,22 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     map[BorderB] = borderClr.blueF();
     map[BorderA] = borderClr.alphaF();
 
-    // Shader params: borderRadius, borderWidth (zone → context rule → global)
-    map[ShaderBorderRadius] = zone->useCustomColors()
-        ? zone->borderRadius()
-        : overlayOverride.borderRadius.value_or(m_settings ? m_settings->borderRadius()
-                                                           : ConfigDefaults::borderRadius());
-    map[ShaderBorderWidth] = zone->useCustomColors()
-        ? zone->borderWidth()
-        : overlayOverride.borderWidth.value_or(m_settings ? m_settings->borderWidth() : ConfigDefaults::borderWidth());
+    // Shader params: borderRadius, borderWidth (zone → context rule → global).
+    // Bounded on the way out whichever tier won: the per-zone value comes from
+    // a layout file that is never rewritten on load, so a hand-edited or
+    // legacy-wide value reaches here unclamped and would otherwise be drawn.
+    map[ShaderBorderRadius] =
+        qBound(0,
+               zone->useCustomColors() ? zone->borderRadius()
+                                       : overlayOverride.borderRadius.value_or(
+                                             m_settings ? m_settings->borderRadius() : ConfigDefaults::borderRadius()),
+               ConfigDefaults::borderRadiusMax());
+    map[ShaderBorderWidth] =
+        qBound(0,
+               zone->useCustomColors() ? zone->borderWidth()
+                                       : overlayOverride.borderWidth.value_or(
+                                             m_settings ? m_settings->borderWidth() : ConfigDefaults::borderWidth()),
+               ConfigDefaults::borderWidthMax());
 
     return map;
 }

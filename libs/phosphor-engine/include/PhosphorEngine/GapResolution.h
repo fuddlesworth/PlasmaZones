@@ -17,8 +17,9 @@ namespace PhosphorEngine {
 /// helpers (daemon GeometryUtils) and the autotile PerScreenConfigResolver
 /// previously each implemented this resolution with byte-identical layer
 /// semantics. This header is the single implementation; the `normalize`
-/// callable absorbs the one legitimate divergence (autotile clamps every
-/// map-sourced value to its gap range, snapping consumes raw values).
+/// callable is where each caller applies its clamp. All three placement arms
+/// now pass the same [0, GeometryDefaults::MaxGap] bound, so one context
+/// gap-override rule means the same thing in every mode.
 namespace GapResolution {
 
 /// Single gap value from an override map, or nullopt when @p map lacks

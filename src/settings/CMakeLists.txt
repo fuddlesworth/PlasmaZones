@@ -141,6 +141,13 @@ set(plasmazones_settings_SRCS
     pages/decorationpagecontroller.cpp
     pages/decorationpreviewcontroller.h
     pages/decorationpreviewcontroller.cpp
+    pages/animationpreviewcontroller.h
+    pages/animationpreviewcontroller.cpp
+    # The wobble-lattice spring integrator the animation preview's move
+    # simulation drives — compiled from the kwin-effect tree so the preview
+    # and the compositor run the SAME solver and can never drift in feel.
+    # Both trees are GPL-3.0, so no license boundary is crossed.
+    ${CMAKE_SOURCE_DIR}/kwin-effect/plasmazoneseffect/mesh_sim.cpp
     # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
     # separate TU.
     pages/decorationpagecontroller_paths.cpp
@@ -515,6 +522,7 @@ qt_add_qml_module(plasmazones-settings
         qml/components/StayOpenMenuItem.qml
         qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
+        qml/pages/shaders/AnimationPreviewPane.qml
         qml/pages/shaders/ShaderBrowserDetailDialog.qml
         qml/pages/animations/CurveEditorDialog.qml
         qml/pages/animations/CurvePresets.qml

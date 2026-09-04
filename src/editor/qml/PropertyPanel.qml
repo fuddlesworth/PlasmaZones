@@ -74,6 +74,10 @@ Rectangle {
     readonly property real defaultInactiveOpacity: 0.3
     readonly property int defaultBorderWidth: 2
     readonly property int defaultBorderRadius: 8
+    // Zone-overlay border ceilings, from the same ZoneDefaults constants the
+    // global setting and the zone-overlay rule actions bound against.
+    readonly property int borderWidthMax: editorController ? editorController.zoneBorderWidthMax : 10
+    readonly property int borderRadiusMax: editorController ? editorController.zoneBorderRadiusMax : 50
 
     // Helper functions for extracting zone colors
     function getZoneColor(propertyName) {
@@ -358,12 +362,12 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Border width:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     from: 0
-                    to: 20
+                    to: propertyPanel.borderWidthMax
                     spinValue: propertyPanel.defaultBorderWidth
                     defaultValue: propertyPanel.defaultBorderWidth
                     spinEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Border width for all selected zones")
-                    toolTipText: i18nc("@info:tooltip", "Set border width for all selected zones (0-20)")
+                    toolTipText: i18nc("@info:tooltip", "Set border width for all selected zones (0-%1)", propertyPanel.borderWidthMax)
                     onSpinValueModified: function (newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderWidth", newValue);
@@ -374,12 +378,12 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     from: 0
-                    to: 50
+                    to: propertyPanel.borderRadiusMax
                     spinValue: propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Corner radius for all selected zones")
-                    toolTipText: i18nc("@info:tooltip", "Set corner radius for all selected zones (0-50)")
+                    toolTipText: i18nc("@info:tooltip", "Set corner radius for all selected zones (0-%1)", propertyPanel.borderRadiusMax)
                     onSpinValueModified: function (newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderRadius", newValue);
@@ -781,12 +785,12 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Border width:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
-                    to: 20
+                    to: propertyPanel.borderWidthMax
                     spinValue: selectedZone ? selectedZone.borderWidth : propertyPanel.defaultBorderWidth
                     defaultValue: propertyPanel.defaultBorderWidth
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border width in pixels")
-                    toolTipText: i18nc("@info:tooltip", "Set zone border width in pixels (0-20)")
+                    toolTipText: i18nc("@info:tooltip", "Set zone border width in pixels (0-%1)", propertyPanel.borderWidthMax)
                     onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderWidth", newValue);
@@ -799,12 +803,12 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
-                    to: 50
+                    to: propertyPanel.borderRadiusMax
                     spinValue: selectedZone ? selectedZone.borderRadius : propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Corner radius in pixels")
-                    toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-50)")
+                    toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-%1)", propertyPanel.borderRadiusMax)
                     onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderRadius", newValue);

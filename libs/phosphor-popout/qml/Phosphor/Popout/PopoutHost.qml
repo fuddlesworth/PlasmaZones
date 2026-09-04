@@ -11,7 +11,22 @@
 import Phosphor.Theme
 import QtQuick
 
-Item {
+// FocusScope, not Item, and that is load-bearing. The host claims focus while
+// it is open so Escape reaches it, but its content usually wants focus too: a
+// menu with single-key shortcuts puts focus on a default entry. In one flat
+// focus scope those two claims are the same claim, and whichever runs last
+// wins. The transport sets `open = true` after the content has completed, so
+// the host would win and the content's keys would die, silently and partially
+// (Escape still worked, everything else did not).
+//
+// For a pre-built `contentItem` the scope is enough on its own: Qt delegates
+// focus down into it when the host claims scope focus, whether the delegate
+// asks declaratively (`focus: true`) or focuses a child of its own. A
+// `contentComponent` delegate is built by the Loader after that resolution has
+// happened and does need a nudge, which onOpenChanged gives it. Either way,
+// keys the content leaves unhandled propagate back up to the Keys handler
+// here.
+FocusScope {
     id: root
 
     // The popout's content. The host accepts either a pre-built Item
@@ -43,6 +58,12 @@ Item {
     // dismisses the popout. Cooperative and modal popouts typically
     // want this on. Detached popouts off.
     property bool dismissOnClickOutside: true
+    // Whether this popout wants the keyboard while it is open. Separate from
+    // dismissOnClickOutside on purpose: those are different questions, and
+    // gating focus on the dismiss policy meant a pinned popout could not hold
+    // the keyboard and any re-evaluation of that policy stripped focus from
+    // live content. Transports set this from PopoutRequest::keyboardFocus.
+    property bool keyboardFocus: true
     // Background dim. The transport binds this. Cooperative popouts
     // may want a translucent dim. Modal popouts want an opaque scrim.
     // Detached popouts want transparent. The literal "transparent"
@@ -53,6 +74,32 @@ Item {
     // normalises "transparent" to a zero-alpha QColor, matching the
     // backdropShown check.
     property color backdropColor: "transparent"
+
+    // Where the content frame sits on the (full-bleed) surface. The
+    // transport sets these from PopoutRequest.anchor:
+    //   "center"     centred on the surface (ScreenCenter, and AtPointer
+    //                until a transport can supply a pointer position)
+    //   "barLeft" / "barCenter" / "barRight"
+    //                hung just below the top reserved band — the bar's
+    //                exclusive zone on this screen, in reservedTop — and
+    //                aligned to the bar capsule's inset edges
+    //   "custom"     top-left at (customX, customY) in surface coordinates
+    // Placement is the host's job, not the surface's: keeping the surface
+    // full-bleed is what keeps the scrim, click-outside dismissal and the
+    // keyboard grab exactly as they are for every placement.
+    property string placement: "center"
+    property int reservedTop: 0
+
+    // The horizontal inset a bar-anchored popout aligns to, matching the bar
+    // capsule's own inset from the screen edge.
+    //
+    // A property rather than a constant because BarHost exposes
+    // `screenInset` as settable and invites overriding it: a host that moves
+    // its capsule in from the edge has to move its popouts with it, or the
+    // two stop lining up. The default is the token both sides use.
+    property int barInset: Tokens.spacing_xl
+    property real customX: 0
+    property real customY: 0
 
     // Internal: duration token shared by the content frame's
     // opacity/scale Behaviors. Exposed as a property so the Behaviors
@@ -94,6 +141,46 @@ Item {
         open = false;
     }
 
+    // Escape dismisses, matching the click-outside path exactly: it sets
+    // `open = false` so the close animation runs and `dismissed` fires from
+    // the same timer, rather than tearing the host down out from under the
+    // transport.
+    //
+    // `focus` is claimed while open and released on close, so a closed host
+    // does not swallow keys meant for whatever is underneath. Because the root
+    // is a FocusScope, this gates keyboard focus for the ENTIRE content
+    // subtree, not just for the Escape handler below: a FocusScope that does
+    // not hold scope focus cannot delegate active focus to any descendant.
+    //
+    // Gated on `keyboardFocus`, NOT on `dismissOnClickOutside`. The dismiss
+    // policy is a different question, and gating on it meant a pinned popout
+    // could not hold the keyboard, while any re-evaluation of the policy
+    // stripped focus from live content. It also made every host that could
+    // self-dismiss claim focus, so opening a second in-window popout took the
+    // keyboard from the first even when the second never wanted it. Escape
+    // re-checks the dismiss policy for itself, which is where that belongs.
+    //
+    // Note this also gates ESCAPE: a host that takes no focus receives no key
+    // events, so `keyboardFocus: false` means Escape does not dismiss either,
+    // even with dismissOnClickOutside set. That is consistent on a layer
+    // surface (the transport maps !keyboardFocus to KeyboardInteractivity
+    // None, so the compositor delivers nothing anyway), and click-outside
+    // remains the dismissal route for such a popout.
+    //
+    // The surface still has to grant keyboard interactivity for any of this to
+    // arrive — on a layer-shell surface that means
+    // KeyboardInteractivity::Exclusive or OnDemand; the default None never
+    // delivers a key event at all.
+    focus: root.open && root.keyboardFocus
+    Keys.onEscapePressed: event => {
+        if (!root.open || !root.dismissOnClickOutside) {
+            event.accepted = false;
+            return;
+        }
+        root.dismiss();
+        event.accepted = true;
+    }
+
     // Sizing is the transport's responsibility — the transport sets x,
     // y, width, and height on this Item. The root Item deliberately
     // does NOT anchors.fill its parent: an earlier revision did, which
@@ -117,6 +204,19 @@ Item {
             dismissEmitter.stop();
             dismissLatch.dismissedFired = false;
             dismissLatch.everOpened = true;
+            // Give a LOADER-built delegate the keyboard, if nothing inside it
+            // already has it.
+            //
+            // The two content paths need different handling, measured rather
+            // than assumed. A pre-built `contentItem` is reparented before the
+            // host claims scope focus, so Qt delegates down into it correctly
+            // on its own — and pushing there is actively harmful, because it
+            // overrides a delegate that focused a child of its own. A
+            // `contentComponent` delegate is built by the Loader after that
+            // resolution has happened, so without a push focus stays on the
+            // host and the content's keys are dead.
+            if (root.keyboardFocus && !root.contentItem)
+                contentFrame.focusContentIfIdle();
         } else {
             // Known limitation: QTimer samples interval at start(), so
             // a Motion-token retune (theme switch mid-close) updates
@@ -276,6 +376,9 @@ Item {
             // resolved to nothing and left Accessible.name undefined. qsTr is
             // built into QML, so it always resolves, and it matches the
             // convention the other library QML follows.
+            // A plain MouseArea exposes no accessible role, so without an
+            // explicit one the name is never announced.
+            Accessible.role: Accessible.Button
             Accessible.name: qsTr("Dismiss popout")
         }
 
@@ -315,9 +418,47 @@ Item {
         // a delegate the host may never display.
         //
         // The `??` (nullish coalescing) operator requires Qt 6.4+ in
-        // QML's JS engine. The project pins QT_MIN_VERSION 6.6.0 (top-
+        // QML's JS engine. The project pins QT_MIN_VERSION 6.10.0 (top-
         // level CMakeLists.txt), so the operator is safe to use here.
-        readonly property Item _visibleDelegate: root.contentItem ?? contentLoader.item
+        //
+        // `Loader.item` is typed QObject, so the cast is what keeps this an
+        // Item-typed binding rather than an implicit narrowing qmllint flags.
+        // A Loader holding a non-Item yields null here, which the consumers
+        // below already handle.
+        readonly property Item _visibleDelegate: root.contentItem ?? (contentLoader.item as Item)
+
+        // True when focus is already somewhere in the delegate's subtree.
+        //
+        // BOTH halves are needed and each covers a case the other misses. The
+        // `activeFocus` half catches a delegate holding focus itself, and a
+        // pre-built contentItem whose child focused itself before the window
+        // existed, where the window's focus item has not settled onto that
+        // child yet. The parent-chain walk catches a Loader-built delegate
+        // whose child genuinely holds focus, where the delegate's own
+        // `activeFocus` reads false. Dropping either one lets the push
+        // override content that manages its own focus.
+        function contentHoldsFocus(): bool {
+            const delegate = _visibleDelegate;
+            if (!delegate)
+                return false;
+            if (delegate.activeFocus)
+                return true;
+            let item = delegate.Window.activeFocusItem;
+            while (item) {
+                if (item === delegate)
+                    return true;
+                item = item.parent;
+            }
+            return false;
+        }
+
+        function focusContentIfIdle(): void {
+            if (contentHoldsFocus())
+                return;
+            const delegate = _visibleDelegate;
+            if (delegate)
+                delegate.forceActiveFocus();
+        }
 
         function rebindContentItem() {
             // Only orphan _lastBound if it is still parented under
@@ -368,7 +509,41 @@ Item {
             _lastBound = root.contentItem;
         }
 
-        anchors.centerIn: parent
+        // Explicit x/y rather than anchors.centerIn: an anchor would fight
+        // every placement but "center". The bar placements align to the
+        // capsule's inset (`barInset`, defaulting to the token BarHost uses)
+        // and hang one spacing_m below the reserved band, so the popout
+        // reads as belonging to the bar without knowing the bar's shape.
+        // Every arm rounds to a whole pixel. These bindings replaced an
+        // `anchors.centerIn`, whose alignWhenCentered default did that
+        // rounding for us; without it an odd difference between the surface
+        // and the frame lands the content on a half pixel and blurs its text.
+        // Also clamped to zero, so a frame that is somehow still wider than
+        // the surface starts at the edge rather than off it.
+        x: {
+            switch (root.placement) {
+            case "barLeft":
+                return root.barInset;
+            case "barRight":
+                return Math.max(0, Math.round(root.width - width - root.barInset));
+            case "custom":
+                return Math.round(root.customX);
+            default:
+                return Math.max(0, Math.round((root.width - width) / 2));
+            }
+        }
+        y: {
+            switch (root.placement) {
+            case "barLeft":
+            case "barCenter":
+            case "barRight":
+                return Math.round(root.reservedTop + Tokens.spacing_m);
+            case "custom":
+                return Math.round(root.customY);
+            default:
+                return Math.max(0, Math.round((root.height - height) / 2));
+            }
+        }
         // Bind to the visible delegate's intrinsic size. childrenRect
         // would include invisible children, and a preloaded but
         // hidden contentItem would inflate the frame.
@@ -383,8 +558,14 @@ Item {
         // > 0 would require an extra state machine and trade one
         // hidden transient for another; the opacity-gated transient
         // is preferable.
-        width: _visibleDelegate ? _visibleDelegate.implicitWidth : 0
-        height: _visibleDelegate ? _visibleDelegate.implicitHeight : 0
+        // Clamped to the surface. The host fills the output, and a delegate
+        // that reports an implicit size larger than the screen would be
+        // centred with a negative offset and cut off on BOTH sides at once,
+        // with no clip, scroll or shrink anywhere on the path. A short or
+        // portrait output, or a fractional scale that shrinks the logical
+        // size, reaches this with content that is fine on a typical display.
+        width: _visibleDelegate ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : 0
+        height: _visibleDelegate ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : 0
         opacity: root.open ? 1 : 0
         scale: root.open ? 1 : 0.96
 
@@ -424,6 +605,17 @@ Item {
             anchors.fill: parent
             active: root.contentItem === null && root.contentComponent !== null
             sourceComponent: root.contentComponent
+            // The onOpenChanged push runs only on the open edge, so a
+            // transport that sets open first and assigns
+            // contentComponent afterwards would build its delegate
+            // after that push already ran, leaving its keys dead.
+            // Mirror the push here for a delegate that lands while
+            // the host is already open; focusContentIfIdle() is a
+            // no-op when the delegate's subtree took focus itself.
+            onLoaded: {
+                if (root.open && root.keyboardFocus)
+                    contentFrame.focusContentIfIdle();
+            }
         }
 
         Behavior on opacity {
@@ -472,6 +664,9 @@ Item {
     Timer {
         id: contentDiagnosticTimer
 
+        // One short beat, not a motion duration: this is a diagnostic
+        // deadline for a two-step construction, not something the user sees,
+        // so it deliberately does not scale with the animation tokens.
         interval: 50
         repeat: false
         onTriggered: {

@@ -141,9 +141,23 @@ private Q_SLOTS:
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
             o.insert(QStringLiteral("value"), -5);
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
-            o.insert(QStringLiteral("value"), 600); // > kMaxGap (500)
+            o.insert(QStringLiteral("value"), 600); // grossly malformed, still rejected
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 0);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            // The range the EDITOR offers is MaxGap, and its ceiling loads.
+            o.insert(QStringLiteral("value"), MaxGap);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+            QVERIFY2(descriptor.has_value(), type.data());
+            QVERIFY2(!descriptor->params.isEmpty(), type.data());
+            QVERIFY2(descriptor->params.first().max.has_value(), type.data());
+            QCOMPARE(*descriptor->params.first().max, MaxGap);
+            // The LOAD bound is deliberately looser than what the editor offers.
+            // A rule authored before the offered range narrowed must still load,
+            // because a rejected action is dropped along with any rule it was
+            // alone in; the placement engines clamp it to MaxGap on consumption.
+            o.insert(QStringLiteral("value"), MaxGap + 1);
             QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 12);
             const auto reloaded = RuleAction::fromJson(o);

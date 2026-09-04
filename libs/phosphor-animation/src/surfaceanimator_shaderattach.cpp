@@ -3,6 +3,7 @@
 
 #include "surfaceanimator_p.h"
 
+#include <PhosphorAnimation/AnimationShaderItemConfig.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/AnimationUniformExtension.h>
 #include <PhosphorRendering/ShaderEffect.h>
@@ -401,9 +402,13 @@ QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickI
     return hidden;
 }
 
+} // namespace detail
+
 /// Apply per-effect static configuration (fragment / vertex source,
 /// include paths, multipass, wallpaper, depth) to an existing shader
-/// item. Idempotent — every `ShaderEffect` setter no-ops on identity, so
+/// item. Exported (declared in AnimationShaderItemConfig.h) so preview
+/// hosts configure their shader item through the exact code every
+/// production leg runs. Idempotent — every `ShaderEffect` setter no-ops on identity, so
 /// a repeat call with the same `effect` only incurs the cost of the
 /// wallpaper cache lookup (mtime-keyed, mutex-guarded; typically a
 /// cache hit).
@@ -490,6 +495,10 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
         shaderItem->setUseWallpaper(false);
     }
     shaderItem->setUseDepthBuffer(effect.useDepthBuffer);
+    // Image-pass tessellation for vertex-displacing packs (the same
+    // `geometryGrid` count the kwin path builds its window-quad grid from).
+    // 0 for everything else keeps the plain quad.
+    shaderItem->setGridSubdivisions(effect.geometryGridSubdivisions);
 
     // User textures are NOT pushed here — they flow through the per-leg
     // setShaderParams call alongside customParams/customColors. The
@@ -502,6 +511,8 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
     // protection all live in one place — same code path overlay zones
     // already use.
 }
+
+namespace detail {
 
 /// Build the per-leg ShaderEffect: anchor resolution + layer-enable +
 /// setSourceItem (gated on explicit anchors — layer-enabling the
@@ -595,8 +606,8 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // applyEffectStaticConfig may end up calling node-side load paths whose
     // SPIR-V expects the extension to land at offset sizeof(BaseUniforms);
     // installing later would cause the first prepare() to allocate the UBO
-    // without the extension's 48 trailing bytes and the shader would read
-    // garbage at offsets 672-720 until the next allocation cycle.
+    // without the extension's 672 trailing bytes and the shader would read
+    // garbage at offsets 672-1343 until the next allocation cycle.
     //
     // Lifetime: the shared_ptr is captured by `ShaderEffect::m_uniformExtension`
     // and lives for the shaderItem's lifetime. `syncShaderGeometryNow` pulls

@@ -18,15 +18,14 @@
 //       }
 //   }
 //
-// Known limitation: Item.clip is rectangular, so the expanding ripple
-// circle is not masked to `radius`. On a pill or rounded surface the
-// circle can momentarily bleed past the rounded corners while it
-// expands. The state-layer overlay below honours `radius`, so the
-// resting hover / press tint is correctly rounded; only the transient
-// ripple sweep is unclipped. A rounded mask lands when the connected-
-// corner work (Phase 3.2) brings a shared clip primitive.
+// Both the resting state layer and the expanding press ripple honour
+// `radius`: the state layer is a rounded Rectangle, and the ripple is a
+// radial gradient painted inside a rounded-rect Shape. Neither relies on
+// Item.clip, which is a rectangular scissor and used to let the ripple
+// bleed past the corners of a pill.
 
 import QtQuick
+import QtQuick.Shapes
 import Phosphor.Theme
 
 Item {
@@ -51,12 +50,19 @@ Item {
     // or press (e.g. an elevation bump on a pressed button).
     readonly property bool hovered: hover.hovered
     readonly property bool down: tap.pressed
+    // True while a press ripple is sweeping. Outlives `down` by the
+    // fade-out, so a host that gates chrome on the animation reads this
+    // rather than the press state.
+    readonly property bool rippling: rippleAnim.running
 
     // Re-emitted tap. Hosts connect this to their own clicked signal so
     // any future ripple-side logic (focus restore, haptics) routes
     // through one place.
     signal tapped
 
+    // Neither the state layer nor the ripple needs this any more (both
+    // paint inside the rounded rect themselves), but it still bounds any
+    // content a host parents into the ripple layer.
     clip: true
 
     HoverHandler {
@@ -92,45 +98,100 @@ Item {
 
     // Expanding press ripple. Centred on the press point, grows to cover
     // the host, fades as it goes.
-    Rectangle {
-        id: circle
+    //
+    // The sweep is painted as a radial gradient inside a rounded-rect
+    // Shape rather than as a growing circle behind Item.clip, because
+    // Item.clip is a rectangular scissor and would let the circle bleed
+    // past `radius` at the corners. Here the painted area IS the host's
+    // rounded rect, so the corners are exact by construction: the
+    // gradient's opaque disc is the ripple, and everything past its edge
+    // is transparent.
+    // NOTE for anyone binding a property of this Shape: the ripple
+    // animation below drives `opacity` through PropertyAction and
+    // NumberAnimation, which are imperative writes. The first ripple
+    // severs any binding on that property permanently, and the symptom
+    // is a value that simply stops updating. Bind a wrapper instead, or
+    // move the animation onto a helper property this one reads.
+    Shape {
+        id: sweep
 
         // Press-point centre, set by start() before each animation.
         property real cx: 0
         property real cy: 0
-        // Diameter that guarantees coverage from any press point: twice
-        // the host's diagonal.
-        readonly property real maxDiameter: 2 * Math.sqrt(root.width * root.width + root.height * root.height)
+        // Animated ripple radius, 0 up to `maxRadius`.
+        property real progress: 0
+        // Radius that guarantees coverage from any press point: the full
+        // diagonal reaches the far corner even from the opposite one.
+        readonly property real maxRadius: Math.sqrt(root.width * root.width + root.height * root.height)
 
-        width: 0
-        height: width
-        radius: width / 2
-        x: cx - width / 2
-        y: cy - width / 2
-        color: root.rippleColor
+        anchors.fill: parent
         opacity: 0
+        // Nothing to paint at rest, and this keeps the Shape out of the
+        // scene graph between presses.
+        visible: rippleAnim.running
+
+        ShapePath {
+            strokeWidth: 0
+            strokeColor: "transparent"
+
+            fillGradient: RadialGradient {
+                centerX: sweep.cx
+                centerY: sweep.cy
+                // A zero-radius gradient is degenerate; the floor keeps
+                // the first animation frame well-defined.
+                centerRadius: Math.max(sweep.progress, 0.01)
+                focalX: sweep.cx
+                focalY: sweep.cy
+                focalRadius: 0
+
+                GradientStop {
+                    position: 0
+                    color: root.rippleColor
+                }
+                // The near-1.0 stop gives the disc a one-pixel-ish soft
+                // edge instead of a hard aliased rim. Beyond the last
+                // stop a radial gradient pads its final colour outward,
+                // so that colour must be a fully transparent version of
+                // `rippleColor` (not "transparent", which pads black at
+                // zero alpha and fringes the edge dark).
+                GradientStop {
+                    position: 0.98
+                    color: root.rippleColor
+                }
+                GradientStop {
+                    position: 1
+                    color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                }
+            }
+
+            PathRectangle {
+                width: root.width
+                height: root.height
+                radius: root.radius
+            }
+        }
 
         ParallelAnimation {
             id: rippleAnim
 
             NumberAnimation {
-                target: circle
-                property: "width"
+                target: sweep
+                property: "progress"
                 from: 0
-                to: circle.maxDiameter
+                to: sweep.maxRadius
                 duration: Motion.duration_medium_2
                 easing: Motion.standard
             }
 
             SequentialAnimation {
                 PropertyAction {
-                    target: circle
+                    target: sweep
                     property: "opacity"
                     value: StateLayer.pressed
                 }
 
                 NumberAnimation {
-                    target: circle
+                    target: sweep
                     property: "opacity"
                     to: 0
                     duration: Motion.duration_medium_2
@@ -154,11 +215,11 @@ Item {
     // Restart the ripple from a fresh press point. Stopping first resets
     // any in-flight sweep so rapid taps each get their own ripple rather
     // than stacking on a half-faded one.
-    function start(px, py) {
+    function start(px: real, py: real): void {
         rippleAnim.stop();
-        circle.cx = px;
-        circle.cy = py;
-        circle.width = 0;
+        sweep.cx = px;
+        sweep.cy = py;
+        sweep.progress = 0;
         rippleAnim.start();
     }
 }

@@ -247,9 +247,12 @@ private Q_SLOTS:
     // of a default too, which is the load-bearing half.
     void testDefaultShaderEffectIdForPath()
     {
-        // Snap events default to window-morph; others to none.
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
+        // Geometry events default to window-morph; others to none. There is
+        // no maximize leaf: the native maximize morph and the engines' own
+        // maximizes (scroll column maximize-to-edges, monocle) ride the two
+        // placement nodes.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowPlaceIn), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowPlaceOut), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
         // The interactive-drag leaf carries NO default: a crossfade pack
         // cannot drive the held drag transition, and the move-class packs
@@ -309,7 +312,7 @@ private Q_SLOTS:
     {
         // Truly-unset snap event resolves to the built-in window-morph default.
         ShaderProfileTree tree;
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
     }
 
@@ -326,8 +329,8 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile leaf;
         leaf.effectId = QStringLiteral("slide");
-        tree.setOverride(PP::WindowSnapIn, leaf);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        tree.setOverride(PP::WindowPlaceIn, leaf);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("slide"));
     }
 
@@ -337,8 +340,8 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile none;
         none.effectId = QString(); // engaged-empty
-        tree.setOverride(PP::WindowSnapIn, none);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        tree.setOverride(PP::WindowPlaceIn, none);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn);
         QVERIFY(r.effectiveEffectId().isEmpty());
     }
 
@@ -350,7 +353,7 @@ private Q_SLOTS:
         ShaderProfile cat;
         cat.effectId = QStringLiteral("dissolve");
         tree.setOverride(PP::Window, cat);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("dissolve"));
     }
 
@@ -364,7 +367,7 @@ private Q_SLOTS:
         catNone.effectId = QString(); // engaged-empty "None" at the category
         tree.setOverride(PP::Window, catNone);
         // A snap event without its own override still gets the default.
-        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId(),
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn).effectiveEffectId(),
                  QStringLiteral("window-morph"));
         // A non-snap window event (no built-in default) correctly stays None
         // under the category None.
@@ -373,9 +376,9 @@ private Q_SLOTS:
         // A per-event None under the category still wins (no default).
         ShaderProfile leafNone;
         leafNone.effectId = QString();
-        tree.setOverride(PP::WindowSnapIn, leafNone);
+        tree.setOverride(PP::WindowPlaceIn, leafNone);
         QVERIFY(
-            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId().isEmpty());
+            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn).effectiveEffectId().isEmpty());
     }
 
     void testResolveWithDefaultParamsOnlyLeafStillGetsDefault()
@@ -387,8 +390,8 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile paramsOnly;
         paramsOnly.parameters = QVariantMap({{QStringLiteral("speed"), 0.5}});
-        tree.setOverride(PP::WindowSnapIn, paramsOnly);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        tree.setOverride(PP::WindowPlaceIn, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowPlaceIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
         QVERIFY(r.parameters.has_value());
         QCOMPARE(r.parameters->value(QStringLiteral("speed")).toDouble(), 0.5);
@@ -405,7 +408,7 @@ private Q_SLOTS:
         parent.effectId = QStringLiteral("ripple-snap");
         tree.setOverride(PP::WindowMovement, parent);
         QVERIFY(tree.resolve(PP::WindowMove).effectiveEffectId().isEmpty());
-        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        QCOMPARE(tree.resolve(PP::WindowPlaceIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
         // resolveShaderWithDefault injects no default either (move has none).
         QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove).effectiveEffectId().isEmpty());
         // A direct leaf override applies untouched.
@@ -415,7 +418,7 @@ private Q_SLOTS:
         QCOMPARE(tree.resolve(PP::WindowMove).effectiveEffectId(), QStringLiteral("wobble"));
         // Isolation cuts both ways in outcome: the leaf override does not
         // bleed into sibling or ancestor resolution either.
-        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        QCOMPARE(tree.resolve(PP::WindowPlaceIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
         QCOMPARE(tree.resolve(PP::WindowMovement).effectiveEffectId(), QStringLiteral("ripple-snap"));
         // The baseline is skipped too, exactly like named ancestors.
         tree.clearOverride(PP::WindowMove);
@@ -459,7 +462,7 @@ private Q_SLOTS:
         // which is exactly why it is pinned here.
         QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingTabSwitch));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMovement));
-        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowPlaceIn));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(QString()));
         // Both desktop leaves must stay NON-isolated. The predicate is a single

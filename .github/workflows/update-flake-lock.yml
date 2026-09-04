@@ -20,13 +20,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Nix
-        # cachix/install-nix-action v31 — pinned by SHA so a hijacked
+        # cachix/install-nix-action v31.11.1 — pinned by SHA so a hijacked
         # tag can't run arbitrary code in this workflow's write-scoped
         # context.
-        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 

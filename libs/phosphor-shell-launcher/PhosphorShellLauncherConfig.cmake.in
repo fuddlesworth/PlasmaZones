@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# The installed package exposes the C++ core
+# (PhosphorShellLauncher::PhosphorShellLauncher). Its public headers name
+# PhosphorRegistry types (ILauncherProvider and friends), so PhosphorRegistry
+# is a PUBLIC link dependency consumers need transitively. Qt6::Gui is a
+# PRIVATE dependency of the library and is deliberately absent here.
+find_dependency(Qt6 6.6 COMPONENTS Core)
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_dependency(PhosphorRegistry)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorShellLauncherTargets.cmake")
+
+check_required_components(PhosphorShellLauncher)

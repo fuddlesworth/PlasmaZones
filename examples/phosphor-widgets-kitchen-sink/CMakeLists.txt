@@ -6,7 +6,12 @@
 # in its enabled / disabled states with a live accent-cycle header. This
 # is the acceptance test for libs/phosphor-shell-widgets.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+# QuickShapes has to be found in THIS directory scope, not merely inherited
+# from a parent: the atoms on display include PhosphorRipple and the
+# connected-corner shapes, which are QtQuick.Shapes types, so the static qml
+# plugin's dependency walk resolves Qt6::QuickShapes here and warns at
+# configure time without it.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 QuickShapes)
 
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)

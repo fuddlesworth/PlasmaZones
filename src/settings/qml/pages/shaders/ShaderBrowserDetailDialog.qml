@@ -20,12 +20,13 @@ import "../../js/FontUtils.js" as FontUtils
  * Drives both the animation-shaders browser and the snapping-overlay-shaders
  * browser via a `bridge`.
  *
- * When the bridge also exposes a `previewController` (zone/overlay browser
- * only — see SnappingShadersPageController), the right pane is a LIVE
- * ZoneShaderItem preview and the left column an editable
- * ParameterEditor whose changes are transient (never persisted). The
- * animation browser has no previewController, so it shows no preview pane —
- * just a read-only parameter list.
+ * When the bridge also exposes a `previewController`, the right pane is a
+ * LIVE preview (selected by the bridge's `previewKind`: a ZoneShaderItem
+ * render for zone/overlay, the composed chain for decorations, a driven
+ * transition for animations) and the left column an editable
+ * ParameterEditor whose changes are transient (never persisted). A bridge
+ * with no previewController shows no preview pane — just a read-only
+ * parameter list.
  *
  * Required:
  *   - `effect`: var — set by the host before calling `open()`.
@@ -60,15 +61,16 @@ Kirigami.Dialog {
     // handles spaces and unicode while preserving path separators, but leaves
     // `#` and `?` untouched, so those two are escaped explicitly or they would
     // be parsed as fragment/query delimiters.
-    // Twin site: ShaderBrowserCard.qml preview Image source.
+    // Twin site: AnimationPreviewPane.qml wallpaper Image source.
     function _encodeFilePath(path) {
         return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
     }
 
-    // ── T3.1 live preview (zone/overlay browser only) ──────────────────
-    // The zone-shader bridge exposes a shared ShaderPreviewController; the
-    // animation bridge does not. So the right pane is a live render + the left
-    // column an editable editor only here.
+    // ── T3.1 live preview ──────────────────────────────────────────────
+    // Every shipped bridge (zone/overlay, decoration, animation) exposes a
+    // preview controller these days, and previewKind selects the pane. The
+    // null case remains the contract for a bridge without one: the right
+    // pane then degrades to the read-only parameter list below.
     readonly property var previewController: bridge && bridge.previewController ? bridge.previewController : null
     readonly property bool _livePreview: previewController !== null && effect !== null
     // Which preview pane this bridge wants. The decoration bridge reports
@@ -84,6 +86,7 @@ Kirigami.Dialog {
     // decoration controller would be a hard "not a function" at open time.
     readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
     readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
+    readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
     // Transient (non-persisted) state driving the preview.
     property var _liveParams: ({})
     property var _lockedParams: ({})
@@ -117,6 +120,11 @@ Kirigami.Dialog {
     // the zone renderer's. Written ONLY by _teardownPanes / _armPanes — see
     // the shared-lifecycle contract below.
     property bool _decorationArmed: false
+    // The animation pane's arm flag, lifecycle-twin of _decorationArmed:
+    // written ONLY by _teardownPanes / _armPanes. The animation pane covers
+    // itself until its shader compiles, so it arms on the decoration
+    // schedule (a tick after teardown), not the zone one.
+    property bool _animationArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -131,6 +139,19 @@ Kirigami.Dialog {
     // the background until the dialog closed.
     readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
 
+    // Whether the browsed pack actually consumes the audio spectrum, so a
+    // non-audio pack's dialog session does not spawn the external CAVA
+    // process at all. Only the animation controller can answer per pack
+    // (packInfo); the zone and decoration controllers expose no such probe
+    // yet, so those kinds keep the historical start-always behaviour — a
+    // known cost, not an oversight, until their bridges grow one.
+    function _packWantsAudio() {
+        if (_previewKind !== "animation")
+            return true;
+        var info = previewController.packInfo(effect ? (effect.id || "") : "");
+        return info && info.audio === true;
+    }
+
     on_AppActiveChanged: {
         if (!opened || !_livePreview)
             return;
@@ -138,7 +159,8 @@ Kirigami.Dialog {
             // Re-baseline so the first post-resume delta is ~one frame, not
             // the clamped 100 ms jump.
             _previewLastTime = Date.now() / 1000;
-            previewController.startAudioCapture();
+            if (_packWantsAudio())
+                previewController.startAudioCapture();
         } else {
             previewController.stopAudioCapture();
         }
@@ -216,10 +238,12 @@ Kirigami.Dialog {
     function _teardownPanes() {
         _rendererActive = false; // zone
         _decorationArmed = false; // decoration
+        _animationArmed = false; // animation
     }
     function _armPanes() {
         Qt.callLater(function () {
             root._decorationArmed = root.visible && root._decorationPreview;
+            root._animationArmed = root.visible && root._animationPreview;
         });
         // The zone arm normally waits for onOpened. A reset while ALREADY
         // open (a mid-session caller, or a fast pack switch on a dialog whose
@@ -282,7 +306,7 @@ Kirigami.Dialog {
         // Gate on _appActive: opening the dialog while the settings app
         // is backgrounded must not start CAVA — the on_AppActiveChanged
         // handler starts it when the app comes to the front.
-        if (_livePreview && _appActive)
+        if (_livePreview && _appActive && _packWantsAudio())
             previewController.startAudioCapture();
     }
     onClosed: {
@@ -306,8 +330,9 @@ Kirigami.Dialog {
     }
 
     title: effect ? (effect.name || effect.id || "") : ""
-    // Wide (side-by-side with the live preview) for the zone/overlay browser;
-    // narrower single-column for the animation browser, which has no preview.
+    // Wide (side-by-side with the live preview) whenever a bridge supplies a
+    // preview controller — all three shipped browsers do; narrower
+    // single-column for the no-previewController fallback.
     preferredWidth: _livePreview ? Kirigami.Units.gridUnit * 54 : Kirigami.Units.gridUnit * 38
     maximumHeight: Kirigami.Units.gridUnit * 26
     standardButtons: Kirigami.Dialog.Close
@@ -329,10 +354,11 @@ Kirigami.Dialog {
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
             // per-row lock column rather than the divider. MUST be 0 when hidden:
-            // the animation dialog has no preview column, so availableWidth is
-            // nearly the full dialog width — claiming that here would make the
-            // footer wider than the dialog and feed back into availableWidth, a
-            // runaway layout loop that freezes the dialog.
+            // a bridge without a previewController gets no preview column, so
+            // availableWidth is nearly the full dialog width — claiming that
+            // here would make the footer wider than the dialog and feed back
+            // into availableWidth, a runaway layout loop that freezes the
+            // dialog.
             implicitWidth: visible ? detailsScroll.availableWidth - Kirigami.Units.largeSpacing : 0
             implicitHeight: visible ? presetRow.implicitHeight : 0
 
@@ -563,17 +589,21 @@ Kirigami.Dialog {
                     // ── Parameters ────────────────────────────────────────
                     // Editable editor (live preview) carries its own toolbar +
                     // "Parameters" header, so the read-only heading below is
-                    // shown only for the animation browser.
+                    // shown only for a bridge without a previewController
+                    // (none shipped today; the fallback is the contract for
+                    // third-party bridges).
                     Kirigami.Heading {
                         visible: root._hasParameters && !root._livePreview
                         text: i18nc("@title:group shader parameters section", "Parameters")
                         level: 4
                     }
 
-                    // Editable editor — live (zone/overlay) browser only. Wrapped
-                    // in a Loader so it is NOT instantiated for the animation
-                    // browser (which uses the read-only Repeater below); otherwise
-                    // it eagerly builds slider rows for params it never shows.
+                    // Editable editor — any bridge with a previewController
+                    // (all three shipped browsers). Wrapped in a Loader so it
+                    // is NOT instantiated for the no-previewController
+                    // fallback (which uses the read-only Repeater below);
+                    // otherwise it eagerly builds slider rows for params it
+                    // never shows.
                     Loader {
                         Layout.fillWidth: true
                         active: root._livePreview && root._hasParameters
@@ -633,7 +663,10 @@ Kirigami.Dialog {
                         }
                     }
 
-                    // Read-only fallback for the animation browser.
+                    // Read-only fallback for a bridge without a
+                    // previewController. Unreachable in every shipped
+                    // configuration; kept as the degraded contract for
+                    // third-party bridges.
                     Repeater {
                         model: !root._livePreview && root.effect && root.effect.parameters ? root.effect.parameters : []
 
@@ -696,9 +729,8 @@ Kirigami.Dialog {
 
             // ── RIGHT: pinned preview (fills the column) ────────────────
             // Hidden (and so excluded from the row, letting the params fill
-            // width) for the animation browser, which has no previewController.
-            // The zone/overlay and decoration browsers each get their own pane
-            // below, selected by _previewKind.
+            // width) for a bridge with no previewController. Each browser
+            // gets its own pane below, selected by _previewKind.
             Item {
                 visible: root._livePreview
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 24
@@ -749,6 +781,26 @@ Kirigami.Dialog {
                         // deliberately NOT here — focus loss must freeze, not
                         // tear down, the same split the zone pane gets from its
                         // clock's `running` gate.
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live animation preview: the stand-in card played through
+                // the pack as a real transition leg plays it. Same Loader
+                // shape and armed-flag lifecycle as the decoration pane
+                // above; the pane covers itself until its shader compiles,
+                // so it builds during the enter transition too.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._animationPreview && root._animationArmed
+                    visible: active
+
+                    sourceComponent: AnimationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
                         active: root.visible
                         animating: root._appActive
                     }

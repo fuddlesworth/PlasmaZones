@@ -4,8 +4,11 @@
 // Bridge methods that wire OverlayService to PhosphorOverlay::ShellHost:
 // the post-create / pre-destroy callbacks, the per-screen shim wrappers
 // (ensurePassiveShellFor / destroyPassiveShell), the warm-up loop, and
-// the surface-mapped-state sync that translates PZ-content slot
-// visibility into the booleans ShellHost::syncSurfaceState expects.
+// the surface-mapped-state sync that computes the three predicates
+// ShellHost::syncSurfaceState expects. The first two come from PZ-content
+// slot visibility. The keyboard predicate deliberately does not, since it
+// has to release on the first edge of dismissal rather than when the
+// slot's fade finishes.
 //
 // Extracted from osd.cpp where these methods accumulated during the
 // Phase 2-4 ShellHost lift. They are not OSD-specific, they belong
@@ -14,7 +17,6 @@
 #include "internal.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
-#include "core/utils/utils.h"
 #include "phosphor_roles.h"
 #include "phosphor_slot_keys.h"
 
@@ -114,6 +116,13 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // overwrite this immediately via syncPassiveShellSurfaceState
     // (anyInputGrabbing=true), so the brief redundant write happens
     // entirely within a single event-loop tick.
+    //
+    // The keyboard axis deliberately gets no equivalent default here. It is
+    // owned solely by syncSurfaceState, which the modal-show paths call in the
+    // same tick, and unlike the input flag it has no stale-inheritance hazard
+    // to guard: the re-entry case this defends against keeps the same
+    // transport handle, and the only writer of that handle's interactivity is
+    // the sync itself.
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }
@@ -228,8 +237,9 @@ void OverlayService::warmUpNotifications()
     int createdCount = 0;
     if (effectsEnabled) {
         for (const QString& sid : effectiveIds) {
-            QScreen* physScreen = m_screenManager ? m_screenManager->physicalScreenFor(sid).qscreen
-                                                  : Utils::findScreenAtPosition(QPoint(0, 0));
+            // effectiveIds is empty unless m_screenManager is non-null, so the
+            // loop body only runs when it is.
+            QScreen* physScreen = m_screenManager->physicalScreenFor(sid).qscreen;
             if (physScreen) {
                 auto* state = ensurePassiveShellFor(sid, physScreen);
                 if (state && state->shell && state->shell->shellSurface()) {
@@ -329,7 +339,7 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // Input-region rationale (Qt::WindowTransparentForInput): pre-shell-
     // migration each overlay had its own wl_surface sized to its visible
     // content, so clicks outside the toast / card naturally fell through
-    // to underlying windows. Post-shell every kbd-None overlay shares the
+    // to underlying windows. Post-shell every passive overlay shares the
     // screen-sized shell surface - there's no per-slot input region the
     // daemon can hand to the compositor. The pragmatic split: only MODAL
     // slots (snap-assist, layout picker, cheatsheet) grab input. OSD /
@@ -373,7 +383,29 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
-    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
+    // Keyboard grab: the cheatsheet alone, because its search field is the
+    // only overlay content that reads typed characters. Snap assist and the
+    // picker stay kbd-None on purpose — both answer only to global shortcuts,
+    // which KWin routes ahead of surface delivery, so taking the keyboard
+    // would buy them nothing and cost the focused window its input.
+    //
+    // Keyed on m_cheatsheetVisible, NOT on the slot's isVisible(): the slot
+    // item stays visible for the whole fade-out, and holding the session's
+    // keyboard across an animation would swallow whatever the user typed into
+    // the window they were returning to. The flag is cleared, and the surface
+    // re-synced, on the first edge of every dismissal path that keeps the
+    // surface alive. Teardown paths release implicitly instead, when the
+    // surface itself is destroyed. Escape
+    // itself is unaffected either way — it reaches the daemon through the
+    // ad-hoc global grab (daemon/cheatsheet.cpp), never through this surface.
+    const bool anyKeyboardGrabbing = m_cheatsheetVisible && m_cheatsheetScreenId == effectiveId;
+
+    m_shellHost->syncSurfaceState(effectiveId,
+                                  {
+                                      .visible = anyVisible,
+                                      .inputGrabbing = anyInputGrabbing,
+                                      .keyboardGrabbing = anyKeyboardGrabbing,
+                                  });
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

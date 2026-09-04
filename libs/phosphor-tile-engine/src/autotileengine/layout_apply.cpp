@@ -356,8 +356,19 @@ void AutotileEngine::applyTiling(const QString& screenId)
     // Drag-insert preview: skip emitting geometry for the dragged window so
     // KWin's interactive move isn't fought. Other windows still animate to
     // their new tile positions, producing the OrderingPage-style shift.
-    const bool filterForPreview = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
-    const QString filteredWindowId = filterForPreview ? m_dragInsertPreview->windowId : QString();
+    // Three sources for the same skip: a live preview on this screen, a
+    // cancel that is retiling while the interactive move is still running
+    // (m_dragCancelFilterWindowId, set only inside
+    // cancelDragInsertPreview(dragStillActive = true)), and the daemon-set
+    // interactive-drag mark (m_interactiveDragWindow), which covers every
+    // OTHER retile that lands during a drag — a deferred geometry-retry, a
+    // neighbour opening or closing, an engine-internal preview self-cancel.
+    // Neither the cancel filter nor the mark is screen-scoped — the window
+    // is mid-drag on exactly one screen and its id cannot collide elsewhere.
+    const bool previewOnScreen = m_dragInsertPreview
+        && PhosphorIdentity::VirtualScreenId::samePhysical(m_dragInsertPreview->targetScreenId, screenId);
+    const QString filteredWindowId = previewOnScreen ? m_dragInsertPreview->windowId : m_dragCancelFilterWindowId;
+    const bool filterForPreview = !filteredWindowId.isEmpty();
 
     const QStringList windows = state->tiledWindows();
     const QVector<QRect> zones = state->calculatedZones();
@@ -465,6 +476,14 @@ void AutotileEngine::applyTiling(const QString& screenId)
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
+            continue;
+        }
+        if (!m_interactiveDragWindow.isEmpty() && windows[i] == m_interactiveDragWindow) {
+            // Under a compositor interactive move for the whole drag: KWin
+            // owns the frame until drop, so never fight it (see
+            // setInteractiveDragWindow). Skipped before the
+            // m_lastAppliedTileRect insert like the preview skip above — a
+            // rect never applied must not become the float-back comparand.
             continue;
         }
         // No inset: the KWin effect's border shader recolours each window's own

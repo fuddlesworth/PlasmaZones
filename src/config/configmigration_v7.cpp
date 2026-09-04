@@ -3,237 +3,132 @@
 
 #include "configmigration.h"
 
-#include "configdefaults.h"
+#include "configkeys.h"
 #include "configmigration_util.h"
 
-#include <PhosphorConfig/JsonBackend.h>
-
-#include <QFile>
-#include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
-#include <QJsonParseError>
-#include <QJsonValue>
 #include <QLatin1String>
+#include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QUuid>
 
 namespace PlasmaZones {
 
-namespace {
-// The two per-layout sidecar keys being relocated (the layout-file spellings
-// that ZoneJsonKeys used to declare — pinned here because the runtime keys
-// are gone) and the OverlayShaderTree JSON field names they land in.
-constexpr QLatin1String kSidecarShaderId{"shaderId"};
-constexpr QLatin1String kSidecarShaderParams{"shaderParams"};
-constexpr QLatin1String kTreeBaseline{"baseline"};
-constexpr QLatin1String kTreeOverrides{"overrides"};
-constexpr QLatin1String kNodeShaderId{"shaderId"};
-constexpr QLatin1String kNodeParameters{"parameters"};
-// One-shot marker stamped into the Snapping.OverlayShaders group by the same
-// atomic write as the lift. Once present, later runs only STRIP the sidecar
-// and never merge from it again — so an override the user removed after a
-// failed sidecar strip cannot be resurrected from the stale sidecar copy on
-// the retry. JsonBackend round-trips unknown keys, so ordinary Settings
-// saves preserve it. Pinned locally like the sidecar spellings above: this
-// is migration-internal state, not a settings key.
-constexpr QLatin1String kLiftedMarkerKey{"SidecarLifted"};
+// ── v6 → v7: the window-movement animation nodes are renamed, and the
+//    maximize node is retired ────────────────────────────────────────────────
+//
+// Every geometry the placement engines commit rides ONE animation node,
+// whatever mode placed the window: snapping into a zone, tiling into a slot,
+// a scrolling column reflowing, monocle filling the screen. That node was
+// still called `snapIn` (and its release leg `snapOut`), a name from when
+// snapping was the only mode, so a scrolling-only user who has never drawn a
+// zone had every column placement governed by a node called "snapIn". v7
+// renames them `placeIn` / `placeOut`.
+//
+// `window.movement.maximize` is retired with the same move. It had come to
+// mean two different things: the KWin-native maximize of a window PlasmaZones
+// was not placing, AND an engine placement that happened to set KWin's
+// maximize bit on the way (a monocle tile, a column maximized to the edges).
+// Deciding which of the two a given placement was turned out to be
+// unanswerable on Wayland, where the press, the engine's write and each
+// committed echo are a client round trip apart. So a placement always rides
+// the placement node, and the native maximize morph rides it too — placeIn
+// growing to the maximize area, placeOut restoring from it — which is also
+// what a user means by "the animation windows play when they change size".
+//
+// Schema-migration freeze policy (mirrors migrateV5ToV6): every v6 group/key
+// spelling and every path string this step depends on is frozen here as a
+// file-scope constant, so the migration's wire-format contract stays stable
+// if the live accessors or ProfilePaths constants are renamed again later.
 
-/// Remove the two relocated shader keys from every object-valued sidecar
-/// entry, dropping entries left empty. Returns true when anything changed.
-bool stripShaderKeys(QJsonObject& sidecar)
+namespace {
+
+// Frozen v6 group and key spellings.
+constexpr QLatin1String kV6AnimationsGroup{"Animations"};
+constexpr QLatin1String kV6KeyShaderProfileTree{"ShaderProfileTree"};
+// ShaderProfileTree::toJson shape: `{ "baseline": {...}, "overrides": [ { "path": "...", "profile": {...} } ] }`.
+constexpr QLatin1String kV6KeyOverrides{"overrides"};
+constexpr QLatin1String kV6KeyPath{"path"};
+// The three retired v6 node paths.
+constexpr QLatin1String kV6PathSnapIn{"window.movement.snapIn"};
+constexpr QLatin1String kV6PathSnapOut{"window.movement.snapOut"};
+constexpr QLatin1String kV6PathMaximize{"window.movement.maximize"};
+// Their v7 homes.
+constexpr QLatin1String kV7PathPlaceIn{"window.movement.placeIn"};
+constexpr QLatin1String kV7PathPlaceOut{"window.movement.placeOut"};
+
+/// The v7 path a v6 override path lands on, or the path itself when it is not
+/// one of the three retired ones.
+QString v7PathFor(const QString& v6Path)
 {
-    bool dirty = false;
-    const QJsonObject snapshot = sidecar;
-    for (auto it = snapshot.constBegin(); it != snapshot.constEnd(); ++it) {
-        if (!it.value().isObject()) {
-            continue;
-        }
-        QJsonObject entry = it.value().toObject();
-        if (!entry.contains(kSidecarShaderId) && !entry.contains(kSidecarShaderParams)) {
-            continue;
-        }
-        entry.remove(kSidecarShaderId);
-        entry.remove(kSidecarShaderParams);
-        if (entry.isEmpty()) {
-            sidecar.remove(it.key());
-        } else {
-            sidecar.insert(it.key(), entry);
-        }
-        dirty = true;
+    if (v6Path == kV6PathSnapIn || v6Path == kV6PathMaximize) {
+        return QString(kV7PathPlaceIn);
     }
-    return dirty;
+    if (v6Path == kV6PathSnapOut) {
+        return QString(kV7PathPlaceOut);
+    }
+    return v6Path;
 }
+
 } // namespace
 
 void ConfigMigration::migrateV6ToV7(QJsonObject& root)
 {
+    // Defense-in-depth idempotency guard, mirroring the earlier steps.
     if (root.value(ConfigKeys::versionKey()).toInt(0) >= 7) {
         return;
     }
-    // v7 moves zone-overlay shader assignments out of the layout-settings
-    // sidecar into the config's Snapping.OverlayShaders/OverlayShaderTree
-    // blob. The config root itself carries nothing to transform — the
-    // sidecar lift needs filesystem access and must NOT run on the sparse
-    // profile deltas this chain also processes (it would stamp the user's
-    // live assignments into every profile), so it lives in
-    // relocateOverlayShaderAssignments, invoked from ensureJsonConfig's
-    // finalize pass on every run — the same split as the v4 layout-settings
-    // relocation (relocateLayoutSettings). All this step does is stamp.
+
+    QJsonObject animations = groupObjectAtPath(root, kV6AnimationsGroup);
+    const QJsonValue treeValue = animations.value(kV6KeyShaderProfileTree);
+    // Only an object-shaped tree is rewritten. A missing tree is the common
+    // fresh-config case and needs nothing; a non-object value at that key is
+    // not this step's to repair, and is left exactly as found (the loader's
+    // own validation owns malformed blobs).
+    if (treeValue.isObject()) {
+        QJsonObject tree = treeValue.toObject();
+        const QJsonArray before = tree.value(kV6KeyOverrides).toArray();
+
+        // Which v7 paths already have a home after the plain renames. The
+        // maximize override folds into placeIn only when nothing else will
+        // land there: a user who assigned a pack to Maximized meant "animate
+        // this with pack X", and placeIn is where that event now lives — but a
+        // pack they assigned to the placement node itself is the more general
+        // statement and wins, so the maximize entry is dropped rather than
+        // clobbering it.
+        QSet<QString> occupiedAfterRename;
+        for (const QJsonValue& v : before) {
+            const QString path = v.toObject().value(kV6KeyPath).toString();
+            if (path != kV6PathMaximize) {
+                occupiedAfterRename.insert(v7PathFor(path));
+            }
+        }
+
+        QJsonArray after;
+        for (const QJsonValue& v : before) {
+            QJsonObject entry = v.toObject();
+            const QString path = entry.value(kV6KeyPath).toString();
+            if (path == kV6PathMaximize && occupiedAfterRename.contains(QString(kV7PathPlaceIn))) {
+                continue;
+            }
+            const QString renamed = v7PathFor(path);
+            if (renamed != path) {
+                entry.insert(kV6KeyPath, renamed);
+            }
+            after.append(entry);
+        }
+
+        if (after != before) {
+            tree.insert(kV6KeyOverrides, after);
+            animations.insert(kV6KeyShaderProfileTree, tree);
+            setGroupAtSegments(root, QString(kV6AnimationsGroup).split(QLatin1Char('.')), animations);
+        }
+    }
+
+    // Stamp the literal, not ConfigSchemaVersion — the historical step's
+    // output must stay frozen when the chain grows again.
     root[ConfigKeys::versionKey()] = 7;
-}
-
-bool ConfigMigration::relocateOverlayShaderAssignments(const QString& jsonPath)
-{
-    const QString sidecarPath = ConfigDefaults::layoutSettingsFilePath();
-    if (!QFile::exists(sidecarPath)) {
-        return true; // nothing to relocate — fresh install or already clean
-    }
-
-    QJsonObject sidecar;
-    {
-        QFile sf(sidecarPath);
-        if (!sf.open(QIODevice::ReadOnly)) {
-            qWarning("ConfigMigration: overlay-shader relocation could not read %s — skipping",
-                     qPrintable(sidecarPath));
-            return true; // unreadable sidecar is the layout store's problem, not a migration failure
-        }
-        const QByteArray raw = sf.readAll();
-        // Cheap steady-state bail: this runs on every startup forever, and
-        // once the one-time lift is done the file never carries the shader
-        // keys again — skip the JSON parse when the bytes cannot contain
-        // them. (kSidecarShaderParams is not a substring of kSidecarShaderId
-        // or vice versa, so both are checked.)
-        if (!raw.contains(kSidecarShaderId.latin1()) && !raw.contains(kSidecarShaderParams.latin1())) {
-            return true;
-        }
-        QJsonParseError err;
-        const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
-        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            qWarning("ConfigMigration: overlay-shader relocation skipping unparseable %s", qPrintable(sidecarPath));
-            return true;
-        }
-        sidecar = doc.object();
-    }
-
-    // Collect the shader entries to lift. An entry with an empty shaderId is
-    // stripped without lifting: it meant "no shader", which is the tree's
-    // inherit/baseline default, and any orphaned shaderParams riding such an
-    // entry are dropped by design (parameters are meaningless without a
-    // shader). Non-UUID keys (the "autotile:<algoId>" entries the pre-v7
-    // editor could stamp shader keys onto) are also stripped without lifting:
-    // the tree's override paths are layout UUIDs only, so a lifted autotile
-    // key could never be resolved and would sit in the config as junk.
-    QJsonObject lifted; // uuid → {shaderId, parameters}
-    for (auto it = sidecar.constBegin(); it != sidecar.constEnd(); ++it) {
-        if (!it.value().isObject()) {
-            continue;
-        }
-        const QJsonObject entry = it.value().toObject();
-        const QString shaderId = entry.value(kSidecarShaderId).toString();
-        if (shaderId.isEmpty() || QUuid::fromString(it.key()).isNull()) {
-            continue;
-        }
-        QJsonObject node;
-        node.insert(kNodeShaderId, shaderId);
-        const QJsonValue params = entry.value(kSidecarShaderParams);
-        if (params.isObject() && !params.toObject().isEmpty()) {
-            node.insert(kNodeParameters, params.toObject());
-        }
-        lifted.insert(it.key(), node);
-    }
-    QJsonObject strippedSidecar = sidecar;
-    const bool sidecarDirty = stripShaderKeys(strippedSidecar);
-
-    if (!sidecarDirty) {
-        return true; // fully idempotent — nothing left to move
-    }
-
-    // Lift into the config root FIRST: the config copy is the authoritative
-    // destination, so it must be durably written before the sidecar loses
-    // its entries. On a re-run after a sidecar write failure the merge below
-    // keeps an already-lifted (possibly since-edited) node — existing tree
-    // entries always win over the stale sidecar copy.
-    if (!lifted.isEmpty()) {
-        if (!QFile::exists(jsonPath)) {
-            // No config file yet (interrupted fresh install): leave the
-            // sidecar untouched and retry once the config exists.
-            return true;
-        }
-        QFile cf(jsonPath);
-        if (!cf.open(QIODevice::ReadOnly)) {
-            qWarning("ConfigMigration: overlay-shader relocation could not open %s", qPrintable(jsonPath));
-            return false;
-        }
-        QJsonParseError err;
-        const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
-        cf.close();
-        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            qWarning("ConfigMigration: overlay-shader relocation: %s did not parse — aborting lift",
-                     qPrintable(jsonPath));
-            return false;
-        }
-        QJsonObject root = doc.object();
-        QJsonObject group = groupObjectAtPath(root, ConfigKeys::snappingOverlayShadersGroup());
-        // The lift merges from the sidecar at most ONCE (see kLiftedMarkerKey).
-        // On a retry after a failed sidecar strip, the user may have edited OR
-        // REMOVED lifted assignments meanwhile; the config is authoritative,
-        // so a marked config takes nothing more from the stale sidecar.
-        const bool alreadyLifted = group.value(kLiftedMarkerKey).toBool();
-        QJsonObject tree = group.value(ConfigKeys::overlayShaderTreeKey()).toObject();
-        QJsonObject overrides = tree.value(kTreeOverrides).toObject();
-        bool treeDirty = false;
-        if (!alreadyLifted) {
-            for (auto it = lifted.constBegin(); it != lifted.constEnd(); ++it) {
-                if (overrides.contains(it.key())) {
-                    continue; // already present (edited copy) — that copy is live
-                }
-                overrides.insert(it.key(), it.value());
-                treeDirty = true;
-            }
-        }
-        if (treeDirty || !alreadyLifted) {
-            if (treeDirty) {
-                tree.insert(kTreeOverrides, overrides);
-                group.insert(ConfigKeys::overlayShaderTreeKey(), tree);
-            }
-            group.insert(kLiftedMarkerKey, true);
-            setGroupAtSegments(root, ConfigKeys::snappingOverlayShadersGroup().split(QLatin1Char('.')), group);
-            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root)) {
-                qWarning("ConfigMigration: failed to write lifted overlay shader tree to %s", qPrintable(jsonPath));
-                return false;
-            }
-        }
-    }
-
-    // Strip the relocated keys from the sidecar. Re-read it FRESH here
-    // rather than rewriting the entry-time snapshot: the daemon's runtime
-    // LayoutSettingsStore rewrites this file without taking the migration
-    // lock, so a snapshot rewrite could clobber a concurrent save (a
-    // hiddenFromSelector or autotile toggle landing during this one-shot
-    // lift). Stripping from a just-read copy preserves such writes; nothing
-    // post-v7 writes shader keys, so re-stripping the fresh copy is safe.
-    // A failure here retries on the next run; the existing-entry-wins merge
-    // above keeps that safe.
-    {
-        QFile sf(sidecarPath);
-        if (sf.open(QIODevice::ReadOnly)) {
-            QJsonParseError err;
-            const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll(), &err);
-            if (err.error == QJsonParseError::NoError && doc.isObject()) {
-                QJsonObject fresh = doc.object();
-                if (!stripShaderKeys(fresh)) {
-                    return true; // someone else already stripped it
-                }
-                strippedSidecar = fresh;
-            }
-        }
-    }
-    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, strippedSidecar)) {
-        qWarning("ConfigMigration: failed to strip overlay shader keys from %s", qPrintable(sidecarPath));
-        return false;
-    }
-    return true;
 }
 
 } // namespace PlasmaZones

@@ -19,6 +19,12 @@ namespace PhosphorServiceSni {
 
 namespace {
 
+/// Per-call timeout for the item's blocking property reads. The peer is an
+/// arbitrary session client, so the QtDBus connection default of 25s is far
+/// too generous: a hung client would otherwise stall the GUI thread once per
+/// property. Two seconds is well beyond any healthy round trip.
+constexpr int kPropertyTimeoutMs = 2000;
+
 /// "Active" / "Passive" / "NeedsAttention" → enum. Anything else
 /// defaults to Passive: items in the wild occasionally send empty
 /// strings during startup.
@@ -353,6 +359,13 @@ StatusNotifierItem::StatusNotifierItem(const QString& dbusService, const QString
     d->path = dbusPath;
     d->proxy =
         std::make_unique<OrgKdeStatusNotifierItemInterface>(dbusService, dbusPath, QDBusConnection::sessionBus(), this);
+
+    // Bound the blocking property reads below. Any session peer can make us
+    // build one of these by registering, and the reads run on the GUI thread,
+    // so the connection default of 25s per property lets one hung tray client
+    // freeze the whole shell for minutes. A timed-out read yields a
+    // default-constructed value, which the change detection already handles.
+    d->proxy->setTimeout(kPropertyTimeoutMs);
 
     // Subscribe to per-property change signals. The spec is vague
     // about whether items also fire org.freedesktop.DBus.Properties

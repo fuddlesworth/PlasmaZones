@@ -84,7 +84,7 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // global setting stayed on. Gating on the seeded flag keeps the bring-up
     // window no worse than the old global-flag test while making the resolved
     // map authoritative the moment it exists.
-    if (m_tilingHandler && m_tilingHandler->hasScrollingScreens()
+    if (m_tilingHandler->hasScrollingScreens()
         && (m_tilingHandler->anyScreenCropsStraddlers()
             || (!m_tilingHandler->scrollEffectBehaviourSeeded() && m_cachedScrollCropStraddlers))) {
         return true;

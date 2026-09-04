@@ -23,6 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTest>
 
 class TestAnimationShaderParamWiring : public QObject
@@ -142,7 +143,7 @@ private Q_SLOTS:
                                     .arg(slot)
                                     .arg(QChar(subChar))
                                     .arg(exp.slot)
-                                    .arg(QChar(QChar(u'x' + exp.sub)))));
+                                    .arg(QLatin1Char("xyzw"[exp.sub]))));
             definedInShader.insert(id);
         }
 
@@ -183,6 +184,58 @@ private Q_SLOTS:
                                      << "slot directly or rename / drop the metadata entry.";
             }
         }
+    }
+
+    // ── Bundled-metadata standards ─────────────────────────────────────
+    // The schema (animation-metadata.schema.json) is deliberately lenient —
+    // it validates USER packs fail-closed at load, so tightening it would
+    // reject third-party packs already on users' machines. The BUNDLED tree
+    // is ours to hold to a higher bar, and this slot is that bar: every
+    // shipped pack carries the descriptive identity fields, and category
+    // values come from one canonical list so the browser's category
+    // grouping cannot fragment into near-duplicate sections again
+    // ("Pixelate" beside "Pixelation" was real). Extending the list is
+    // fine — that is a deliberate taxonomy decision; a typo'd or ad-hoc
+    // value failing here is the point.
+    void testBundledMetadataStandards()
+    {
+        const QString animationsDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        QDir dir(animationsDir);
+        if (!dir.exists()) {
+            QSKIP("data/animations not found — running outside source tree");
+        }
+        static const QSet<QString> kCanonicalCategories = {
+            QStringLiteral("3D"),       QStringLiteral("Dissolve"), QStringLiteral("Distortion"),
+            QStringLiteral("Fade"),     QStringLiteral("Geometry"), QStringLiteral("Glitch"),
+            QStringLiteral("Particle"), QStringLiteral("Physics"),  QStringLiteral("Pixelation"),
+            QStringLiteral("Reveal"),   QStringLiteral("Slide"),    QStringLiteral("Tile"),
+            QStringLiteral("Zoom"),
+        };
+        QStringList violations;
+        const QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString& sub : subdirs) {
+            if (sub == QLatin1String("shared")) {
+                continue;
+            }
+            QFile metaFile(animationsDir + QLatin1Char('/') + sub + QStringLiteral("/metadata.json"));
+            if (!metaFile.exists() || !metaFile.open(QIODevice::ReadOnly)) {
+                continue; // the wiring rows above own missing/unreadable metadata
+            }
+            const QJsonObject m = QJsonDocument::fromJson(metaFile.readAll()).object();
+            for (const char* key : {"description", "author", "version", "category"}) {
+                if (m.value(QLatin1String(key)).toString().trimmed().isEmpty()) {
+                    violations << sub + QStringLiteral(": empty or missing ") + QLatin1String(key);
+                }
+            }
+            const QString category = m.value(QLatin1String("category")).toString();
+            if (!category.isEmpty() && !kCanonicalCategories.contains(category)) {
+                violations << sub + QStringLiteral(": category \"") + category
+                        + QStringLiteral(
+                                  "\" is not in the canonical list — extend kCanonicalCategories "
+                                  "deliberately or fix the value");
+            }
+        }
+        QVERIFY2(violations.isEmpty(), qPrintable(violations.join(QStringLiteral("\n"))));
     }
 };
 

@@ -108,17 +108,30 @@ PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const 
     meta.write(QJsonDocument(metadata).toJson());
     meta.close();
 
+    // Returns bool like the multipass writeBuffer sibling: a silently
+    // dropped stage write would surface later as a misleading
+    // "buffer shader missing" validator diagnostic instead of a fixture
+    // failure.
     const auto writeStage = [&dir](const QString& file) {
         QFile f(dir + QLatin1Char('/') + file);
-        if (f.open(QIODevice::WriteOnly)) {
-            f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
         }
+        f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        f.close();
+        return f.error() == QFile::NoError;
     };
-    writeStage(QStringLiteral("zone.frag"));
+    bool stagesOk = writeStage(QStringLiteral("zone.frag"));
     for (const QJsonValue& v : metadata.value(QLatin1String("bufferShaders")).toArray()) {
         if (!v.toString().isEmpty()) {
-            writeStage(v.toString());
+            stagesOk = writeStage(v.toString()) && stagesOk;
         }
+    }
+    if (!stagesOk) {
+        PackResult failed;
+        failed.errors = -1;
+        failed.report = QStringLiteral("FIXTURE: failed to write a stage file under ") + dir;
+        return failed;
     }
 
     PackResult result;
@@ -692,9 +705,9 @@ private Q_SLOTS:
     /// A compositor-only pack's VERTEX stage is compiled too. It is the stage
     /// the geometry packs do their per-vertex work in and the one the daemon
     /// never touches, so it is both the likeliest to break and the least
-    /// covered. Unlike the daemon vertex bake, the p_<id> preamble is spliced
-    /// here, matching the compositor: a vertex-driven pack reading its params
-    /// must compile, not fail on an undeclared identifier.
+    /// covered. The p_<id> preamble is spliced here, matching the compositor
+    /// (and, these days, the daemon vertex bake too): a vertex-driven pack
+    /// reading its params must compile, not fail on an undeclared identifier.
     void compositorOnlyVertexStageIsCompiledWithParams()
     {
         if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {

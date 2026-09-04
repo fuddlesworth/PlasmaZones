@@ -55,7 +55,8 @@ public:
     P_CONFIG_KEY(cycleWindowHeightBackKey, "CycleWindowHeightBack")
     P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
     P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
-    P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")
+    P_CONFIG_KEY(maximizeWindowHeightKey, "MaximizeWindowHeight")
+    P_CONFIG_KEY(expandWindowKey, "ExpandWindow")
     P_CONFIG_KEY(focusWindowTopKey, "FocusWindowTop")
     P_CONFIG_KEY(focusWindowBottomKey, "FocusWindowBottom")
     P_CONFIG_KEY(focusColumnLeftKey, "FocusColumnLeft")
@@ -68,6 +69,8 @@ public:
     P_CONFIG_KEY(viewPageForwardKey, "ViewPageForward")
     P_CONFIG_KEY(equalizeColumnWidthsKey, "EqualizeColumnWidths")
     P_CONFIG_KEY(minimizeColumnWidthKey, "MinimizeColumnWidth")
+    P_CONFIG_KEY(equalizeWindowHeightsKey, "EqualizeWindowHeights")
+    P_CONFIG_KEY(minimizeWindowHeightKey, "MinimizeWindowHeight")
 };
 
 } // namespace PlasmaZones

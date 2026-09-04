@@ -16,7 +16,7 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-/// v6 → v7: overlay shader assignments lift out of the layout-settings
+/// v7 → v8: overlay shader assignments lift out of the layout-settings
 /// sidecar into the config's Snapping.OverlayShaders/OverlayShaderTree blob
 /// (relocateOverlayShaderAssignments), plus the OverlayShaderTree value
 /// type's own JSON round-trip and resolve contracts.
@@ -87,14 +87,14 @@ private:
         return id;
     }
 
-    /// A v7-stamped config root plus a sidecar carrying: shader keys for
+    /// A v8-stamped config root plus a sidecar carrying: shader keys for
     /// layoutA (with params), an empty-shader entry for layoutB, a clean
-    /// entry, an "autotile:*" entry with a shader (the pre-v7 editor could
+    /// entry, an "autotile:*" entry with a shader (the pre-v8 editor could
     /// stamp those), a params-only entry with no shaderId, and the store's
     /// own _version stamp.
     [[nodiscard]] bool seedFixture()
     {
-        if (!writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}})) {
+        if (!writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}})) {
             return false;
         }
         const QJsonObject params{{QStringLiteral("intensity"), 0.5}};
@@ -230,7 +230,7 @@ private Q_SLOTS:
     void testLift_missingSidecarIsNoOpSuccess()
     {
         IsolatedConfigGuard guard;
-        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}}));
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
         const QByteArray before = readBytes(ConfigDefaults::configFilePath());
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
         // The config is not rewritten (no spurious empty-group write).
@@ -256,7 +256,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         // Unparseable sidecar: skipped with success, left untouched.
-        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 7}}));
+        QVERIFY(writeJson(ConfigDefaults::configFilePath(), QJsonObject{{QStringLiteral("_version"), 8}}));
         QVERIFY(writeRaw(ConfigDefaults::layoutSettingsFilePath(), QByteArrayLiteral("{not json")));
         QVERIFY(ConfigMigration::relocateOverlayShaderAssignments(ConfigDefaults::configFilePath()));
         QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), QByteArrayLiteral("{not json"));
@@ -287,7 +287,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject root = readJson(ConfigDefaults::configFilePath());
-        QVERIFY(root.value(QStringLiteral("_version")).toInt() >= 7);
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
         const QJsonObject overrides = treeFromConfig(root).value(QStringLiteral("overrides")).toObject();
         QCOMPARE(overrides.value(layoutA()).toObject().value(QStringLiteral("shaderId")).toString(),
                  QStringLiteral("cosmic-flow"));

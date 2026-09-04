@@ -630,7 +630,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 && (previewEngine != insertEngine
                     || !PhosphorScreens::ScreenIdentity::screensMatch(previewEngine->dragInsertPreviewScreenId(),
                                                                       insertScreenId))) {
-                previewEngine->cancelDragInsertPreview();
+                // Captured before the cancel empties them, mirroring the
+                // trigger-release arm below: the departed screen's strip
+                // popup must re-snapshot at this boundary (the cancel
+                // re-attaches the drag window, changing that strip's shape),
+                // and nothing later on this tick reaches the departed screen
+                // — the per-tick selector check runs against the NEW screen
+                // only, so a stale popup would otherwise stay up for as long
+                // as the new screen's preview lives.
+                const QString departedScreenId = previewEngine->dragInsertPreviewScreenId();
+                const bool departedStripSelector = previewEngine->providesDragInsertSelector();
+                previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
+                if (departedStripSelector && m_overlayService && !departedScreenId.isEmpty()) {
+                    m_overlayService->refreshStripSelector(departedScreenId);
+                }
                 // The departed screen's indicator goes with the preview it
                 // described. pushScrollDropIndicator would clear it anyway on
                 // the first tick that resolves a rect for the new screen, but
@@ -800,7 +813,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // re-attaches the drag window, changing the strip's shape).
             const QString cancelledScreenId = previewEngine->dragInsertPreviewScreenId();
             const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
-            previewEngine->cancelDragInsertPreview();
+            previewEngine->cancelDragInsertPreview(/*dragStillActive=*/true);
             clearScrollDropIndicator();
             stopDragScrollTimer();
             if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {

@@ -1050,26 +1050,14 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         // relayout the wrong strip (the mutated one must stay silent
         // until its desktop returns).
         //
-        // Close-settle hold: with a configured delay, the reflow waits out
-        // the closing window's disappear animation instead of moving the
-        // neighbours over the still-painting corpse (the two animations
-        // fighting for the vacated slot is exactly the visual mess the hold
-        // exists to prevent). The deferred flush passes focusAfter=false on
-        // purpose: the compositor activates its own successor immediately
-        // and windowFocused adopts it long before the flush fires, so the
-        // engine re-asserting its pick a delay later would only re-open the
-        // dueling-activations bounce the pending-self-activation fix closed.
-        if (m_closeReflowDelayMs > 0) {
-            startCloseReflowHold(key.screenId);
-        } else {
-            applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
-        }
+        // The survivors reflow immediately (niri parity): the close
+        // animation's job is the corpse alone, which the effect pins in
+        // place via its own freeze — a foreign (KWin) close animation ends
+        // on its own schedule and must not gate the strip.
+        applyLayout(key.screenId, wasActive && !state->strip().activeWindowId().isEmpty());
     }
     Q_EMIT placementChanged(key.screenId);
 }
-
-// startCloseReflowHold / deferForCloseReflowHold / scheduleCloseReflowFlush
-// live in engine_closehold.cpp (this TU is over the file-size ceiling).
 
 // The compositor focus-report handler (windowFocused) lives in
 // engine_focus.cpp — split out when this file crossed the size ceiling a

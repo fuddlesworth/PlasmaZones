@@ -1430,8 +1430,17 @@ private:
     /// Hidden after first show, and the input region eats every click
     /// for the daemon's lifetime.
     ///
-    /// Called after every slot setVisible toggle. Idempotent:
-    /// isLogicallyShown() guards re-show; the all-slots-hidden
+    /// It also drives the surface's layer-shell keyboard interactivity, and
+    /// that third predicate is NOT derived from slot visibility. It reads
+    /// m_cheatsheetVisible and m_cheatsheetScreenId, because the grab has to
+    /// be released on the first edge of dismissal while the slot itself stays
+    /// visible for the whole fade-out. Any caller that changes whether the
+    /// cheatsheet is up must therefore set those two members BEFORE calling
+    /// this, or the sync computes the pre-change answer.
+    ///
+    /// Called after every slot setVisible toggle, and additionally on the
+    /// dismissal edge described above, which is not a setVisible toggle.
+    /// Idempotent: isLogicallyShown() guards re-show; the all-slots-hidden
     /// predicate guards the hide.
     void syncPassiveShellSurfaceState(const QString& effectiveId);
 

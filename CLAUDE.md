@@ -170,7 +170,15 @@ On Linux (native):
 # compositor-only animation packs, and HARD-FAILS when neither is on PATH
 # rather than skipping. Install your distro's glslang package before running
 # ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
-cmake -B build -DBUILD_TESTING=ON
+#
+# BUILD_PHOSPHOR_SHELL also defaults to OFF, and it gates the whole Phosphor
+# shell tier: libs/phosphor-shell*, the bar, control center, launcher, power
+# and popout libraries, their demos, and their tests. Configure without it and
+# none of that is built, so ctest passes without ever running those suites.
+# Pass it when working on anything under the shell tier. It requires
+# USE_KDE_FRAMEWORKS=ON (the default), since those libraries need KF6 Kirigami
+# for icon rendering and have no Qt-only fallback.
+cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
 
 # Build
 cmake --build build --parallel $(nproc)

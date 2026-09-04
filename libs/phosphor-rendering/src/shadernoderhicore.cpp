@@ -72,6 +72,8 @@ static void shaderCacheEvictOne()
 
 static constexpr char kShaderCacheKeyDelim = '\0';
 
+} // anonymous namespace
+
 /// Build a fingerprint over a list of canonical include paths. Each
 /// included file contributes its canonical path + mtime, separated by
 /// the standard delimiter. Stable across runs (mtime is fs metadata)
@@ -79,7 +81,8 @@ static constexpr char kShaderCacheKeyDelim = '\0';
 /// header is modified — closing the gap that previously let an edit
 /// to `data/overlays/shared/common.glsl` (e.g. a UBO layout change) be
 /// silently masked by a per-`.frag`/`.vert` cache hit because the
-/// top-level shader file's mtime didn't change.
+/// top-level shader file's mtime didn't change. Call at expansion time
+/// (see the declaration in internal.h for the TOCTOU rationale).
 ///
 /// Sort the input first so the order in which the resolver walked
 /// nested `#include` directives doesn't affect the fingerprint —
@@ -87,7 +90,7 @@ static constexpr char kShaderCacheKeyDelim = '\0';
 /// would produce a fresh key even when the included content is
 /// identical, costing a needless re-bake. The set of files matters,
 /// the visit order doesn't.
-static QByteArray includeFingerprint(QStringList paths)
+QByteArray includeFingerprint(QStringList paths)
 {
     QByteArray fp;
     paths.sort();
@@ -102,9 +105,11 @@ static QByteArray includeFingerprint(QStringList paths)
     return fp;
 }
 
-static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QByteArray& vertIncludeFp,
-                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp,
-                                 const QString& paramPreamble, const QByteArray& entryFp)
+namespace {
+
+QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QByteArray& vertIncludeFp,
+                          const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp,
+                          const QString& paramPreamble, const QByteArray& entryFp)
 {
     QByteArray key = vertPath.toUtf8();
     key.append(kShaderCacheKeyDelim);
@@ -155,6 +160,19 @@ QString ShaderNodeRhi::loadAndExpandShader(const QString& path, QString* outErro
 QString ShaderNodeRhi::loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError)
 {
     return ShaderCompiler::loadAndExpand(path, m_shaderIncludePaths, outError, outIncludedPaths);
+}
+
+void ShaderNodeRhi::requestAnotherFrame() const
+{
+    // Same liveness locking as safeRhi(): hold m_itemMutex across the
+    // dereference so a concurrent invalidateItem() cannot free m_item
+    // between the check and QQuickItem::window(). QQuickWindow::update()
+    // itself is thread-safe and merely schedules, so no GUI-thread block
+    // happens under the mutex (the lock-ordering invariant holds).
+    std::lock_guard<std::mutex> guard(m_itemMutex);
+    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) {
+        m_item->window()->update();
+    }
 }
 
 QRhi* ShaderNodeRhi::safeRhi() const
@@ -494,11 +512,11 @@ void ShaderNodeRhi::prepare()
             return;
         }
 
-        const QByteArray vertIncludeFp = includeFingerprint(m_vertexIncludedPaths);
-        const QByteArray fragIncludeFp = includeFingerprint(m_fragmentIncludedPaths);
+        // Include fingerprints were computed at load time (see the member
+        // doc) — re-statting here would race a concurrent include edit.
         const QByteArray entryFp = entryScaffoldFingerprint(m_entryPrologue, m_entryCandidates);
-        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath,
-                                                   m_fragmentMtime, fragIncludeFp, m_paramPreamble, entryFp);
+        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_vertexIncludeFp, m_fragmentPath,
+                                                   m_fragmentMtime, m_fragmentIncludeFp, m_paramPreamble, entryFp);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
             QMutexLocker lock(&filenameShaderCacheMutex());
             auto& cache = filenameShaderCache();
@@ -517,7 +535,15 @@ void ShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            auto vertResult = ShaderCompiler::compile(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
+            // Splice the p_<id> preamble into the VERTEX stage too. The kwin
+            // path splices one preamble for both stages, and geometry packs
+            // (phosphor-stream) read p_ params in their verts, so leaving
+            // the vertex un-spliced made the same source compile on one
+            // runtime and fail on the other. Spliced at compile rather than
+            // load so a preamble set after the vertex source still applies;
+            // the cache key already carries m_paramPreamble. Empty = no-op.
+            const QString splicedVert = PhosphorShaders::spliceAfterVersion(m_vertexShaderSource, m_paramPreamble);
+            auto vertResult = ShaderCompiler::compile(splicedVert.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertResult.shader;
             if (!m_vertexShader.isValid()) {
                 m_shaderError = QStringLiteral("Vertex shader: ")
@@ -559,6 +585,87 @@ void ShaderNodeRhi::prepare()
 
     if (!m_shaderReady) {
         return;
+    }
+
+    // Image-pass grid mesh (setGridSubdivisions). Built lazily here — after
+    // the shader-ready gate, so a node whose shader never compiles does not
+    // hold ~1 MB of grid buffers it can never draw — rather than in the init
+    // block, because the density can change over the node's life (a metadata
+    // hot-reload, a pack switch on a reused item); the setter drops the
+    // buffers and the pipeline, and this block rebuilds both lazily.
+    // Immutable buffers, uploaded once below alongside the quad VBO.
+    if (m_gridSubdivisions > 0 && !m_gridVbo && !m_gridBuffersFailed) {
+        const int n = m_gridSubdivisions;
+        const int verts = (n + 1) * (n + 1);
+        m_gridIndexCount = n * n * 6;
+        m_gridVbo.reset(
+            rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, quint32(verts) * 4 * sizeof(float)));
+        m_gridIbo.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer,
+                                       quint32(m_gridIndexCount) * sizeof(quint16)));
+        if (!m_gridVbo->create() || !m_gridIbo->create()) {
+            // Degrade to the quad rather than failing the node: the pack
+            // still renders, only without per-vertex deformation density.
+            // LATCH the failure instead of zeroing m_gridSubdivisions — the
+            // owning item re-pushes its own count on every sync, so a zero
+            // here would be undone by setGridSubdivisions next frame and
+            // this create() (and its warning) would retry at frame rate.
+            // The latch clears on a density change or device loss.
+            qCWarning(lcShaderNode) << "Failed to create grid mesh buffers — falling back to the quad";
+            m_gridVbo.reset();
+            m_gridIbo.reset();
+            m_gridIndexCount = 0;
+            m_gridBuffersFailed = true;
+            m_pipeline.reset();
+        } else {
+            m_gridUploaded = false;
+        }
+    }
+    if (gridActive() && m_gridVbo && !m_gridUploaded) {
+        const int n = m_gridSubdivisions;
+        // Same layout and corner values as RhiConstants::QuadVertices:
+        // clip-space position, then a texCoord that runs 0..1 with v = 0 at
+        // clip y = -1, so a 1-cell grid is bit-identical to the quad.
+        QVector<float> vertexData;
+        vertexData.reserve((n + 1) * (n + 1) * 4);
+        for (int row = 0; row <= n; ++row) {
+            const float t = float(row) / float(n);
+            for (int col = 0; col <= n; ++col) {
+                const float s = float(col) / float(n);
+                vertexData.append(-1.0f + 2.0f * s);
+                vertexData.append(-1.0f + 2.0f * t);
+                vertexData.append(s);
+                vertexData.append(t);
+            }
+        }
+        QVector<quint16> indexData;
+        indexData.reserve(m_gridIndexCount);
+        for (int row = 0; row < n; ++row) {
+            for (int col = 0; col < n; ++col) {
+                const quint16 tl = quint16(row * (n + 1) + col);
+                const quint16 tr = quint16(tl + 1);
+                const quint16 bl = quint16(tl + n + 1);
+                const quint16 br = quint16(bl + 1);
+                indexData.append(tl);
+                indexData.append(tr);
+                indexData.append(bl);
+                indexData.append(tr);
+                indexData.append(br);
+                indexData.append(bl);
+            }
+        }
+        if (QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch()) {
+            batch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
+            batch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
+            cb->resourceUpdate(batch);
+            m_gridUploaded = true;
+        } else {
+            // Batch pool exhausted mid-record (the 64-batch limit has been
+            // hit in this codebase before). render() skips the frame while
+            // the grid is pending, and a STATIC item gets no further
+            // prepare() on its own — request one so the upload retries next
+            // frame instead of leaving the item blank indefinitely.
+            requestAnotherFrame();
+        }
     }
 
     // Upload textures FIRST — before any SRB or pipeline creation.
@@ -845,9 +952,25 @@ void ShaderNodeRhi::render(const RenderState* state)
     QRhiShaderResourceBindings* imageSrb =
         (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
     cb->setShaderResources(imageSrb);
-    QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
-    cb->setVertexInput(0, 1, &vbufBinding);
-    cb->draw(4);
+    if (gridActive()) {
+        if (!m_gridVbo || !m_gridIbo || !m_gridUploaded) {
+            // Grid pending (e.g. prepare() got no resource-update batch this
+            // frame): the pipeline was created with Triangles topology, so
+            // falling back to the 4-vertex strip quad would draw one wrong
+            // triangle and drop a vertex. Skip the frame; the next prepare()
+            // uploads and draws correctly.
+            return;
+        }
+        // Tessellated image pass for vertex-displacing packs; the pipeline
+        // was created with Triangles topology for exactly this branch.
+        QRhiCommandBuffer::VertexInput gridBinding(m_gridVbo.get(), 0);
+        cb->setVertexInput(0, 1, &gridBinding, m_gridIbo.get(), 0, QRhiCommandBuffer::IndexUInt16);
+        cb->drawIndexed(m_gridIndexCount);
+    } else {
+        QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
+        cb->setVertexInput(0, 1, &vbufBinding);
+        cb->draw(4);
+    }
 }
 
 void ShaderNodeRhi::releaseResources()
@@ -905,8 +1028,20 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     // path applies (T1.1), so the SPIR-V this warm entry caches is byte-for-byte
     // what the live load would produce for the same key. Empty = no-op.
     fragSource = PhosphorShaders::spliceAfterVersion(fragSource, paramPreamble);
+    // Fingerprint the includes NOW — immediately after the expansions that
+    // read them — not after the compiles below. glslang can take hundreds of
+    // milliseconds, and an include edited in that window would fingerprint
+    // its new mtime against the old content just compiled, caching stale
+    // SPIR-V under the new key. Matches the load-time fingerprinting the
+    // live loadVertexShader / loadFragmentShader do.
+    const QByteArray vertIncludeFp = includeFingerprint(vertIncludedPaths);
+    const QByteArray fragIncludeFp = includeFingerprint(fragIncludedPaths);
+    // Vertex stage gets the same splice the live compile applies (see the
+    // in-node compile site) so the warm-baked SPIR-V stays byte-for-byte
+    // what the live load produces for the same key.
+    const QString splicedVertSource = PhosphorShaders::spliceAfterVersion(vertSource, paramPreamble);
 
-    auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
+    auto vertResult = ShaderCompiler::compile(splicedVertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {
         result.errorMessage =
             vertResult.error.isEmpty() ? QStringLiteral("Vertex shader bake failed") : vertResult.error;
@@ -919,14 +1054,12 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         return result;
     }
 
-    // Fingerprint includes so the warm-bake cache entry matches what
-    // a per-stage `loadVertexShader` / `loadFragmentShader` later
-    // computes — without this, the warm-baked entry would key on
-    // {top-level path, mtime} alone and diverge from the runtime
-    // bake's now-fingerprint-aware key, producing a cache miss every
-    // first frame and erasing the warm-bake's purpose.
-    const QByteArray vertIncludeFp = includeFingerprint(vertIncludedPaths);
-    const QByteArray fragIncludeFp = includeFingerprint(fragIncludedPaths);
+    // The include fingerprints above key the entry so it matches what a
+    // per-stage `loadVertexShader` / `loadFragmentShader` later computes —
+    // without them, the warm-baked entry would key on {top-level path,
+    // mtime} alone and diverge from the runtime bake's fingerprint-aware
+    // key, producing a cache miss every first frame and erasing the
+    // warm-bake's purpose.
     const QByteArray entryFp = entryScaffoldFingerprint(entryPrologue, entryCandidates);
     const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp,
                                           paramPreamble, entryFp);

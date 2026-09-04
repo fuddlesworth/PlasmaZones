@@ -130,8 +130,8 @@ private Q_SLOTS:
         // CURRENT schema version (later stamps land on top of the v6 output
         // this test is really about); the frozen v6 step output is asserted
         // by the direct-step case below. ConfigSchemaVersion, not a literal:
-        // the next bump is not a v5→v6 concern (test_profilestore.cpp:653
-        // keeps the single deliberate literal-pin tripwire).
+        // the next bump is not a v5→v6 concern (test_profilestore keeps the
+        // single deliberate literal-pin tripwire).
         QCOMPARE(after.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
         // Every colour was a palette snapshot: each key becomes the EXPLICIT
         // empty sentinel (delta-safe spelling of "follow the palette"); the

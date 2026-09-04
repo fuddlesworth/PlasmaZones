@@ -230,7 +230,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
             // not an in-zone resize.
             applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                PhosphorAnimation::ProfilePaths::WindowPlaceOut);
             // Drag-out unsnap: the window left zone-managed sizing.
             m_snapHandler->clearWindowSnapped(liveWindowId);
         } else {
@@ -338,8 +338,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             m_daemonGate.inGeometryApply = prevInApply;
         });
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                            zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                            zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
+                                             : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                             QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
     }
     // Track snapping's own border set (mirrors how autotile records at its
@@ -477,10 +477,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
     // moves windows between existing zones in the same layout — a snap-in. Everything else
     // ("vs_reconfigure" via the adaptor relay, "snap_all" via the effect-local path, and any
-    // future daemon-emitted string) defaults to WindowSnapIn.
+    // future daemon-emitted string) defaults to WindowPlaceIn.
     const QString batchProfilePath = (action == QLatin1String("resnap"))
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
-        : PhosphorAnimation::ProfilePaths::WindowSnapIn;
+        : PhosphorAnimation::ProfilePaths::WindowPlaceIn;
 
     // Per-screen supersession epoch (see m_daemonGate.batchGenByScreen): bump and
     // snapshot each target screen's counter so this cascade's still-queued

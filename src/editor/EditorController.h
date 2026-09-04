@@ -31,6 +31,7 @@
 #include <QSize>
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneDefaults.h> // zone-overlay border ceilings exposed to QML
 #include "core/platform/logging.h"
 #include "undo/UndoController.h"
 #include "EditorGapsModel.h"
@@ -171,6 +172,11 @@ class EditorController : public QObject
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
     Q_PROPERTY(int labelFontWeight READ labelFontWeight CONSTANT)
+
+    // Zone-overlay border ceilings, so the per-zone spin boxes offer exactly
+    // the range the global setting and the zone-overlay rule actions accept.
+    Q_PROPERTY(int zoneBorderWidthMax READ zoneBorderWidthMax CONSTANT)
+    Q_PROPERTY(int zoneBorderRadiusMax READ zoneBorderRadiusMax CONSTANT)
     Q_PROPERTY(bool labelFontItalic READ labelFontItalic CONSTANT)
     Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline CONSTANT)
     Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout CONSTANT)
@@ -308,6 +314,14 @@ public:
     int labelFontWeight() const
     {
         return m_labelFontWeight;
+    }
+    static constexpr int zoneBorderWidthMax()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderWidthMax;
+    }
+    static constexpr int zoneBorderRadiusMax()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderRadiusMax;
     }
     bool labelFontItalic() const
     {

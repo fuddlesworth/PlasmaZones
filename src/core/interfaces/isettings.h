@@ -1117,7 +1117,8 @@ Q_SIGNALS:
     void scrollingCycleWindowHeightBackShortcutChanged();
     void scrollingIncreaseWindowHeightShortcutChanged();
     void scrollingDecreaseWindowHeightShortcutChanged();
-    void scrollingResetWindowHeightsShortcutChanged();
+    void scrollingMaximizeWindowHeightShortcutChanged();
+    void scrollingExpandWindowShortcutChanged();
     void scrollingCenterVisibleColumnsShortcutChanged();
     void scrollingFocusWindowTopShortcutChanged();
     void scrollingFocusWindowBottomShortcutChanged();
@@ -1131,6 +1132,8 @@ Q_SIGNALS:
     void scrollingViewPageForwardShortcutChanged();
     void scrollingEqualizeColumnWidthsShortcutChanged();
     void scrollingMinimizeColumnWidthShortcutChanged();
+    void scrollingEqualizeWindowHeightsShortcutChanged();
+    void scrollingMinimizeWindowHeightShortcutChanged();
 
     // ── Environment signals ─────────────────────────────────────────────────
     // Not setting NOTIFYs: nothing above them in the config schema fires these,

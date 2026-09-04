@@ -44,6 +44,14 @@ public:
     // destruction cascades through. The factory does not retain
     // ownership — the returned item lives under parent.
     //
+    // Like engine, the call-site contract is non-null: an item created
+    // with no parent has no owner at all (the returned item is
+    // CppOwnership), so nothing would ever delete it. Factories MAY
+    // qWarning + return nullptr defensively, as the shell's own
+    // QmlComponentBarWidgetFactory does, but test fakes and plugin
+    // examples deliberately hand back an unrooted item instead and leave
+    // disposal to the caller.
+    //
     // Returns nullptr if the factory cannot construct a widget right
     // now (e.g., a required external service is unavailable). The
     // bar host treats nullptr as "skip this slot, leave a gap or

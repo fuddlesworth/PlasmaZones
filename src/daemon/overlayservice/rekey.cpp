@@ -28,6 +28,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
@@ -96,6 +98,50 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
         m_screenStates.erase(existing);
+        // That erase destroyed a shell able to host a visible modal, so it is
+        // one of the teardown sites resetModalSingletonsForDestroyedId names.
+        // The clobber guard above only refuses on a non-null overlayPhysScreen,
+        // and that field is written solely by the main-overlay path, never by
+        // ensurePassiveShellFor - so a passive-only shell carrying a visible
+        // cheatsheet, picker or snap assist reaches here. Left alone, the
+        // modal's screen id would name a key with no state at all: the hide
+        // path's lookup fails, the slot is never hidden, and the visible flag
+        // stays set so the next toggle no-ops.
+        //
+        // This MUST run before the oldKey remap below. Remapping first would
+        // move the donor's still-live modal id onto newKey, and this reset
+        // would then dismiss the sheet that actually survived the move.
+        resetModalSingletonsForDestroyedId(newKey);
+        // That fired dismissal signals. No receiver touches m_screenStates
+        // today (they release shortcut grabs and nothing else), but the donor
+        // iterator has to survive to the move below, and an iterator held
+        // across a signal emission is the kind of thing that stays correct
+        // only until someone connects the wrong slot. Re-find rather than
+        // rely on that.
+        donor = m_screenStates.find(oldKey);
+        if (donor == m_screenStates.end()) {
+            // Unlike the bail-outs above, the lib has already moved its shell
+            // to newKey by this point, so a bare return would leave the lib
+            // keyed where the daemon has no entry and the caller's recreate
+            // fallback would try to build a second shell there. Put the lib
+            // back before giving up, so the failure is the clean no-op the
+            // caller's contract expects.
+            if (m_shellHost->rekey(newKey, oldKey)) {
+                qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
+                                     << "vanished during the target-side modal reset; reverted lib-side rekey";
+            } else {
+                // Whatever removed the donor put a live shell at oldKey, so the
+                // lib refuses to move back onto it. The lib is left keyed at
+                // newKey with no daemon entry there, which the caller's
+                // recreate fallback will not repair. Say so rather than let the
+                // success wording above cover it.
+                qCWarning(lcOverlay) << "rekeyOverlayState: donor" << oldKey
+                                     << "vanished during the target-side modal reset AND the revert was refused; lib "
+                                        "is keyed"
+                                     << newKey << "with no daemon entry";
+            }
+            return false;
+        }
     }
 
     PerScreenOverlayState state = std::move(donor.value());
@@ -154,6 +200,28 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (PhosphorScreens::ScreenIdentity::screensMatch(m_selectedStripScreenId, oldKey)) {
         m_selectedStripTarget = {};
         m_selectedStripScreenId.clear();
+    }
+    // The three modal singletons remember which screen they are up on, and
+    // those ids are map keys into m_screenStates. The state has just moved to
+    // newKey, so an id still naming oldKey addresses a key that no longer
+    // exists, and every path that would clean the modal up misses: the hide
+    // path's lookup fails, so the slot is never hidden and its surface keeps
+    // the input grab, while the cheatsheet's keyboard predicate (which compares
+    // its screen id against the id being synced) reads false under the new key
+    // and hands the keyboard back out from under a visible search field.
+    //
+    // Exact equality, not screensMatch: these are map keys, and every other
+    // reader compares them with ==. The fuzzy match above is for a target
+    // checked against a live cursor id, which is a different question.
+    // An id naming neither key belongs to another screen this rekey did not
+    // touch, so it is left alone.
+    //
+    // This has to happen before the conditional sync further down, which reads
+    // m_cheatsheetScreenId.
+    for (QString* modalScreenId : {&m_cheatsheetScreenId, &m_layoutPickerScreenId, &m_snapAssistScreenId}) {
+        if (*modalScreenId == oldKey) {
+            *modalScreenId = newKey;
+        }
     }
     // A hide in flight under oldKey cannot simply have its bit dropped. The
     // animator's track is keyed by {surface, item}, neither of which the rekey
@@ -294,6 +362,26 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
             qCWarning(lcOverlay) << "validateScreenStateInvariant: live overlay" << it.key()
                                  << "is not in the current target set: orphan";
             Q_ASSERT_X(false, "OverlayService", "orphaned overlay entry");
+        }
+    }
+    // A modal singleton's screen id is a key into m_screenStates, and every
+    // path that hides or tears one down looks it up by that key. An id naming
+    // a key that no longer exists is therefore unrecoverable by any normal
+    // route: the slot stays visible, its surface keeps the input grab, and the
+    // visible flag stays set so the toggle no-ops. Nothing in the ordinary
+    // show/hide cycle can produce it, which is exactly why it is worth
+    // asserting here - the ways in are key migrations and teardowns, and those
+    // are the paths that have to remember to carry these three along.
+    const std::pair<const QString&, const char*> modalIds[] = {
+        {m_cheatsheetScreenId, "cheatsheet"},
+        {m_layoutPickerScreenId, "layout picker"},
+        {m_snapAssistScreenId, "snap assist"},
+    };
+    for (const auto& [modalScreenId, modalName] : modalIds) {
+        if (!modalScreenId.isEmpty() && !m_screenStates.contains(modalScreenId)) {
+            qCWarning(lcOverlay) << "validateScreenStateInvariant:" << modalName << "screen id" << modalScreenId
+                                 << "names a key with no screen state";
+            Q_ASSERT_X(false, "OverlayService", "modal singleton id names a dead screen key");
         }
     }
 #else

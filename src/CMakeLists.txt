@@ -137,6 +137,7 @@ set(plasmazones_core_SRCS
     config/configmigration_v5.cpp
     config/configmigration_v6.cpp
     config/configmigration_v7.cpp
+    config/configmigration_v8.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
@@ -196,6 +197,7 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor/autotileadaptor.h
     dbus/tilingadaptor/tilingadaptor.cpp
+    dbus/tilingadaptor/relay.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
@@ -698,11 +700,74 @@ configure_file(
 # is absent.
 
 if(BUILD_PHOSPHOR_SHELL)
-    add_executable(phosphor-shell shell/main.cpp)
+    add_executable(phosphor-shell
+        shell/main.cpp
+        # The bar's IBarWidgetFactory registry owner + the generic
+        # QML-component factory. First production owner of a UI-seam
+        # registry; the Phosphor.Bar QML module stays registry-agnostic
+        # (Phase 4.1).
+        shell/BarController.h
+        shell/barcontroller.cpp
+        shell/LayerPopoutTransport.h
+        shell/layerpopouttransport.cpp
+        shell/QmlComponentBarWidgetFactory.h
+        shell/qmlcomponentbarwidgetfactory.cpp
+        shell/ControlCenterController.h
+        shell/controlcentercontroller.cpp
+        shell/QmlComponentTileFactory.h
+        shell/qmlcomponenttilefactory.cpp
+        # The popout transport stack: one router in front of the layer
+        # transport and the bar-socket transport, so PopoutController
+        # arbitrates both presentation paths.
+        shell/RoutingPopoutTransport.h
+        shell/routingpopouttransport.cpp
+        shell/SocketPopoutTransport.h
+        shell/socketpopouttransport.cpp
+        # The launcher's registry owner: built-in providers, the model the
+        # launcher popout binds, and the clipboard + Toplevels services the
+        # providers read that nothing else in the shell owns yet.
+        shell/LauncherController.h
+        shell/launchercontroller.cpp
+    )
 
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
+            # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
+            # for BarController, and the Phosphor.Bar QML module + its plugin
+            # registrar so the bar delegates resolve at runtime.
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellPower::PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            # Phosphor.ControlCenter + its registrar, so shell.qml's
+            # control-center popout resolves the surface and its tiles.
+            # The tiles import Phosphor.Service.* modules, which the
+            # registerQmlTypes() block in shell/main.cpp already publishes.
+            PhosphorShellControlCenter::PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
+            # The launcher: its core (LauncherModel + the built-in providers
+            # LauncherController materialises), the Phosphor.Launcher module
+            # + registrar for shell.qml's launcher popout. The clipboard
+            # service the controller owns for the clipboard provider is
+            # already listed with the other services below.
+            PhosphorShellLauncher::PhosphorShellLauncher
+            PhosphorShellLauncher::PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
+            # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
+            # The router has to be installed on each engine (see main.cpp)
+            # or every IpcTarget logs a warning and stays inert.
+            PhosphorIpc::PhosphorIpc
+            PhosphorIpc::PhosphorIpcQml
+            PhosphorIpcQmlplugin
+            # Popout policy + the QML host it drives. Static QML modules ship
+            # both a library and a plugin registrar; the registrar is what
+            # publishes the module to a QQmlEngine, so without it the
+            # transport's PopoutHost.qml load would fail at runtime.
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceUPower::PhosphorServiceUPower

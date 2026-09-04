@@ -179,7 +179,7 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
     // resolveShaderWithDefault (not bare resolve) so the built-in per-event
-    // default — window-morph for window snap events — shows as the current
+    // default — window-morph for the window geometry events — shows as the current
     // value for an unset event. A user override (incl. an explicit "None")
     // still wins; the default is computed, never persisted.
     ShaderProfile resolved = resolveShaderWithDefault(tree, path);
@@ -231,11 +231,18 @@ QStringList AnimationsPageController::stockSuppressedEvents() const
         }
         return true;
     };
-    for (const QString& path :
-         {PhosphorAnimation::ProfilePaths::WindowMinimize, PhosphorAnimation::ProfilePaths::WindowMaximize}) {
-        if (packOwns(path)) {
-            owned.append(path);
-        }
+    if (packOwns(PhosphorAnimation::ProfilePaths::WindowMinimize)) {
+        owned.append(PhosphorAnimation::ProfilePaths::WindowMinimize);
+    }
+    // The stock maximize effect is unloaded when a pack owns EITHER placement
+    // node (the compositor gate is the same disjunction), because the unload
+    // is global and a window that maximizes on placeIn restores on placeOut.
+    // Both are therefore reported as suppressed together: a rule scoped to
+    // either has no stock effect left to conflict with.
+    if (packOwns(PhosphorAnimation::ProfilePaths::WindowPlaceIn)
+        || packOwns(PhosphorAnimation::ProfilePaths::WindowPlaceOut)) {
+        owned.append(PhosphorAnimation::ProfilePaths::WindowPlaceIn);
+        owned.append(PhosphorAnimation::ProfilePaths::WindowPlaceOut);
     }
     return owned;
 }

@@ -16,6 +16,7 @@
 #include <QPointF>
 #include <QSizeF>
 #include <QTest>
+#include <QVector2D>
 #include <QVector4D>
 
 #include <array>
@@ -25,10 +26,18 @@ using PhosphorAnimation::AnimationUniformExtension;
 
 namespace {
 /// Pull one float out of the write() byte image at a byte offset.
-float floatAt(const std::array<char, 48>& buf, int byteOffset)
+float floatAt(const std::array<char, 672>& buf, int byteOffset)
 {
     float v = 0.0f;
     std::memcpy(&v, buf.data() + byteOffset, sizeof(float));
+    return v;
+}
+
+/// Same, for the tail's one int field (iHasOldWindow).
+int intAt(const std::array<char, 672>& buf, int byteOffset)
+{
+    int v = 0;
+    std::memcpy(&v, buf.data() + byteOffset, sizeof(int));
     return v;
 }
 } // namespace
@@ -39,15 +48,17 @@ class TestAnimationUniformExtension : public QObject
 
 private Q_SLOTS:
 
-    // The extension appends exactly 48 bytes after BaseUniforms, landing
-    // the animation UBO total at 720. animation_uniforms.glsl's UBO
-    // branch declares the matching trailing fields — a mismatch desyncs
-    // every animation shader's UBO upload.
+    // The extension appends exactly 672 bytes after BaseUniforms (anchor
+    // fields, the transition-class tail, the icon rect and the two 16-slot
+    // move arrays at std140 vec2 stride 16), landing the animation UBO
+    // total at 1344. animation_uniforms.glsl's UBO branch declares the
+    // matching trailing fields — a mismatch desyncs every animation
+    // shader's UBO upload.
     void testExtensionSizeAndUboTotal()
     {
         AnimationUniformExtension ext;
-        QCOMPARE(ext.extensionSize(), 48);
-        QCOMPARE(static_cast<int>(sizeof(PhosphorShaders::BaseUniforms)) + ext.extensionSize(), 720);
+        QCOMPARE(ext.extensionSize(), 672);
+        QCOMPARE(static_cast<int>(sizeof(PhosphorShaders::BaseUniforms)) + ext.extensionSize(), 1344);
     }
 
     // A freshly constructed extension carries the (0, 0, 1, 1) identity
@@ -58,7 +69,7 @@ private Q_SLOTS:
     void testDefaultAnchorRectIsIdentity()
     {
         AnimationUniformExtension ext;
-        std::array<char, 48> buf{};
+        std::array<char, 672> buf{};
         ext.write(buf.data(), 0);
         QCOMPARE(floatAt(buf, 32), 0.0f); // x
         QCOMPARE(floatAt(buf, 36), 0.0f); // y
@@ -82,7 +93,7 @@ private Q_SLOTS:
         ext.setIAnchorPosInFbo(QPointF(77.0, 88.0));
         ext.setIAnchorRectInTexture(QVector4D(0.1f, 0.2f, 0.5f, 0.625f));
 
-        std::array<char, 48> buf{};
+        std::array<char, 672> buf{};
         ext.write(buf.data(), 0);
 
         QCOMPARE(floatAt(buf, 0), 11.0f);
@@ -102,13 +113,79 @@ private Q_SLOTS:
         QCOMPARE(floatAt(buf, 44), 0.625f);
     }
 
+    // The transition-class tail lands at the offsets the GLSL block
+    // declares, relative to the extension's start:
+    //   iSwitchDelta      @ 48  (UBO 720)
+    //   iStripMotion      @ 64  (UBO 736)
+    //   iStripRect        @ 80  (UBO 752)
+    //   iFromRect         @ 96  (UBO 768)
+    //   iToRect           @ 112 (UBO 784)
+    //   iStripAxis        @ 128 (UBO 800)
+    //   iOldWindowOpacity @ 136 (UBO 808)
+    //   iHasOldWindow     @ 140 (UBO 812) — the tail's one int; a
+    //                       float/int swap or reorder there passes every
+    //                       float pin, so it gets its own check.
+    void testTransitionTailOffsets()
+    {
+        AnimationUniformExtension ext;
+        ext.setISwitchDelta(QVector4D(1.0f, 2.0f, 3.0f, 4.0f));
+        ext.setIStripMotion(QVector4D(5.0f, 6.0f, 7.0f, 8.0f));
+        ext.setIStripRect(QVector4D(9.0f, 10.0f, 11.0f, 12.0f));
+        ext.setIFromRect(QVector4D(13.0f, 14.0f, 15.0f, 16.0f));
+        ext.setIToRect(QVector4D(17.0f, 18.0f, 19.0f, 20.0f));
+        ext.setIStripAxis(QVector2D(21.0f, 22.0f));
+        ext.setIOldWindowOpacity(0.75f);
+        ext.setIHasOldWindow(true);
+
+        std::array<char, 672> buf{};
+        ext.write(buf.data(), 0);
+
+        QCOMPARE(floatAt(buf, 48), 1.0f);
+        QCOMPARE(floatAt(buf, 60), 4.0f);
+        QCOMPARE(floatAt(buf, 64), 5.0f);
+        QCOMPARE(floatAt(buf, 80), 9.0f);
+        QCOMPARE(floatAt(buf, 96), 13.0f);
+        QCOMPARE(floatAt(buf, 112), 17.0f);
+        QCOMPARE(floatAt(buf, 128), 21.0f);
+        QCOMPARE(floatAt(buf, 132), 22.0f);
+        QCOMPARE(floatAt(buf, 136), 0.75f);
+        QCOMPARE(intAt(buf, 140), 1);
+    }
+
+    // The icon rect and move arrays land at their declared offsets:
+    //   iIconRect  @ 144 (UBO 816)
+    //   iMoveTrail @ 160 (UBO 832), std140 vec2 stride 16
+    //   iMoveMesh  @ 416 (UBO 1088), same stride
+    void testIconRectAndMoveArrayOffsets()
+    {
+        AnimationUniformExtension ext;
+        ext.setIIconRect(QVector4D(30.0f, 40.0f, 48.0f, 6.0f));
+        ext.setIMoveTrail({QVector2D(1.5f, -2.5f), QVector2D(3.0f, -4.0f)});
+        ext.setIMoveMesh({QVector2D(7.0f, 8.0f)});
+
+        std::array<char, 672> buf{};
+        ext.write(buf.data(), 0);
+
+        QCOMPARE(floatAt(buf, 144), 30.0f);
+        QCOMPARE(floatAt(buf, 156), 6.0f);
+        // trail[0] at 160, trail[1] one 16-byte stride later.
+        QCOMPARE(floatAt(buf, 160), 1.5f);
+        QCOMPARE(floatAt(buf, 164), -2.5f);
+        QCOMPARE(floatAt(buf, 176), 3.0f);
+        QCOMPARE(floatAt(buf, 180), -4.0f);
+        // Unsupplied entries zero-fill.
+        QCOMPARE(floatAt(buf, 192), 0.0f);
+        QCOMPARE(floatAt(buf, 416), 7.0f);
+        QCOMPARE(floatAt(buf, 420), 8.0f);
+    }
+
     // write() honours its `offset` argument — the daemon hands it
     // sizeof(BaseUniforms) so the extension lands after the base block.
     void testWriteHonoursOffset()
     {
         AnimationUniformExtension ext;
         ext.setIAnchorRectInTexture(QVector4D(0.25f, 0.5f, 0.75f, 1.0f));
-        std::array<char, 64> buf{};
+        std::array<char, 688> buf{};
         ext.write(buf.data(), 16);
         float v = 0.0f;
         std::memcpy(&v, buf.data() + 16 + 32, sizeof(float)); // iAnchorRectInTexture.x
@@ -132,6 +209,15 @@ private Q_SLOTS:
 
         ext.clearDirty();
         ext.setIAnchorRectInTexture(QVector4D(0.0f, 0.0f, 0.5f, 0.5f));
+        QVERIFY(!ext.isDirty());
+
+        // The tail setters follow the same identity-write contract — pin
+        // one of the vector-list setters too, since their equality check
+        // compares whole lists rather than scalars.
+        ext.setIMoveTrail({QVector2D(1.0f, 2.0f)});
+        QVERIFY(ext.isDirty());
+        ext.clearDirty();
+        ext.setIMoveTrail({QVector2D(1.0f, 2.0f)});
         QVERIFY(!ext.isDirty());
     }
 };

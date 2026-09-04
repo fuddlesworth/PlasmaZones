@@ -578,8 +578,9 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     // ── Audio spectrum ───────────────────────────────────────────────
     node->setAudioSpectrum(m_audioSpectrum);
 
-    // ── Depth buffer and wallpaper ───────────────────────────────────
+    // ── Depth buffer, grid mesh and wallpaper ────────────────────────
     node->setUseDepthBuffer(m_useDepthBuffer);
+    node->setGridSubdivisions(m_gridSubdivisions);
     node->setUseWallpaper(m_useWallpaper);
     {
         QMutexLocker lock(&m_wallpaperTextureMutex);
@@ -619,13 +620,16 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setBufferScale(m_bufferScale);
     node->setHalfFloatBuffers(m_halfFloatBuffers);
     node->setBufferWrap(m_bufferWrap);
-    if (!m_bufferWraps.isEmpty()) {
-        node->setBufferWraps(m_bufferWraps);
-    }
+    // Pushed unconditionally — an EMPTY list is a meaningful value ("no
+    // per-buffer overrides, every slot on the single-value default"), and the
+    // node's setters handle it exactly that way. Gating on isEmpty() left the
+    // node holding stale per-buffer overrides forever after a hot-reload
+    // cleared them (applyEffectStaticConfig sets {} to wipe previous-leg
+    // overrides), because the unconditional single-value push above no-ops
+    // when the default token itself is unchanged.
+    node->setBufferWraps(m_bufferWraps);
     node->setBufferFilter(m_bufferFilter);
-    if (!m_bufferFilters.isEmpty()) {
-        node->setBufferFilters(m_bufferFilters);
-    }
+    node->setBufferFilters(m_bufferFilters);
 }
 
 // ============================================================================
@@ -744,8 +748,12 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     // isShaderReady() stays true and the status block below
                     // would set Ready again three lines later, leaving the item
                     // claiming Ready while errorLog holds a real failure.
+                    // clearBakedShader (not invalidateShader) clears that
+                    // readiness in the same sync AND cancels the rebake the
+                    // source clear armed — prepare() would otherwise stamp an
+                    // "empty source" error over this one.
                     node->setFragmentShaderSource(QString());
-                    node->invalidateShader();
+                    node->clearBakedShader();
                     setError(errorMsg);
                 }
             } else {
@@ -758,13 +766,17 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 // Same reuse-path clobber as the load-failure arm above: drop
                 // the resident bake so isShaderReady() cannot revert the error.
                 node->setFragmentShaderSource(QString());
-                node->invalidateShader();
+                node->clearBakedShader();
                 setError(QStringLiteral("Shader URL resolved to an empty local path: ") + m_shaderSource.toString());
             }
         } else {
-            // Source cleared — stop rendering old shader
+            // Source cleared — stop rendering the old shader. clearBakedShader
+            // drops the resident bake (so the status block below cannot
+            // promote Null back to Ready off isShaderReady()) and cancels the
+            // rebake, so a deliberate clear ends at Null with an empty
+            // errorLog instead of a manufactured "empty source" Error.
             node->setFragmentShaderSource(QString());
-            node->invalidateShader();
+            node->clearBakedShader();
             setStatus(Status::Null);
         }
     }

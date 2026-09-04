@@ -243,6 +243,37 @@ private:
     /// the paint thread (same discipline as the desktop teardown part).
     void ensureGlContextCurrent();
 
+    /// The software cursor is part of the scene: KWin draws its overlay item
+    /// (cursor, drag icon) at the end of every scene walk, INSIDE the
+    /// paintScreen this pass nests to fill its capture. Left alone it lands
+    /// in uStrip and the pack smears it with the columns, and since the pass
+    /// replaces the output's paint nothing draws it sharp afterwards. So
+    /// while a pass paints the output under the pointer the compositor's
+    /// cursor is hidden (KWin then neither composites it nor puts it on a
+    /// cursor plane) and the pass blits the cursor image itself as its last
+    /// draw, above the composited above-strip windows.
+    ///
+    /// Hides when @p screen's pass is about to capture (its shader compiled
+    /// and its capture target allocated, so the pass WILL replace this
+    /// frame's paint) and the pointer is on it. A no-op when another effect
+    /// already hides the cursor, so the pass never resurrects a cursor
+    /// something else wanted gone.
+    void hideCursorForPass(KWin::LogicalOutput* screen);
+    /// Show the cursor again once no LIVE pass (spring live or fade open)
+    /// covers the pointer: the leg settled, the output went away, or the
+    /// pointer moved to an output with no pass. Runs from paintOutput's
+    /// settle frame, so that frame's normal scene paints the cursor rather
+    /// than blinking it for a frame, and from every postPaintScreen, so a
+    /// pointer crossing to a quiet output gets its cursor back within a
+    /// frame even though the hidden cursor damages nothing there.
+    void updateCursorHiding();
+    /// Render the scene's own cursor item into the pass, at the pointer.
+    /// Only meaningful while hideCursorForPass has the cursor hidden: the
+    /// item is drawn explicitly (the renderer only honours visibility on
+    /// child items), so hiding it from KWin does not hide it from us.
+    void drawCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
+    bool cursorOnOutput(KWin::LogicalOutput* screen) const;
+
     /// Erase one entry, freeing its GL resources. Caller ensures a current
     /// GL context (paintOutput is on the paint thread; the off-thread
     /// mutators call ensureGlContextCurrent first).
@@ -254,6 +285,9 @@ private:
     // ctor.
     std::unordered_map<KWin::LogicalOutput*, OutputStripPass> m_active;
     std::unordered_map<QString, CompiledStripShader> m_shaderCache;
+    /// True while THIS manager holds a hideCursor() on the compositor (the
+    /// call is refcounted, so the flag keeps show/hide balanced).
+    bool m_cursorHidden = false;
 };
 
 } // namespace PlasmaZones

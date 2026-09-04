@@ -58,6 +58,10 @@ QJsonObject baseDefaults()
         {QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 1}, {QStringLiteral("k2"), QStringLiteral("x")}}},
         {QStringLiteral("GroupB"), QJsonObject{{QStringLiteral("b"), false}}},
         {QStringLiteral("Rendering"), QJsonObject{{QStringLiteral("Gpu"), QStringLiteral("auto")}}},
+        // Animations.ShaderProfileTree is declared for the same reason: the
+        // migrated-delta filter keeps only schema-declared keys, so the v6→v7
+        // profile test would silently pass on a dropped blob without it.
+        {QStringLiteral("Animations"), QJsonObject{{QStringLiteral("ShaderProfileTree"), QJsonObject()}}},
         {QStringLiteral("_version"), 5},
     };
 }
@@ -647,10 +651,13 @@ private Q_SLOTS:
     /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        // v7 qualifies: migrateV6ToV7 is stamp-only for the config root (the
+        // v7 qualifies: migrateV6ToV7 rewrites only the Animations group's
+        // ShaderProfileTree blob in place (see olderProfileFileV6RenamesPlacementNodes).
+        // v8 qualifies: migrateV7ToV8 is stamp-only for the config root (the
         // overlay-shader sidecar lift runs outside the chain and never touches
-        // a profile delta), so a v6-stamped profile migrates forward cleanly.
-        QCOMPARE(ConfigSchemaVersion, 7);
+        // a profile delta), so a v7-stamped profile migrates forward cleanly
+        // (see olderProfileV7FileMigratesForward).
+        QCOMPARE(ConfigSchemaVersion, 8);
     }
 
     /// A profile file stamped v5 whose delta carries the old zone-colour
@@ -747,23 +754,61 @@ private Q_SLOTS:
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
     }
 
-    /// The v6→v7 arm of the same path, required by the version-pin policy in
-    /// profileFormatTracksConfigSchemaVersion: migrateV6ToV7 is stamp-only
-    /// for the config root, so a v6-stamped profile's delta must load and
-    /// apply unchanged under a current-version store.
-    void olderProfileV6FileMigratesForward()
+    /// The stamp-only arm required by the version-pin policy in
+    /// profileFormatTracksConfigSchemaVersion: migrateV7ToV8 touches nothing
+    /// but the version key, so a v7-stamped profile's delta must load and
+    /// apply unchanged under a current-version store. (A v6-stamped delta
+    /// with no animation overrides crosses both remaining steps unchanged
+    /// too — the second case pins that.)
+    void olderProfileV7FileMigratesForward()
+    {
+        for (int seedVersion : {7, 6}) {
+            const QUuid id = QUuid::createUuid();
+            QJsonObject delta;
+            delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+            QVERIFY(writeProfileFileFixture(id, seedVersion, delta));
+
+            ProfileStore store(makeCurrentVersionConfig());
+            QVERIFY(store.activateProfile(id.toString()));
+            QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
+            QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+        }
+    }
+
+    /// A profile file stamped v6 whose delta carries a shader override on a
+    /// retired placement node loads through migrateV6ToV7: the override is
+    /// served under its v7 path with its profile intact.
+    void olderProfileFileV6RenamesPlacementNodes()
     {
         const QUuid id = QUuid::createUuid();
+        QJsonObject profile;
+        profile.insert(QStringLiteral("effectId"), QStringLiteral("slide"));
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.movement.snapIn"));
+        entry.insert(QStringLiteral("profile"), profile);
+        QJsonObject tree;
+        tree.insert(QStringLiteral("baseline"), QJsonObject());
+        tree.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        QJsonObject animations;
+        animations.insert(QStringLiteral("ShaderProfileTree"), tree);
         QJsonObject delta;
-        delta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+        delta.insert(QStringLiteral("Animations"), animations);
         QVERIFY(writeProfileFileFixture(id, 6, delta));
 
         ProfileStore store(makeCurrentVersionConfig());
-        const QVariantList rows = store.availableProfiles();
-        QCOMPARE(rows.size(), 1);
+        QCOMPARE(store.availableProfiles().size(), 1);
         QVERIFY(store.activateProfile(id.toString()));
-        QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
-        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+        const QJsonArray overrides = m_lastApplied.value(QStringLiteral("Animations"))
+                                         .toObject()
+                                         .value(QStringLiteral("ShaderProfileTree"))
+                                         .toObject()
+                                         .value(QStringLiteral("overrides"))
+                                         .toArray();
+        QCOMPARE(overrides.size(), 1);
+        const QJsonObject served = overrides.first().toObject();
+        QCOMPARE(served.value(QStringLiteral("path")).toString(), QStringLiteral("window.movement.placeIn"));
+        QCOMPARE(served.value(QStringLiteral("profile")).toObject().value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("slide"));
     }
 
     /// The version guards around the forward migration: a file older than

@@ -437,9 +437,32 @@ void ScrollEngine::adjustWindowHeight(qreal deltaPercent, const QString& screenI
     P_SCROLL_VERB(screenId, state->strip().adjustActiveWindowHeight(deltaPercent, params), "resize", false, QString());
 }
 
-void ScrollEngine::resetWindowHeights(const QString& screenId)
+void ScrollEngine::maximizeWindowHeight(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().resetActiveColumnHeights(), "resize", false, QString());
+    P_SCROLL_VERB(screenId, state->strip().toggleMaximizeActiveWindowHeight(params), "resize", false, QString());
+}
+
+void ScrollEngine::minimizeWindowHeight(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().minimizeActiveWindowHeight(params), "resize", false, QString());
+}
+
+void ScrollEngine::expandWindowToAvailableHeight(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().expandActiveWindowToAvailableHeight(params), "resize", false, QString());
+}
+
+void ScrollEngine::equalizeWindowHeights(const QString& screenId)
+{
+    // "equalize_heights" in the reason slot, the height sibling of
+    // equalizeVisibleColumnWidths' "equalize": the OSD's generic resize copy
+    // names one window, and this verb rewrote a whole column's worth. The two
+    // tokens must stay DISTINCT — the OSD renders each by name, so borrowing
+    // the width verb's token announced "Column widths equalized" for a verb
+    // that changed no column's width. The failure token stays the shared
+    // no_target.
+    P_SCROLL_VERB(screenId, state->strip().equalizeActiveColumnHeights(), "resize", false,
+                  QStringLiteral("equalize_heights"));
 }
 
 void ScrollEngine::centerVisibleColumns(const QString& screenId)

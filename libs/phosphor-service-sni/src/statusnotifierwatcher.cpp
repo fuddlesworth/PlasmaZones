@@ -234,6 +234,20 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
         return; // already registered
     }
 
+    // Per-sender cap. Registration is unauthenticated: any session peer can
+    // call this, and each accepted item grows three containers and costs a
+    // proxy with its own blocking property reads. Without a cap one peer can
+    // drive the tray to arbitrary size and the shell with it. A real
+    // application registers one item, occasionally a handful; anything past
+    // this is a bug or an attack, and refusing it costs a well-behaved
+    // client nothing.
+    constexpr int kMaxItemsPerSender = 32;
+    if (m_byOwner.value(sender).size() >= kMaxItemsPerSender) {
+        qCWarning(lcSniWatcher) << "refusing registration from" << sender << "— already at the per-sender item cap of"
+                                << kMaxItemsPerSender;
+        return;
+    }
+
     ItemEntry entry{sender, canonical};
     m_items.insert(canonical, entry);
     // Compute the dedup gate BEFORE the append so "already watched" is

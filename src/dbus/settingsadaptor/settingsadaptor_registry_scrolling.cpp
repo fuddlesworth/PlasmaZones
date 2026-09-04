@@ -791,8 +791,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingIncreaseWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,
                                  setScrollingDecreaseWindowHeightShortcut)
-        REGISTER_CONCRETE_STRING("scrollingResetWindowHeightsShortcut", scrollingResetWindowHeightsShortcut,
-                                 setScrollingResetWindowHeightsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMaximizeWindowHeightShortcut", scrollingMaximizeWindowHeightShortcut,
+                                 setScrollingMaximizeWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingExpandWindowShortcut", scrollingExpandWindowShortcut,
+                                 setScrollingExpandWindowShortcut)
         REGISTER_CONCRETE_STRING("scrollingCenterVisibleColumnsShortcut", scrollingCenterVisibleColumnsShortcut,
                                  setScrollingCenterVisibleColumnsShortcut)
         REGISTER_CONCRETE_STRING("scrollingFocusWindowTopShortcut", scrollingFocusWindowTopShortcut,
@@ -819,6 +821,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingEqualizeColumnWidthsShortcut)
         REGISTER_CONCRETE_STRING("scrollingMinimizeColumnWidthShortcut", scrollingMinimizeColumnWidthShortcut,
                                  setScrollingMinimizeColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingEqualizeWindowHeightsShortcut", scrollingEqualizeWindowHeightsShortcut,
+                                 setScrollingEqualizeWindowHeightsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMinimizeWindowHeightShortcut", scrollingMinimizeWindowHeightShortcut,
+                                 setScrollingMinimizeWindowHeightShortcut)
     }
 
 // Clean up macros (local scope; unity-batch hygiene)

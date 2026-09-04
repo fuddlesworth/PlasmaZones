@@ -38,6 +38,7 @@
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
+#include <PhosphorZones/ZoneDefaults.h> // zone-overlay border bounds, static_asserted below
 #include <PhosphorZones/ZonesLayoutSource.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
@@ -76,6 +77,7 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/ruleadaptor.h"
+#include <PhosphorRules/ActionParams.h> // MaxGap, static_asserted below
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -102,6 +104,25 @@ namespace PlasmaZones {
 // modes; these assertions fail the build if the two ranges ever drift apart.
 static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
+static_assert(Defaults::InnerGap == PhosphorTiles::AutotileDefaults::DefaultInnerGap,
+              "Snapping and autotile inner-gap defaults must match — they are the same gap quantity");
+static_assert(Defaults::OuterGap == PhosphorTiles::AutotileDefaults::DefaultOuterGap,
+              "Snapping and autotile outer-gap defaults must match — they are the same gap quantity");
+// The rule layer validates a gap payload against its own copy of the ceiling
+// and publishes that same number as the rule editor's spin-box max. If it
+// drifted above the value the engines clamp to, the editor would offer gaps
+// that silently collapse to MaxGap on consumption.
+static_assert(static_cast<int>(PhosphorRules::MaxGap) == Defaults::MaxGap,
+              "Rule gap ceiling and the placement gap ceiling must match");
+// The zone-overlay border bounds are hand-mirrored on the rules side, which
+// cannot include PhosphorZones. The daemon sees both, and the drift is silent:
+// the rule validator would accept a width the zones-layer consumer then clamps
+// away. Values, not symbols, because kMaxOverlayBorderWidth is private to
+// phosphor-rules; the descriptor is the public surface that carries them.
+static_assert(::PhosphorZones::ZoneDefaults::BorderWidthMax == 10
+                  && ::PhosphorZones::ZoneDefaults::BorderRadiusMax == 50,
+              "Zone-overlay border bounds moved — update kMaxOverlayBorderWidth / kMaxOverlayBorderRadius "
+              "in libs/phosphor-rules/src/ruleaction_builtins_p.h to match");
 
 namespace {
 

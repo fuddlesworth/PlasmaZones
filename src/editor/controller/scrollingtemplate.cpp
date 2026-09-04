@@ -125,11 +125,15 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
 void EditorController::createNewScrollingTemplate()
 {
     // Same starting shape the deleted settings-app form seeded: no blueprint
-    // columns, width-preset default pointing at the middle stop of a thirds/
-    // half/two-thirds vocabulary.
+    // columns, width-preset default pointing at the half stop. The vocabulary
+    // matches the shipped default list, so a template created here cycles the
+    // same stops a screen with no template does — see the KEEP IN SYNC map on
+    // ScrollLayoutParams::presetColumnWidths (ScrollTypes.h), which counts this
+    // seed among the copies. Spelled out rather than shared because
+    // ScrollingTemplate is LGPL and cannot reach the GPL ConfigDefaults.
     PhosphorZones::ScrollingTemplate templ;
-    templ.presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0};
-    templ.presetWindowHeights = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+    templ.presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    templ.presetWindowHeights = {1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     beginTemplateSession(QUuid::createUuid().toString(), PhosphorI18n::tr("New Template"), /*isNew*/ true,
                          EditorTemplateModel::stateFromTemplate(templ), /*isSystem*/ false);
 }

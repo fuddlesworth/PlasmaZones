@@ -8,6 +8,7 @@
 #include "phosphor_i18n.h"
 #include "settings/utils/animationfileutils.h"
 #include "settings/stores/animationpresetlibrary.h"
+#include "animationpreviewcontroller.h"
 #include "animations_controller_detail.h"
 #include "settings/services/motionsetdomain.h"
 #include "settings/stores/shadersetstore.h"
@@ -111,6 +112,9 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     m_motionSets = new ShaderSetStore(motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn,
                                                             snapshotRollbackFn, mutationGuardFn),
                                       this);
+    // Live-preview data source for the shader browser's detail dialog. Both
+    // borrows are the controller's own, so the lifetimes already agree.
+    m_preview = new AnimationPreviewController(shaderRegistry, settings, this);
 
     m_lastHadPendingChanges = hasPendingChanges();
     m_lastStockSuppressedEvents = stockSuppressedEvents();
@@ -195,6 +199,40 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 }
 
 AnimationsPageController::~AnimationsPageController() = default;
+
+// Slider bounds for the spring editor: a deliberately narrower, usable
+// subset of the engine clamp range (Spring clamps omega to [0.1, 200] and
+// zeta to [0, 10]) — see the header's declaration block for the perceptual
+// rationale. The engine clamp, not the slider, is the validity boundary.
+qreal AnimationsPageController::springOmegaMin() const
+{
+    return 1.0;
+}
+
+qreal AnimationsPageController::springOmegaMax() const
+{
+    return 40.0;
+}
+
+qreal AnimationsPageController::springZetaMin() const
+{
+    return 0.1;
+}
+
+qreal AnimationsPageController::springZetaMax() const
+{
+    return 4.0;
+}
+
+QObject* AnimationsPageController::previewController() const
+{
+    return m_preview;
+}
+
+QString AnimationsPageController::previewKind() const
+{
+    return QStringLiteral("animation");
+}
 
 void AnimationsPageController::setUserProfilesDirOverride(const QString& dir)
 {
@@ -440,6 +478,27 @@ void AnimationsPageController::refreshDirtyState()
     Q_EMIT pendingChangesChanged();
 }
 
+namespace {
+/// Restore one snapshotted file: "was absent" (nullopt) → remove any file
+/// the edit created; otherwise an atomic QSaveFile rewrite of the
+/// snapshotted bytes. Pure file I/O with no member access, so it is safe
+/// on the async worker thread. Shared by revertPending, revertPendingUnder
+/// and the asyncRevertPending worker — a fix in the restore arm (say a
+/// permissions edge in the QSaveFile path) must reach all three callers.
+bool restoreSnapshotFile(const QString& filePath, const std::optional<QByteArray>& content)
+{
+    if (!content.has_value()) {
+        return !QFile::exists(filePath) || QFile::remove(filePath);
+    }
+    QSaveFile f(filePath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    f.write(*content);
+    return f.commit();
+}
+} // namespace
+
 bool AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
@@ -487,21 +546,7 @@ bool AnimationsPageController::revertPending()
         const QString& filePath = it.key();
         const auto& content = it.value();
 
-        bool restored = false;
-        if (!content.has_value()) {
-            // File didn't exist before this session — remove if present.
-            if (!QFile::exists(filePath) || QFile::remove(filePath))
-                restored = true;
-        } else {
-            QSaveFile f(filePath);
-            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                f.write(*content);
-                if (f.commit())
-                    restored = true;
-            }
-        }
-
-        if (!restored) {
+        if (!restoreSnapshotFile(filePath, content)) {
             qCWarning(lcConfig) << "AnimationsPageController::revertPending: failed to restore" << filePath;
             retained.insert(filePath, content);
             continue;
@@ -574,21 +619,7 @@ bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
         if (it == m_pendingFileSnapshots.cend())
             continue; // no staged edit for this path
 
-        bool restored = false;
-        if (!it.value().has_value()) {
-            // File was absent pre-edit — remove it if the edit created one.
-            if (!QFile::exists(filePath) || QFile::remove(filePath))
-                restored = true;
-        } else {
-            QSaveFile f(filePath);
-            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                f.write(*it.value());
-                if (f.commit())
-                    restored = true;
-            }
-        }
-
-        if (!restored) {
+        if (!restoreSnapshotFile(filePath, it.value())) {
             qCWarning(lcConfig) << "revertPendingUnder: failed to restore" << filePath;
             allRestored = false;
             continue; // keep the snapshot so a retry can pick it up
@@ -744,20 +775,7 @@ void AnimationsPageController::asyncRevertPending()
             const QString& filePath = it.key();
             const auto& content = it.value();
 
-            bool restored = false;
-            if (!content.has_value()) {
-                if (!QFile::exists(filePath) || QFile::remove(filePath))
-                    restored = true;
-            } else {
-                QSaveFile f(filePath);
-                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                    f.write(*content);
-                    if (f.commit())
-                        restored = true;
-                }
-            }
-
-            if (!restored) {
+            if (!restoreSnapshotFile(filePath, content)) {
                 qCWarning(lcConfig) << "AnimationsPageController::asyncRevertPending: failed to restore" << filePath;
                 result.retained.insert(filePath, content);
                 continue;

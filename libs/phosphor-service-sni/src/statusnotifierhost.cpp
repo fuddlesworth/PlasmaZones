@@ -138,21 +138,25 @@ void StatusNotifierHost::Private::connectToWatcher()
             bus.disconnect(watcherService(), watcherPath(), watcherInterface(),
                            QStringLiteral("StatusNotifierItemUnregistered"), q,
                            SLOT(_q_remoteItemUnregistered(QString)));
-            // Qt::UniqueConnection on both wires for parity with the
-            // watcher-side rewire; defensive even though
-            // onOwnershipReleased ensures one-shot promotion today.
-            QObject::connect(
-                watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q,
-                [this](const QString& c) {
-                    onItemRegistered(c);
-                },
-                Qt::UniqueConnection);
-            QObject::connect(
-                watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q,
-                [this](const QString& c) {
-                    onItemUnregistered(c);
-                },
-                Qt::UniqueConnection);
+            // NO Qt::UniqueConnection here, unlike the watcher-side
+            // rewire it used to mirror. That flag is only supported when
+            // the slot is a pointer to a member function; passing it with
+            // a functor trips an assert inside QObject::connect and aborts
+            // the process. The watcher-side wire can carry it precisely
+            // because it connects to &StatusNotifierWatcher::onServiceUnregistered.
+            //
+            // Nothing is lost: promotion is one-shot. onOwnershipReleased
+            // returns early once m_serviceOwner is set, and tryClaimOwnership
+            // sets it before promotedToOwner is emitted, so this lambda runs
+            // at most once per watcher and there is no duplicate to suppress.
+            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q,
+                             [this](const QString& c) {
+                                 onItemRegistered(c);
+                             });
+            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q,
+                             [this](const QString& c) {
+                                 onItemUnregistered(c);
+                             });
             // Issue the promotion's own seed HERE, tagged to skip the zombie
             // reaper: its authoritative list is empty (items registered with
             // the prior owner, not with us) and tray apps do not re-register
@@ -360,6 +364,18 @@ StatusNotifierHost::StatusNotifierHost(QObject* parent)
     d->nameWatcher = new QDBusServiceWatcher(watcherService(), QDBusConnection::sessionBus(),
                                              QDBusServiceWatcher::WatchForRegistration, this);
     connect(d->nameWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this](const QString&) {
+        // Our own promotion claims this name, and because the prior owner
+        // released it first the bus reports the claim with an empty previous
+        // owner, which is exactly the shape this watcher fires on. Re-entering
+        // registerHost() there would issue a second seed with the zombie
+        // reaper armed, against our own freshly promoted watcher whose item
+        // set is still empty, and reap every inherited item. The promotion
+        // handler has already issued the correct seed, and there is no foreign
+        // watcher to re-register with when we are the owner.
+        if (d->watcher && d->watcher->isServiceOwner()) {
+            qCDebug(lcSniHost) << "watcher name registered by our own promotion; keeping the promotion's seed";
+            return;
+        }
         d->registerHost();
     });
 

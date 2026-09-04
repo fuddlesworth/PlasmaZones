@@ -281,7 +281,22 @@ public:
     void resetStripToDefaults(const QString& screenId);
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
-    void resetWindowHeights(const QString& screenId);
+    /// Toggle the focused window between filling its column and the even
+    /// split (the height twin of toggleMaximizeColumn). Unlike that one this
+    /// keeps no pre-maximize slot; ScrollStrip::toggleMaximizeActiveWindowHeight
+    /// documents why.
+    void maximizeWindowHeight(const QString& screenId);
+    /// The focused window at the shortest preset height (the height twin of
+    /// minimizeColumnWidth).
+    void minimizeWindowHeight(const QString& screenId);
+    /// Grow the focused window into the empty space left in its column (the
+    /// height twin of expandColumnToAvailableWidth). A column holding an Auto
+    /// window has no empty space to claim, since that window already absorbs
+    /// it.
+    void expandWindowToAvailableHeight(const QString& screenId);
+    /// An equal share of the focused column for each of its windows (the
+    /// height twin of equalizeVisibleColumnWidths).
+    void equalizeWindowHeights(const QString& screenId);
     /// Center the span of fully visible columns (niri center-visible-columns).
     void centerVisibleColumns(const QString& screenId);
     /// Scroll the view along the strip by @p percent of the work area's MAIN
@@ -615,7 +630,11 @@ public:
     }
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
     void commitDragInsertPreview() override;
-    void cancelDragInsertPreview() override;
+    /// @p dragStillActive carries the base-interface contract and is
+    /// deliberately unused here (see the definition): the DETACH-ONCE model
+    /// plus the interactive-drag mark already keep the dragged window's rect
+    /// from being emitted mid-drag.
+    void cancelDragInsertPreview(bool dragStillActive = false) override;
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
     /// `secondary` (a MODEL-column tile index — minimized tiles count).
@@ -1396,8 +1415,8 @@ private:
     QHash<QString, QString> m_announcedStripEpoch;
 
     /// Cached layout parameters rebuilt by refreshConfigFromSettings().
-    QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
+    QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn m_centerFocusedColumn = CenterFocusedColumn::Never;
     /// Cached tri-state intent from the global config. NEVER the resolved
     /// axis: under Auto two screens with no per-screen key resolve
@@ -1436,38 +1455,6 @@ private:
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
     bool m_centerShortColumns = false;
-    /// Close-settle hold (refreshConfigFromSettings, derived daemon-side from
-    /// the animation duration): a close-triggered reflow — and the
-    /// focus-adoption reflow the compositor's successor pick fires
-    /// milliseconds later — waits this long so the closing window's
-    /// disappear animation plays over an unchanged strip before the
-    /// neighbours move in. 0 (the no-IScrollSettings seed and the
-    /// animations-off answer) keeps the historical immediate reflow.
-    /// User-driven verbs deliberately bypass the hold: a deliberate action
-    /// mid-animation outranks the settle, and the scheduled flush behind it
-    /// is an idempotent re-apply. windowOpened bypasses it too, accepted
-    /// knowingly: an arrival must place itself (and usually takes focus, so
-    /// its apply cannot wait), which means a close-then-immediate-open chain
-    /// (a file dialog handing back to its parent) reflows over the corpse as
-    /// it always did — best-effort degradation to the pre-hold behaviour,
-    /// not a correctness bug. Three paths defer: windowClosed, windowFocused
-    /// and scheduleRetileForScreen's queued apply — that third one being what
-    /// makes the other two work, since the daemon turns every close's own
-    /// placementChanged into an identical-set re-push that retiles anyway.
-    /// engine_closehold.cpp carries the full account, including why the
-    /// config, per-screen and min-size retiles that reach the same guard lose
-    /// nothing by being replayed from the flush.
-    int m_closeReflowDelayMs = 0;
-    /// Per-screen monotonic deadline for the hold, plus the flush-scheduled
-    /// guard that keeps one timer per screen however many closes land inside
-    /// one hold window (each close pushes the deadline; the flush lambda
-    /// reschedules itself for the remainder instead of applying early).
-    QHash<QString, qint64> m_closeReflowHoldUntil;
-    QSet<QString> m_closeReflowFlushScheduled;
-    QElapsedTimer m_closeReflowClock;
-    void startCloseReflowHold(const QString& screenId);
-    bool deferForCloseReflowHold(const QString& screenId);
-    void scheduleCloseReflowFlush(const QString& screenId);
     /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
     /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
     /// is false: tiling defaults this on because a sole window fills the screen

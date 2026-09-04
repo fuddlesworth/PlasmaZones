@@ -462,7 +462,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // cross-screen restore armed — see the declaration.
                         m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow, snapGeometry);
                         applyWindowGeometry(safeWindow, snapGeometry, false, false,
-                                            PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                                            PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                                             /*demoteMaximizeOnDeferredReplay=*/true);
                     }
                     // Drag-drop snap committed — record in snapping's border set,
@@ -565,7 +565,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         }
                         // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
                         applyWindowGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                            PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                            PhosphorAnimation::ProfilePaths::WindowPlaceOut);
                     }
                     // Drag-to-unsnap: window left zone-managed sizing.
                     m_snapHandler->clearWindowSnapped(windowId);

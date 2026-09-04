@@ -638,10 +638,27 @@ void TestScrollEngineVerbs::equalizeAndMinimizeReportTheirFeedback()
     QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
     QCOMPARE(feedback.last().at(2).toString(), QString());
+
     engine->minimizeColumnWidth(QStringLiteral("S1"));
     QCOMPARE(feedback.count(), 4);
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
+    // The HEIGHT equalize carries its own token. It rides the same "resize"
+    // action as the width verb and rewrote a whole group the same way, so it
+    // needs a reason of its own rather than the generic one — but it must not
+    // borrow the width verb's, because the OSD renders each token by name and
+    // "equalize" is spoken as "Column widths equalized". Pinned by value here
+    // and by an arm in NavigationOsdContent.qml; the two have to move
+    // together. Counted relatively, so this stays at the tail without
+    // renumbering everything above it.
+    engine->adjustWindowHeight(-25.0, QStringLiteral("S1"));
+    const int beforeEqualizeHeights = feedback.count();
+    engine->equalizeWindowHeights(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), beforeEqualizeHeights + 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize_heights"));
 }
 
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()

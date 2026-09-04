@@ -106,7 +106,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     // defect this call exists to fix.
                     m_tilingHandler->demoteMaximizeForSnapPlacement(window, geo);
                     applyWindowGeometry(window, geo, false, skipAnimation,
-                                        PhosphorAnimation::ProfilePaths::WindowSnapIn, QRectF(), QRectF(),
+                                        PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                                         /*demoteMaximizeOnDeferredReplay=*/true);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for

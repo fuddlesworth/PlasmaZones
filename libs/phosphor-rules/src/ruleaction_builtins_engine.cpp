@@ -476,14 +476,24 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Event);
+                return hasNonEmptyString(p, ActionParam::Event)
+                    && hasValidOptionalDurationMs(p, ActionParam::DurationMs);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::Curve), QString(ActionParam::DurationMs)},
         .domain = ActionDomain::Window,
-        .params =
-            {P{.key = QString(ActionParam::Event), .kind = QString(ParamKind::AnimationEvent)},
-             P{.key = QString(ActionParam::DurationMs), .kind = QStringLiteral("number"), .min = 0.0, .max = 60000.0}},
+        .params = {P{.key = QString(ActionParam::Event), .kind = QString(ParamKind::AnimationEvent)},
+                   // Floor stays 0, which is the disengaged sentinel the editor
+                   // seeds and the consumer reads as "no duration override";
+                   // raising it would turn every freshly added action into a
+                   // real 50ms override. The CEILING is the one the effect
+                   // honours, so the editor stops offering durations it would
+                   // silently cut. It can still author 1 to 49, which the
+                   // consumer rounds up to the 50ms floor.
+                   P{.key = QString(ActionParam::DurationMs),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxAnimationDurationMs}},
         .category = QStringLiteral("animation"),
         .displayOrder = 1,
         .tags = {QString(Tag::Animation), QString(Tag::Effect)},
@@ -688,7 +698,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::OverlayBorderWidth),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, MaxBorderWidth);
+                return hasNumberInRange(p, ActionParam::Value, kMaxOverlayBorderWidth);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -696,7 +706,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = MaxBorderWidth,
+                     .max = kMaxOverlayBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 7,

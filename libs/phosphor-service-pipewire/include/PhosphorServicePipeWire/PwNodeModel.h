@@ -4,14 +4,13 @@
 #pragma once
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
-// Full definition for the ONE type this header's moc surface exposes: the
-// `connection` Q_PROPERTY carries PipeWireConnection* (Qt6 moc
-// auto-registers property metatypes, and QMetaType SFINAE-probes
-// completeness — a fwd decl would re-fire GCC's -Wsfinae-incomplete once
-// moc aggregation order stops shielding it). PwNode.h is NOT moc surface
-// (the `node` role travels inside a QVariant through data()); it is
-// included purely for consumers of that role, and PipeWireConnection.h
-// already pulls it in anyway.
+// Full definitions for BOTH types this header's moc surface exposes: the
+// `connection` Q_PROPERTY carries PipeWireConnection*, and the `firstNode`
+// Q_PROPERTY plus the `nodeAt()` Q_INVOKABLE carry PwNode*. Qt6 moc
+// auto-registers property and invokable-return metatypes, and QMetaType
+// SFINAE-probes completeness — a forward declaration of either would
+// re-fire GCC's -Wsfinae-incomplete once moc aggregation order stops
+// shielding it. Same rationale as PipeWireHost.h.
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 #include <PhosphorServicePipeWire/PwNode.h>
 
@@ -62,6 +61,16 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PwNodeModel : public QAbstractListModel
                    connectionChanged)
     Q_PROPERTY(QStringList mediaClasses READ mediaClasses WRITE setMediaClasses NOTIFY mediaClassesChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    /// Row 0, or null when the model is empty.
+    ///
+    /// Exists because "the first matching node" is a value QML wants to
+    /// BIND to, and a `nodeAt(0)` call in a binding tracks no dependency
+    /// so it would never re-evaluate. Pairing it with `count` is not a
+    /// substitute: a rebuild that swaps every row for a different set of
+    /// the SAME size (a connection swap, a media-class change) moves row 0
+    /// without moving the count, and the binding would stay pinned to a
+    /// node that has since been destroyed.
+    Q_PROPERTY(PhosphorServicePipeWire::PwNode* firstNode READ firstNode NOTIFY firstNodeChanged)
 
 public:
     // DO NOT REORDER OR INSERT MID-LIST — smoke tests pin these values
@@ -92,6 +101,19 @@ public:
     [[nodiscard]] int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+
+    [[nodiscard]] PwNode* firstNode() const;
+
+    /// The node at `row`, or null when `row` is out of range.
+    ///
+    /// For IMPERATIVE reads only — a click handler, a one-shot lookup. Do
+    /// NOT call it from a binding: it is a plain function call, so the
+    /// binding tracks no dependency on the model and will never
+    /// re-evaluate. Pairing it with `count` does not rescue that, because
+    /// a rebuild can replace every row with a different set of the same
+    /// size. Bind `firstNode` when row 0 is what you want; anything else
+    /// belongs in a delegate.
+    [[nodiscard]] Q_INVOKABLE PwNode* nodeAt(int row) const;
 
 public Q_SLOTS:
     /// Attach the model to a `PipeWireConnection` (or detach by passing
@@ -135,6 +157,7 @@ Q_SIGNALS:
     void connectionChanged();
     void mediaClassesChanged();
     void countChanged();
+    void firstNodeChanged();
 
 private:
     class Private;

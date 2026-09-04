@@ -857,6 +857,25 @@ private:
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
+    /// DRY helper: mark @p windowId as under a compositor interactive move on
+    /// BOTH placement engines (empty clears). Every set/clear site routes
+    /// through here — a site marking only one engine is exactly how the
+    /// autotile arm went missing (discussion #1028: any retile landing during
+    /// a drag resized the window in the user's hand).
+    void setEngineInteractiveDragWindow(const QString& windowId);
+
+    /// DRY helper for teardown paths where the prior session is DEAD by
+    /// construction (a fresh beginDrag, a compositor reconnect, a pending
+    /// drag's exit): clear the interactive-drag mark FIRST, then cancel any
+    /// leftover preview with an explicit dragStillActive=false so its
+    /// snap-back geometry is actually emitted. cancelDragInsertIfActive is
+    /// wrong on these paths twice over — its session-liveness derivation can
+    /// read a dead session's ids as a live drag, and a mark still standing
+    /// during the cancel suppresses the snap-back through applyTiling /
+    /// applyLayout even when the flag is false, parking the window at its
+    /// mid-drag geometry.
+    void cancelStaleDragInsertPreviews();
+
     /// Screen the drop indicator was last pushed to, empty when none is
     /// showing. Tracked rather than re-derived because the clear has to reach
     /// the screen the indicator is ON, which after a cross-screen drag is no

@@ -21,7 +21,7 @@ namespace PhosphorAnimation {
 /// Naming convention (apply to new paths):
 ///   show / hide                 — ephemeral surfaces (osd, popup, badge)
 ///   open / close                — persistent surfaces with a stateful open/closed
-///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn,
+///   <verb>In / <verb>Out        — directional motion (slideIn, placeIn,
 ///                                 fadeIn …); `switch`, `layoutSwitch` and
 ///                                 `peek` are bidirectional-leg exceptions
 ///                                 with no In/Out suffix, and `view`
@@ -37,9 +37,9 @@ PHOSPHORANIMATION_EXPORT extern const QString Global;
 
 // window.* — runtime window-lifecycle animations driven by the
 // kwin-effect's OffscreenEffect via tryBeginShaderForEvent. The
-// snap/layout-switch leaves are window events triggered by zone
-// interaction (the WINDOW animates when it snaps into/out of a zone
-// or when a layout switch repositions it).
+// placement/layout-switch leaves are window events triggered by the
+// placement engines (the WINDOW animates when an engine places it,
+// releases it, or a layout switch repositions it).
 PHOSPHORANIMATION_EXPORT extern const QString Window;
 // window.appearance.* — a window surface materialising / dissolving (the
 // appearance shader contract). WindowAppearance is the cascade parent.
@@ -54,12 +54,23 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
 // `move` class (see EventClassMove below). There are NO resize legs — the
 // interactive edge-drag resize and the never-routed snapResize were dropped
 // (see the rationale note in profilepaths.cpp); discrete resizes are
-// covered by snapIn / layoutSwitch / maximize.
+// covered by placeIn / placeOut / layoutSwitch.
+//
+// placeIn / placeOut are the two DIRECTIONS of one event, a placement engine
+// putting a window somewhere or letting it go: every mode's placement rides
+// placeIn (a zone snap, a tile, a scrolling column, monocle filling the
+// screen), and every release rides placeOut (unsnap, float, untile, a
+// pre-tile restore). There is no separate maximize node. The compositor's
+// own maximize of a window PlasmaZones is not placing rides these two as
+// well — placeIn to the maximize area, placeOut back to the restore rect —
+// because the alternative, telling an engine placement that happened to set
+// KWin's maximize bit apart from a maximize the user pressed, has no reliable
+// answer on Wayland, where the press, the engine's write and each committed
+// echo are a client round trip apart.
 PHOSPHORANIMATION_EXPORT extern const QString WindowMovement;
-PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
-PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
-PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
+PHOSPHORANIMATION_EXPORT extern const QString WindowPlaceIn;
+PHOSPHORANIMATION_EXPORT extern const QString WindowPlaceOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
 // desktop.* — full-screen two-texture transitions driven by the kwin-effect's
@@ -266,7 +277,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 //   8. `animationPageScope` — without an entry the page falls through to the
 //      whole-tree branch and its Reset wipes every animation override there is.
 
-/// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
+/// Geometry transitions: placeIn/placeOut, layoutSwitch — every leg
 /// that carries an old and new rect.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 
@@ -423,8 +434,12 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///
 /// SSOT for "what shader does this event animate with out of the box". Two
 /// families default to a shader:
-///   • Window SNAP (snap in/out, layout-switch) → "window-morph" (geometry
-///     cross-fade), run by the kwin-effect. The interactive-drag leaf
+///   • Window GEOMETRY legs (snap in/out, layout-switch, maximize) →
+///     "window-morph" (geometry cross-fade), run by the kwin-effect. Maximize
+///     is in the set because the engines route their own column and monocle
+///     maximizes through it, and that default counts as pack ownership for
+///     the stock-effect suppression, so KWin's own maximize effect is
+///     unloaded by default. The interactive-drag leaf
 ///     (`window.movement.move`) carries NO default — a crossfade pack
 ///     cannot drive a held drag, and the move-class packs (wobble) stay
 ///     opt-in.

@@ -32,7 +32,7 @@ namespace PlasmaZones {
 /// @c kwin-effect/plasmazoneseffect/drag_snap.cpp, and the read-only
 /// @c packOwnsEvent predicate inside @c syncStockEffectSuppression
 /// (@c kwin-effect/plasmazoneseffect/lifecycle.cpp), which resolves the
-/// DesktopPeek / WindowMinimize / WindowMaximize paths already listed
+/// DesktopPeek / WindowMinimize / WindowPlaceIn / WindowPlaceOut paths already listed
 /// below. When a future surface adds a shader leg, append its leg paths
 /// here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
@@ -64,26 +64,27 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowOpen,
         PP::WindowClose,
         PP::WindowMinimize,
-        PP::WindowMaximize,
         PP::WindowMove,
         PP::WindowFocus,
-        // Snap-into-zone window animations driven by the kwin-effect's
-        // applyWindowGeometry chokepoint (drag_snap.cpp), which resolves
-        // through resolveShaderWithDefault rather than
-        // tryBeginShaderForEvent, applying the same rule-then-tree cascade
-        // so the user can pick a distinct shader per snap event.
+        // Placement window animations driven by the kwin-effect's
+        // applyWindowGeometry chokepoint (drag_snap.cpp and every engine
+        // batch), which resolves through resolveShaderWithDefault rather than
+        // tryBeginShaderForEvent, applying the same rule-then-tree cascade so
+        // the user can pick a distinct shader per placement event. The
+        // KWin-native maximize morph (beginMaximizeShaderMorph) rides the
+        // same two legs through tryBeginShaderForEvent.
         //
         // There are NO resize legs: `window.movement.resize` (the
         // interactive edge-drag) and the never-routed
         // `window.movement.snapResize` were dropped from the taxonomy
         // entirely — a held resize has no discrete before/after for a
         // crossfade and no sim support for physics packs, and discrete
-        // resizes are covered by the snap / layoutSwitch / maximize
+        // resizes are covered by the placeIn / placeOut / layoutSwitch
         // events (the resize-only branch of applyWindowGeometry inherits
-        // the snap-in shader). Stale config overrides on those paths are
+        // the placeIn shader). Stale config overrides on those paths are
         // pruned by pruneShaderProfileTreeToSupportedPaths below.
-        PP::WindowSnapIn,
-        PP::WindowSnapOut,
+        PP::WindowPlaceIn,
+        PP::WindowPlaceOut,
         PP::WindowLayoutSwitch,
         // Full-screen virtual-desktop switch — consumed by the kwin-effect's
         // DesktopTransitionManager (resolveShaderWithDefault(tree,

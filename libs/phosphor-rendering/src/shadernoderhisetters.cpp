@@ -324,6 +324,27 @@ bool ShaderNodeRhi::removeExtraBinding(int binding)
 // Audio / User Texture / Wallpaper Setters
 // ============================================================================
 
+void ShaderNodeRhi::setGridSubdivisions(int subdivisions)
+{
+    const int clamped = qBound(0, subdivisions, kMaxGridSubdivisions);
+    if (clamped == m_gridSubdivisions) {
+        return;
+    }
+    m_gridSubdivisions = clamped;
+    // The mesh and the pipeline topology both depend on this: drop the grid
+    // buffers so prepare() rebuilds them at the new density, and the image
+    // pipeline so it is recreated with the matching topology (TriangleStrip
+    // for the quad, Triangles for a grid). SRB is untouched — bindings do
+    // not change with geometry. A latched create failure gets a fresh try at
+    // the new density.
+    m_gridVbo.reset();
+    m_gridIbo.reset();
+    m_gridIndexCount = 0;
+    m_gridUploaded = false;
+    m_gridBuffersFailed = false;
+    m_pipeline.reset();
+}
+
 void ShaderNodeRhi::setAudioSpectrum(const QVector<float>& spectrum)
 {
     if (m_audioSpectrum == spectrum) {
@@ -706,7 +727,9 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
     }
     m_vertexPath = path;
     m_vertexMtime = mtime;
-    m_vertexIncludedPaths = std::move(includedPaths);
+    // Fingerprint now, while the includes are the ones just read — see the
+    // member doc for the bake-time TOCTOU this closes.
+    m_vertexIncludeFp = includeFingerprint(std::move(includedPaths));
     m_shaderDirty = true;
     return true;
 }
@@ -748,7 +771,7 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
     m_fragmentShaderSource = PhosphorShaders::spliceAfterVersion(expanded, m_paramPreamble);
     m_fragmentPath = path;
     m_fragmentMtime = mtime;
-    m_fragmentIncludedPaths = std::move(includedPaths);
+    m_fragmentIncludeFp = includeFingerprint(std::move(includedPaths));
     m_shaderDirty = true;
     return true;
 }
@@ -774,13 +797,13 @@ void ShaderNodeRhi::setVertexShaderSource(const QString& source)
         if (source.isEmpty()) {
             m_vertexPath.clear();
             m_vertexMtime = 0;
-            m_vertexIncludedPaths.clear();
+            m_vertexIncludeFp.clear();
         } else {
             // Inline source — no file backing, so no transitively-
-            // included headers to fingerprint. Clear any leftover list
-            // from a prior loadVertexShader so the cache key matches the
-            // post-source-set state.
-            m_vertexIncludedPaths.clear();
+            // included headers to fingerprint. Clear any leftover
+            // fingerprint from a prior loadVertexShader so the cache key
+            // matches the post-source-set state.
+            m_vertexIncludeFp.clear();
         }
         m_shaderDirty = true;
     }
@@ -793,9 +816,9 @@ void ShaderNodeRhi::setFragmentShaderSource(const QString& source)
         if (source.isEmpty()) {
             m_fragmentPath.clear();
             m_fragmentMtime = 0;
-            m_fragmentIncludedPaths.clear();
+            m_fragmentIncludeFp.clear();
         } else {
-            m_fragmentIncludedPaths.clear();
+            m_fragmentIncludeFp.clear();
         }
         m_shaderDirty = true;
     }
@@ -814,6 +837,17 @@ QString ShaderNodeRhi::shaderError() const
 void ShaderNodeRhi::invalidateShader()
 {
     m_shaderDirty = true;
+}
+
+void ShaderNodeRhi::clearBakedShader()
+{
+    m_shaderReady = false;
+    m_shaderError.clear();
+    // An empty source has nothing to bake — cancel the rebake the source
+    // setters just armed, or the next prepare() would report "Vertex or
+    // fragment shader source is empty" against a state the item reported
+    // deliberately (Error from a failed load, or Null from a cleared source).
+    m_shaderDirty = false;
 }
 
 void ShaderNodeRhi::invalidateUniforms()

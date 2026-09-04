@@ -862,14 +862,18 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                     overlay.inactiveOpacity = qBound(0.0, v.toDouble(), 1.0);
                 }
             }
+            // Bounded at both ends, mirroring the per-window pair's symmetric
+            // re-validation in the effect's shader_resolve: the load-time
+            // descriptor validator already rejects out-of-range payloads, so
+            // this is the defence-in-depth half rather than the only guard.
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderWidth))) {
                 if (const QJsonValue v = action->params.value(PWR::ActionParam::Value); v.isDouble()) {
-                    overlay.borderWidth = std::max(0, qRound(v.toDouble()));
+                    overlay.borderWidth = std::clamp(qRound(v.toDouble()), 0, ZoneDefaults::BorderWidthMax);
                 }
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderRadius))) {
                 if (const QJsonValue v = action->params.value(PWR::ActionParam::Value); v.isDouble()) {
-                    overlay.borderRadius = std::max(0, qRound(v.toDouble()));
+                    overlay.borderRadius = std::clamp(qRound(v.toDouble()), 0, ZoneDefaults::BorderRadiusMax);
                 }
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShowZoneNumbers))) {

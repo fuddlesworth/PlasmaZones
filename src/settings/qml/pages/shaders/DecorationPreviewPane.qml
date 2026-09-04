@@ -111,7 +111,7 @@ Item {
                 animationsPaused: !root.animating
                 focused: focusToggle.checked
                 audioSpectrum: root._audioSpectrum
-                cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
+                cardTitle: i18nc("@title sample window in a shader preview", "Sample Window")
             }
 
             // Covers the preview until the chain has actually compiled, the way
@@ -136,7 +136,7 @@ Item {
                 // the stale frame at the front of the flicker. showable drops
                 // the same frame the pack changes. See its doc.
                 visible: !chainPreview.showable || chainPreview.hasError
-                text: chainPreview.hasError ? i18nc("@info:placeholder decoration preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+                text: chainPreview.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 // Opaque, unlike the zone pane's: the preview underneath has to
                 // keep RENDERING to reach `ready` at all, so this conceals it
                 // rather than replacing it. Slot colour and rounding, so it
@@ -184,7 +184,7 @@ Item {
             // stay as it was until the dialog was reopened.
             visible: root._isAudioPack && root.previewController !== null && !root.previewController.audioVisualizerEnabled
             type: Kirigami.MessageType.Information
-            text: i18nc("@info decoration preview limitation", "This pack reacts to audio. Turn on the audio visualizer in Shaders settings to see it move.")
+            text: i18nc("@info shader preview limitation", "This pack reacts to audio. Turn on Audio spectrum in General settings to see it move.")
         }
     }
 }

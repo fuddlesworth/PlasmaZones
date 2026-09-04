@@ -115,15 +115,23 @@ struct BorderBand {
     float edge;
 };
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
-    float width = borderWidth * uSurfaceScale;
-    float radius = (cornerRadius + borderWidth) * uSurfaceScale;
     // A zero feather makes both smoothstep() edges equal, which is undefined in
     // GLSL (NaN / garbage on the boundary fragment). Floor it at a hair so an
     // aggressively crisp (or hand-edited) value degrades to a near-hard edge
     // rather than misrendering.
     float feather = max(aa, 1e-3);
+    // Bound the band to most of the frame's half extent, the way frameSdf
+    // already bounds the radius. Inside the frame the SDF never falls below
+    // that half extent, so a wider band would leave every interior fragment on
+    // the band side of the smoothstep and paint the whole surface as border.
+    // Stopping just short of it keeps a sliver of content visible on a very
+    // small window. Same fraction the glass pack uses for its edge.
+    vec2 halfSize = 0.5 * uSurfaceFrameSize;
+    float width = min(borderWidth * uSurfaceScale, max(0.9 * min(halfSize.x, halfSize.y), 0.1));
+    // Radius derives from the CLAMPED width, so the content corner still ends
+    // at the requested cornerRadius rather than drifting in the clamped case.
     BorderBand b;
-    b.fs = frameSdf(p, radius);
+    b.fs = frameSdf(p, cornerRadius * uSurfaceScale + width);
     b.insideMask = 1.0 - smoothstep(-feather, feather, b.fs.d);
     b.edge = smoothstep(-width - feather, -width + feather, b.fs.d);
     return b;
