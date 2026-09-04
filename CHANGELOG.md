@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Restoring a maximized window on a scrolling screen now plays the Released animation**: with a pack assigned to Released under Settings → Animations → Window Motion, clicking the restore button on a maximized window in scrolling mode played the Placed animation instead. The maximize button on a scrolling screen is answered by the scrolling engine rather than by KDE, and every placement that came back from it was treated as an arrival. A window handing its maximize state back is now treated as a release, so it animates on Released. A tiling algorithm such as monocle giving the screen back does the same. ([#1058](https://github.com/fuddlesworth/PlasmaZones/pull/1058))
+
 ## [3.4.10] - 2026-09-04
 
 ### Added
