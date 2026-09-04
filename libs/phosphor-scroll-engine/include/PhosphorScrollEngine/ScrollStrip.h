@@ -450,11 +450,18 @@ public:
     /// to a Fixed of the same extent and lose its anchor. A TABBED column
     /// toggles in the column's own space, the cycle and adjust verbs' rule.
     ///
-    /// The maximize intent is also the only memory this verb has, which is why
-    /// reconcileWindowSize refuses to overwrite it when a client acks a cross
-    /// extent SHORT of a stored Fixed at or above the budget: a client with
-    /// size increments declining the height must not erase the fact that the
-    /// tile was maximized, or the un-maximize arm becomes unreachable.
+    /// KNOWN GAP, recorded because the fix is bigger than the verb: the
+    /// Fixed(budget) written here is the only memory that the tile is
+    /// maximized, and reconcileWindowSize overwrites it with whatever the
+    /// client acks. A client with size increments (a terminal) acks a
+    /// quantised height short of the applied one, so the intent stops reading
+    /// as maximized and the un-maximize arm is unreachable for the life of
+    /// that window; Equalize Window Heights is the way back to Auto. Refusing
+    /// the ack in reconcile is NOT the fix — it makes onWindowResized's
+    /// refused-ack branch schedule a retile that re-applies the same rect the
+    /// client quantises again, which is a self-driving loop. The real fix is a
+    /// per-tile latch that travels with the tile the way the width axis uses
+    /// m_preMaximizeColumnIdx, which is why that slot exists there.
     bool toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& params);
     /// The active tile at its shortest: the smallest preset height, or
     /// MinWindowHeightFraction of the work area's cross extent when the preset
@@ -741,18 +748,18 @@ private:
     /// a height a verb clamps to it is a height that will actually render —
     /// EXCEPT under @c maximizedToEdges, where relayout resolves the column
     /// against the raw work area with no inner gap and ignores the stored
-    /// intents entirely. A verb that must measure a flagged column drops the
-    /// override first (expandActiveWindowToAvailableHeight does) rather than
-    /// comparing a raw-area share against this gapped budget. A
+    /// intents entirely, so a share measured there is not comparable with this
+    /// gapped budget. expandActiveWindowToAvailableHeight drops the override
+    /// before it measures for exactly that reason;
+    /// toggleMaximizeActiveWindowHeight does NOT, and reads a raw-area share
+    /// against this budget — which only ever makes it decide the tile is
+    /// already maximized, so the press clears the override and returns rather
+    /// than sizing on a bad number. A
     /// TABBED column stacks nothing and spends no inner gaps, so its budget is
     /// the whole cross extent (tabbedColumnCrossPx caps its owner there).
     /// Answers -1 when there is no active column or the work area is
     /// degenerate.
     int activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const;
-    /// The same budget for an ARBITRARY column, which the active-column form
-    /// delegates to. Separate because reconcileWindowSize answers for the
-    /// RESIZED column, which need not be the active one.
-    int columnCrossBudgetPx(const Column& col, const ScrollLayoutParams& params) const;
     /// The shortest the active tile may be written, in the space the height
     /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
     /// is already added). MinWindowHeightFraction of the work area's cross

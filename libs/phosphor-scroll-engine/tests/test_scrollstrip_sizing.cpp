@@ -540,12 +540,16 @@ void TestScrollStripSizing::aMinimizePressNeverHandsATabbedColumnToAnAutoOwner()
     QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Auto);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 260);
 
-    strip.minimizeActiveWindowHeight(params);
+    // True because the claim lands, even though no pixel moves: "b" takes the
+    // extent owner from "a". Asserted so the slot cannot pass against a verb
+    // that does nothing at all.
+    QVERIFY2(strip.minimizeActiveWindowHeight(params), "taking the extent owner is a change and must be reported");
 
     // A minimize press may never GROW the column. This is the assertion that
     // fails on the unfixed engine, at 800 against 260.
     col = strip.activeColumn();
     QVERIFY(col);
+    QCOMPARE(col->heightOwnerId, QStringLiteral("b"));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 260);
     // And the owner and the intent agree: whichever tab ends up owning the
     // extent is holding a height that resolves to it, never a bare Auto.

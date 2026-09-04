@@ -534,9 +534,10 @@ void TestScrollStripOps::heightMaximizeMinimizeAndExpand()
     r = strip.relayout(params);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 530);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 260);
-    // The column now tiles its budget exactly, which is the invariant that
-    // catches a gap counted on both sides: grown + sibling + the one inner gap
-    // is the whole cross extent, with nothing stranded.
+    // Spelled out rather than left to the two literals above: grown + sibling
+    // + the one inner gap is the whole cross extent, so nothing is stranded.
+    // The 530 is what actually catches a gap counted on both sides; this line
+    // says why 530 is the right number.
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))) + Ax::crossLen(rectOf(r, QStringLiteral("a"))) + params.gap,
              Ax::crossLen(params.workArea));
     // Nothing left over now.

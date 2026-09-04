@@ -23,8 +23,8 @@ public:
     // Meta+Ctrl families in configdefaults.h. Chords that leave the Meta+Alt
     // anchor do so for a stated reason at their own accessor: the height verbs
     // that add Ctrl to their width twin's chord, and the equalize pair, which
-    // sits on Retile's T (Meta+Ctrl+T) because all three re-flow the strip
-    // (see scrollingEqualizeColumnWidthsShortcut).
+    // sits on the LETTER of Retile's Meta+Ctrl+T because all three re-flow the
+    // strip (see scrollingEqualizeColumnWidthsShortcut).
     //
     // The sizing verbs come in width/height PAIRS that do the same thing on
     // the two axes, and each pair spells the axis in its chord, but not all by
@@ -37,7 +37,10 @@ public:
     // (PgUp/PgDown plain for width, Shift'd for height), and the equalize pair
     // shares Retile's T outside the Meta+Alt family entirely. Each accessor
     // states which case it is, and a NEW sizing pair should use the Ctrl
-    // device.
+    // device. Note Equalize Window Heights lands on Meta+Ctrl+Alt+T for the
+    // T-letter reason and not as an instance of the Ctrl device — its own
+    // accessor spells that out, including why the chord is NOT the height twin
+    // of Meta+Alt+T.
     //
     // NOTE: the Meta+Alt family is SHARED with the layouts pair (Meta+Alt+[ ]),
     // the cheatsheet (Meta+Alt+/), cycle-in-zone (Meta+Alt+, .), the

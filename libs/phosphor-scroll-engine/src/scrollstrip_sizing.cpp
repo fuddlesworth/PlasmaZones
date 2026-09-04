@@ -36,8 +36,12 @@ int ScrollStrip::activeTileCrossPx(const ScrollLayoutParams& params) const
     return -1;
 }
 
-int ScrollStrip::columnCrossBudgetPx(const Column& col, const ScrollLayoutParams& params) const
+int ScrollStrip::activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const
 {
+    const Column* col = activeColumn();
+    if (!col) {
+        return -1;
+    }
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return -1; // degenerate area, the height verbs' bail
@@ -45,23 +49,14 @@ int ScrollStrip::columnCrossBudgetPx(const Column& col, const ScrollLayoutParams
     // A tabbed column stacks nothing, so it spends no inner gaps and its whole
     // budget is the cross extent — tabbedColumnCrossPx caps its owner's intent
     // at exactly that.
-    if (col.display == ColumnDisplay::Tabbed) {
+    if (col->display == ColumnDisplay::Tabbed) {
         return workH;
     }
-    const int visibleTiles = col.visibleTileCount();
+    const int visibleTiles = col->visibleTileCount();
     // relayout's availH for this column, verbatim: the gaps BETWEEN the
     // visible tiles come out of the budget, and the floor keeps a pixel for
     // each of them so a crowded column cannot resolve to nothing.
     return qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
-}
-
-int ScrollStrip::activeColumnCrossBudgetPx(const ScrollLayoutParams& params) const
-{
-    const Column* col = activeColumn();
-    if (!col) {
-        return -1;
-    }
-    return columnCrossBudgetPx(*col, params);
 }
 
 int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) const
@@ -891,40 +886,34 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         // indicator eats the main axis or is not placed within the column.
         const WindowHeight ackedH =
             WindowHeight::makeFixed(params.axis.crossSize(ackedSize) + tabbedCrossReservationPx(col, params));
-        // A client that cannot deliver the height we asked for is DECLINING,
-        // not choosing, and its refusal must not become the stored intent.
-        // toggleMaximizeActiveWindowHeight keeps no pre-maximize slot: the
-        // Fixed(budget) it writes IS its only memory that the tile is
-        // maximized, and the un-maximize arm is reached only by reading that
-        // intent back. A client with size increments (a terminal is the
-        // ordinary case) acks a cross extent short of the one applied, and
-        // rewriting the intent to that short value made every later press
-        // re-maximize and re-ack forever, with the un-maximize arm
-        // unreachable for the life of the window. The width axis is already
-        // protected against the same shape by the m_preMaximizeColumnIdx
-        // reset in the main-axis arm above.
+        // The acked height is recorded even when it is SHORT of the one just
+        // applied, and deliberately so. A client with size increments (a
+        // terminal) acks a quantised height, and that ack is the only thing
+        // that lets the pair converge: refusing to record it returns false
+        // from here, which sends onWindowResized into its refused-ack branch,
+        // and that branch only excuses a displacement when the client is
+        // pinned LARGER than the applied rect (pinnedAtMinW/H both require
+        // newFrame > lastApplied). A short ack is not explained, so it
+        // schedules a retile, which re-applies the same rect, which the client
+        // quantises again — the self-driving loop that branch's own comment
+        // describes.
         //
-        // Deliberately narrow: only a stored Fixed at or above the column's
-        // budget (which is what "maximized" means here) and only an ack SHORT
-        // of it. A client growing past what it was given, or settling any
-        // height against a non-maximized intent, still records normally.
-        const int colBudget = columnCrossBudgetPx(col, params);
-        const WindowHeight& storedH = col.tiles.at(ti).height;
-        const bool declinedMaximize = storedH.kind == WindowHeight::Fixed && colBudget > 0
-            && storedH.fixedPx >= colBudget && ackedH.fixedPx < storedH.fixedPx;
-        if (!declinedMaximize) {
-            // The dragged tab becomes the column's sole height owner, the same
-            // claim the keyboard verbs make: without it a drag on tab B would
-            // settle, and then the column would snap back to tab A's older
-            // intent because the resolver takes the first non-Auto tab it
-            // finds.
-            if (claimTabbedHeightOwnership(col, ti, ackedH)) {
-                changed = true;
-            }
-            if (!(col.tiles.at(ti).height == ackedH)) {
-                col.tiles[ti].height = ackedH;
-                changed = true;
-            }
+        // The cost is that toggleMaximizeActiveWindowHeight loses its only
+        // memory that the tile was maximized, since the Fixed(budget) it wrote
+        // is what gets overwritten. See that verb's note in ScrollStrip.h: the
+        // fix is a per-tile latch that travels with the tile, not a refusal
+        // here.
+        //
+        // The dragged tab becomes the column's sole height owner, the same
+        // claim the keyboard verbs make: without it a drag on tab B would
+        // settle, and then the column would snap back to tab A's older intent
+        // because the resolver takes the first non-Auto tab it finds.
+        if (claimTabbedHeightOwnership(col, ti, ackedH)) {
+            changed = true;
+        }
+        if (!(col.tiles.at(ti).height == ackedH)) {
+            col.tiles[ti].height = ackedH;
+            changed = true;
         }
     }
     return changed;

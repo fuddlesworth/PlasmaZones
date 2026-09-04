@@ -17,9 +17,11 @@
 // outside the tile rects. Copying a width verb's gap arithmetic across the
 // axis therefore subtracts the gaps twice.
 //
-// The shared helpers (activeTileCrossPx, columnCrossBudgetPx,
+// The shared helpers (activeTileCrossPx, activeColumnCrossBudgetPx,
 // activeWindowHeightFloorPx, claimTabbedHeightOwnership) stay in
-// scrollstrip_sizing.cpp, where reconcileWindowSize uses them too.
+// scrollstrip_sizing.cpp, which is also where reconcileWindowSize lives — it
+// claims tabbed height ownership on a cross-axis ack the same way these verbs
+// do.
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -274,7 +276,10 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
     // work-area change would have honoured is gone.
     const bool maximizedByIntent = tile->height.kind == WindowHeight::Fixed ? tile->height.fixedPx >= budget
                                                                             : tile->height.kind == WindowHeight::Preset
-            && qMin(budget, proportionalPx(tile->height.presetFraction, workH, params.gap)) >= budget;
+            && qMin(budget,
+                    proportionalPx(nearestPresetValue(params.presetWindowHeights, tile->height.presetFraction), workH,
+                                   params.gap))
+                >= budget;
     const bool maximized = currentPx >= budget || maximizedByIntent;
     const WindowHeight result = maximized ? WindowHeight::makeAuto() : WindowHeight::makeFixed(budget);
     // Ownership before the no-change bail, and written through the COLUMN
@@ -374,20 +379,25 @@ bool ScrollStrip::minimizeActiveWindowHeight(const ScrollLayoutParams& params)
     if (clearedEdges) {
         activeCol->maximizedToEdges = false;
     }
-    // Written BEFORE the no-move bail, and this is the whole reason the write
-    // is not guarded by it. claimTabbedHeightOwnership moves the tabbed
-    // column's extent owner to this tile and writes nothing else, so an owner
-    // must already hold the height the claim was made for. Bailing out
-    // without the write left the new owner carrying whatever it had — Auto for
-    // a tab inserted at the context default — and tabbedColumnCrossPx resolves
-    // an Auto owner to the WHOLE work area, so a minimize press GREW the
-    // column it was asked to shrink. The verdict below still reads the
-    // rendered pixels, so a tile already seated at its floor reports no
-    // movement; only the stored intent is brought in line with the claim.
-    activeCol->tiles[ti].height = target;
+    // Written before the no-move bail WHEN THE CLAIM LANDED, and only then.
+    // claimTabbedHeightOwnership moves the tabbed column's extent owner to
+    // this tile and writes nothing else, so an owner must already hold the
+    // height the claim was made for. Bailing out without the write left the
+    // new owner carrying whatever it had — Auto for a tab inserted at the
+    // context default — and tabbedColumnCrossPx resolves an Auto owner to the
+    // WHOLE work area, so a minimize press GREW the column it was asked to
+    // shrink. Gated on `claimed` rather than written unconditionally: with no
+    // claim there is no owner to keep consistent, and an unconditional write
+    // would mutate the persisted intent on a press this verb goes on to report
+    // as a refusal. The verdict below still reads the rendered pixels, so a
+    // tile already seated at its floor reports no movement.
+    if (claimed) {
+        activeCol->tiles[ti].height = target;
+    }
     if (targetPx == currentPx) {
         return claimed || clearedEdges;
     }
+    activeCol->tiles[ti].height = target;
     return true;
 }
 

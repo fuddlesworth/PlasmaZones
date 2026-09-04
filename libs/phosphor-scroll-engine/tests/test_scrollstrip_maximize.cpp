@@ -416,10 +416,17 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     // The three whole-size height verbs. Each clears the override
     // unconditionally while it is set, the rule setActiveWindowHeight states:
     // under the override the stored intents are not rendered at all, so a
-    // press whose result equals the stored value is still a real change. The
-    // maximize toggle is the one that proves it — with the equality test it
-    // once carried, a tile already holding the intent the toggle would write
-    // refused forever and the column never left the override.
+    // press whose result equals the stored value is still a real change.
+    //
+    // The maximize toggle is the one that proves it, and only from AUTO. Under
+    // the override the tile measures at the raw extent, so the toggle decides
+    // it is already maximized and its result is Auto; the equalize below puts
+    // the tile on Auto first so that result EQUALS the stored intent and the
+    // unconditional clear is the only thing that can report a change. Driven
+    // from the Fixed the adjust above leaves, the old equality-gated clear
+    // fired too (Auto differs from Fixed) and this triplet passed against the
+    // very bug it is here to catch.
+    QVERIFY2(strip.equalizeActiveColumnHeights(), "the tile must be on Auto for the press below to be the hard case");
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QVERIFY2(strip.toggleMaximizeActiveWindowHeight(params), "the height maximize toggle must report the drop");
     QVERIFY(!flagged());
@@ -430,10 +437,11 @@ void TestScrollStripMaximize::widthAndHeightVerbsClearMaximizeToEdges()
     QVERIFY(!flagged());
     QVERIFY(renderedMain() <= gappedMain);
 
-    // Expand drops the override BEFORE it measures, so that even a press it
-    // goes on to refuse still reports the drop rather than mutating silently:
-    // measured under the override every tile resolves to a share of the RAW
-    // cross extent, which is not the budget the verb compares against.
+    // Expand drops the override BEFORE it measures, since under the override
+    // every tile resolves to a share of the RAW cross extent, which is not the
+    // budget the verb compares against. This press succeeds; the case where a
+    // press REFUSES and still has to report the drop is covered in
+    // test_scrollstrip_sizing.cpp.
     QVERIFY(strip.toggleMaximizeToEdgesActiveColumn(params));
     QVERIFY2(strip.expandActiveWindowToAvailableHeight(params), "the height expand must report the drop");
     QVERIFY(!flagged());
