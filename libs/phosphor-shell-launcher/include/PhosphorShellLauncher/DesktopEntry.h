@@ -78,6 +78,10 @@ struct PHOSPHORSHELLLAUNCHER_EXPORT DesktopEntry
 class PHOSPHORSHELLLAUNCHER_EXPORT DesktopEntryScanner
 {
 public:
+    // Static-only. Instantiating it would suggest there is per-scanner
+    // state, and there is none.
+    DesktopEntryScanner() = delete;
+
     // The applications directories in precedence order: the user's own
     // first, then each XDG_DATA_DIRS entry. What QStandardPaths reports
     // for ApplicationsLocation.

@@ -20,6 +20,10 @@ inline bool wrapInTerminal(QStringList& argv)
 {
     const QString xdgTerminal = QStandardPaths::findExecutable(QStringLiteral("xdg-terminal-exec"));
     if (!xdgTerminal.isEmpty()) {
+        // The `--` separator, so a command whose first word begins with a
+        // dash is passed through as the command rather than parsed as an
+        // option to xdg-terminal-exec itself.
+        argv.prepend(QStringLiteral("--"));
         argv.prepend(xdgTerminal);
         return true;
     }

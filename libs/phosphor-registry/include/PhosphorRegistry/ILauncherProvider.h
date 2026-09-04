@@ -35,6 +35,13 @@ public:
     QString subtitle;
     // Freedesktop icon name, resolved by the surface through the icon
     // theme. Empty means the surface draws the provider's own glyph.
+    //
+    // A name, not a path. Kirigami.Icon does accept a file path or a URL
+    // here and the surface does not reject one, so a provider whose source
+    // is client-controlled must refuse path-shaped values itself rather
+    // than pass them through: the windows provider does exactly that with
+    // an app id, since a client could otherwise have the shell load an
+    // arbitrary file.
     QString iconName;
     // Ranking score, higher is better. Providers that fuzzy-match should
     // return the matcher's score so rows from different providers rank

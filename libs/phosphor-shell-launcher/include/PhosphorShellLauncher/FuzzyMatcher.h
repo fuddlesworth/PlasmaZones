@@ -39,9 +39,13 @@ struct PHOSPHORSHELLLAUNCHER_EXPORT FuzzyMatch
 class PHOSPHORSHELLLAUNCHER_EXPORT FuzzyMatcher
 {
 public:
-    // Empty pattern matches everything with score 0 and no positions, so a
-    // provider can list all candidates on an empty query without a special
-    // case. Empty candidate never matches a non-empty pattern.
+    // Empty pattern matches everything with score 0 and no positions.
+    // Note that no provider relies on this: each one decides for itself
+    // whether an empty query lists anything (listsOnEmptyQuery) and skips
+    // the matcher entirely in that case. The behaviour is kept because it
+    // is the sane answer for a general-purpose matcher, not because a
+    // caller depends on it. Empty candidate never matches a non-empty
+    // pattern.
     [[nodiscard]] static std::optional<FuzzyMatch> match(QStringView pattern, QStringView candidate,
                                                          bool caseSensitive = false);
 
