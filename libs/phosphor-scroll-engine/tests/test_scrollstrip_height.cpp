@@ -305,9 +305,11 @@ void TestScrollStripHeight::aRememberedHeightThatNoLongerFitsIsDroppedForAuto()
     QVERIFY2(b.height.kind == WindowHeight::Auto,
              "a remembered height taller than the new budget must be dropped, not put back to render clamped");
     QVERIFY2(!b.preMaximizeHeight.has_value(), "the slot is spent either way");
-    // And one press was enough: the tile is sharing the column, not sitting at
-    // the budget waiting for a second press.
-    QVERIFY(Ax::crossLen(rectOf(strip.relayout(shrunk), QStringLiteral("b"))) < 490);
+    // And one press was enough: the tile is sharing the column evenly with its
+    // Auto sibling, not sitting at the budget waiting for a second press. The
+    // literal is the whole point — a bare "less than the budget" would also
+    // pass for a wrongly restored Fixed(300).
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(shrunk), QStringLiteral("b"))), 245);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripHeight)

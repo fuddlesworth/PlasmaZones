@@ -302,9 +302,9 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
     // there overwrote the remembered height with the near-full one it had just
     // displaced, and the toggle then alternated between two full heights
     // forever with the user's real height gone and Auto unreachable. The slot
-    // is set only by the arm below and cleared by every other height write, so
-    // "it has a value" means exactly "this verb maximized this tile and nothing
-    // has countermanded it since".
+    // is set only by the arm below, and Tile's own note carries exactly which
+    // writes clear it again, so "it has a value" means "this verb maximized
+    // this tile and nothing has countermanded it since".
     const bool maximized = remembered.has_value() || currentPx >= budget || maximizedByIntent;
     // Un-maximizing puts back the height the maximize press displaced, and
     // falls to Auto only when there is nothing remembered — which is the case

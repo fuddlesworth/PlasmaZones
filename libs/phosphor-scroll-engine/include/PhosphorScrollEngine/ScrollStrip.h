@@ -478,9 +478,12 @@ public:
     /// width axis rather than mirroring it. The width toggle keeps its restore
     /// in m_preMaximizeColumnIdx + m_preMaximizeWidth and re-infers maximized
     /// state from resolved pixels, which it can afford because a column's main
-    /// budget is the whole viewport and does not move. A column's CROSS budget
-    /// does move — it is the cross extent less one gap per inter-tile seam, so
-    /// closing a sibling or tabbing the column grows it — and a tile holding
+    /// budget is the whole viewport: it does not move when the STRIP changes
+    /// shape, only when the work area does, and the width restore arm
+    /// re-validates its stored width against the current one before using it.
+    /// A column's CROSS budget moves on both counts — it is the cross extent
+    /// less one gap per inter-tile seam, so closing a sibling or tabbing the
+    /// column grows it without the work area moving at all — and a tile holding
     /// Fixed(the old budget) then re-infers as NOT maximized. Consulting the
     /// slot first is what stops that press re-entering the maximize arm and
     /// overwriting the user's remembered height with a near-full one. The

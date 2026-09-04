@@ -780,13 +780,20 @@ struct Tile
     /// one of those paths moves the Tile struct whole.
     ///
     /// Set ONLY by that verb's maximize arm, and cleared by every other write
-    /// that changes the tile's HEIGHT, including the one reconcileWindowSize
-    /// makes when a user finishes an interactive resize: the user has chosen a
-    /// height of their own, so there is no maximize left to undo. A press
-    /// those verbs refuse changes no height and so clears nothing — they bail
-    /// on "no movement", and a refusal is not a countermand. Nor does dropping
-    /// a column's maximize-to-edges override, which several of them do before
-    /// that bail: the press reports a change, but not a change of height. Because of that the
+    /// that SETTLES a height on the tile. That includes an addressed re-state
+    /// landing on the height the tile already held (setActiveWindowHeight and
+    /// setWindowHeightIntent both clear above their equality bail: the caller
+    /// named a height and got it), and it includes the write
+    /// reconcileWindowSize makes when a user finishes an interactive resize,
+    /// since the user has chosen a height of their own and there is no
+    /// maximize left to undo.
+    ///
+    /// What does NOT clear it is a press the verb refuses. adjust, the preset
+    /// cycle, minimize and expand bail on "this press moved no pixels", and a
+    /// refusal is not a countermand — a held-down key sitting at its limit
+    /// must not erase the memory. Nor does dropping a column's
+    /// maximize-to-edges override on its own: that press reports a change, but
+    /// it has not settled a height. Because of that the
     /// standing slot is also what the toggle READS to decide the tile is
     /// maximized: it cannot go stale the way the height itself does when the
     /// budget moves under it. Deliberately
