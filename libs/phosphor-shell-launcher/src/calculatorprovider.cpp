@@ -359,9 +359,14 @@ QString CalculatorProvider::format(double value)
     // the reader's own separator (see number()), so a user who types "3,5"
     // is understood even though the answer comes back with a point.
     //
-    // Integers (within double's exact range) print without a point;
-    // everything else with up to 10 significant digits, trailing zeros
-    // trimmed by 'g'.
+    // Two branches with DIFFERENT precision, deliberately. An exact integer
+    // inside double's exact range prints in full, however many digits that
+    // takes: truncating 1234567890123 to ten significant digits would be a
+    // wrong answer rather than a rounded one, which is not a thing a
+    // calculator may do. Everything else prints to at most ten significant
+    // digits with trailing zeros trimmed, because a fraction has no exact
+    // decimal form to be wrong about. The header's "ten significant digits"
+    // describes the second branch.
     if (std::abs(value) < 1e15 && value == std::floor(value)) {
         return QLocale::c().toString(static_cast<qlonglong>(value));
     }

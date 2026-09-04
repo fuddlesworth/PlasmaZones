@@ -38,6 +38,11 @@ public:
     // `service` must expose `history` (QAbstractItemModel*), `copy(int)`
     // and `remove(int)`. Null makes the provider inert (no rows), never
     // a crash.
+    /// The service is resolved ONCE, here. A host that publishes its
+    /// clipboard service lazily and constructs this provider first gets a
+    /// permanently inert provider and one warning at startup: there is no
+    /// signal on a duck-typed dependency to re-read it from, so the
+    /// contract is that the service exists by the time this is built.
     explicit ClipboardProvider(QObject* service, QObject* parent = nullptr);
     ~ClipboardProvider() override;
 

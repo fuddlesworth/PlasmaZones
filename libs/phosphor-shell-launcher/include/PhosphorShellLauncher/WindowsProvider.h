@@ -38,6 +38,11 @@ class PHOSPHORSHELLLAUNCHER_EXPORT WindowsProvider : public PhosphorRegistry::IL
 
 public:
     // Null makes the provider inert (no rows), never a crash.
+    /// The model is resolved ONCE, here, and so is its "toplevel" role. A
+    /// host that publishes the model lazily and constructs this provider
+    /// first gets a permanently inert provider and one warning at startup:
+    /// there is no signal on a duck-typed dependency to re-read it from, so
+    /// the contract is that the model exists by the time this is built.
     explicit WindowsProvider(QAbstractItemModel* toplevels, QObject* parent = nullptr);
     ~WindowsProvider() override;
 

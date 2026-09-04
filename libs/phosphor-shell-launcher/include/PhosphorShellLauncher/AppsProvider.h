@@ -4,6 +4,7 @@
 
 #include <PhosphorRegistry/ILauncherProvider.h>
 #include <PhosphorShellLauncher/DesktopEntry.h>
+#include <PhosphorShellLauncher/FuzzyMatcher.h>
 #include <PhosphorShellLauncher/phosphorshelllauncher_export.h>
 
 #include <QList>
@@ -70,7 +71,13 @@ public:
     [[nodiscard]] int maximumResults() const;
 
     // Score penalty applied to a match against anything but the name.
-    static constexpr int SecondaryFieldPenalty = 4;
+    // Expressed against the matcher's own scale rather than as a bare
+    // number. Every other constant in the ranking derives from ScoreMatch,
+    // so retuning that would silently rescale them all and leave this one
+    // meaning something different. A quarter of one character match is
+    // enough to break a tie between a name hit and a keyword hit without
+    // outweighing a genuinely better match.
+    static constexpr int SecondaryFieldPenalty = FuzzyMatcher::ScoreMatch / 4;
 
     // Everything currently known, unfiltered. For tests and for a host
     // that wants to show a full app grid.

@@ -150,6 +150,12 @@ QVariantList LauncherModel::providers() const
         entry.insert(QStringLiteral("id"), provider->id());
         entry.insert(QStringLiteral("name"), provider->displayName());
         entry.insert(QStringLiteral("iconName"), provider->iconName());
+        // What the provider OFFERED, not how many things matched. Every
+        // provider caps its own result list before the model sees it, so a
+        // query matching three hundred applications reports the cap. The
+        // pill is a "there is more here" affordance rather than a tally, and
+        // presenting the true total would promise rows the user cannot
+        // reach by selecting that pill.
         entry.insert(QStringLiteral("count"), m_counts.value(provider->id()));
         out.append(entry);
     }
