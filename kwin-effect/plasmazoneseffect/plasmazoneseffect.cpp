@@ -200,10 +200,17 @@ bool PlasmaZonesEffect::isActive() const
     // effect in the chain (the spring settling mid-fade dropped it, jumping
     // the corpse by the frozen offset). O(1); entries are bounded by corpse
     // lifetime (sole erase at windowDeleted).
+    // `m_stripTransition.holdsCursorHide()` outlives the pass clause by one
+    // frame on purpose: the strip pass hides KWin's cursor while it paints
+    // and releases it only from our paint hooks, so the effect must stay in
+    // the chain until that release has run. Without it, a settle fade that
+    // closes between two frames dropped the effect with the cursor still
+    // hidden, and nothing ever showed it again (see the accessor's doc).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
-        || m_scrollTabPainter->hasAnyIndicators() || !m_scrollCorpseFreeze.isEmpty();
+        || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
+        || !m_scrollCorpseFreeze.isEmpty();
 }
 
 void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)

@@ -138,6 +138,23 @@ public:
     /// entry check.
     bool isRunningForOutput(KWin::LogicalOutput* screen) const;
 
+    /// True while this manager holds the compositor's cursor hidden (see
+    /// hideCursorForPass). Feeds PlasmaZonesEffect::isActive() SEPARATELY
+    /// from isRunning(): the hide is released only from the effect's paint
+    /// hooks (paintOutput's settle frame, postPaintScreen's reap), and
+    /// isRunning() goes false the instant the settle fade's window closes.
+    /// When that happens between the last fade frame and the next frame's
+    /// chain build, an isActive() built on isRunning() alone drops the
+    /// effect from the chain with the cursor still hidden and no hook left
+    /// to show it again — the pointer stays invisible until a later leg
+    /// happens to run the release. This keeps the effect in the chain for
+    /// the one extra frame (the last fade frame always damages the output)
+    /// that runs updateCursorHiding.
+    bool holdsCursorHide() const
+    {
+        return m_cursorHidden;
+    }
+
     /// Paint one output's strip pass. Returns true when the decorated scene
     /// was drawn (the caller must then SKIP the normal scene paint for this
     /// output); false when the output is not armed, its spring has settled,
