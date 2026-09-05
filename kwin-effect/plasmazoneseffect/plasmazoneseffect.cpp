@@ -185,6 +185,13 @@ bool PlasmaZonesEffect::isActive() const
     // design — see StripTransitionManager::paintOutput). Keep both: the
     // spring clause is not a substitute for the fade tail, and the pass
     // clause is not a substitute for the pack-less spring.
+    // `m_stripTransition.holdsCursorHide()` outlives the pass clause by one
+    // frame on purpose: the strip pass hides KWin's cursor while it paints
+    // and, on the settle path, releases it only from our paint hooks (the
+    // off-paint kill paths release it themselves), so the effect must stay
+    // in the chain until that release has run. Without it, a settle fade that
+    // closes between two frames dropped the effect with the cursor still
+    // hidden, and nothing ever showed it again (see the accessor's doc).
     // The compositor-drawn tab pills exist only while this effect is in the
     // paint chain: they are blitted from paintWindow (at the anchor slot) or
     // paintScreen (the post-walk fallback), so on an
@@ -200,12 +207,6 @@ bool PlasmaZonesEffect::isActive() const
     // effect in the chain (the spring settling mid-fade dropped it, jumping
     // the corpse by the frozen offset). O(1); entries are bounded by corpse
     // lifetime (sole erase at windowDeleted).
-    // `m_stripTransition.holdsCursorHide()` outlives the pass clause by one
-    // frame on purpose: the strip pass hides KWin's cursor while it paints
-    // and releases it only from our paint hooks, so the effect must stay in
-    // the chain until that release has run. Without it, a settle fade that
-    // closes between two frames dropped the effect with the cursor still
-    // hidden, and nothing ever showed it again (see the accessor's doc).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
