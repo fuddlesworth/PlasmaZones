@@ -62,6 +62,28 @@ Item {
         value: ShellMotion.reducedMotion
     }
 
+    // Touchpad gestures (A3, the per-surface Gesture rows). Only the
+    // compositor sees them; the KWin effect reports each completed one
+    // through the daemon and ShellGestures relays it here. Three fingers
+    // are the launcher's, four the dashboard's.
+    Connections {
+        target: ShellGestures
+
+        function onSwiped(direction: string, fingers: int): void {
+            if (fingers === 3 && direction === "up" && !Popouts.isOpen("launcher"))
+                root.toggleLauncher();
+            else if (fingers === 3 && direction === "down")
+                Popouts.close(Popouts.handleFor("launcher"));
+            else if (fingers === 4 && direction === "up" && !Popouts.isOpen("dashboard"))
+                root.toggleDashboard();
+        }
+
+        function onPinched(direction: string, fingers: int): void {
+            if (fingers === 4 && direction === "expanding")
+                Popouts.close(Popouts.handleFor("dashboard"));
+        }
+    }
+
     // The wallpaper, one surface per output, and the first of the
     // per-screen surfaces because it is the bottom layer: a Background
     // panel that draws what WallpaperService resolves for its output.

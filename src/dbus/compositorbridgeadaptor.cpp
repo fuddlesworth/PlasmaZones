@@ -84,4 +84,20 @@ void CompositorBridgeAdaptor::reportModifierState(int modifiers, int mouseButton
     Q_EMIT modifierStateChanged(modifiers, mouseButtons);
 }
 
+void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& direction, uint fingerCount)
+{
+    // Boundary validation: the vocabulary is closed, so anything else is a
+    // bridge bug and is dropped rather than relayed to the shell.
+    static const QStringList kSwipeDirections{QStringLiteral("up"), QStringLiteral("down"), QStringLiteral("left"),
+                                              QStringLiteral("right")};
+    static const QStringList kPinchDirections{QStringLiteral("expanding"), QStringLiteral("contracting")};
+    const bool swipe = kind == QLatin1String("swipe") && kSwipeDirections.contains(direction);
+    const bool pinch = kind == QLatin1String("pinch") && kPinchDirections.contains(direction);
+    if ((!swipe && !pinch) || fingerCount < 1 || fingerCount > 5) {
+        qCWarning(lcDbusWindow) << "reportGesture dropped:" << kind << direction << fingerCount;
+        return;
+    }
+    Q_EMIT gestureReported(kind, direction, fingerCount);
+}
+
 } // namespace PlasmaZones

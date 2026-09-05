@@ -304,6 +304,35 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(1).toInt(), 0x00000001);
     }
 
+    void testReportGesture_relaysValidGestures()
+    {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
+
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
+        m_bridgeAdaptor->reportGesture(QStringLiteral("pinch"), QStringLiteral("expanding"), 4);
+
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("swipe"));
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("up"));
+        QCOMPARE(spy.at(0).at(2).toUInt(), 3u);
+        QCOMPARE(spy.at(1).at(0).toString(), QStringLiteral("pinch"));
+        QCOMPARE(spy.at(1).at(1).toString(), QStringLiteral("expanding"));
+        QCOMPARE(spy.at(1).at(2).toUInt(), 4u);
+    }
+
+    void testReportGesture_dropsOutOfVocabulary()
+    {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::gestureReported);
+
+        m_bridgeAdaptor->reportGesture(QStringLiteral("tap"), QStringLiteral("up"), 3); // unknown kind
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("expanding"), 3); // pinch word
+        m_bridgeAdaptor->reportGesture(QStringLiteral("pinch"), QStringLiteral("up"), 4); // swipe word
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 0); // no fingers
+        m_bridgeAdaptor->reportGesture(QStringLiteral("swipe"), QStringLiteral("up"), 6); // too many
+
+        QCOMPARE(spy.count(), 0);
+    }
+
     // =====================================================================
     // ControlAdaptor: getFullState
     // =====================================================================

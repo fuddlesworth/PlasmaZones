@@ -123,9 +123,15 @@ Item {
         enabled: root.available
         onTapped: eventPoint => root._moveTo(eventPoint.position.x)
     }
+    // A wheel notch steps the value; a two-finger horizontal swipe on a
+    // touchpad (A3 §5) arrives as an x delta and steps it the same way,
+    // right for more.
     WheelHandler {
         enabled: root.available
-        onWheel: event => root._step(event.angleDelta.y > 0 ? 1 : -1)
+        onWheel: event => {
+            const delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+            root._step(delta > 0 ? 1 : -1);
+        }
     }
 
     RowLayout {

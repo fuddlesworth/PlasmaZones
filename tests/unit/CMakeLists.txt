@@ -2387,6 +2387,23 @@ target_link_libraries(test_shell_motion
 target_include_directories(test_shell_motion PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_shell_motion COMMAND test_shell_motion)
 
+# The gesture relay: the daemon's gestureReported split into swiped /
+# pinched over a fake daemon on the private bus.
+add_executable(test_shell_gestures
+    shell/test_shell_gestures.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ShellGestures.h
+    ${CMAKE_SOURCE_DIR}/src/shell/shellgestures.cpp
+)
+target_link_libraries(test_shell_gestures
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorProtocol::PhosphorProtocol
+)
+target_include_directories(test_shell_gestures PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
+
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller
     shell/test_toast_controller.cpp

@@ -83,6 +83,8 @@ public Q_SLOTS:
      *   "borders"     — bridge supports native window border rendering
      *   "modifiers"   — bridge reports keyboard modifier state via
      *                   reportModifierState
+     *   "gestures"    — bridge forwards the shell's touchpad gestures via
+     *                   reportGesture
      */
     PhosphorProtocol::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
                                                               const QStringList& capabilities);
@@ -100,6 +102,20 @@ public Q_SLOTS:
      */
     void reportModifierState(int modifiers, int mouseButtons);
 
+    /**
+     * @brief Report a completed touchpad gesture recognised for the shell
+     * @param kind "swipe" or "pinch"
+     * @param direction swipe: up/down/left/right; pinch: expanding/contracting
+     * @param fingerCount 3 or 4
+     * @note Re-emitted verbatim as gestureReported. The bridge registers
+     *       the gestures it forwards under the "gestures" capability; the
+     *       daemon keeps no state, it is the relay between the compositor
+     *       (which alone sees touchpad gestures) and the shell surface that
+     *       answers them. Input is validated here: an unknown kind or
+     *       direction, or a finger count outside 1..5, is dropped.
+     */
+    void reportGesture(const QString& kind, const QString& direction, uint fingerCount);
+
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Bridge lifecycle
@@ -114,6 +130,7 @@ Q_SIGNALS:
 
     void bridgeRegistered(const QString& compositorName, const QString& version, const QStringList& capabilities);
     void modifierStateChanged(int modifiers, int mouseButtons);
+    void gestureReported(const QString& kind, const QString& direction, uint fingerCount);
 
 private:
     QString m_bridgeName;

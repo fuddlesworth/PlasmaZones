@@ -82,15 +82,41 @@ Item {
         }
     }
 
+    // Swipe to dismiss (A3 §3): a two-finger or one-finger drag to the
+    // right past the threshold dismisses; short of it the card settles
+    // back. Only the x axis, so the stack above never scrolls by mistake.
+    readonly property int swipeThreshold: 72
+    readonly property bool swiping: swipe.active
+
     Item {
         id: card
 
         anchors.horizontalCenter: parent.horizontalCenter
+        anchors.horizontalCenterOffset: swipe.active ? Math.max(0, swipe.translation.x) : 0
         anchors.top: parent.top
         anchors.topMargin: 2 + Tokens.spacing_s
         width: Math.min(360, toast.width)
         implicitHeight: Math.max(64, row.implicitHeight + 2 * Tokens.spacing_m)
         height: implicitHeight
+        // The card fades as it travels, and settles back on release.
+        opacity: swipe.active ? Math.max(0.2, 1 - Math.max(0, swipe.translation.x) / (2 * toast.swipeThreshold)) : 1
+
+        Behavior on anchors.horizontalCenterOffset {
+            enabled: !swipe.active
+            SettleAnimation {}
+        }
+
+        DragHandler {
+            id: swipe
+
+            target: null
+            yAxis.enabled: false
+            xAxis.minimum: 0
+            onActiveChanged: {
+                if (!active && translation.x >= toast.swipeThreshold)
+                    toast.dismissed();
+            }
+        }
 
         Rectangle {
             anchors.fill: parent

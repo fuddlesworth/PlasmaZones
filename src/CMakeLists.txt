@@ -738,6 +738,8 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/shelleffects.cpp
         shell/ShellMotion.h
         shell/shellmotion.cpp
+        shell/ShellGestures.h
+        shell/shellgestures.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
@@ -811,6 +813,9 @@ if(BUILD_PHOSPHOR_SHELL)
             # loaded at startup through PaletteStore (see main.cpp).
             PhosphorShellPicker::PhosphorShellPickerQml
             PhosphorShellPickerQmlplugin
+            # ShellGestures subscribes to the daemon's gestureReported relay
+            # by the protocol's interface constants.
+            PhosphorProtocol::PhosphorProtocol
             # ShellMotion owns the profile registry behind SettleAnimation
             # and publishes the QML-side motion defaults.
             PhosphorAnimation::PhosphorAnimation

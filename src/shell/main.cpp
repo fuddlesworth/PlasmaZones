@@ -12,6 +12,7 @@
 #include "PolkitController.h"
 #include "RoutingPopoutTransport.h"
 #include "ShellEffects.h"
+#include "ShellGestures.h"
 #include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
 #include "ToastController.h"
@@ -359,6 +360,10 @@ int main(int argc, char* argv[])
     PhosphorShellApp::ShellMotion shellMotion;
     shellMotion.publish();
 
+    // The compositor's touchpad gestures, relayed by the daemon; shell.qml
+    // maps them to surfaces.
+    PhosphorShellApp::ShellGestures shellGestures;
+
     // The pane's window rule, seeded into the daemon's store if absent so
     // the engines know where to put a toplevel with the pane's app id.
     PhosphorShellApp::PaneRules::seed(
@@ -466,6 +471,9 @@ int main(int argc, char* argv[])
     // bar band through ShellEffects.setBlurBehind.
     engine.addEngineHook([&shellMotion](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellMotion"), &shellMotion);
+    });
+    engine.addEngineHook([&shellGestures](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellGestures"), &shellGestures);
     });
     engine.addEngineHook([&shellEffects](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellEffects"), &shellEffects);
