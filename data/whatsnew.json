@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.4.12",
+            "date": "2026-09-05",
+            "highlights": [
+                "Fixed: the pointer no longer vanishes after a strip shader pass on a scrolling screen. The effect stays in the paint chain until the cursor is shown again (#1062)"
+            ]
+        },
+        {
             "version": "3.4.11",
             "date": "2026-09-04",
             "highlights": [

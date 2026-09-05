@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.4.12] - 2026-09-05
+
+### Fixed
+
+- **The pointer no longer vanishes after a strip shader pass on a scrolling screen**: with a strip pack assigned under Settings → Animations → Scrolling, the strip pass hides the compositor cursor while it paints the strip and draws its own copy, and it only shows the cursor again from within the effect's paint hooks. The effect could leave the paint chain the instant the settle fade finished, one frame before the hook that shows the cursor ran, so the pointer stayed invisible until a later scroll happened to run it. Decorations or tab indicators kept the effect in the chain permanently, which is why only some setups saw it. The effect now stays in the chain while the cursor is hidden, so the pointer always comes back. ([#1062](https://github.com/fuddlesworth/PlasmaZones/pull/1062))
+
 ## [3.4.11] - 2026-09-04
 
 ### Added
