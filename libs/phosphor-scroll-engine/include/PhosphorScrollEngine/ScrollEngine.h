@@ -1270,10 +1270,12 @@ private:
     /// (applyLayout's focusWindowAfter arm) whose windowFocused report has
     /// not come back yet — the self-activation echo filter. The full
     /// consume/clear contract is documented on windowFocused's drain
-    /// (engine_lifecycle.cpp).
+    /// (engine_focus.cpp).
     QStringList m_pendingSelfActivations;
     /// Append to m_pendingSelfActivations and trim to the cap — the single
-    /// producer path (applyLayout's focus arm and the verb TU's switch).
+    /// producer path, shared by all three emitters (applyLayout's focus arm,
+    /// the declined-open rewind in engine_lifecycle.cpp, and the verb TU's
+    /// float-to-tiling switch).
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
