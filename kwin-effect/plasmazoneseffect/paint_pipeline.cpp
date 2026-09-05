@@ -140,6 +140,16 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
+bool PlasmaZonesEffect::foreignFullScreenEffectActive() const
+{
+    // The whole window stack is still painted under a fullscreen effect's
+    // opaque view every frame, with full-screen damage, so skipping this
+    // effect's own passes is the primary GPU saving while one runs, not a
+    // belt. Our own claim (the desktop-switch blend) is not foreign.
+    const KWin::Effect* active = KWin::effects->activeFullScreenEffect();
+    return active && active != this;
+}
+
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
     // KWin 6.7 no longer passes a presentTime; sample the steady clock
@@ -213,7 +223,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_scrollTabPainted = false;
     m_scrollTabBlitIssued = false;
     m_scrollTabAboveAnchor.clear();
-    if (data.screen && m_scrollTabPainter->hasIndicators(data.screen)) {
+    if (data.screen && !foreignFullScreenEffectActive() && m_scrollTabPainter->hasIndicators(data.screen)) {
         const QRectF passOutputGeo = QRect(data.screen->geometry());
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
             // The paintability terms StripTransitionManager's above-strip
@@ -543,7 +553,8 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // decorate a frame nobody sees. When the strip pass paints (captures the
     // scene, runs the pack, returns true) the normal scene paint is skipped
     // the same way.
-    if (m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
+    const bool foreignFullScreen = foreignFullScreenEffectActive();
+    if (!foreignFullScreen && m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         return;
     }
     // The scene walk's own damage region is the clip for the pill blit, for
@@ -561,7 +572,7 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // blitting at the anchor's slot. Still requires an
     // anchor: with no strip column on the output there is nothing the pills
     // belong to this pass.
-    if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot
+    if (screen && !foreignFullScreen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot
         && m_scrollTabPainter->hasIndicators(screen)) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
@@ -1156,6 +1167,10 @@ void PlasmaZonesEffect::postPaintScreen()
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
+    if (foreignFullScreenEffectActive()) {
+        OffscreenEffect::prePaintWindow(view, w, data);
+        return;
+    }
     // Derived ONCE. This runs per window, per output, per frame, and the three
     // branches below (padded transform, SetOpacity, chain translucency) each used to
     // re-derive the id and re-look-up the same decoration entry.
@@ -1391,6 +1406,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
+    if (foreignFullScreenEffectActive()) {
+        // Nothing of ours is visible under the foreign view: no decoration
+        // fold, no burn, no tab blit. Straight down the chain.
+        KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+        return;
+    }
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges
