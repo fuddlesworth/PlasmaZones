@@ -2234,6 +2234,13 @@ private:
     /// be live.
     void initExistingWindowsAndInput();
 
+    /// Register the Phosphor shell's touchpad gestures with KWin's recognizer
+    /// (definition in gestures.cpp). Each completed gesture is reported to
+    /// the daemon through CompositorBridge.reportGesture, which relays it to
+    /// the shell. The bridge advertises the "gestures" capability for this.
+    void initTouchpadGestures();
+    void reportShellGesture(const QString& kind, const QString& direction, uint fingerCount);
+
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
     /// loaders) each land as a separate async settings reply; several arriving in
