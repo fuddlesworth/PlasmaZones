@@ -54,7 +54,7 @@ const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
     static const QList<BuiltinWidget> widgets{
         {QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock")},
         {QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp")},
-        {QStringLiteral("workspaces"), QStringLiteral("Workspaces"), QStringLiteral("Workspaces")},
+        {QStringLiteral("placementmap"), QStringLiteral("Placement Map"), QStringLiteral("PlacementMap")},
         {QStringLiteral("systemmetrics"), QStringLiteral("System Metrics"), QStringLiteral("SystemMetrics")},
         {QStringLiteral("network"), QStringLiteral("Network"), QStringLiteral("Network")},
         {QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("Bluetooth")},

@@ -1,0 +1,9 @@
+{
+  "name": "phosphor-breathe",
+  "displayName": "Phosphor breathe (undamped oscillator)",
+  "typeId": "spring",
+  "parameters": {
+    "omega": 4.2,
+    "zeta": 0.0
+  }
+}

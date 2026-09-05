@@ -35,7 +35,20 @@ QtObject {
     readonly property int radius_xl: 24
     readonly property int radius_xxl: 32
     readonly property int radius_full: 9999
+    // Shell chrome radii (docs/phosphor-shell-design/05-visual-identity.md
+    // R3). Chrome uses ONLY these four: edge for OSD cards, fields and
+    // outlined chips; tile for engine-placed panes; container for floating
+    // cards; mini for placement-map miniature cells. radius_l / radius_xl /
+    // radius_xxl / radius_full above are settings-page tokens and are
+    // forbidden on shell chrome (no pills, nothing above 10 px).
+    readonly property int radius_edge: 6
+    readonly property int radius_tile: 8
+    readonly property int radius_container: 10
+    readonly property int radius_mini: 3
     // ─── Elevation (per tier) ────────────────────────────────────────────
+    // Settings pages only. Shell chrome carries no drop shadow (R2): depth
+    // there is a stroke and a ground step, so elevation_1..5 are forbidden
+    // on shell chrome and ElevationShadow must never be attached to it.
     // Both halves of the M3 elevation system live here so a retune touches
     // one place: y/blur/opacity drive the drop shadow (rendered by
     // ElevationShadow.qml into MultiEffect parameters) and tint is the
@@ -84,6 +97,12 @@ QtObject {
     // are tokenised so widgets bind these instead of opening every Text
     // delegate to tune sizes.
     readonly property string font_family: Qt.application.font.family
+    // Shell chrome faces (05 §7). Manrope for display and UI, JetBrains
+    // Mono for every value. Qt's font matching substitutes a system face
+    // when either is not installed, so these are safe to bind
+    // unconditionally; `font_family` above stays the settings-page face.
+    readonly property string font_family_ui: "Manrope"
+    readonly property string font_family_mono: "JetBrains Mono"
     readonly property int font_size_display_l: 32
     readonly property int font_size_display_m: 24
     readonly property int font_size_display_s: 20
@@ -100,4 +119,14 @@ QtObject {
     readonly property int font_weight_medium: Font.Medium
     readonly property int font_weight_demibold: Font.DemiBold
     readonly property int font_weight_bold: Font.Bold
+    // ─── Chrome strokes and bar geometry ─────────────────────────────────
+    // The 1 px inset stroke that gives every chrome surface its edge: its
+    // opacity at rest and when active (05 §5). The bar is a 26 px band
+    // under a 2 px spectrum rail on the screen edge, 28 px in all.
+    readonly property real stroke_resting: 0.35
+    // A coloured hairline on a bright field needs more ink (A1 §2.5).
+    readonly property real stroke_resting_light: 0.55
+    readonly property real stroke_active: 1.0
+    readonly property int bar_thickness: 28
+    readonly property int rail_thickness: 2
 }

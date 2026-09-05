@@ -2,26 +2,21 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Power.PowerMenu, the session menu.
 //
-// The panel that sits in the middle of a screen-centred Modal popout. The
-// surface, the dimmed scrim, click-outside and Escape all belong to the
-// transport and PopoutHost; this file is only the panel.
+// A column of words over your dimmed desktop (A3 §5). No dialog box and
+// no tiles: the surface is a full-screen layer with a void ground at
+// 60 % (phase 1's stand-in for the compositor dim, which is phase 2), and
+// the six session actions are 24 px words down the left edge, coloured
+// on the state axis by how destructive they are (Lock cyan through Shut
+// down rose), each with its one-letter shortcut underlined. A 3 px
+// selection line on the screen's left edge slides between words.
 //
-// Six actions in two rows, per docs/phosphor-shell-design/mockups/power-menu.svg,
-// each with a one-letter shortcut shown in its tile. Lock is the default: the
-// menu focuses the VISIBLE Lock tile on open and draws it filled, because it
+// Destructive actions (log out, restart, shut down) take two presses: the
+// first grows the line to 6 px and starts a 3 s countdown that shortens
+// it, the second confirms. Lock is the default and pre-focused, because it
 // is the only entry that cannot lose the user anything.
 //
 // Availability comes from logind through SessionHost, and an action logind
-// will not perform is HIDDEN rather than greyed — the mockup's "Hibernate
-// hidden if logind says no". A greyed tile invites a click that would be
-// silently dropped by SessionHost's own capability gate.
-//
-// Capabilities are refreshed on open and the answers arrive asynchronously,
-// so a tile can appear or vanish shortly after the menu is painted. That is
-// accepted rather than papered over: holding the menu back until the first
-// reply lands would delay every open to hide a case that only really bites
-// on the very first one after startup, when nothing has been queried yet.
-// The grid re-lays out around whatever is showing, and the rows stay centred.
+// will not perform is HIDDEN rather than greyed.
 
 pragma ComponentBehavior: Bound
 
@@ -31,136 +26,98 @@ import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Service.Session
 
-Item {
+FocusScope {
     id: root
 
-    /// The shell's SessionHost. Injected rather than constructed: every
-    /// SessionHost instance opens its own logind connection AND takes two
-    /// real inhibitors (a sleep delay-lock and a grab on the power/suspend/
-    /// hibernate/lid keys), so a second one here would double them.
     required property SessionHost session
-
-    /// Set by the transport so the menu can close itself after acting.
-    ///
-    /// Typed `Item` rather than PopoutHost on purpose: this module must not
-    /// depend on Phosphor.Popout, which would make the menu unusable outside a
-    /// popout. The cost is that `dismiss()` and `open` are not statically
-    /// checked here, which is what qmllint reports on those two lines.
     property Item _popoutHost: null
 
-    // Announced as a dialog so assistive tech says what opened, rather than
-    // reading six unexplained buttons.
     Accessible.role: Accessible.Dialog
     Accessible.name: qsTr("Session")
 
-    implicitWidth: panel.implicitWidth
-    implicitHeight: panel.implicitHeight
+    // Fills the screen: the popout host centres this, so claim the output.
+    implicitWidth: Screen.width
+    implicitHeight: Screen.height
 
-    // An action is offered only when logind will actually perform it.
-    // Yes and Challenge both count: Challenge means polkit will prompt, and
-    // SessionHost's own gate accepts both, so anything narrower would hide
-    // actions that work.
+    readonly property int rowHeight: 72
+    readonly property int confirmMs: 3000
+
+    // Id of the selected action, and the id awaiting its second press
+    // (or ""). Ids, not indices: rows come and go with logind's answers.
+    property string selectedId: "lock"
+    property string armed: ""
+
     function _offered(availability: int): bool {
         return availability === SessionHost.Yes || availability === SessionHost.Challenge;
     }
 
     function _runAndClose(thunk: var): void {
         thunk();
-        // Close on act. The popout is Modal, so leaving it up over a
-        // suspending or restarting session would be the only thing on screen.
         if (root._popoutHost)
             root._popoutHost.dismiss();
     }
 
-    // One entry is the WHOLE definition of an action: how it looks, whether
-    // logind will do it, what it does, and which key runs it. An earlier
-    // revision spread those across four tables keyed by the same id string,
-    // where adding an action meant four coordinated edits and missing one was
-    // silent (the tile rendered and did nothing, or the displayed letter and
-    // the handled keycode drifted apart).
-    //
-    // Hoisted rather than inlined into the Repeater's `model`, so the array is
-    // built once. An inline literal re-evaluates and rebuilds every delegate,
-    // which resets focus and hover mid-interaction. For the same reason the
-    // entries carry no Theme reads: `accent` is a semantic NAME resolved to a
-    // Theme token inside the tile delegate, so a live retheme retints tiles
-    // in place instead of rebuilding the array (and every tile) via this
-    // binding's Theme dependencies.
-    //
-    // `available` and `run` are functions, not values: capability answers
-    // arrive asynchronously from logind and move with lid state, swap and
-    // inhibitors, so evaluating per binding keeps the grid honest.
+    // One entry is the WHOLE definition of an action. `t` is the
+    // state-axis position: how much the action costs the user.
     readonly property var actions: [
+        {
+            "id": "lock",
+            "label": qsTr("Lock"),
+            "key": "L",
+            "code": Qt.Key_L,
+            "t": 0.0,
+            "destructive": false,
+            "isDefault": true,
+            "available": () => true,
+            "run": s => s.lock()
+        },
         {
             "id": "suspend",
             "label": qsTr("Suspend"),
-            "icon": "system-suspend",
             "key": "S",
             "code": Qt.Key_S,
-            "accent": "info",
-            "row": 0,
+            "t": 0.2,
+            "destructive": false,
             "available": s => root._offered(s.canSuspend),
             "run": s => s.suspend()
         },
         {
             "id": "hibernate",
             "label": qsTr("Hibernate"),
-            "icon": "system-suspend-hibernate",
             "key": "H",
             "code": Qt.Key_H,
-            "accent": "tertiary",
-            "row": 0,
+            "t": 0.4,
+            "destructive": false,
             "available": s => root._offered(s.canHibernate),
             "run": s => s.hibernate()
         },
         {
-            // Lock and log out are not logind capabilities: lock goes to the
-            // session object and log out is a shell-level signal, so neither
-            // has a Can* to consult and both are always offered.
-            "id": "lock",
-            "label": qsTr("Lock"),
-            "icon": "system-lock-screen",
-            "key": "L",
-            "code": Qt.Key_L,
-            "accent": "primary",
-            "row": 0,
-            // The default action: drawn filled and focused on open. One flag
-            // rather than three separate `id === "lock"` tests, which is the
-            // drift this array exists to prevent.
-            "isDefault": true,
-            "available": () => true,
-            "run": s => s.lock()
-        },
-        {
             "id": "logout",
             "label": qsTr("Log out"),
-            "icon": "system-log-out",
             "key": "O",
             "code": Qt.Key_O,
-            "accent": "secondary",
-            "row": 1,
+            "t": 0.6,
+            "destructive": true,
             "available": () => true,
             "run": s => s.logout()
         },
         {
             "id": "reboot",
             "label": qsTr("Restart"),
-            "icon": "system-reboot",
             "key": "R",
             "code": Qt.Key_R,
-            "accent": "warning",
-            "row": 1,
+            "t": 0.8,
+            "destructive": true,
             "available": s => root._offered(s.canReboot),
             "run": s => s.reboot()
         },
         {
             "id": "poweroff",
             "label": qsTr("Shut down"),
-            "icon": "system-shutdown",
             "key": "P",
             "code": Qt.Key_P,
-            "accent": "error",
-            "row": 1,
+            "t": 1.0,
+            "destructive": true,
             "available": s => root._offered(s.canPowerOff),
             "run": s => s.powerOff()
         }
@@ -171,26 +128,65 @@ Item {
         return s ? action.available(s) : false;
     }
 
+    // Rows by action id, filled as the Repeater builds them.
+    property var _rows: ({})
+
+    function _visibleIds(): var {
+        return root.actions.filter(a => root._isAvailable(a)).map(a => a.id);
+    }
+
+    // Activate an action: destructive ones arm first and run on the
+    // second press within the countdown.
     function _invoke(action: var): void {
         const s = root.session;
         if (!s || !root._isAvailable(action))
             return;
+        if (action.destructive && root.armed !== action.id) {
+            root.armed = action.id;
+            confirmTimer.restart();
+            return;
+        }
+        confirmTimer.stop();
+        root.armed = "";
         root._runAndClose(() => action.run(s));
     }
 
-    // Capabilities move with lid state, swap and inhibitor locks, and
-    // SessionHost documents refreshCapabilities as existing for exactly this
-    // moment. Without it a menu opened long after startup shows whatever was
-    // true when the shell launched.
+    function _select(id: string): void {
+        if (id === "")
+            return;
+        root.selectedId = id;
+        if (root.armed !== "" && root.armed !== id) {
+            root.armed = "";
+            confirmTimer.stop();
+        }
+    }
+
+    // Move the selection by `delta` among the rows logind offers.
+    function _step(delta: int): void {
+        const ids = root._visibleIds();
+        if (ids.length === 0)
+            return;
+        const at = Math.max(0, ids.indexOf(root.selectedId));
+        root._select(ids[Math.max(0, Math.min(ids.length - 1, at + delta))]);
+    }
+
+    function _selectedAction(): var {
+        return root.actions.find(a => a.id === root.selectedId) ?? null;
+    }
+
+    Timer {
+        id: confirmTimer
+
+        interval: root.confirmMs
+        repeat: false
+        onTriggered: root.armed = ""
+    }
+
     Component.onCompleted: {
         if (root.session)
             root.session.refreshCapabilities();
-        // Claim focus now AND again when the popout opens. The transport
-        // completes this component before the layer surface exists, so this
-        // first call runs on an item with no window and Qt may not keep the
-        // grant; the host's open transition is the moment the menu is really
-        // on screen and can hold it.
-        defaultTile.forceActiveFocus();
+        root._select("lock");
+        root.forceActiveFocus();
     }
 
     Connections {
@@ -199,149 +195,220 @@ Item {
         function onOpenChanged(): void {
             if (!root._popoutHost.open)
                 return;
-            // Refresh here as well as at construction. Both shipped transports
-            // build a fresh menu per open, so today this is the same moment,
-            // but PopoutHost documents transports that reuse one host across
-            // popouts, and against those the menu would otherwise show the
-            // capabilities that were true when it was first built.
             if (root.session)
                 root.session.refreshCapabilities();
-            defaultTile.forceActiveFocus();
+            root.forceActiveFocus();
         }
     }
 
-    // Single-key activation. Handled on the panel rather than per tile so a
-    // key works wherever focus happens to be, and so a letter whose tile is
-    // hidden is simply inert rather than reaching a different action. The
-    // keycode comes from the action entry, so it cannot drift from the letter
-    // the tile displays.
+    focus: true
     Keys.onPressed: event => {
-        // Bare letters only. These actions suspend or power off the machine,
-        // so a Ctrl- or Meta-held keystroke meant for something else must not
-        // reach one, and a held key must not fire twice.
-        if (event.isAutoRepeat || (event.modifiers & ~Qt.ShiftModifier) !== Qt.NoModifier)
+        if (event.isAutoRepeat)
+            return;
+        if (event.key === Qt.Key_Up) {
+            root._step(-1);
+            event.accepted = true;
+            return;
+        }
+        if (event.key === Qt.Key_Down) {
+            root._step(1);
+            event.accepted = true;
+            return;
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            const a = root._selectedAction();
+            if (a)
+                root._invoke(a);
+            event.accepted = true;
+            return;
+        }
+        if ((event.modifiers & ~Qt.ShiftModifier) !== Qt.NoModifier)
             return;
         const hit = root.actions.find(a => a.code === event.key);
-        if (hit === undefined)
+        if (hit === undefined || !root._isAvailable(hit))
             return;
         event.accepted = true;
+        root._select(hit.id);
         root._invoke(hit);
     }
 
-    PhosphorCard {
-        id: panel
+    // Phase 1 ground: void at 60 %. The compositor dim (35 % brightness,
+    // 40 % saturation on every window) is phase 2.
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.background
+        opacity: 0.6
+    }
 
-        // Menus sit at elevation 3 in the M3 scale ElevationShadow
-        // documents; the bar capsule is 2.
-        elevation: 3
-        radius: Tokens.radius_xl
-        padding: Tokens.spacing_xl
+    // The selection line on the screen's left edge. 3 px, 6 px while an
+    // action is armed, shortening with the countdown.
+    Rectangle {
+        id: selectionLine
 
-        ColumnLayout {
-            spacing: Tokens.spacing_l
+        readonly property var _action: root._selectedAction()
+        readonly property Item _row: root._rows[root.selectedId] ?? null
+        readonly property bool _armed: _action !== null && root.armed === _action.id
 
-            Text {
-                // Translated in natural casing; the shout is styling, and
-                // casing rules differ per locale.
-                text: qsTr("Session")
-                font.capitalization: Font.AllUppercase
-                color: Theme.on_surface_variant
-                font.pixelSize: Tokens.font_size_label_s
-                font.weight: Tokens.font_weight_medium
-                font.family: Tokens.font_family
-                Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: Tokens.spacing_xs
+        x: 0
+        y: column.y + (_row ? _row.y : 0)
+        width: _armed ? 6 : 3
+        height: root.rowHeight * (_armed ? countdown.remaining : 1)
+        color: _action ? Spectrum.at(_action.t) : Spectrum.resting
+
+        Behavior on y {
+            NumberAnimation {
+                duration: 110
+                easing: Motion.reveal
             }
-
-            // Two fixed rows rather than a flow: the mockup's rows have
-            // different tile heights. Each row centres itself, so hiding an
-            // unavailable action shortens that row and leaves it centred
-            // rather than leaving a hole where the tile was.
-            Repeater {
-                model: 2
-
-                delegate: RowLayout {
-                    id: tileRow
-
-                    required property int index
-
-                    spacing: Tokens.spacing_m
-                    Layout.alignment: Qt.AlignHCenter
-
-                    Repeater {
-                        // Filtered to this row, NOT the whole list with the
-                        // off-row entries hidden. Building all six in both rows
-                        // made twelve tiles for six actions, six of them alive
-                        // only to be invisible (each still resolving a themed
-                        // icon), and gave the row-1 Lock copy — the invisible
-                        // one — a second chance to claim the default focus,
-                        // which it won by completing last. The menu then opened
-                        // focused on a tile nobody could see.
-                        model: root.actions.filter(a => a.row === tileRow.index)
-
-                        delegate: PowerTile {
-                            required property var modelData
-
-                            visible: root._isAvailable(modelData)
-                            // Metrics come off the tile itself, which is the
-                            // one definition of them, so the grid and the tile
-                            // cannot drift apart. QQuickLayout skips invisible
-                            // items entirely, so a hidden action costs neither
-                            // width nor a spacing slot and this only ever
-                            // sizes a tile that is actually shown.
-                            Layout.preferredWidth: tileWidth
-                            Layout.preferredHeight: tileRow.index === 0 ? tallHeight : shortHeight
-
-                            label: modelData.label
-                            iconName: modelData.icon
-                            shortcut: modelData.key
-                            // Resolved HERE, not in the actions array, so a
-                            // retheme retints this binding alone instead of
-                            // rebuilding the array and every tile with it.
-                            // The switch reads the Theme properties directly,
-                            // so each is a tracked dependency.
-                            accent: {
-                                switch (modelData.accent) {
-                                case "info":
-                                    return Theme.info;
-                                case "tertiary":
-                                    return Theme.tertiary;
-                                case "primary":
-                                    return Theme.primary;
-                                case "secondary":
-                                    return Theme.secondary;
-                                case "warning":
-                                    return Theme.warning;
-                                case "error":
-                                    return Theme.error;
-                                }
-                                return Theme.on_surface_variant;
-                            }
-                            primary: modelData.isDefault === true
-
-                            onActivated: root._invoke(modelData)
-
-                            Component.onCompleted: {
-                                if (modelData.isDefault === true)
-                                    defaultTile.target = this;
-                            }
-                        }
-                    }
-                }
+        }
+        Behavior on width {
+            NumberAnimation {
+                duration: Motion.duration_enter
+                easing: Motion.enter
             }
         }
     }
 
-    // Indirection so Component.onCompleted can focus the default tile
-    // without reaching into the Repeater's delegate tree by index.
+    // Countdown fraction while armed.
     QtObject {
-        id: defaultTile
+        id: countdown
 
-        property Item target: null
+        property real remaining: 1
+    }
+    NumberAnimation {
+        id: countdownAnim
 
-        function forceActiveFocus() {
-            if (target)
-                target.forceActiveFocus();
+        target: countdown
+        property: "remaining"
+        from: 1
+        to: 0
+        duration: root.confirmMs
+    }
+    onArmedChanged: {
+        if (root.armed !== "")
+            countdownAnim.restart();
+        else {
+            countdownAnim.stop();
+            countdown.remaining = 1;
+        }
+    }
+
+    Column {
+        id: column
+
+        x: 48
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 0
+
+        // One row per action, hidden (and skipped by the Column) when
+        // logind will not perform it.
+        Repeater {
+            model: root.actions
+
+            delegate: PowerRow {}
+        }
+    }
+
+    // A row: the word, its key hint, and the armed suffix.
+    component PowerRow: Item {
+        id: row
+
+        required property var modelData
+        required property int index
+
+        // Named so the tests can walk the visual tree for rows.
+        objectName: "powerRow"
+
+        // The one activation seam: pointer, keyboard and assistive tech
+        // all route through it. A destructive action arms on the first
+        // activation and runs on the second.
+        signal activated
+
+        onActivated: {
+            root._select(row.modelData.id);
+            root._invoke(row.modelData);
+        }
+
+        readonly property string label: row.modelData.label
+        readonly property bool primary: row.modelData.isDefault === true
+        readonly property bool isSelected: root.selectedId === row.modelData.id
+        readonly property bool isArmed: root.armed === row.modelData.id
+        readonly property color hue: Spectrum.at(row.modelData.t)
+
+        width: 360
+        height: root.rowHeight
+        visible: root._isAvailable(row.modelData)
+        // The selected row holds focus; keys it does not handle bubble
+        // to the menu's own handler.
+        focus: row.isSelected
+
+        Accessible.role: Accessible.Button
+        Accessible.name: row.label
+        Accessible.onPressAction: row.activated()
+
+        Component.onCompleted: {
+            const rows = root._rows;
+            rows[row.modelData.id] = row;
+            root._rows = rows;
+        }
+
+        HoverHandler {
+            cursorShape: Qt.PointingHandCursor
+            onHoveredChanged: {
+                if (hovered)
+                    root._select(row.modelData.id);
+            }
+        }
+        TapHandler {
+            onTapped: row.activated()
+        }
+
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Tokens.spacing_m
+
+            Text {
+                id: word
+
+                text: row.modelData.label
+                color: row.hue
+                opacity: row.isSelected ? 1 : 0.75
+                font.family: Tokens.font_family_ui
+                font.pixelSize: Tokens.font_size_display_m
+                font.weight: Tokens.font_weight_regular
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: row.isSelected ? Motion.duration_enter : Motion.duration_release
+                        easing: row.isSelected ? Motion.enter : Motion.release
+                    }
+                }
+
+                // The key hint: the first letter underlined.
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.bottom
+                    anchors.topMargin: -2
+                    width: firstLetter.advanceWidth
+                    height: 1
+                    color: row.hue
+                    opacity: 0.9
+                }
+                TextMetrics {
+                    id: firstLetter
+
+                    font: word.font
+                    text: row.modelData.label.length > 0 ? row.modelData.label[0] : ""
+                }
+            }
+
+            TabularText {
+                anchors.baseline: word.baseline
+                visible: row.isArmed
+                text: qsTr("Enter again")
+                color: Theme.on_surface_variant
+                font.pixelSize: Tokens.font_size_body_m
+            }
         }
     }
 }

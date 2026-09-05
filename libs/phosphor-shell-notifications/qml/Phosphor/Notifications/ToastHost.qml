@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Notifications.ToastHost, the toast stack manager.
 //
-// Stacks transient notification toasts at the top-right, newest on top.
+// Stacks transient notification toasts under the top edge of the work
+// area, newest on top, each hanging from its own 2 px band (A3 §3).
 // Shows up to maxVisible at once and queues the rest; as a toast
 // dismisses (timeout, hover-then-leave, or close), the next queued toast
-// takes its place. Slide-in / slide-out / reflow are handled by the
-// ListView add / remove / displaced transitions (Motion tokens).
+// takes its place. Bands enter from their centre outward and cards enter
+// on opacity; nothing slides in from the side.
+//
+// Phase 1 centres the stack; placing each toast at its app's bar-entry x
+// (or under the app's window) is phase 2 and needs the bar to expose
+// chip positions.
 //
 //   ToastHost {
 //       id: toasts
@@ -156,9 +161,8 @@ Item {
         id: list
 
         anchors.top: parent.top
-        anchors.right: parent.right
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: host.margins
-        anchors.rightMargin: host.margins
         width: 360
         height: Math.max(0, Math.min(contentHeight, parent.height - host.margins * 2))
         spacing: host.spacing
@@ -181,37 +185,43 @@ Item {
             imageSource: model.imageSource
             urgency: model.urgency
             timeout: model.timeout
+            t: Spectrum.tForX(list.x + list.width / 2, host.width)
             onDismissed: host.dismiss(model.toastId)
         }
 
-        // Slide in from the right + fade.
+        // Band draws out from its centre, card enters on opacity.
         add: Transition {
             NumberAnimation {
-                property: "x"
-                from: list.width
-                duration: Motion.duration_medium_2
-                easing: Motion.emphasized
+                property: "bandReveal"
+                from: 0
+                to: 1
+                duration: Motion.duration_reveal
+                easing: Motion.reveal
             }
             NumberAnimation {
                 property: "opacity"
                 from: 0
                 to: 1
-                duration: Motion.duration_short_3
+                duration: Motion.duration_enter_content
+                easing: Motion.reveal
             }
         }
 
-        // Slide out to the right + fade.
+        // Card dismisses, then the band retracts toward its centre.
         remove: Transition {
-            NumberAnimation {
-                property: "x"
-                to: list.width
-                duration: Motion.duration_short_4
-                easing: Motion.standard
-            }
-            NumberAnimation {
-                property: "opacity"
-                to: 0
-                duration: Motion.duration_short_4
+            SequentialAnimation {
+                NumberAnimation {
+                    property: "opacity"
+                    to: 0
+                    duration: Motion.duration_dismiss
+                    easing: Motion.dismiss
+                }
+                NumberAnimation {
+                    property: "bandReveal"
+                    to: 0
+                    duration: Motion.duration_release
+                    easing: Motion.release
+                }
             }
         }
 
@@ -219,8 +229,8 @@ Item {
         displaced: Transition {
             NumberAnimation {
                 property: "y"
-                duration: Motion.duration_short_4
-                easing: Motion.standard
+                duration: Motion.duration_release
+                easing: Motion.release
             }
         }
     }

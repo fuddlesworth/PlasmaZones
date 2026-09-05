@@ -29,7 +29,9 @@ Item {
     // shadow (forwarded to ElevationShadow) and the surface tint overlay
     // (the colour shift below).
     property int elevation: 1
-    property real radius: Tokens.radius_l
+    property real radius: Tokens.radius_container
+    // Rail-axis hue of the card's stroke.
+    property real t: 0.5
     property real padding: Tokens.spacing_l
 
     implicitWidth: contentArea.implicitWidth + padding * 2
@@ -63,11 +65,15 @@ Item {
         anchors.fill: parent
         radius: root.radius
         color: root._tintedSurface
-        // Only pay for the layer + shadow pass when actually elevated; a
-        // flat card (elevation 0) renders as a plain rounded surface.
-        layer.enabled: root.elevation > 0
-        layer.effect: ElevationShadow {
-            level: root.elevation
+        opacity: 0.92
+
+        // Depth on chrome is a stroke, not a shadow (05 R2). `elevation`
+        // still tints the ground; it no longer casts.
+        SpectrumStroke {
+            anchors.fill: parent
+            radius: root.radius
+            t: root.t
+            active: root.elevation > 1
         }
 
         Behavior on color {

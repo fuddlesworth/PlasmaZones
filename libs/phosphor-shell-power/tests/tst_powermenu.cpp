@@ -132,8 +132,8 @@ private:
 
 namespace {
 
-// Every PowerTile in the menu. Identified by type name rather than by a C++
-// type, since PowerTile is QML-defined.
+// Every PowerRow in the menu. Identified by type name rather than by a C++
+// type, since PowerRow is QML-defined.
 //
 // Walks the VISUAL tree, not findChildren: a Repeater's delegates are not
 // QObject children of anything in the document, so findChildren stops at the
@@ -142,9 +142,9 @@ void collectPowerTiles(QQuickItem* item, QList<QQuickItem*>& out)
 {
     const auto children = item->childItems();
     for (QQuickItem* child : children) {
-        // The generated name is PowerTile_QMLTYPE_<n>; matching the underscore
-        // too keeps a future PowerTileGroup from counting as a tile.
-        if (QString::fromUtf8(child->metaObject()->className()).startsWith(QLatin1String("PowerTile_"))) {
+        // Rows are inline components, so their class name is the menu's;
+        // the row names itself instead.
+        if (child->objectName() == QLatin1String("powerRow")) {
             out.append(child);
         }
         collectPowerTiles(child, out);
@@ -288,9 +288,17 @@ private Q_SLOTS:
             const QString label = tile->property("label").toString();
             QVERIFY2(counters.contains(label), qPrintable(QStringLiteral("unmapped tile label '%1'").arg(label)));
             const int before = m_session.get()->*counters.value(label);
-            // Drive the tile's own activation signal — the seam pointer,
+            // Drive the row's own activation signal — the seam pointer,
             // keyboard, and assistive tech all route through.
             QVERIFY(QMetaObject::invokeMethod(tile, "activated"));
+            // Log out, Restart and Shut down arm on the first activation
+            // and run on the second (the 3 s confirm); the rest run at once.
+            const bool destructive = label == QStringLiteral("Log out") || label == QStringLiteral("Restart")
+                || label == QStringLiteral("Shut down");
+            if (destructive) {
+                QCOMPARE(m_session.get()->*counters.value(label), before);
+                QVERIFY(QMetaObject::invokeMethod(tile, "activated"));
+            }
             ++expectedTotal;
             QCOMPARE(m_session.get()->*counters.value(label), before + 1);
             QCOMPARE(m_session->totalActionCount(), expectedTotal);

@@ -117,6 +117,20 @@ target_link_libraries(test_phosphorshell_workspaces
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_workspaces COMMAND test_phosphorshell_workspaces)
+
+# PlacementMapParser: the bus-free JSON → cells half of the bar's placement
+# map, plus the forScreen() ownership guard. Needs a session bus only to
+# construct the singleton's service watcher; no daemon is expected, so the
+# screen must read as mode -1 with no cells.
+add_executable(test_phosphorshell_placementmapparser test_placementmapparser.cpp)
+target_link_libraries(test_phosphorshell_placementmapparser
+    PRIVATE
+        Qt6::Test
+        Qt6::Qml
+        PhosphorShell::PhosphorShell
+)
+add_test(NAME test_phosphorshell_placementmapparser COMMAND test_phosphorshell_placementmapparser)
+phosphorshell_isolate_test(test_phosphorshell_placementmapparser "QT_QPA_PLATFORM=offscreen")
 phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
 # TIMEOUT set AFTER the isolation call, which only supplies its 120s default
 # when no TIMEOUT is set yet — last write wins.

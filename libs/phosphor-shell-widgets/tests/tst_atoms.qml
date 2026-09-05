@@ -90,7 +90,7 @@ TestCase {
         const c = createTemporaryObject(cardComp, testCase);
         verify(c, "PhosphorCard instantiates");
         compare(c.elevation, 1, "default elevation 1");
-        compare(c.radius, 16, "default radius 16");
+        compare(c.radius, 10, "default radius is the container radius");
         compare(c.padding, 16, "default padding 16");
     }
 

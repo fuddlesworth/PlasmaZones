@@ -81,6 +81,8 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/LazyLoader.h
     include/PhosphorShell/Toplevels.h
     include/PhosphorShell/Workspaces.h
+    include/PhosphorShell/PlacementMap.h
+    include/PhosphorShell/PlacementMapParser.h
     include/PhosphorShell/WallpaperService.h
     include/PhosphorShell/SystemClock.h
     include/PhosphorShell/SystemUsage.h
@@ -107,6 +109,8 @@ set(phosphorshell_SRCS
     src/lazyloader.cpp
     src/toplevels.cpp
     src/workspaces.cpp
+    src/placementmap.cpp
+    src/placementmapparser.cpp
     src/wallpaperservice.cpp
     src/systemclock.cpp
     src/systemusage.cpp
@@ -166,6 +170,12 @@ target_link_libraries(PhosphorShell
         # still carries a find_dependency(PhosphorWorkspaces) (and Qt6
         # WaylandClient, below) for installed consumers.
         PhosphorWorkspaces::PhosphorWorkspaces
+        # PlacementMap: daemon wire types + JSON zone keys, D-Bus for the
+        # placement engine's geometry feed. Private for the same reason as
+        # PhosphorWorkspaces above.
+        PhosphorProtocol::PhosphorProtocol
+        PhosphorZones::PhosphorZones
+        Qt6::DBus
         # WaylandClient + private headers needed by popupwindow.cpp to call
         # xdg_popup.reposition directly. Qt's xdg-shell client plugin owns
         # the xdg_popup proxy lifecycle, but reposition is just a stateless

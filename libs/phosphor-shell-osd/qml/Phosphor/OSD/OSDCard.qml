@@ -1,14 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.OSD.OSDCard, shared chrome for the built-in OSDs.
+// Phosphor.OSD.OSDCard, shared chrome for the built-in OSDs: an edge band.
 //
-// A rounded elevated card holding a glyph, a label, and an optional
-// progress bar. The four built-in OSDs (VolumeOSD, BrightnessOSD,
-// MicOSD, CapsLockOSD) are each an OSDCard with their own glyph and
-// bindings, so the card frame, elevation, spacing, and progress styling
-// live in one place.
+// An OSD is a value drawn on the edge that concerns it (A3 §4), not a
+// centred card. The band is 3 px along one screen edge, its length the
+// value and its colour the state-axis sample of that value (cyan low,
+// rose at the limit); the glyph and the tabular readout ride the fill
+// point. Stateful OSDs (mic, caps) draw a 2 px band across the whole
+// edge with the glyph and label at its centre.
+//
+// Phase 1 anchors bands to the SCREEN edge; the window-edge placement
+// (volume on the focused window's bottom edge) is phase 2 and needs the
+// compositor to hand the shell that window's rect.
 //
 //   OSDCard {
+//       edge: OSDCard.Bottom
 //       label: qsTr("Volume")
 //       showProgress: true
 //       progress: value / 100
@@ -16,92 +22,107 @@
 //   }
 
 import QtQuick
-import QtQuick.Layouts
 import Phosphor.Theme
 import Phosphor.Widgets
 
 Item {
     id: card
 
-    // Glyph component shown at the top of the card.
+    enum Edge {
+        Bottom,
+        Top,
+        Right
+    }
+
     property Component icon: null
     property string label: ""
-    // Whether to show the progress bar (volume/brightness yes; mic/caps no).
     property bool showProgress: false
-    // Progress fraction 0..1.
     property real progress: 0
+    // Which screen edge the band lives on. OSDHost reads it to place the
+    // frame.
+    property int edge: OSDCard.Bottom
+    // How much of the band is drawn, 0..1; OSDHost animates it for the
+    // enter and retract.
+    property real reveal: 1
 
-    implicitWidth: 240
-    implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
+    readonly property bool _vertical: card.edge === OSDCard.Right
+    readonly property real _fraction: Math.max(0, Math.min(1, card.progress))
+    readonly property real _length: card._vertical ? card.height : card.width
+    readonly property real _fill: card.showProgress ? card._fraction : 1
+    readonly property color _hue: card.showProgress ? Spectrum.at(card._fraction) : Spectrum.resting
 
-    // An OSD is a transient status announcement, so expose it to assistive
-    // tech as an alert. Fold the progress percentage into the name for the
-    // OSDs that show it (volume/brightness); the stateful ones (mic/caps)
-    // carry their state in the label already.
+    // Sized by the host to the edge it spans; the band is thin.
+    implicitWidth: card._vertical ? 40 : 400
+    implicitHeight: card._vertical ? 400 : 40
+
     Accessible.role: Accessible.AlertMessage
-    Accessible.name: card.showProgress ? qsTr("%1, %2 percent").arg(card.label).arg(Math.round(Math.max(0, Math.min(1, card.progress)) * 100)) : card.label
+    Accessible.name: card.showProgress ? qsTr("%1, %2 percent").arg(card.label).arg(Math.round(card._fraction * 100)) : card.label
 
+    // Track: the whole edge at rest opacity.
     Rectangle {
-        anchors.fill: parent
-        radius: Tokens.radius_l
-        color: Theme.surface_container_high
-        layer.enabled: true
-        layer.effect: ElevationShadow {
-            level: 3
+        visible: card.showProgress
+        x: card._vertical ? card.width - 3 : 0
+        y: card._vertical ? 0 : card.height - 3
+        width: card._vertical ? 3 : card.width
+        height: card._vertical ? card.height : 3
+        color: Theme.on_surface
+        opacity: 0.12 * card.reveal
+    }
+
+    // The band. Grows from its source point (the edge's start) to the
+    // value; `reveal` scales it for enter/retract.
+    Rectangle {
+        id: band
+
+        readonly property real _len: card._length * card._fill * card.reveal
+        x: card._vertical ? card.width - 3 : 0
+        y: card._vertical ? card.height - _len : card.height - (card.showProgress ? 3 : 2)
+        width: card._vertical ? 3 : _len
+        height: card._vertical ? _len : (card.showProgress ? 3 : 2)
+        color: card._hue
+
+        Behavior on _len {
+            NumberAnimation {
+                duration: Motion.duration_enter_content
+                easing: Motion.reveal
+            }
         }
     }
 
-    ColumnLayout {
-        id: column
+    // Glyph + readout riding the fill point.
+    Row {
+        id: readout
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Tokens.spacing_xl
-        anchors.rightMargin: Tokens.spacing_xl
-        spacing: Tokens.spacing_m
+        spacing: Tokens.spacing_s
+        opacity: card.reveal
+        x: card._vertical ? card.width - width - 8 : Math.max(0, Math.min(card.width - width, band._len - width / 2))
+        y: card._vertical ? Math.max(0, Math.min(card.height - height, card.height - band._len - height / 2)) : card.height - 3 - height - 6
 
         Loader {
-            Layout.alignment: Qt.AlignHCenter
+            anchors.verticalCenter: parent.verticalCenter
             sourceComponent: card.icon
         }
 
-        Text {
-            // The card root already announces the label (and percentage) as
-            // its AlertMessage name, so keep this Text out of the a11y tree to
-            // avoid a screen reader reading the label twice.
-            Accessible.ignored: true
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            text: card.label
-            color: Theme.on_surface
-            font.pixelSize: Tokens.font_size_title_s
+        TabularText {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: card.showProgress
+            text: Math.round(card._fraction * 100)
+            font.pixelSize: Tokens.font_size_display_m
             font.weight: Tokens.font_weight_medium
-            elide: Text.ElideRight
+            tickOnChange: true
+            t: card._fraction
         }
 
-        // Progress track + fill. Reserved out of layout when not shown so
-        // a stateful OSD (mic/caps) is a compact icon+label card.
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 6
-            visible: card.showProgress
-            radius: height / 2
-            color: Theme.surface_variant
-
-            Rectangle {
-                width: parent.width * Math.max(0, Math.min(1, card.progress))
-                height: parent.height
-                radius: parent.radius
-                color: Theme.primary
-
-                Behavior on width {
-                    NumberAnimation {
-                        duration: Motion.duration_short_3
-                        easing: Motion.standard
-                    }
-                }
-            }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !card.showProgress
+            Accessible.ignored: true
+            text: card.label
+            color: Theme.on_surface_variant
+            font.family: Tokens.font_family_ui
+            font.pixelSize: Tokens.font_size_label_m
+            font.capitalization: Font.AllUppercase
+            font.letterSpacing: 1
         }
     }
 }

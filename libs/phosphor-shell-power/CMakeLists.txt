@@ -54,7 +54,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(_phosphor_power_qml_files
     qml/Phosphor/Power/PowerMenu.qml
-    qml/Phosphor/Power/PowerTile.qml
 )
 
 # Pin each QML file's resource alias to its basename, keeping the resource

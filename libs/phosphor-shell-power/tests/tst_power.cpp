@@ -39,7 +39,6 @@ private Q_SLOTS:
         // runtime and a unit test therefore cannot satisfy.
         QTest::addColumn<bool>("loadable");
         QTest::newRow("PowerMenu") << QStringLiteral("PowerMenu") << false;
-        QTest::newRow("PowerTile") << QStringLiteral("PowerTile") << true;
     }
 
     void everyPublishedTypeResolves()

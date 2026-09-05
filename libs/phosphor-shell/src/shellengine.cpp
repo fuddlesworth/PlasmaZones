@@ -7,6 +7,7 @@
 #include <PhosphorShell/FloatingWindow.h>
 #include <PhosphorShell/LazyLoader.h>
 #include <PhosphorShell/Toplevels.h>
+#include <PhosphorShell/PlacementMap.h>
 #include <PhosphorShell/Workspaces.h>
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/PerScreenPanels.h>
@@ -176,6 +177,12 @@ bool ShellEngine::load(const QUrl& shellUrl)
         // singleton for the same reason Toplevels is one: the underlying
         // manager holds one D-Bus subscription per process.
         qmlRegisterSingletonType<Workspaces>("Phosphor.Shell", 1, 0, "Workspaces", &Workspaces::create);
+        // The placement engine's geometry per screen (the bar's live map).
+        // One set of daemon subscriptions per engine, screens vended by
+        // forScreen() under C++ ownership.
+        qmlRegisterSingletonType<PlacementMap>("Phosphor.Shell", 1, 0, "PlacementMap", &PlacementMap::create);
+        qmlRegisterUncreatableType<PlacementMapScreen>("Phosphor.Shell", 1, 0, "PlacementMapScreen",
+                                                       QStringLiteral("Vended by PlacementMap.forScreen()"));
     });
 
     // Watch BEFORE building. A failed initial load still leaves the watcher

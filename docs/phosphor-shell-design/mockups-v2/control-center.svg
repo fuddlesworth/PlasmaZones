@@ -1,0 +1,433 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: control-center.svg
+  The control center opening as an engine-placed pane (tiling: new leaf), with the tether
+  and the rail-as-slider content. Insets: the same pane landing as a zone and as a strip column.
+  Built on _template.svg (same defs, layers and note style). SMIL loop of 8s.
+  Note on curves: SMIL keySplines control points must lie in [0,1]; browsers drop an <animate>
+  whose spline says 1.2. The enter curve here is 0.34 1 0.64 1 and settle overshoots by keyframe.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <!-- The one spectrum. Everything that encodes screen position samples this by x. -->
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Vertical variant for side rails / brightness band -->
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Wallpaper: navy field, never blurred by chrome -->
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <!-- Soft wallpaper light (a hint of the spectrum in the wallpaper itself) -->
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Gleam: a short bright segment that travels a stroke. Use as a stroke with dasharray. -->
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Backdrop blur for glass over windows -->
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- Reveal mask: a surface draws in from its source edge -->
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <!-- App glyph placeholder used inside miniature cells -->
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <!-- Mote: margin dust, opt-in (lock/dashboard only) -->
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <!-- Pointer, for the choreography only -->
+    <symbol id="cursor" viewBox="0 0 12 16">
+      <path d="M1 1 L1 12 L4 9.5 L6.5 15 L8.5 14 L6 8.8 L10 8.8 Z" fill="#E6EDFF" stroke="#050916" stroke-width="1"/>
+    </symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows. Tiling: win-a focused on the left, a stack on the right.
+       The engine inserts the pane as a new leaf at t=0.6s and the neighbours reflow under its settle. ===== -->
+  <g id="windows">
+    <g id="win-a">
+      <rect x="36" y="44" width="552" height="640" rx="8" fill="#0B1730" fill-opacity="0.92">
+        <animate attributeName="width" values="792;792;544.8;552;552;799.2;792;792" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+      <rect x="36.5" y="44.5" width="551" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9">
+        <animate attributeName="width" values="791;791;543.8;551;551;798.2;791;791" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+      <rect x="36.5" y="44.5" width="551" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+        <animate attributeName="width" values="791;791;543.8;551;551;798.2;791;791" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+        <animate attributeName="opacity" values="0.55;0.55;0;0;0.55;0.55" keyTimes="0.0000;0.0875;0.1050;0.6400;0.7000;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </rect>
+      <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="36;400;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </rect>
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="480" height="10" rx="2"/>
+        <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="500" height="10" rx="2"/>
+        <rect x="64" y="196" width="460" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+      </g>
+    </g>
+    <g id="win-b">
+      <rect x="1024" y="44" width="220" height="316" rx="8" fill="#0B1730" fill-opacity="0.88">
+        <animate attributeName="x" values="836;836;1029.6;1024;1024;830.4;836;836" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+        <animate attributeName="width" values="408;408;214.4;220;220;413.6;408;408" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+      <rect x="1024.5" y="44.5" width="219" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45">
+        <animate attributeName="x" values="836.5;836.5;1030.1;1024.5;1024.5;830.9;836.5;836.5" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+        <animate attributeName="width" values="407;407;213.4;219;219;412.6;407;407" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g id="win-c">
+      <rect x="1024" y="368" width="220" height="316" rx="8" fill="#0B1730" fill-opacity="0.88">
+        <animate attributeName="x" values="836;836;1029.6;1024;1024;830.4;836;836" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+        <animate attributeName="width" values="408;408;214.4;220;220;413.6;408;408" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+      <rect x="1024.5" y="368.5" width="219" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45">
+        <animate attributeName="x" values="836.5;836.5;1030.1;1024.5;1024.5;830.9;836.5;836.5" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+        <animate attributeName="width" values="407;407;213.4;219;219;412.6;407;407" keyTimes="0.0000;0.0750;0.1075;0.1275;0.6400;0.6725;0.6975;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1;0.33 1 0.68 1;0.2 1 0.4 1;0 0 1 1"/>
+      </rect>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar. 2px rail on the screen edge + 26px navy-glass band, 0 inset, no radius ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <!-- idle gleam, one pass per 9s -->
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <!-- Placement map: 18px tall, aspect-true. Cells sample the rail at their x. -->
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <!-- focused window chip: glyph + title, underline in the hue of the window's position -->
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+    </g>
+    <!-- clock: tabular mono, minute underline ticks -->
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <!-- right group: metrics as 2px bars in the rail hue at their x, glyphs, notifications, cc dot, power -->
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE ===== -->
+  <g id="scene">
+    <!-- chip underline + rail segment at 100% (the part of the wire that runs along the rail) -->
+    <rect x="1014" y="0" width="192" height="2" fill="url(#rail)" opacity="1">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0750;0.0875;0.6637;0.7263;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+    <rect x="1194" y="20" width="12" height="1" fill="#E9457A" opacity="1">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0750;0.0875;0.6637;0.7263;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+    <!-- the tether: 2px, rail hue at its x, drops from the rail to the pane's top edge -->
+    <rect x="1014" y="2" width="2" height="42" fill="#C44DBE">
+      <animate attributeName="height" values="0;0;42;42;0;0" keyTimes="0.0000;0.0825;0.1050;0.6325;0.6637;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+    </rect>
+
+    <!-- the pane (engine-placed tile) -->
+    <g id="pane" opacity="1">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0750;0.0925;0.6400;0.6412;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+      <clipPath id="paneClip"><rect x="596" y="44" width="420" height="640" rx="8"/></clipPath>
+      <rect x="596" y="44" width="420" height="640" rx="8" fill="#0B1730" fill-opacity="0.96"/>
+      <rect x="596.5" y="44.5" width="419" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="596.5" y="44.5" width="419" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55">
+        <animate attributeName="opacity" values="0;0;0.55;0.55;0;0" keyTimes="0.0000;0.0875;0.1050;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      </rect>
+      <!-- top edge: the rail gradient over the pane's own x-range, clipped to the pack's radius -->
+      <rect x="596" y="44" width="420" height="2" fill="url(#rail)" clip-path="url(#paneClip)"/>
+      <rect x="596" y="44" width="60" height="2" fill="url(#gleam)" clip-path="url(#paneClip)">
+        <animate attributeName="x" values="596;956;596" keyTimes="0;0.5;1" dur="7s" repeatCount="indefinite"/>
+      </rect>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0925;0.1225;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.0925;0.1225;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M615 85 a9 9 0 0 1 14 0 M618 88 a5 5 0 0 1 8 0" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="622" cy="91" r="1.2" fill="#E6EDFF"/>
+      <text x="644" y="90" class="ui t1" font-size="14" font-weight="500">Wi-Fi</text>
+      <text x="1000" y="90" class="mono t2" font-size="13" text-anchor="end">Phosphor-5G</text>
+      <rect x="612" y="110" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="110" width="388" height="2" fill="#3B82F6" opacity="1.0">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.0925;0.1200;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.0925;0.1200;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0940;0.1240;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.0940;0.1240;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M618 140 l8 6 -8 6 M622 138 v16 M618 143 l8 6 M618 149 l8 -6" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="150" class="ui t1" font-size="14" font-weight="500">Bluetooth</text>
+      <text x="1000" y="150" class="mono t2" font-size="13" text-anchor="end">Keys · 84%</text>
+      <rect x="612" y="170" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="170" width="388" height="2" fill="#3B82F6" opacity="1.0">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.0940;0.1215;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.0940;0.1215;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0955;0.1255;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.0955;0.1255;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M615 204 h3 l5 -4 v12 l-5 -4 h-3 z M626 203 a4 4 0 0 1 0 6" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="210" class="ui t1" font-size="14" font-weight="500">Volume</text>
+      <text x="1000" y="210" class="mono t2" font-size="13" text-anchor="end">62%</text>
+      <rect x="612" y="230" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="230" width="240.6" height="2" fill="#985CF7">
+        <animate attributeName="x" values="852.6;852.6;612;612" keyTimes="0.0000;0.0955;0.1230;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;240.6;240.6" keyTimes="0.0000;0.0955;0.1230;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0970;0.1270;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.0970;0.1270;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <circle cx="622" cy="266" r="3.5" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M622 258 v2 M622 272 v2 M614 266 h2 M628 266 h2" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="270" class="ui t1" font-size="14" font-weight="500">Brightness</text>
+      <text x="1000" y="270" class="mono t2" font-size="13" text-anchor="end">40%</text>
+      <rect x="612" y="290" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="290" width="155.2" height="2" fill="#5179F6">
+        <animate attributeName="x" values="767.2;767.2;612;612" keyTimes="0.0000;0.0970;0.1245;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;155.2;155.2" keyTimes="0.0000;0.0970;0.1245;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0985;0.1285;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.0985;0.1285;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M621 320 a6 6 0 1 0 7 8 a5 5 0 0 1 -7 -8 z" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="330" class="ui t1" font-size="14" font-weight="500">Night light</text>
+      <text x="1000" y="330" class="mono t2" font-size="13" text-anchor="end">3400K</text>
+      <rect x="612" y="350" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="350" width="388" height="2" fill="#3B82F6" opacity="1.0">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.0985;0.1260;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.0985;0.1260;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.1000;0.1300;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.1000;0.1300;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M615 386 q7 -8 14 0 q-7 8 -14 0 z" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="622" cy="386" r="2" fill="#E6EDFF"/>
+      <text x="644" y="390" class="ui t1" font-size="14" font-weight="500">Keep awake</text>
+      <text x="1000" y="390" class="mono t2" font-size="13" text-anchor="end">off</text>
+      <rect x="612" y="410" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="410" width="388" height="2" fill="#94A3B8" opacity="0.4">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.1000;0.1275;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.1000;0.1275;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.1015;0.1315;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.1015;0.1315;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M624 438 l-5 8 h5 l-2 7 l7 -9 h-5 z" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="450" class="ui t1" font-size="14" font-weight="500">Power profile</text>
+      <text x="1000" y="450" class="mono t2" font-size="13" text-anchor="end">Balanced · 84%</text>
+      <rect x="612" y="470" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="470" width="388" height="2" fill="#3B82F6" opacity="1.0">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.1015;0.1290;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.1015;0.1290;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.1030;0.1330;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.1030;0.1330;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <path d="M615 501 l7 -3 l7 3 v6 q0 6 -7 9 q-7 -3 -7 -9 z" fill="none" stroke="#E6EDFF" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="644" y="510" class="ui t1" font-size="14" font-weight="500">VPN</text>
+      <text x="1000" y="510" class="mono t2" font-size="13" text-anchor="end">connecting</text>
+      <rect x="612" y="530" width="388" height="2" fill="#E6EDFF" opacity="0.08"/>
+      <rect x="612" y="530" width="388" height="2" fill="#A855F7" opacity="1.0">
+        <animate attributeName="x" values="806.0;806.0;612;612" keyTimes="0.0000;0.1030;0.1305;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="0;0;388;388" keyTimes="0.0000;0.1030;0.1305;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0955;0.1255;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <rect x="612" y="230" width="240.6" height="2" fill="#985CF7">
+        <animate attributeName="width" values="240.6;240.6;271.6;271.6;240.6;240.6" keyTimes="0.0000;0.3750;0.3950;0.6412;0.6425;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.2 1 0.4 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <animate attributeName="fill" values="#985CF7;#985CF7;#AF53E9;#AF53E9;#985CF7;#985CF7" keyTimes="0.0000;0.3750;0.3950;0.6412;0.6425;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+      </rect>
+      <rect x="966" y="198" width="36" height="16" fill="#0B1730" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.3750;0.3762;0.6412;0.6425;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+      </rect>
+      <text x="1000" y="210" class="mono t2" font-size="13" text-anchor="end" opacity="0">70%
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.3750;0.3762;0.6412;0.6425;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+      </text>
+      <rect x="976" y="213" width="8" height="2" fill="#AF53E9" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.3750;0.3825;0.4250;0.5125;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.1045;0.1345;0.6250;0.6400;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 4;0 4;0 0;0 0" keyTimes="0.0000;0.1045;0.1345;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <text x="612" y="562" class="ui t1" font-size="13">Wallpaper<tspan class="t2">&#160;·&#160;</tspan>Display<tspan class="t2">&#160;·&#160;</tspan>Settings</text>
+    </g>
+    </g>
+  </g>
+
+  <g id="pointer">
+    <use xlink:href="#cursor" width="12" height="16" x="0" y="0" transform="translate(1198 10)">
+      <animateTransform attributeName="transform" type="translate" values="900 300;900 300;1198 10;1198 10" keyTimes="0.0000;0.0063;0.0688;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+    </use>
+    <circle cx="1200" cy="15" r="4" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+      <animate attributeName="r" values="4;4;12;4;12;12" keyTimes="0.0000;0.0750;0.1125;0.6250;0.6625;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <animate attributeName="opacity" values="0.9;0.9;0;0.9;0;0" keyTimes="0.0000;0.0750;0.1125;0.6250;0.6625;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </circle>
+  </g>
+  <g transform="translate(56 505)">
+    <text x="0" y="-8" class="ui eyebrow">Snapping · nearest zone</text>
+    <rect x="0" y="0" width="240" height="135" rx="3" fill="#050916" fill-opacity="0.9" stroke="#1E293B"/>
+    <rect x="0" y="0" width="240" height="1.5" fill="url(#rail)" opacity="0.8"/>
+    <rect x="0" y="1.5" width="240" height="6" fill="#0B1730" fill-opacity="0.9"/>
+    <circle cx="224" cy="4.5" r="1.5" fill="#E5437D"/>
+    <rect x="8.5" y="12.5" width="131" height="114" rx="3" fill="none" stroke="#3987F5" stroke-opacity="0.55"/>
+    <rect x="146.5" y="12.5" width="85" height="53" rx="3" fill="none" stroke="#C34DC1" stroke-opacity="0.55"/>
+    <rect x="146.5" y="72.5" width="85" height="54" rx="3" fill="none" stroke="#C34DC1" stroke-opacity="0.55"/>
+    <rect x="8" y="12" width="132" height="115" rx="3" fill="#0B1730" fill-opacity="0.85"/>
+    <rect x="146" y="72" width="86" height="55" rx="3" fill="#0B1730" fill-opacity="0.85"/>
+    <rect x="146" y="12" width="86" height="54" rx="3" fill="#0B1730" fill-opacity="0.96"/>
+    <rect x="146.5" y="12.5" width="85" height="53" rx="3" fill="none" stroke="#FFFFFF" stroke-opacity="0.6"/>
+    <rect x="146" y="12" width="86" height="1.5" fill="url(#rail)"/>
+    <rect x="152" y="24" width="74" height="1" fill="#5179F6" opacity="0.7"/>
+    <rect x="152" y="34" width="74" height="1" fill="#F43F5E" opacity="0.7"/>
+    <rect x="152" y="44" width="74" height="1" fill="#985CF7" opacity="0.7"/>
+    <rect x="152" y="54" width="74" height="1" fill="#5179F6" opacity="0.7"/>
+    <rect x="223" y="7.5" width="2" height="4.5" fill="#E5437D"/>
+    <text x="120" y="148" class="ui t2" font-size="9" text-anchor="middle">occupant stays underneath; close pops the pane</text>
+  </g>
+  <g transform="translate(316 505)">
+    <text x="0" y="-8" class="ui eyebrow">Scrolling · column after focus</text>
+    <rect x="0" y="0" width="240" height="135" rx="3" fill="#050916" fill-opacity="0.9" stroke="#1E293B"/>
+    <rect x="0" y="0" width="240" height="1.5" fill="url(#rail)" opacity="0.8"/>
+    <rect x="0" y="1.5" width="240" height="6" fill="#0B1730" fill-opacity="0.9"/>
+    <circle cx="224" cy="4.5" r="1.5" fill="#E5437D"/>
+    <clipPath id="stripClip"><rect x="1" y="8" width="238" height="127"/></clipPath>
+    <g clip-path="url(#stripClip)">
+      <rect x="-70" y="12" width="74" height="115" rx="3" fill="#0B1730" fill-opacity="0.85" opacity="0.4"/>
+      <rect x="-69.5" y="12.5" width="73" height="114" rx="3" fill="none" stroke="#22D3EE" stroke-opacity="0.27999999999999997"/>
+      <rect x="10" y="12" width="96" height="115" rx="3" fill="#0B1730" fill-opacity="0.85" opacity="1.0"/>
+      <rect x="10.5" y="12.5" width="95" height="114" rx="3" fill="none" stroke="#3498F4" stroke-opacity="0.7"/>
+      <rect x="10.5" y="12.5" width="95" height="114" rx="3" fill="none" stroke="#FFFFFF" stroke-opacity="0.5"/>
+      <rect x="112" y="12" width="79" height="115" rx="3" fill="#0B1730" fill-opacity="0.96" opacity="1.0"/>
+      <rect x="112.5" y="12.5" width="78" height="114" rx="3" fill="none" stroke="#9C5AF7" stroke-opacity="0.7"/>
+      <rect x="112" y="12" width="79" height="1.5" fill="url(#rail)"/>
+      <rect x="118" y="24" width="67" height="1" fill="#5179F6" opacity="0.7"/>
+      <rect x="118" y="34" width="67" height="1" fill="#F43F5E" opacity="0.7"/>
+      <rect x="118" y="44" width="67" height="1" fill="#985CF7" opacity="0.7"/>
+      <rect x="118" y="54" width="67" height="1" fill="#5179F6" opacity="0.7"/>
+      <rect x="197" y="12" width="80" height="115" rx="3" fill="#0B1730" fill-opacity="0.85" opacity="0.4"/>
+      <rect x="197.5" y="12.5" width="79" height="114" rx="3" fill="none" stroke="#F14064" stroke-opacity="0.27999999999999997"/>
+    </g>
+    <rect x="190" y="1.5" width="34" height="1.5" fill="url(#rail)"/>
+    <rect x="190" y="1.5" width="2" height="10.5" fill="#C54DBD"/>
+    <text x="120" y="148" class="ui t2" font-size="9" text-anchor="middle">strip insert slide; hue = strip position; scrolls to reveal</text>
+  </g>
+  <g class="note" transform="translate(300 60)">
+    <rect width="280" height="90" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#9B5AF7">Engine-placed</text>
+    <text x="12" y="40" class="ui note-body">Opening asks tiling for a rect: a new leaf next to</text>
+    <text x="12" y="55" class="ui note-body">the focused window. win-a shrinks and the right</text>
+    <text x="12" y="70" class="ui note-body">stack slides over under the mode's own animation.</text>
+    <text x="12" y="85" class="ui note-body">Gaps, radius and border pack are the user's.</text>
+  </g>
+  <g class="note" transform="translate(1032 60)">
+    <rect width="212" height="135" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#E9457A">Tether</text>
+    <text x="12" y="40" class="ui note-body">Click: chip underline + rail segment</text>
+    <text x="12" y="55" class="ui note-body">go to 100%, then a 2px thread in the</text>
+    <text x="12" y="70" class="ui note-body">rail's hue drops to the pane's edge.</text>
+    <text x="12" y="85" class="ui note-body">The pane isn't under the chip, so</text>
+    <text x="12" y="100" class="ui note-body">the wire runs along the rail first.</text>
+    <text x="12" y="115" class="ui note-body">Close: content 120ms, thread 250ms,</text>
+    <text x="12" y="130" class="ui note-body">rail segment releases over 500ms.</text>
+  </g>
+  <g class="note" transform="translate(1032 205)">
+    <rect width="212" height="135" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#985CF7">Rail as slider</text>
+    <text x="12" y="40" class="ui note-body">Each 52px rail's 2px underline IS</text>
+    <text x="12" y="55" class="ui note-body">the control. Length = value, colour</text>
+    <text x="12" y="70" class="ui note-body">= state axis (62% volume sits</text>
+    <text x="12" y="85" class="ui note-body">blue→purple). Toggles are the light:</text>
+    <text x="12" y="100" class="ui note-body">blue on, grey off, purple pending.</text>
+    <text x="12" y="115" class="ui note-body">A hardware key at 3s: the line</text>
+    <text x="12" y="130" class="ui note-body">follows and the digit underlines.</text>
+  </g>
+  <g class="note" transform="translate(1032 350)">
+    <rect width="212" height="105" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#9B5AF7">Top edge = rail</text>
+    <text x="12" y="40" class="ui note-body">The pane's top band is the rail</text>
+    <text x="12" y="55" class="ui note-body">gradient over its own x-range, so</text>
+    <text x="12" y="70" class="ui note-body">it matches the bar above pixel for</text>
+    <text x="12" y="85" class="ui note-body">pixel. No header, no chrome of</text>
+    <text x="12" y="100" class="ui note-body">its own, no tile grid.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · control center · engine-placed pane (tiling main, snapping and scrolling insets) · 8s loop</text>
+</svg>

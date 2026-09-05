@@ -1,0 +1,382 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: the bar's placement map morphing across modes.
+  One screen, 12 s loop: snapping 0-4 s, tiling 4-8 s, scrolling 8-12 s, then
+  back to snapping across the loop seam. The mode change is driven by a desktop
+  switch (the ticks move 1 -> 2 -> 3). Per A2 §2: new cells enter in 180 ms, old
+  edges release over 720 ms, the shared horizontal split never blinks. In the
+  scrolling phase the rail re-binds to the strip and shows the lens's slice of
+  the same #rail gradient (a transform on the one gradient, not a second one).
+  keyTimes: 0.0667 = 0.8 s, 0.3333 = 4 s, 0.4 = 4.8 s, 0.6667 = 8 s, 0.7333 = 8.8 s.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <!-- the work area: windows in the strip run past its right edge -->
+    <clipPath id="workArea"><rect x="36" y="44" width="1208" height="640"/></clipPath>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows, re-placed by the engine per mode =====
+       snapping: A 36,44 600x640 | B 644,44 600x316 | C 644,368 600x316
+       tiling:   A 36,44 788x640 | B 832,44 412x316 | C 832,368 412x316
+       scrolling: A 36,44 400x640 | B 444,44 600x640 | C 1052,44 400x640 (runs off the edge) -->
+  <g id="windows" clip-path="url(#workArea)">
+    <!-- A: focused, white edge over the spectrum stroke -->
+    <g id="win-a">
+      <rect x="36" y="44" width="600" height="640" rx="8" fill="#0B1730" fill-opacity="0.92" stroke="url(#rail)" stroke-width="1" stroke-opacity="0.9">
+        <animate attributeName="width" values="400;600;600;788;788;400;400" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+      <rect x="36" y="44" width="600" height="640" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.55">
+        <animate attributeName="width" values="400;600;600;788;788;400;400" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+      <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="36;316;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+    <g id="win-b">
+      <rect x="644" y="44" width="600" height="316" rx="8" fill="#0B1730" fill-opacity="0.88" stroke="url(#rail)" stroke-width="1" stroke-opacity="0.45">
+        <animate attributeName="x" values="444;644;644;832;832;444;444" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="600;600;600;412;412;600;600" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="height" values="640;316;316;316;316;640;640" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g id="win-c">
+      <rect x="644" y="368" width="600" height="316" rx="8" fill="#0B1730" fill-opacity="0.88" stroke="url(#rail)" stroke-width="1" stroke-opacity="0.45">
+        <animate attributeName="x" values="1052;644;644;832;832;1052;1052" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="y" values="44;368;368;368;368;44;44" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="400;600;600;412;412;400;400" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="height" values="640;316;316;316;316;640;640" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <!-- The rail. Static axis in snapping/tiling. In scrolling it binds to the strip and shows the
+         lens's slice [0.59, 0.865] of the same gradient: scale 3.636, translate -2746. -->
+    <g id="rail-bind">
+      <animateTransform attributeName="transform" type="translate" values="-2746;0;0;0;0;-2746;-2746" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                        calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      <g>
+        <animateTransform attributeName="transform" type="scale" values="3.636 1;1 1;1 1;1 1;1 1;3.636 1;3.636 1" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                          calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+      </g>
+    </g>
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <!-- overflow ends, scrolling only: outer 48 px at 100 %, 2 -> 3 px, in the hue of the next off-screen column -->
+    <rect x="0" y="0" width="48" height="3" fill="#8265F7" opacity="0">
+      <animate attributeName="opacity" values="1;0;0;0;0;0;0;1;1" keyTimes="0;0.008;0.0667;0.3333;0.6667;0.7;0.7333;0.7333;1" dur="12s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="1232" y="0" width="48" height="3" fill="#E84275" opacity="0">
+      <animate attributeName="opacity" values="1;0;0;0;0;0;0;1;1" keyTimes="0;0.008;0.0667;0.3333;0.6667;0.7;0.7333;0.7333;1" dur="12s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Placement map: 18 px tall, 32 wide (16:9). Work area 1208x640 -> 30x16 at (1,1). -->
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+
+      <!-- SNAPPING generation. Hues sampled at each cell's screen x: A 0.26, B/C 0.74. -->
+      <g id="map-snap-fill">
+        <animate attributeName="opacity" values="0;1;1;0;0;0;0" keyTimes="0;0.015;0.3333;0.34;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <rect x="1" y="1" width="15" height="16" fill="#3596F4" fill-opacity="0.55"/>
+        <rect x="16" y="1" width="15" height="8" fill="#B850D7" fill-opacity="0.4"/>
+        <rect x="16" y="9" width="15" height="8" fill="#B850D7" fill-opacity="0.4"/>
+      </g>
+      <g id="map-snap-edge">
+        <animate attributeName="opacity" values="0;1;1;0;0;0;0" keyTimes="0;0.015;0.3333;0.3933;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <!-- the vertical split at 0.5 of the work area: this one is not matched by tiling, so it releases -->
+        <line x1="16" y1="1" x2="16" y2="17" stroke="#B850D7" stroke-opacity="0.8" stroke-width="1"/>
+      </g>
+
+      <!-- TILING generation. Master 0.65 wide. A 0.336, B/C 0.81. -->
+      <g id="map-tile-fill" opacity="0">
+        <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;0.0667;0.3333;0.3483;0.6667;0.6733;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+        <rect x="1" y="1" width="19.6" height="16" fill="#3B82F6" fill-opacity="0.55"/>
+        <rect x="20.6" y="1" width="10.4" height="8" fill="#C64CBB" fill-opacity="0.4"/>
+        <rect x="20.6" y="9" width="10.4" height="8" fill="#C64CBB" fill-opacity="0.4"/>
+      </g>
+      <g id="map-tile-edge" opacity="0">
+        <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;0.0667;0.3333;0.3483;0.6667;0.7267;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <line x1="20.6" y1="1" x2="20.6" y2="17" stroke="#C64CBB" stroke-opacity="0.8" stroke-width="1"/>
+      </g>
+
+      <!-- MATCHED EDGE: the horizontal split at 0.5 exists in both snapping and tiling.
+           It is kept and re-parented (its x1 settles to the new split), and never blinks. -->
+      <line id="matched-edge" x1="16" y1="9" x2="31" y2="9" stroke="#C64CBB" stroke-opacity="0.8" stroke-width="1">
+        <animate attributeName="x1" values="16;16;16;20.6;20.6;20.6;16" keyTimes="0;0.0667;0.3333;0.3542;0.6667;0.9999;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;0;0" keyTimes="0;0.015;0.3333;0.4;0.6667;0.7267;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0 0 1 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </line>
+
+      <!-- SCROLLING generation. Strip 4400 px, view 2600..3808, so the lens sees t in [0.59, 0.865].
+           Lens 70 % of the map width (x 5..27), gutters 15 % a side. -->
+      <g id="map-scroll-cols" opacity="0">
+        <animate attributeName="opacity" values="1;0;0;0;0;1;1" keyTimes="0;0.06;0.0667;0.6667;0.6767;0.6917;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.05 0.6 0.15 1;0 0 1 1;0 0 1 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <!-- A (focused) strip centre 0.636, B 0.75, C 0.865 clipped at the lens edge -->
+        <rect x="5" y="1" width="7.4" height="16" fill="#9C5AF7" fill-opacity="0.55"/>
+        <rect x="12.6" y="1" width="11.1" height="16" fill="#BB4FD2" fill-opacity="0.4" stroke="#BB4FD2" stroke-opacity="0.8" stroke-width="1"/>
+        <rect x="23.9" y="1" width="3.1" height="16" fill="#D6479B" fill-opacity="0.4" stroke="#D6479B" stroke-opacity="0.8" stroke-width="1"/>
+      </g>
+      <g id="map-lens" opacity="0">
+        <animate attributeName="opacity" values="1;0;0;0;1;1;1" keyTimes="0;0.0167;0.0667;0.6667;0.6767;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.05 0.6 0.15 1;0 0 1 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0 0 1 1"/>
+        <rect x="5" y="1" width="22" height="16" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="1"/>
+      </g>
+      <g id="map-gutters" opacity="0">
+        <animate attributeName="opacity" values="1;0;0;0;0;1;1" keyTimes="0;0.008;0.0667;0.6667;0.7;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.32 0 0.67 0;0 0 1 1;0 0 1 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <!-- three columns beyond the left edge at strip t 0.09, 0.3, 0.5; one beyond the right at 0.955 -->
+        <rect x="1" y="1" width="1" height="16" fill="#29BEF0"/>
+        <rect x="2.5" y="1" width="1" height="16" fill="#388AF5"/>
+        <rect x="4" y="1" width="1" height="16" fill="#726CF6"/>
+        <rect x="30" y="1" width="1" height="16" fill="#E84275"/>
+      </g>
+
+      <!-- Focus: white 1 px edge on A's cell, mode-agnostic, settles to A's new rect -->
+      <rect id="map-focus" x="1.5" y="1.5" width="14" height="15" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1">
+        <animate attributeName="x" values="5.5;1.5;1.5;1.5;1.5;5.5;5.5" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="width" values="6.4;14;14;18.6;18.6;6.4;6.4" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+
+      <!-- desktop ticks: the switch 1 -> 2 -> 3 is what changes the mode -->
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9">
+          <animate attributeName="opacity" values="0.9;0.9;0.25;0.25;0.25;0.25;0.9" keyTimes="0;0.3333;0.3334;0.6667;0.6668;0.9999;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/>
+        </rect>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25">
+          <animate attributeName="opacity" values="0.25;0.25;0.9;0.9;0.25;0.25" keyTimes="0;0.3333;0.3334;0.6667;0.6668;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/>
+        </rect>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25">
+          <animate attributeName="opacity" values="0.25;0.25;0.9;0.9" keyTimes="0;0.6667;0.6668;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/>
+        </rect>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <!-- focused window chip; its underline hue follows the window's position (A: 0.26 / 0.336 / strip 0.636) -->
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3596F4" opacity="0.9">
+        <animate attributeName="fill" values="#9C5AF7;#3596F4;#3596F4;#3B82F6;#3B82F6;#9C5AF7;#9C5AF7" keyTimes="0;0.0667;0.3333;0.4;0.6667;0.7333;1" dur="12s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE: the phase strip, inside window A so it stays off the chrome ===== -->
+  <g id="scene">
+    <g transform="translate(60 660)" class="ui" font-size="12">
+      <text x="0" y="0" class="t1">snapping<animate attributeName="opacity" values="1;1;0.35;0.35;0.35;0.35;1" keyTimes="0;0.3333;0.3334;0.6667;0.6668;0.9999;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/></text>
+      <text x="80" y="0" class="t1" opacity="0.35">tiling<animate attributeName="opacity" values="0.35;0.35;1;1;0.35;0.35" keyTimes="0;0.3333;0.3334;0.6667;0.6668;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/></text>
+      <text x="140" y="0" class="t1" opacity="0.35">scrolling<animate attributeName="opacity" values="0.35;0.35;1;1" keyTimes="0;0.6667;0.6668;1" dur="12s" repeatCount="indefinite" calcMode="discrete"/></text>
+      <text x="220" y="0" class="t2">· a desktop switch drives the mode, 12 s loop</text>
+    </g>
+
+    <!-- Static reference strip: the map at 4x in each mode, with the rail as it looks in that mode above it.
+         Map coords are the same as the live map (32x18), scaled 4. Strokes 0.5 = 2 px. -->
+    <g id="map-strip" transform="translate(44 430)">
+      <text x="0" y="-8" class="ui eyebrow">Placement map at 4× · rail above as it looks in that mode</text>
+
+      <!-- SNAPPING: full gradient compressed into 128 px -->
+      <g transform="translate(0 0)">
+        <g transform="scale(0.1 1)"><rect x="0" y="0" width="1280" height="8" fill="url(#rail)" opacity="0.75"/></g>
+        <g transform="translate(0 16) scale(4)">
+          <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14" stroke-width="0.25"/>
+          <rect x="1" y="1" width="15" height="16" fill="#3596F4" fill-opacity="0.55"/>
+          <rect x="16" y="1" width="15" height="8" fill="#B850D7" fill-opacity="0.4"/>
+          <rect x="16" y="9" width="15" height="8" fill="#B850D7" fill-opacity="0.4"/>
+          <line x1="16" y1="1" x2="16" y2="17" stroke="#B850D7" stroke-opacity="0.8" stroke-width="0.5"/>
+          <!-- matched 50/50 split, highlighted white -->
+          <line x1="16" y1="9" x2="31" y2="9" stroke="#FFFFFF" stroke-opacity="0.95" stroke-width="0.75"/>
+          <rect x="1.5" y="1.5" width="14" height="15" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="0.5"/>
+          <g transform="translate(9 19)" fill="#FFFFFF">
+            <rect x="0" y="0" width="2" height="1" opacity="0.9"/><rect x="4" y="0" width="2" height="1" opacity="0.25"/>
+            <rect x="8" y="0" width="2" height="1" opacity="0.25"/><rect x="12" y="0" width="2" height="1" opacity="0.25"/>
+          </g>
+        </g>
+        <text x="64" y="112" text-anchor="middle" class="ui t1" font-size="12" font-weight="500">snapping</text>
+      </g>
+
+      <!-- TILING: same full gradient; master 0.65, the shared split re-parented -->
+      <g transform="translate(136 0)">
+        <g transform="scale(0.1 1)"><rect x="0" y="0" width="1280" height="8" fill="url(#rail)" opacity="0.75"/></g>
+        <g transform="translate(0 16) scale(4)">
+          <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14" stroke-width="0.25"/>
+          <rect x="1" y="1" width="19.6" height="16" fill="#3B82F6" fill-opacity="0.55"/>
+          <rect x="20.6" y="1" width="10.4" height="8" fill="#C64CBB" fill-opacity="0.4"/>
+          <rect x="20.6" y="9" width="10.4" height="8" fill="#C64CBB" fill-opacity="0.4"/>
+          <line x1="20.6" y1="1" x2="20.6" y2="17" stroke="#C64CBB" stroke-opacity="0.8" stroke-width="0.5"/>
+          <line x1="20.6" y1="9" x2="31" y2="9" stroke="#FFFFFF" stroke-opacity="0.95" stroke-width="0.75"/>
+          <rect x="1.5" y="1.5" width="18.6" height="15" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="0.5"/>
+          <g transform="translate(9 19)" fill="#FFFFFF">
+            <rect x="0" y="0" width="2" height="1" opacity="0.25"/><rect x="4" y="0" width="2" height="1" opacity="0.9"/>
+            <rect x="8" y="0" width="2" height="1" opacity="0.25"/><rect x="12" y="0" width="2" height="1" opacity="0.25"/>
+          </g>
+        </g>
+        <text x="64" y="112" text-anchor="middle" class="ui t1" font-size="12" font-weight="500">tiling</text>
+      </g>
+
+      <!-- SCROLLING: the rail bound to the strip, slice [0.59, 0.865] stretched over 128 px, thickened overflow ends -->
+      <g transform="translate(272 0)">
+        <g transform="translate(-274.5 0) scale(0.3636 1)"><rect x="755" y="0" width="352" height="8" fill="url(#rail)" opacity="0.75"/></g>
+        <rect x="0" y="0" width="6" height="12" fill="#8265F7"/>
+        <rect x="122" y="0" width="6" height="12" fill="#E84275"/>
+        <g transform="translate(0 16) scale(4)">
+          <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14" stroke-width="0.25"/>
+          <!-- gutters: 1 px columns in their strip hues -->
+          <rect x="1" y="1" width="1" height="16" fill="#29BEF0"/>
+          <rect x="2.5" y="1" width="1" height="16" fill="#388AF5"/>
+          <rect x="4" y="1" width="1" height="16" fill="#726CF6"/>
+          <rect x="30" y="1" width="1" height="16" fill="#E84275"/>
+          <!-- columns in the lens -->
+          <rect x="5" y="1" width="7.4" height="16" fill="#9C5AF7" fill-opacity="0.55"/>
+          <rect x="12.6" y="1" width="11.1" height="16" fill="#BB4FD2" fill-opacity="0.4" stroke="#BB4FD2" stroke-opacity="0.8" stroke-width="0.5"/>
+          <rect x="23.9" y="1" width="3.1" height="16" fill="#D6479B" fill-opacity="0.4" stroke="#D6479B" stroke-opacity="0.8" stroke-width="0.5"/>
+          <!-- lens -->
+          <rect x="5" y="1" width="22" height="16" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="0.5"/>
+          <rect x="5.5" y="1.5" width="6.4" height="15" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="0.5"/>
+          <g transform="translate(9 19)" fill="#FFFFFF">
+            <rect x="0" y="0" width="2" height="1" opacity="0.25"/><rect x="4" y="0" width="2" height="1" opacity="0.25"/>
+            <rect x="8" y="0" width="2" height="1" opacity="0.9"/><rect x="12" y="0" width="2" height="1" opacity="0.25"/>
+          </g>
+        </g>
+        <text x="64" y="112" text-anchor="middle" class="ui t1" font-size="12" font-weight="500">scrolling</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 4: annotations, inside window A's content area ===== -->
+  <g class="note" transform="translate(60 72)">
+    <rect width="320" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#3596F4">The rail is the axis</text>
+    <text x="12" y="36" class="ui note-body">2 px on the screen edge, cyan to rose. Every map cell, chip</text>
+    <text x="12" y="50" class="ui note-body">underline and window frame samples it at its own x.</text>
+  </g>
+  <g class="note" transform="translate(60 148)">
+    <rect width="320" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B">
+    </rect>
+    <text x="12" y="20" class="ui note-title" fill="#726CF6">The map is the mode</text>
+    <text x="12" y="36" class="ui note-body">Zones, tile rects or the strip, from the engine's own model.</text>
+    <text x="12" y="50" class="ui note-body">New cells enter in 180 ms, old edges release over 720 ms.</text>
+    <text x="12" y="64" class="ui note-body">No mode label anywhere: the shape says it.</text>
+  </g>
+  <g class="note" transform="translate(60 238)">
+    <rect width="320" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#C64CBB">Matched edges never blink</text>
+    <text x="12" y="36" class="ui note-body">The 50/50 horizontal split exists in both the snapping layout</text>
+    <text x="12" y="50" class="ui note-body">and the tile tree, so it is kept and re-parented, not redrawn.</text>
+  </g>
+  <g class="note" transform="translate(60 314)">
+    <rect width="320" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#E6EDFF">The lens, scrolling only</text>
+    <text x="12" y="36" class="ui note-body">A white outline marks the viewport on the strip. Columns</text>
+    <text x="12" y="50" class="ui note-body">beyond the edge pack into the gutters at 1 px in their own hue.</text>
+    <text x="12" y="64" class="ui note-body">The rail re-binds to the strip and shows the same slice of the</text>
+    <text x="12" y="78" class="ui note-body">gradient, purple to rose here: you are near the end.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · bar modes · snapping → tiling → scrolling → snapping</text>
+</svg>

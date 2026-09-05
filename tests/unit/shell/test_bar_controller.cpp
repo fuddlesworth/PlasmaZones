@@ -76,11 +76,11 @@ void TestBarController::registersEveryBuiltin()
     // builtinWidgets() so that adding or dropping a widget has to be a
     // deliberate edit in two places.
     const QStringList expected{
-        QStringLiteral("audio"), QStringLiteral("battery"),       QStringLiteral("bluetooth"),
-        QStringLiteral("clock"), QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
-        QStringLiteral("media"), QStringLiteral("network"),       QStringLiteral("notification"),
-        QStringLiteral("power"), QStringLiteral("spacer"),        QStringLiteral("systemmetrics"),
-        QStringLiteral("tray"),  QStringLiteral("workspaces"),
+        QStringLiteral("audio"),         QStringLiteral("battery"),       QStringLiteral("bluetooth"),
+        QStringLiteral("clock"),         QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
+        QStringLiteral("media"),         QStringLiteral("network"),       QStringLiteral("notification"),
+        QStringLiteral("placementmap"),  QStringLiteral("power"),         QStringLiteral("spacer"),
+        QStringLiteral("systemmetrics"), QStringLiteral("tray"),
     };
 
     QCOMPARE(ids.size(), expected.size());
@@ -90,7 +90,7 @@ void TestBarController::registersEveryBuiltin()
     // name because its absence was previously pinned here, and a silent
     // regression to that state would otherwise read as an ordinary count
     // change.
-    QVERIFY(ids.contains(QStringLiteral("workspaces")));
+    QVERIFY(ids.contains(QStringLiteral("placementmap")));
 }
 
 void TestBarController::factoryIdsAreSorted()

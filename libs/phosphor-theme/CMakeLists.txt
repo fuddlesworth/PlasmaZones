@@ -5,7 +5,7 @@
 #
 # Holds the active M3 token palette, watches the on-disk JSON palette for
 # hot-reload, and exposes everything to QML as a `Phosphor.Theme` import
-# (Theme / Tokens / Motion / StateLayer singletons).
+# (Theme / Tokens / Motion / StateLayer / Spectrum singletons).
 #
 # Phase 1.1 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -116,8 +116,8 @@ set_target_properties(PhosphorTheme PROPERTIES
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # C++ side: PaletteStore is registered as a QML singleton so QML files can
-# `import Phosphor.Theme` and reference it. The four QML-file singletons
-# (Theme / Tokens / Motion / StateLayer) live alongside.
+# `import Phosphor.Theme` and reference it. The five QML-file singletons
+# (Theme / Tokens / Motion / StateLayer / Spectrum) live alongside.
 #
 # QML singletons are *not* process-global statics, Qt instantiates one per
 # QQmlEngine. Each shell process gets exactly one engine, so there's one
@@ -130,6 +130,7 @@ set(_phosphor_theme_qml_singletons
     qml/Phosphor/Theme/Tokens.qml
     qml/Phosphor/Theme/Motion.qml
     qml/Phosphor/Theme/StateLayer.qml
+    qml/Phosphor/Theme/Spectrum.qml
 )
 
 # qt_add_qml_module's default resource layout nests each QML_FILES entry

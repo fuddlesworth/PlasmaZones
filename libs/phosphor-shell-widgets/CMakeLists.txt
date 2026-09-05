@@ -61,6 +61,11 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/PhosphorCard.qml
     qml/Phosphor/Widgets/PhosphorSlider.qml
     qml/Phosphor/Widgets/PhosphorTextField.qml
+    qml/Phosphor/Widgets/SpectrumRail.qml
+    qml/Phosphor/Widgets/SpectrumStroke.qml
+    qml/Phosphor/Widgets/SpectrumUnderline.qml
+    qml/Phosphor/Widgets/TabularText.qml
+    qml/Phosphor/Widgets/PlacementMiniature.qml
     # Phase 3.2 connected-corner primitives.
     qml/Phosphor/Widgets/ConnectorGeometry.js
     qml/Phosphor/Widgets/ConnectedShape.qml

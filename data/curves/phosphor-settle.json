@@ -1,0 +1,9 @@
+{
+  "name": "phosphor-settle",
+  "displayName": "Phosphor settle (spring, one overshoot)",
+  "typeId": "spring",
+  "parameters": {
+    "omega": 22,
+    "zeta": 0.85
+  }
+}

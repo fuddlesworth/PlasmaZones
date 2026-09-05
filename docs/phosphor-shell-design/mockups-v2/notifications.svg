@@ -1,0 +1,345 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: notifications.svg
+  Toasts as bands on the window they concern (normal purple, critical rose, screen-edge fallback for an app
+  with no window) and the notification center as an engine-placed left column with drag-to-rect.
+  Built on _template.svg (same defs, layers and note style). SMIL loop of 8s.
+  Note on curves: SMIL keySplines control points must lie in [0,1]; browsers drop an <animate>
+  whose spline says 1.2. The enter curve here is 0.34 1 0.64 1 and settle overshoots by keyframe.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <!-- The one spectrum. Everything that encodes screen position samples this by x. -->
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Vertical variant for side rails / brightness band -->
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- Wallpaper: navy field, never blurred by chrome -->
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <!-- Soft wallpaper light (a hint of the spectrum in the wallpaper itself) -->
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Gleam: a short bright segment that travels a stroke. Use as a stroke with dasharray. -->
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Backdrop blur for glass over windows -->
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- Reveal mask: a surface draws in from its source edge -->
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <!-- App glyph placeholder used inside miniature cells -->
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <!-- Mote: margin dust, opt-in (lock/dashboard only) -->
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <!-- Pointer, for the choreography only -->
+    <symbol id="cursor" viewBox="0 0 12 16">
+      <path d="M1 1 L1 12 L4 9.5 L6.5 15 L8.5 14 L6 8.8 L10 8.8 Z" fill="#E6EDFF" stroke="#050916" stroke-width="1"/>
+    </symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows. The notification center is the leftmost leaf; win-a made room for it. ===== -->
+  <g id="windows">
+    <g id="win-a">
+    <rect x="424" y="44" width="404" height="640" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="424.5" y="44.5" width="403" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+      <!-- drop target: white edge while a dragged row hovers; the app opens here on drop -->
+      <rect x="425.0" y="45.0" width="402" height="638" rx="8" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" values="0;0;0.9;0.9;0;0" keyTimes="0.0000;0.3750;0.3862;0.5000;0.5750;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="452" y="84" width="300" height="10" rx="2"/><rect x="452" y="108" width="340" height="10" rx="2"/>
+        <rect x="452" y="132" width="260" height="10" rx="2"/><rect x="452" y="172" width="330" height="10" rx="2"/>
+      </g>
+      <!-- the opened app -->
+      <g opacity="0" color="#E6EDFF">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.4500;0.4675;0.9625;0.9875;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <use xlink:href="#glyph" x="612" y="334" width="28" height="28"/>
+        <text x="626" y="384" class="ui t1" font-size="13" text-anchor="middle">discord</text>
+      </g>
+    </g>
+    <g id="win-b">
+    <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+    <g id="win-c">
+    <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+    <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar. 2px rail on the screen edge + 26px navy-glass band, 0 inset, no radius ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <!-- idle gleam, one pass per 9s -->
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <!-- Placement map: 18px tall, aspect-true. Cells sample the rail at their x. -->
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="9" height="16" fill="#2FA8F2" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <rect x="10.5" y="1" width="9.5" height="16" fill="#6E6DF6" fill-opacity="0.4" stroke="#6E6DF6" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <!-- focused window chip: glyph + title, underline in the hue of the window's position -->
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">Notifications</text>
+      <rect x="22" y="16" width="86" height="1" fill="#2FA8F2" opacity="0.9"/>
+    </g>
+    <!-- clock: tabular mono, minute underline ticks -->
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g transform="translate(660 7)">
+      <circle cx="4.5" cy="12" r="2.2" fill="none" stroke="#E6EDFF" stroke-width="1.2"/><path d="M6.7 12 V4 l5 -1.4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="18" y="12.5" class="ui t1" font-size="13" font-weight="500">Spotify</text>
+      <rect x="18" y="16" width="44" height="1" fill="#A855F7" opacity="0.9"/>
+    </g>
+    <!-- right group: metrics as 2px bars in the rail hue at their x, glyphs, notifications, cc dot, power -->
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE ===== -->
+  <g id="scene">
+    <!-- tether: the bell chip is far to the right, so the wire runs along the rail to the column's x, then down -->
+    <rect x="414" y="0" width="765" height="2" fill="url(#rail)"/>
+    <rect x="1164" y="20" width="14" height="1" fill="#E04585"/>
+    <rect x="414" y="2" width="2" height="42" fill="#3B84F6"/>
+    <g id="center">
+      <clipPath id="ncClip"><rect x="36" y="44" width="380" height="640" rx="8"/></clipPath>
+      <rect x="36" y="44" width="380" height="640" rx="8" fill="#0B1730" fill-opacity="0.96"/>
+      <rect x="36.5" y="44.5" width="379" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="36.5" y="44.5" width="379" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+      <rect x="36" y="44" width="380" height="2" fill="url(#rail)" clip-path="url(#ncClip)"/>
+      <rect x="36" y="44" width="60" height="2" fill="url(#gleam)" clip-path="url(#ncClip)">
+        <animate attributeName="x" values="36;356;36" keyTimes="0;0.5;1" dur="7s" repeatCount="indefinite"/>
+      </rect>
+      <text x="52" y="76" class="ui t1" font-size="14" font-weight="500">Notifications</text>
+      <path d="M334 66 a6 6 0 1 0 7 8 a5 5 0 0 1 -7 -8 z" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.7"/>
+      <text x="400" y="76" class="ui t1" font-size="13" text-anchor="end">Clear</text>
+      <text x="52" y="108" class="ui eyebrow">DISCORD</text>
+      <text x="116" y="108" class="mono" font-size="11" fill="#A855F7">3</text>
+      <use xlink:href="#glyph" x="52" y="134" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="142" class="ui t1" font-size="14">Nate</text>
+      <text x="88" y="160" class="ui t2" font-size="13">mockups look good, ship the tether</text>
+      <text x="400" y="142" class="mono t2" font-size="12" text-anchor="end">2m</text>
+      <rect x="52" y="179" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <use xlink:href="#glyph" x="52" y="198" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="206" class="ui t1" font-size="14">Mira</text>
+      <text x="88" y="224" class="ui t2" font-size="13">can we get the tether hue on the map too</text>
+      <text x="400" y="206" class="mono t2" font-size="12" text-anchor="end">14m</text>
+      <rect x="52" y="243" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <use xlink:href="#glyph" x="52" y="262" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="270" class="ui t1" font-size="14">#phosphor</text>
+      <text x="88" y="288" class="ui t2" font-size="13">12 new messages</text>
+      <text x="400" y="270" class="mono t2" font-size="12" text-anchor="end">1h</text>
+      <rect x="52" y="307" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <text x="52" y="328" class="ui eyebrow">SYSTEM</text>
+      <text x="108" y="328" class="mono" font-size="11" fill="#A855F7">2</text>
+      <use xlink:href="#glyph" x="52" y="354" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="362" class="ui t1" font-size="14">Battery critical · 6%</text>
+      <text x="88" y="380" class="ui t2" font-size="13">plug in now, suspending at 3%</text>
+      <text x="400" y="362" class="mono t2" font-size="12" text-anchor="end">now</text>
+      <rect x="52" y="399" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <use xlink:href="#glyph" x="52" y="418" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="426" class="ui t1" font-size="14">Updates</text>
+      <text x="88" y="444" class="ui t2" font-size="13">14 packages ready</text>
+      <text x="400" y="426" class="mono t2" font-size="12" text-anchor="end">3h</text>
+      <rect x="52" y="463" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <text x="52" y="484" class="ui eyebrow">EARLIER</text>
+      <text x="116" y="484" class="mono" font-size="11" fill="#94A3B8">5</text>
+      <use xlink:href="#glyph" x="52" y="510" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="518" class="ui t1" font-size="14">Kate</text>
+      <text x="88" y="536" class="ui t2" font-size="13">file changed on disk</text>
+      <text x="400" y="518" class="mono t2" font-size="12" text-anchor="end">1d</text>
+      <rect x="52" y="555" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <use xlink:href="#glyph" x="52" y="574" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="582" class="ui t1" font-size="14">Element</text>
+      <text x="88" y="600" class="ui t2" font-size="13">3 mentions in #design</text>
+      <text x="400" y="582" class="mono t2" font-size="12" text-anchor="end">1d</text>
+      <rect x="52" y="619" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+      <use xlink:href="#glyph" x="52" y="638" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="646" class="ui t1" font-size="14">Calendar</text>
+      <text x="88" y="664" class="ui t2" font-size="13">Design review at 15:00</text>
+      <text x="400" y="646" class="mono t2" font-size="12" text-anchor="end">2d</text>
+      <rect x="52" y="683" width="348" height="1" fill="#E6EDFF" opacity="0.06"/>
+    </g>
+    <g id="ghost" opacity="0">
+      <animate attributeName="opacity" values="0;0;0.95;0.95;0;0" keyTimes="0.0000;0.2500;0.2612;0.4500;0.4675;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 -2;428 214;428 214" keyTimes="0.0000;0.2500;0.2625;0.4000;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.33 1 0.68 1;0 0 1 1"/>
+      <rect x="44" y="118" width="296" height="60" rx="10" fill="#070F22" fill-opacity="0.94"/>
+      <rect x="44.5" y="118.5" width="295" height="59" rx="10" fill="none" stroke="#A855F7" stroke-opacity="0.6"/>
+      <use xlink:href="#glyph" x="52" y="134" width="24" height="24" color="#E6EDFF" opacity="0.8"/>
+      <text x="88" y="142" class="ui t1" font-size="14">Nate</text>
+      <text x="88" y="160" class="ui t2" font-size="13">mockups look good, ship the tether</text>
+      <text x="328" y="142" class="mono t2" font-size="12" text-anchor="end">2m</text>
+    </g>
+    <use xlink:href="#cursor" width="12" height="16" transform="translate(700 500)">
+      <animateTransform attributeName="transform" type="translate" values="700 500;700 500;172 146;172 144;600 358;600 358;700 500;700 500" keyTimes="0.0000;0.0250;0.2375;0.2625;0.4000;0.5250;0.6500;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0.33 1 0.68 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+    </use>
+    <!-- (a) Discord: 2px purple band on win-b's top edge, drawn by the compositor, clipped to the window radius -->
+    <clipPath id="wbClip"><rect x="836" y="44" width="408" height="316" rx="8"/></clipPath>
+    <rect x="836" y="44" width="408" height="2" fill="#A855F7" clip-path="url(#wbClip)">
+      <animate attributeName="x" values="1040.0;1040.0;836;836;1040.0;1040.0" keyTimes="0.0000;0.0375;0.0650;0.4750;0.6500;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      <animate attributeName="width" values="0;0;408;408;0;0" keyTimes="0.0000;0.0375;0.0650;0.4750;0.6500;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+    <g opacity="1">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0.0000;0.0625;0.0800;0.4375;0.4825;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      <clipPath id="c922"><rect x="868" y="54" width="360" height="96" rx="10"/></clipPath>
+      <rect x="868" y="54" width="360" height="96" rx="10" fill="#070F22" fill-opacity="0.94"/>
+      <rect x="868" y="54" width="360" height="1" fill="#A855F7" clip-path="url(#c922)"/>
+      <use xlink:href="#glyph" x="884" y="68" width="28" height="28" color="#E6EDFF" opacity="0.85"/>
+      <text x="924" y="78" class="ui eyebrow">Discord</text>
+      <text x="1212" y="78" class="mono t2" font-size="12" text-anchor="end">2m</text>
+      <text x="924" y="96" class="ui t1" font-size="14">Nate: mockups look good, ship the tether</text>
+      <text x="924" y="114" class="ui t2" font-size="13">control-center.svg landed in #design-review</text>
+      <text x="924" y="134" class="ui t1" font-size="13">Reply<tspan class="t2">&#160;·&#160;</tspan>Mark read</text>
+    </g>
+    <clipPath id="wcClip"><rect x="836" y="368" width="408" height="316" rx="8"/></clipPath>
+    <rect x="836" y="368" width="408" height="2" fill="#F43F5E" clip-path="url(#wcClip)">
+      <animate attributeName="opacity" values="1;0.5;1" keyTimes="0;0.5;1" dur="1.2s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1"/>
+    </rect>
+    <g opacity="1">
+      <animate attributeName="opacity" values="1;1" keyTimes="0.0000;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1"/>
+      <clipPath id="c1246"><rect x="868" y="378" width="360" height="96" rx="10"/></clipPath>
+      <rect x="868" y="378" width="360" height="96" rx="10" fill="#070F22" fill-opacity="0.94"/>
+      <rect x="868" y="378" width="360" height="1" fill="#F43F5E" clip-path="url(#c1246)"><animate attributeName="opacity" values="1;0.5;1" keyTimes="0;0.5;1" dur="1.2s" repeatCount="indefinite" calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1"/></rect><g/>
+      <use xlink:href="#glyph" x="884" y="392" width="28" height="28" color="#E6EDFF" opacity="0.85"/>
+      <text x="924" y="402" class="ui eyebrow">System</text>
+      <text x="1212" y="402" class="mono t2" font-size="12" text-anchor="end">now</text>
+      <text x="924" y="420" class="ui t1" font-size="14">Battery critical · 6%</text>
+      <text x="924" y="438" class="ui t2" font-size="13">Plug in now. Suspending at 3%.</text>
+      <text x="924" y="458" class="ui t1" font-size="13">Power settings</text>
+    </g>
+    <rect x="520" y="28" width="360" height="2" fill="#A855F7" opacity="0.9"/>
+    <g opacity="1">
+      <animate attributeName="opacity" values="1;1" keyTimes="0.0000;1.0000" dur="8.0s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1"/>
+      <clipPath id="c550"><rect x="520" y="30" width="360" height="96" rx="10"/></clipPath>
+      <rect x="520" y="30" width="360" height="96" rx="10" fill="#070F22" fill-opacity="0.94"/>
+      <rect x="520" y="30" width="360" height="1" fill="#A855F7" clip-path="url(#c550)"/>
+      <use xlink:href="#glyph" x="536" y="44" width="28" height="28" color="#E6EDFF" opacity="0.85"/>
+      <text x="576" y="54" class="ui eyebrow">Spotify</text>
+      <text x="864" y="54" class="mono t2" font-size="12" text-anchor="end">now</text>
+      <text x="576" y="72" class="ui t1" font-size="14">Now playing · Boards of Canada</text>
+      <text x="576" y="90" class="ui t2" font-size="13">Dayvan Cowboy · The Campfire Headphase</text>
+      <text x="576" y="110" class="ui t1" font-size="13">Pause<tspan class="t2">&#160;·&#160;</tspan>Next</text>
+    </g>
+  </g>
+  <g class="note" transform="translate(868 174)">
+    <rect width="360" height="120" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#A855F7">Band on window</text>
+    <text x="12" y="40" class="ui note-body">A toast is a 2px band on the top edge of the window it</text>
+    <text x="12" y="55" class="ui note-body">concerns (purple; rose if critical), drawn by the compositor</text>
+    <text x="12" y="70" class="ui note-body">and clipped to that window's radius, with the card hanging</text>
+    <text x="12" y="85" class="ui note-body">8px inside the rect. The band enters from its centre outward;</text>
+    <text x="12" y="100" class="ui note-body">on timeout the card releases and the band retracts back</text>
+    <text x="12" y="115" class="ui note-body">toward its centre over 1.4s. No top-right stack, no slide-in.</text>
+  </g>
+  <g class="note" transform="translate(868 498)">
+    <rect width="360" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#F43F5E">Critical</text>
+    <text x="12" y="40" class="ui note-body">Rose band with border-pulse breathing (1.2s) while the</text>
+    <text x="12" y="55" class="ui note-body">state persists. A critical band never retracts on its own.</text>
+  </g>
+  <g class="note" transform="translate(520 140)">
+    <rect width="300" height="90" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#A855F7">No window</text>
+    <text x="12" y="40" class="ui note-body">An app with no visible window hangs its card from the</text>
+    <text x="12" y="55" class="ui note-body">screen's top edge at its bar entry's x (Spotify's media</text>
+    <text x="12" y="70" class="ui note-body">chip). Centred if it has no entry. Never over a window</text>
+    <text x="12" y="85" class="ui note-body">it does not concern.</text>
+  </g>
+  <g class="note" transform="translate(440 470)">
+    <rect width="372" height="90" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#2FA8F2">Engine-placed column</text>
+    <text x="12" y="40" class="ui note-body">The center is a real tile: the leftmost leaf in tiling, the</text>
+    <text x="12" y="55" class="ui note-body">left zone in snapping, a column at the left end of the strip</text>
+    <text x="12" y="70" class="ui note-body">in scrolling. History rows grouped per app with a tabular</text>
+    <text x="12" y="85" class="ui note-body">age column; a tether ties it back to the bell chip.</text>
+  </g>
+  <g class="note" transform="translate(440 570)">
+    <rect width="372" height="75" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#6E6DF6">Drag to rect</text>
+    <text x="12" y="40" class="ui note-body">Drag a row (or a toast) out of the column: the target rect</text>
+    <text x="12" y="55" class="ui note-body">lights with a white edge as the pointer crosses it. Drop opens</text>
+    <text x="12" y="70" class="ui note-body">the app in that rect. Drag off the screen edge dismisses.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · notifications · edge-band toasts, critical band, screen-edge fallback, engine-placed center with drag-to-rect · 8s loop</text>
+</svg>

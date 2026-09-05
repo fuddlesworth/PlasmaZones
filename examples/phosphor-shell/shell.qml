@@ -21,7 +21,7 @@ import QtQuick
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
 // single TopPanel + pushed-in data sources with the production bar:
-// BarHost mounts one connected-corner bar per output, and each bar widget
+// BarHost mounts one spectrum-rail bar per output, and each bar widget
 // owns its own data source (Clock its SystemClock, Battery its UPowerHost,
 // Tray its StatusNotifierHost, ...), so this file no longer wires
 // clock/CPU/memory/battery into a panel.
@@ -51,52 +51,45 @@ Item {
 
         model: PhosphorShell.screens
 
-        // The control center grows out of THIS bar's capsule as one
-        // continuous painted surface (the connected-corner design), rather
-        // than opening as a separate centred popout.
+        // The control center hangs from THIS bar as a tethered pane under
+        // its chip (05 §8; phase 1 draws it inside the bar's surface, the
+        // engine-placed pane is phase 2).
         //
         // Everything the delegate reads must come from a CONTEXT PROPERTY,
         // never an id in this file: PerScreenPanels builds each delegate
         // with a fresh QQmlContext carrying `modelData`, so shell.qml's ids
         // do not resolve inside one. Hence the open state lives on
-        // ControlCenterRegistry and the socket content is declared inline
+        // ControlCenterRegistry and the pane content is declared inline
         // here, in the delegate's own scope.
         delegate: BarHost {
             id: bar
 
-            socketWidth: 380
-            socketDepth: 460
+            paneAnchor: "controlcenter"
+            paneWidth: 380
+            paneDepth: 460
             // Open only on the screen the registry says owns it, so a
-            // multi-head setup shows one panel, on the bar that summoned it.
+            // multi-head setup shows one pane, on the bar that summoned it.
             //
             // Read through PanelWindow.screen, NOT modelData.screen:
             // PerScreenPanels deliberately withholds the screen role from
             // modelData because that map snapshots a raw QScreen* which
             // dangles on hot-unplug, while this property is QPointer-backed
             // and simply reads null once the output dies. Hence the guard.
-            socketOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
+            paneOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
 
             // ONE CONTROL CENTER PER SCREEN, built on that screen's first
-            // open and kept: the bar's pocket Loader latches active, and
-            // the tiles hold live service connections that would be torn
-            // down and re-enumerated on every close. On a multi-head
-            // setup that means one NetworkManager, BlueZ and PipeWire
-            // host per output the user has opened the panel on. Sharing
-            // one instance across bars would mean reparenting a live
-            // surface between outputs, which the socket transport's
-            // one-at-a-time invariant already forbids.
+            // open and kept: the pane Loader latches active, and the
+            // tiles hold live service connections that would be torn
+            // down and re-enumerated on every close.
             //
-            // The pocket depth is a constant on the bar, and the pocket
-            // CLIPS: a tile set taller than the depth is cut off with no
-            // scroll and nothing to say so. Three toggles and two sliders
-            // fit the default comfortably, but adding tiles here means
-            // raising BarHost.socketDepth to match, since the surface
-            // reservation cannot grow after materialization.
-            socketContent: Component {
+            // The pane depth is a constant on the bar, and the pane
+            // CLIPS: a rail list taller than the depth is cut off, so
+            // adding rails means raising paneDepth to match, since the
+            // surface reservation cannot grow after materialization.
+            paneContent: Component {
                 ControlCenter {
                     provider: ControlCenterRegistry
                     tileIds: ControlCenterRegistry.tileIds
-                    columns: 2
                 }
             }
         }
@@ -140,10 +133,10 @@ Item {
         PowerMenu {}
     }
 
-    // The control center grows out of the bar's own capsule (the
-    // connected-corner socket). There is no surface to place — BarHost
-    // paints the body as part of the bar's Shape and the delegate above
-    // mounts the content — but it IS still a popout to the controller:
+    // The control center hangs from the bar as a pane. There is no
+    // surface to place — BarHost paints the pane inside the bar's own
+    // surface and the delegate above mounts the content — but it IS still
+    // a popout to the controller:
     // main.cpp routes the "control-center" id to a SocketPopoutTransport
     // that drives ControlCenterRegistry.openScreen. Going through
     // Popouts rather than writing that property directly is what makes
@@ -152,8 +145,8 @@ Item {
     //
     // No `content`: the socket transport creates nothing, and the
     // controller never reads it. `targetScreen` is the output whose bar
-    // button fired, so a multi-head setup grows the pocket on that bar.
-    // No keyboard focus: a bar-painted pocket is not a surface that can
+    // button fired, so a multi-head setup hangs the pane from that bar.
+    // No keyboard focus: a bar-painted pane is not a surface that can
     // take a layer-shell grab.
     // The control center and the launcher share the default popout
     // scope, so opening one CLOSES the other. That is the intended
@@ -175,7 +168,7 @@ Item {
             "dismissOnFocusLoss": false
         };
         // The arbiter keys on the popout id alone, which is right for the
-        // launcher and the power menu but not for a pocket that belongs to
+        // launcher and the power menu but not for a pane that belongs to
         // one bar. Without this check, pressing the button on a SECOND
         // monitor while the panel is open on the first just closes it, and
         // the screen this call went to the trouble of resolving is thrown
@@ -312,6 +305,9 @@ Item {
 
         Launcher {
             results: LauncherResults
+            // The viewfinder: this output's placement map, keyed by the
+            // output the transport's layer window landed on.
+            map: Screen.name ? PlacementMap.forScreen(Screen.name) : null
             // Built fresh on every open by the transport, so the reset that
             // clears the query and takes focus belongs here; the providers
             // behind the model are process-global and keep their state.
