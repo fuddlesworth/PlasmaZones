@@ -292,7 +292,11 @@ void ScreenManager::destroyGeometrySensor(const QString& screenName)
 {
     auto sensor = m_geometrySensors.take(screenName);
     if (sensor) {
-        sensor->disconnect();
+        // Only this manager's geometry connections. A wildcard disconnect()
+        // would also sever the destroyed hook the layer surface keeps on the
+        // window, which Qt 6 reports as "wildcard call disconnects from
+        // destroyed signal".
+        sensor->disconnect(this);
         sensor->hide();
         sensor->deleteLater();
     }
