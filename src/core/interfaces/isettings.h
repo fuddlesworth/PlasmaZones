@@ -96,7 +96,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
                                      public IOrderingSettings,
-                                     public IAnimationSettings
+                                     public IAnimationSettings,
+                                     public IOverviewSettings
 {
     Q_OBJECT
 
@@ -119,6 +120,7 @@ public:
     //   - IDefaultLayoutSettings: default layout ID
     //   - IOrderingSettings: manual layout / algorithm / scrolling-template ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
+    //   - IOverviewSettings: the workspace overview's look and input
     //
     // See settings_interfaces.h for the full API.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -392,48 +394,6 @@ public:
     /// the loss described above. Those are a backlog to hoist, not a second
     /// sanctioned pattern — see the note in settingsadaptor_registry.cpp.
     virtual void setScrollingTabIndicatorEnabled(bool /*enabled*/)
-    {
-    }
-
-    // The workspace overview's five keys (Workspaces.Overview), on the
-    // interface for the same reason the tab indicator toggle above is: the
-    // settings registry publishes them through these accessors and the
-    // overview KWin effect reads them back over that wire. The literals are
-    // pinned against their ConfigDefaults twins by static_asserts in
-    // settings/workspaces.cpp, the same way the block above is pinned.
-    virtual qreal overviewZoom() const
-    {
-        return 0.5;
-    }
-    virtual void setOverviewZoom(qreal /*zoom*/)
-    {
-    }
-    virtual QString overviewBackdropColor() const
-    {
-        return QStringLiteral("#262626");
-    }
-    virtual void setOverviewBackdropColor(const QString& /*color*/)
-    {
-    }
-    virtual bool overviewGestureEnabled() const
-    {
-        return true;
-    }
-    virtual void setOverviewGestureEnabled(bool /*enabled*/)
-    {
-    }
-    virtual bool overviewWheelSwitchesWorkspaces() const
-    {
-        return true;
-    }
-    virtual void setOverviewWheelSwitchesWorkspaces(bool /*enabled*/)
-    {
-    }
-    virtual bool overviewShowWorkspaceNames() const
-    {
-        return true;
-    }
-    virtual void setOverviewShowWorkspaceNames(bool /*enabled*/)
     {
     }
 
@@ -1056,23 +1016,13 @@ Q_SIGNALS:
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
 
-    // Workspaces settings (dynamic per-monitor workspaces).
-    //
-    // Notification-only, the same shape as the autotile shortcut signals
-    // above: no matching pure-virtual getters. Every consumer of these holds a
-    // concrete Settings* and reads the value there, and the workspace surface
-    // is thirty-odd scalars plus two slot families, so mirroring it into the
-    // interface would grow ISettings by more than it would buy. A consumer
-    // that genuinely needs to read one through the interface should have the
-    // getter added here alongside its signal rather than reach around it.
+    // Workspaces settings (dynamic per-monitor workspaces). Notification-only
+    // like the autotile signals above; wire-read keys go on IOverviewSettings.
     void workspacesEnabledChanged();
     void workspacesManageKWinPerOutputChanged();
     void workspacesSnapBackOsdHintChanged();
     void workspacesNamedEntriesChanged();
     void workspacesRebindKWinShortcutsChanged();
-    // Workspace overview (Workspaces.Overview). The getter/setter pairs are
-    // declared in the public section above with defaulted bodies; only the
-    // signals live here.
     void overviewZoomChanged();
     void overviewBackdropColorChanged();
     void overviewGestureEnabledChanged();
