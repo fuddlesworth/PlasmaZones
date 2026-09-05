@@ -11,61 +11,63 @@
 import QtQuick
 
 Item {
-    id: column
+    // Not "column": the cell delegates below declare a property of that
+    // name, and inside a delegate the property shadows the id.
+    id: stack
 
     required property Item root
 
-    readonly property real cellWidth: column.root.snap(column.width * column.root.zoom)
-    readonly property real cellHeight: column.root.snap(column.height * column.root.zoom)
-    readonly property real gap: column.root.snap(column.height * 0.1 * column.root.zoom)
-    readonly property real cellX: column.root.snap((column.width - column.cellWidth) / 2)
+    readonly property real cellWidth: stack.root.snap(stack.width * stack.root.zoom)
+    readonly property real cellHeight: stack.root.snap(stack.height * stack.root.zoom)
+    readonly property real gap: stack.root.snap(stack.height * 0.1 * stack.root.zoom)
+    readonly property real cellX: stack.root.snap((stack.width - stack.cellWidth) / 2)
     // A live per-output desktop swipe (KWin's desktopChanging) slides the
     // column by whole workspaces; a programmatic switch emits none.
     property real swipeOffset: 0
     Connections {
-        target: column.root.effect
+        target: stack.root.effect
         function onDesktopOffsetChanged(screen) {
-            if (screen === column.root.targetScreen) {
-                column.swipeOffset = column.root.effect.desktopOffsetForScreen(screen).y;
+            if (screen === stack.root.targetScreen) {
+                stack.swipeOffset = stack.root.effect.desktopOffsetForScreen(screen).y;
             }
         }
     }
     // Held false for one animation duration after a workspace is created or
     // destroyed by a drop (KWin's desktopJustCreated), so the destroy
-    // debounce's later renumber cannot lurch the column.
+    // debounce's later renumber cannot lurch the stack.
     property bool animateReflow: true
     Timer {
         id: reflowHold
-        interval: column.root.effect.animationDuration
-        onTriggered: column.animateReflow = true
+        interval: stack.root.effect.animationDuration
+        onTriggered: stack.animateReflow = true
     }
     function holdReflow() {
-        column.animateReflow = false;
+        stack.animateReflow = false;
         reflowHold.restart();
     }
 
     function cellY(sliceIndex) {
-        const step = column.cellHeight + column.gap;
-        return column.root.snap((column.height - column.cellHeight) / 2 + (sliceIndex - column.root.currentIndex - column.swipeOffset) * step);
+        const step = stack.cellHeight + stack.gap;
+        return stack.root.snap((stack.height - stack.cellHeight) / 2 + (sliceIndex - stack.root.currentIndex - stack.swipeOffset) * step);
     }
 
     Repeater {
-        model: column.root.slice
+        model: stack.root.slice
         delegate: WorkspaceCell {
             required property int index
             required property var modelData
-            root: column.root
-            column: column
+            root: stack.root
+            column: stack
             sliceIndex: index
             entry: modelData
-            x: column.cellX
-            y: column.cellY(index)
-            width: column.cellWidth
-            height: column.cellHeight
+            x: stack.cellX
+            y: stack.cellY(index)
+            width: stack.cellWidth
+            height: stack.cellHeight
             Behavior on y {
-                enabled: column.animateReflow && column.root.organized && !column.root.effect.gestureInProgress
+                enabled: stack.animateReflow && stack.root.organized && !stack.root.effect.gestureInProgress
                 NumberAnimation {
-                    duration: column.root.effect.animationDuration
+                    duration: stack.root.effect.animationDuration
                     easing.type: Easing.OutCubic
                 }
             }
@@ -75,9 +77,9 @@ Item {
     // A screen the map knows but that owns no workspace yet: one
     // non-droppable placeholder where its first workspace will appear.
     WorkspaceCell {
-        visible: column.root.screenKnown && column.root.slice.length === 0
-        root: column.root
-        column: column
+        visible: stack.root.screenKnown && stack.root.slice.length === 0
+        root: stack.root
+        column: stack
         sliceIndex: 0
         placeholder: true
         entry: ({
@@ -85,9 +87,9 @@ Item {
                 index: 0,
                 name: ""
             })
-        x: column.cellX
-        y: column.cellY(0)
-        width: column.cellWidth
-        height: column.cellHeight
+        x: stack.cellX
+        y: stack.cellY(0)
+        width: stack.cellWidth
+        height: stack.cellHeight
     }
 }

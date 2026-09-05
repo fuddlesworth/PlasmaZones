@@ -110,7 +110,11 @@ OverviewModelBuilder::Inputs OverviewController::buildInputs() const
             // Engines and the effect key windows by the registry's canonical
             // composite id; the census walks by instance id.
             w.id = m_registry->canonicalizeForLookup(instanceId);
-            w.omitted = omittedType(meta->windowType);
+            // The daemon's own layer-shell surfaces (overlay, OSD, picker)
+            // are tracked as sticky full-output windows with no type; the
+            // effect rejects the same class substring in shouldHandleWindow.
+            w.omitted = omittedType(meta->windowType)
+                || meta->appId.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive);
             w.sticky = meta->isSticky.value_or(false) || meta->virtualDesktops.size() > 1;
             if (m_windowStickyPredicate && m_windowStickyPredicate(w.id)) {
                 w.sticky = true;

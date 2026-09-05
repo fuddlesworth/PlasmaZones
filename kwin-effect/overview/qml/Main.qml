@@ -50,7 +50,7 @@ FocusScope {
 
     // niri: zoom = 1 - p * (1 - zoomSetting).
     readonly property real zoom: 1 - root.progress * (1 - root.effect.zoom)
-    readonly property real outputScale: root.targetScreen ? root.targetScreen.scale : 1
+    readonly property real outputScale: root.targetScreen ? root.targetScreen.devicePixelRatio : 1
 
     // This screen's slice of the workspace map, in slice order.
     readonly property var slice: {
@@ -102,7 +102,12 @@ FocusScope {
         id: wallpaper
         anchors.fill: parent
         outputName: root.targetScreen ? root.targetScreen.name : ""
-        activity: KWinComponents.Workspace.currentActivity
+        // Never empty: with an empty activity the item asks KWin's activities
+        // manager for the current one, and a session without activities (a
+        // nested kwin_wayland --no-kactivities) has no manager to ask, which
+        // crashes the compositor. A window on every activity still matches
+        // the sentinel; a real session always has a current activity anyway.
+        activity: KWinComponents.Workspace.currentActivity || "00000000-0000-0000-0000-000000000000"
         desktop: root.currentDesktop
         opacity: 1 - 0.55 * root.progress
     }
