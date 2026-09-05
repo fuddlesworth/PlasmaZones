@@ -8,6 +8,9 @@
 #include <PhosphorShell/PlacementMap.h>
 #include <PhosphorShell/PlacementMapParser.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlEngine>
 #include <QSignalSpy>
 #include <QTest>
@@ -260,6 +263,141 @@ private Q_SLOTS:
 
         applyFocusByWindowId(cells, QStringLiteral("a"));
         QVERIFY(cells[0].focused && !cells[1].focused);
+    }
+
+    // The ordered overload: a zone's window id is its TOPMOST occupant
+    // (the last listed), the focused window ranks above that since focus
+    // raises, and any urgent occupant marks the zone.
+    void occupantsPickTheTopmostWindowAndUrgency()
+    {
+        QList<Cell> cells;
+        for (const char* id : {"a", "b", "c"}) {
+            Cell c;
+            c.id = QLatin1String(id);
+            cells.append(c);
+        }
+        QList<Occupant> occupants;
+        occupants.append(Occupant{QStringLiteral("old"), {QStringLiteral("a")}, true});
+        occupants.append(Occupant{QStringLiteral("new"), {QStringLiteral("a")}, false});
+        occupants.append(Occupant{QStringLiteral("f"), {QStringLiteral("b")}, false});
+        occupants.append(Occupant{QStringLiteral("later"), {QStringLiteral("b")}, false});
+        applyOccupancy(cells, occupants, QStringLiteral("f"));
+        QVERIFY(cells[0].occupied);
+        QCOMPARE(cells[0].windowId, QStringLiteral("new"));
+        QVERIFY(cells[0].urgent);
+        QVERIFY(!cells[0].focused);
+        // Focus beats recency.
+        QCOMPARE(cells[1].windowId, QStringLiteral("f"));
+        QVERIFY(cells[1].focused);
+        QVERIFY(!cells[1].urgent);
+        QVERIFY(!cells[2].occupied);
+        QVERIFY(cells[2].windowId.isEmpty());
+
+        // Tiling and scrolling cells key on their window directly.
+        QList<Cell> tiles;
+        Cell t;
+        t.id = QStringLiteral("w9");
+        t.windowId = QStringLiteral("w9");
+        tiles.append(t);
+        applyUrgency(tiles, {QStringLiteral("w9")});
+        QVERIFY(tiles[0].urgent);
+        applyUrgency(tiles, {});
+        QVERIFY(!tiles[0].urgent);
+    }
+
+    void metadataLabelsCellsByWindowId()
+    {
+        QList<Cell> cells;
+        Cell a;
+        a.id = QStringLiteral("z1");
+        a.windowId = QStringLiteral("w1");
+        Cell b;
+        b.id = QStringLiteral("z2");
+        b.windowId = QStringLiteral("w2");
+        b.appId = QStringLiteral("stale");
+        cells << a << b;
+        QHash<QString, WindowMeta> meta;
+        meta.insert(QStringLiteral("w1"), WindowMeta{QStringLiteral("org.kde.konsole"), QStringLiteral("Shell")});
+        applyMetadata(cells, meta);
+        QCOMPARE(cells[0].appId, QStringLiteral("org.kde.konsole"));
+        QCOMPARE(cells[0].title, QStringLiteral("Shell"));
+        // A window the table does not know is unlabelled, not stale.
+        QVERIFY(cells[1].appId.isEmpty());
+        QVERIFY(cells[1].title.isEmpty());
+        const QVariantMap m = toVariantList(cells)[0].toMap();
+        for (const char* key : {"windowId", "appId", "title", "urgent"}) {
+            QVERIFY2(m.contains(QLatin1String(key)), key);
+        }
+        QCOMPARE(m.value(QStringLiteral("windowId")).toString(), QStringLiteral("w1"));
+    }
+
+    void screenStateCarriesTheResolvedIds()
+    {
+        const QString json = QStringLiteral(
+            R"([{"screenId":"A","virtualDesktop":3,"activity":"act","mode":1,"layoutId":"","algorithmId":"bsp",)"
+            R"("scrollingTemplateId":"{t}"},{"screenId":"B","mode":0,"layoutId":"{l}"}])");
+        const ScreenState a = screenStateFor(json, QStringLiteral("A"));
+        QCOMPARE(a.mode, 1);
+        QCOMPARE(a.virtualDesktop, 3);
+        QCOMPARE(a.activity, QStringLiteral("act"));
+        QCOMPARE(a.algorithmId, QStringLiteral("bsp"));
+        QCOMPARE(a.scrollingTemplateId, QStringLiteral("{t}"));
+        const ScreenState b = screenStateFor(json, QStringLiteral("B"));
+        QCOMPARE(b.layoutId, QStringLiteral("{l}"));
+        QCOMPARE(b.virtualDesktop, 0);
+        QCOMPARE(screenStateFor(json, QStringLiteral("C")).mode, -1);
+        QCOMPARE(screenStateFor(QStringLiteral("junk"), QStringLiteral("A")).mode, -1);
+    }
+
+    // The WindowDrag.registerDropProxy payload: the miniature's rect and
+    // one entry per cell, both in screen pixels; empty and unnamed cells
+    // are dropped.
+    void dropProxyJsonCarriesRectAndCells()
+    {
+        QVariantList cells;
+        cells.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("z1")},
+                                 {QStringLiteral("x"), 10},
+                                 {QStringLiteral("y"), 4},
+                                 {QStringLiteral("w"), 16},
+                                 {QStringLiteral("h"), 18}});
+        cells.append(QVariantMap{{QStringLiteral("id"), QString()},
+                                 {QStringLiteral("x"), 0},
+                                 {QStringLiteral("y"), 0},
+                                 {QStringLiteral("w"), 5},
+                                 {QStringLiteral("h"), 5}});
+        cells.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("empty")},
+                                 {QStringLiteral("x"), 0},
+                                 {QStringLiteral("y"), 0},
+                                 {QStringLiteral("w"), 0},
+                                 {QStringLiteral("h"), 5}});
+        const QString json = dropProxyJson(QRect(10, 4, 32, 18), cells);
+        const QJsonObject root = QJsonDocument::fromJson(json.toUtf8()).object();
+        QCOMPARE(root[QLatin1String("rect")].toArray(), (QJsonArray{10, 4, 32, 18}));
+        const QJsonArray entries = root[QLatin1String("cells")].toArray();
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries[0].toObject()[QLatin1String("id")].toString(), QStringLiteral("z1"));
+        QCOMPARE(entries[0].toObject()[QLatin1String("rect")].toArray(), (QJsonArray{10, 4, 16, 18}));
+    }
+
+    // Without a daemon every verb is inert and the menu stays empty.
+    void menuAndVerbsAreInertWithoutADaemon()
+    {
+        PlacementMap map;
+        PlacementMapScreen* s = map.forScreen(QStringLiteral("DP-1"));
+        QVERIFY(s->menuModel().isEmpty());
+        QSignalSpy menuSpy(s, &PlacementMapScreen::menuModelChanged);
+        s->refreshMenu();
+        QTest::qWait(20);
+        QVERIFY(s->menuModel().isEmpty());
+        QCOMPARE(menuSpy.count(), 0);
+        QVERIFY(!s->isUrgent());
+        s->applyMenuChoice(QStringLiteral("layout"), QStringLiteral("{x}"));
+        s->moveCell(QStringLiteral("a"), QStringLiteral("b"));
+        s->toggleFloat(QStringLiteral("a"));
+        s->moveToDesktop(QStringLiteral("a"), 0);
+        s->registerDropProxy(QRect(0, 0, 32, 18), {});
+        s->unregisterDropProxy();
+        QVERIFY(s->cells().isEmpty());
     }
 
     void variantListCarriesTheDocumentedKeys()

@@ -10,6 +10,7 @@
 #include <QRect>
 #include <QRectF>
 #include <QString>
+#include <QSet>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
@@ -47,6 +48,48 @@ struct PHOSPHORSHELL_EXPORT Cell
     /// Scrolling only: the column's index in the strip, the argument to
     /// `Scrolling.focusColumnAt`. -1 for every other cell.
     int columnIndex = -1;
+    /// The window this cell stands for: the tile's window (tiling), the
+    /// column's first tile (scrolling), or the TOPMOST occupant of the
+    /// zone (snapping; empty for an empty zone). The argument to
+    /// `WindowTracking.activateWindow` and the float / desktop verbs.
+    QString windowId;
+    /// `WindowTracking.getWindowMetadata` for `windowId`, empty until it
+    /// has answered.
+    QString appId;
+    QString title;
+    /// Snapping: any occupant demands attention. Tiling and scrolling:
+    /// the cell's window does.
+    bool urgent = false;
+};
+
+/// One non-floating window on a screen, for `applyOccupancy`: the zones
+/// it fills and whether it demands attention. The caller lists occupants
+/// bottom to top, so the last occupant of a zone is its topmost window.
+struct PHOSPHORSHELL_EXPORT Occupant
+{
+    QString windowId;
+    QStringList zoneIds;
+    bool urgent = false;
+};
+
+/// `WindowTracking.getWindowMetadata`, reduced to what a label needs.
+struct PHOSPHORSHELL_EXPORT WindowMeta
+{
+    QString appId;
+    QString title;
+};
+
+/// One screen's row of `LayoutRegistry.getScreenStates`.
+struct PHOSPHORSHELL_EXPORT ScreenState
+{
+    /// 0 snapping, 1 tiling, 2 scrolling, -1 when the screen is not listed.
+    int mode = -1;
+    /// The daemon's resolved desktop for this screen, 1-based; 0 unknown.
+    int virtualDesktop = 0;
+    QString activity;
+    QString layoutId;
+    QString algorithmId;
+    QString scrollingTemplateId;
 };
 
 /// A tile from a `Tiling.windowsTileRequested` batch, reduced to what the
@@ -152,13 +195,33 @@ PHOSPHORSHELL_EXPORT QList<Cell> parseCurrentTiles(const QString& tilesJson, con
 PHOSPHORSHELL_EXPORT void applyOccupancy(QList<Cell>& cells, const QHash<QString, QStringList>& occupancy,
                                          const QString& focusedWindowId = {});
 
+/**
+ * @brief Mark cells occupied from an ordered occupant list.
+ *
+ * Like the map overload, and additionally sets each occupied cell's
+ * `windowId` to its topmost occupant (the last one listed, or the
+ * focused window when it is among them, since focus raises) and
+ * `urgent` when any occupant demands attention.
+ */
+PHOSPHORSHELL_EXPORT void applyOccupancy(QList<Cell>& cells, const QList<Occupant>& occupants,
+                                         const QString& focusedWindowId = {});
+
+/// Fill `appId` / `title` from `meta` for every cell with a window id
+/// the table knows. Cells without an entry keep empty labels.
+PHOSPHORSHELL_EXPORT void applyMetadata(QList<Cell>& cells, const QHash<QString, WindowMeta>& meta);
+
+/// Mark the cells whose `windowId` is in `urgent`. Tiling and scrolling
+/// cells key on their window; snapping cells are marked by the occupant
+/// overload of `applyOccupancy` instead and are left alone here.
+PHOSPHORSHELL_EXPORT void applyUrgency(QList<Cell>& cells, const QSet<QString>& urgent);
+
 /// Mark the cell whose id equals `windowId` focused (tiling cells are
 /// keyed by window id). No-op when nothing matches.
 PHOSPHORSHELL_EXPORT void applyFocusByWindowId(QList<Cell>& cells, const QString& windowId);
 
 /// The QML-facing shape: one QVariantMap per cell with the documented keys
 /// (id, x, y, w, h, t, occupied, focused, label, zoneNumber, stack,
-/// stripT, columnIndex).
+/// stripT, columnIndex, windowId, appId, title, urgent).
 PHOSPHORSHELL_EXPORT QVariantList toVariantList(const QList<Cell>& cells);
 
 /// `{x, w}` for a lens band, or an empty map for a null rect.
@@ -167,5 +230,21 @@ PHOSPHORSHELL_EXPORT QVariantMap lensToVariant(const QRectF& lens);
 /// Look up one screen's `mode` in a `getScreenStates` JSON array.
 /// Returns -1 when the screen is not listed or the document is malformed.
 PHOSPHORSHELL_EXPORT int modeForScreen(const QString& statesJson, const QString& screenId);
+
+/// One screen's full row of a `getScreenStates` JSON array: the mode plus
+/// the resolved layout / algorithm / template ids and the daemon's own
+/// (desktop, activity) for the screen. `mode` is -1 when the screen is
+/// not listed or the document is malformed.
+PHOSPHORSHELL_EXPORT ScreenState screenStateFor(const QString& statesJson, const QString& screenId);
+
+/**
+ * @brief Build the `WindowDrag.registerDropProxy` payload.
+ *
+ * `rect` is the miniature's rect in screen-local pixels and `cells` a list
+ * of `{id, x, y, w, h}` maps, one per zone cell, in the same space. The
+ * document is `{"rect":[x,y,w,h],"cells":[{"id":..,"rect":[x,y,w,h]},..]}`.
+ * Entries without an id or with an empty rect are dropped.
+ */
+PHOSPHORSHELL_EXPORT QString dropProxyJson(const QRect& rect, const QVariantList& cells);
 
 } // namespace PhosphorShell::PlacementMapParser

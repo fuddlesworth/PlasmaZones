@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "dropproxy.h"
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
@@ -239,6 +240,24 @@ public Q_SLOTS:
      * drag mode. This replaces the effect-side cross-VS flip logic.
      */
     void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+
+    /**
+     * @brief Register (or replace) a screen's drop proxy: a miniature of
+     *        its snapping zones that a real drag can be dropped on.
+     *
+     * The Phosphor shell registers its placement map here. While a snap-path
+     * drag has its activation trigger held and the cursor is inside the
+     * proxy's rect, the cursor is treated as being over the real zone of
+     * the cell under it (highlight through the overlay, geometry preview,
+     * endDrag snaps there); inside the rect but over no cell is no target.
+     * @p proxyJson follows PhosphorProtocol::Service::DropProxyKey, in the
+     * screen's own pixels; a malformed proxy is refused and any earlier one
+     * stands. One proxy per screen. On a tiling or scrolling screen the
+     * proxy is accepted and ignored, since the snap path never runs there.
+     */
+    void registerDropProxy(const QString& screenId, const QString& proxyJson);
+    /** Drop the proxy registered for @p screenId, if any. */
+    void unregisterDropProxy(const QString& screenId);
 
     /** Forward mouse wheel delta to zone selector for scrolling during drag. */
     void selectorScrollWheel(int angleDeltaY);
@@ -588,6 +607,17 @@ private:
     // output WITHOUT destroying overlay windows. See the call site in dragMoved
     // and the rationale comment in IOverlayService::setIdleForDragPause().
     void clearOverlayForTriggerRelease();
+
+    // Drop proxy (dropproxy.h). resolveDropProxyAt maps a global cursor
+    // position onto the proxy registered for the cursor's PHYSICAL screen,
+    // in that screen's own pixels. The two target helpers are the single-zone
+    // and no-zone arms of handleMultiZoneModifier, shared with the proxy
+    // path so a proxied cell lights and commits exactly like a real zone.
+    DropProxyRegistry::Resolution resolveDropProxyAt(QScreen* screen, const QString& screenId, int x, int y) const;
+    void applySingleZoneTarget(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
+                               PhosphorZones::Layout* layout);
+    void clearZoneTarget();
+    DropProxyRegistry m_dropProxies;
 
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;

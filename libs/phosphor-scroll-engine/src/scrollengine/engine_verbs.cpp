@@ -591,6 +591,22 @@ void ScrollEngine::focusColumnAtIndex(int index, const QString& screenId)
         sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
+void ScrollEngine::moveColumnToIndex(int from, int to, const QString& screenId)
+{
+    // Same silence for a negative index as focusColumnAtIndex. Anything else
+    // out of range reaches the strip, which refuses it, and that refusal is
+    // reported as no_target: the caller named a column, so unlike a negative
+    // index it is a real (if unanswerable) request.
+    if (from < 0 || to < 0) {
+        return;
+    }
+    // The OSD arrow points the way the column travelled, so the direction is
+    // the sign of (to - from) rather than the previous active index the
+    // focus twin reads; P_SCROLL_VERB can express that directly.
+    P_SCROLL_VERB(screenId, state->strip().moveColumnTo(from, to, params), "move", true,
+                  Detail::physicalTokenForMain(to > from ? 1 : -1, params.axis));
+}
+
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
 {
     // Same delta contract (and the same deliberate silence) as

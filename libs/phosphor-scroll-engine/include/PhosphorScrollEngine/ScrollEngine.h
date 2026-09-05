@@ -325,6 +325,14 @@ public:
     /// focusColumnPlain refuses a bad delta. The already-active column
     /// answers no_target like the other focus verbs.
     void focusColumnAtIndex(int index, const QString& screenId);
+    /// Move the column at strip index @p from to strip index @p to
+    /// (ScrollStrip::moveColumnTo), leaving the moved column active and
+    /// re-anchoring the view the way the other move verbs do, then
+    /// activating its active window. A negative index is refused silently
+    /// like focusColumnAtIndex's; an index past the end, or from == to,
+    /// answers no_target since there is no such column to move (from is not
+    /// clamped, unlike a focus index).
+    void moveColumnToIndex(int from, int to, const QString& screenId);
     /// First/last non-minimized tile of the active column (niri
     /// focus-window-top/bottom).
     void focusWindowTop(const QString& screenId);

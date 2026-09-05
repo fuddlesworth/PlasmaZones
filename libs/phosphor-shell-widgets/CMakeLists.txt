@@ -66,6 +66,7 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/SpectrumUnderline.qml
     qml/Phosphor/Widgets/TabularText.qml
     qml/Phosphor/Widgets/PlacementMiniature.qml
+    qml/Phosphor/Widgets/MiniatureEdges.js
     # Phase 3.2 connected-corner primitives.
     qml/Phosphor/Widgets/ConnectorGeometry.js
     qml/Phosphor/Widgets/ConnectedShape.qml
@@ -106,6 +107,16 @@ qt_add_qml_module(PhosphorShellWidgetsQml
         Phosphor.Theme
         QtQuick.Effects
         QtQuick.Shapes
+    # org.kde.kirigami: PlacementMiniature draws each cell's app glyph
+    # through Kirigami.Icon at expanded height. A DEPENDENCY, never an
+    # IMPORT: an IMPORTS entry lands in the qmldir as an unqualified
+    # import for every consumer, and Kirigami's `Theme` attached type
+    # would then shadow the Phosphor.Theme singleton of the same name
+    # (the guard case in the bar's Slot test). The plugin resolves from
+    # the KF6 install at runtime, as every shell surface's Kirigami
+    # import does.
+    DEPENDENCIES
+        org.kde.kirigami
     SOURCES
         src/phosphorshellwidgets_qml_plugin.cpp
     QML_FILES ${_phosphor_widgets_qml_files}

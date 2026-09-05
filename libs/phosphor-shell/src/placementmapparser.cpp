@@ -23,6 +23,20 @@ namespace {
 // them, so they are pinned here beside the only reader in this library.
 constexpr QLatin1String ScreenStatesScreenId("screenId");
 constexpr QLatin1String ScreenStatesMode("mode");
+constexpr QLatin1String ScreenStatesDesktop("virtualDesktop");
+constexpr QLatin1String ScreenStatesActivity("activity");
+constexpr QLatin1String ScreenStatesLayoutId("layoutId");
+constexpr QLatin1String ScreenStatesAlgorithmId("algorithmId");
+constexpr QLatin1String ScreenStatesTemplateId("scrollingTemplateId");
+
+// WindowDrag.registerDropProxy payload keys (the phase-3 daemon contract):
+// the miniature's rect and one entry per zone cell, both in screen-local
+// pixels.
+namespace DropProxyKey {
+constexpr QLatin1String Rect("rect");
+constexpr QLatin1String Cells("cells");
+constexpr QLatin1String Id("id");
+} // namespace DropProxyKey
 
 // Zone::fromJson's ZoneGeometryMode: 0 relative, 1 fixed.
 constexpr int GeometryModeFixed = 1;
@@ -156,6 +170,7 @@ QList<Cell> parseTileBatch(const QList<TileRect>& tiles, const QString& screenId
             continue;
         }
         Cell cell = makeCell(tile.windowId, rect);
+        cell.windowId = tile.windowId;
         cell.occupied = true;
         cells.append(cell);
         if (tile.monocle) {
@@ -254,6 +269,7 @@ StripParse parseStripModel(const QString& modelJson)
             continue;
         }
         Cell cell = makeCell(id, rect);
+        cell.windowId = id;
         cell.stripT = std::clamp(qreal(pos) / extent, 0.0, 1.0);
         cell.t = cell.stripT;
         cell.columnIndex = column[Index].toInt(-1);
@@ -333,6 +349,62 @@ void applyOccupancy(QList<Cell>& cells, const QHash<QString, QStringList>& occup
     }
 }
 
+void applyOccupancy(QList<Cell>& cells, const QList<Occupant>& occupants, const QString& focusedWindowId)
+{
+    // Topmost occupant per zone: the last one listed, unless the focused
+    // window is among them (focus raises).
+    QHash<QString, QString> topmost;
+    QSet<QString> focused;
+    QSet<QString> urgent;
+    for (const Occupant& o : occupants) {
+        if (o.windowId.isEmpty()) {
+            continue;
+        }
+        for (const QString& zoneId : o.zoneIds) {
+            if (zoneId.isEmpty()) {
+                continue;
+            }
+            const bool isFocused = !focusedWindowId.isEmpty() && o.windowId == focusedWindowId;
+            if (isFocused || !focused.contains(zoneId)) {
+                topmost.insert(zoneId, o.windowId);
+            }
+            if (isFocused) {
+                focused.insert(zoneId);
+            }
+            if (o.urgent) {
+                urgent.insert(zoneId);
+            }
+        }
+    }
+    for (Cell& cell : cells) {
+        cell.windowId = topmost.value(cell.id);
+        cell.occupied = !cell.windowId.isEmpty();
+        cell.focused = focused.contains(cell.id);
+        cell.urgent = urgent.contains(cell.id);
+    }
+}
+
+void applyMetadata(QList<Cell>& cells, const QHash<QString, WindowMeta>& meta)
+{
+    for (Cell& cell : cells) {
+        const auto it = meta.constFind(cell.windowId);
+        if (cell.windowId.isEmpty() || it == meta.cend()) {
+            cell.appId.clear();
+            cell.title.clear();
+            continue;
+        }
+        cell.appId = it->appId;
+        cell.title = it->title;
+    }
+}
+
+void applyUrgency(QList<Cell>& cells, const QSet<QString>& urgent)
+{
+    for (Cell& cell : cells) {
+        cell.urgent = !cell.windowId.isEmpty() && urgent.contains(cell.windowId);
+    }
+}
+
 void applyFocusByWindowId(QList<Cell>& cells, const QString& windowId)
 {
     for (Cell& cell : cells) {
@@ -359,6 +431,10 @@ QVariantList toVariantList(const QList<Cell>& cells)
         map.insert(QStringLiteral("stack"), cell.stack);
         map.insert(QStringLiteral("stripT"), cell.stripT);
         map.insert(QStringLiteral("columnIndex"), cell.columnIndex);
+        map.insert(QStringLiteral("windowId"), cell.windowId);
+        map.insert(QStringLiteral("appId"), cell.appId);
+        map.insert(QStringLiteral("title"), cell.title);
+        map.insert(QStringLiteral("urgent"), cell.urgent);
         list.append(map);
     }
     return list;
@@ -377,9 +453,15 @@ QVariantMap lensToVariant(const QRectF& lens)
 
 int modeForScreen(const QString& statesJson, const QString& screenId)
 {
+    return screenStateFor(statesJson, screenId).mode;
+}
+
+ScreenState screenStateFor(const QString& statesJson, const QString& screenId)
+{
+    ScreenState out;
     const QJsonDocument doc = QJsonDocument::fromJson(statesJson.toUtf8());
     if (!doc.isArray() || screenId.isEmpty()) {
-        return -1;
+        return out;
     }
     const QJsonArray states = doc.array();
     for (const QJsonValue& value : states) {
@@ -388,9 +470,40 @@ int modeForScreen(const QString& statesJson, const QString& screenId)
             continue;
         }
         const int mode = state[ScreenStatesMode].toInt(-1);
-        return (mode >= 0 && mode <= 2) ? mode : -1;
+        out.mode = (mode >= 0 && mode <= 2) ? mode : -1;
+        out.virtualDesktop = std::max(0, state[ScreenStatesDesktop].toInt(0));
+        out.activity = state[ScreenStatesActivity].toString();
+        out.layoutId = state[ScreenStatesLayoutId].toString();
+        out.algorithmId = state[ScreenStatesAlgorithmId].toString();
+        out.scrollingTemplateId = state[ScreenStatesTemplateId].toString();
+        return out;
     }
-    return -1;
+    return out;
+}
+
+QString dropProxyJson(const QRect& rect, const QVariantList& cells)
+{
+    const auto rectArray = [](const QRect& r) {
+        return QJsonArray{r.x(), r.y(), r.width(), r.height()};
+    };
+    QJsonArray entries;
+    for (const QVariant& value : cells) {
+        const QVariantMap cell = value.toMap();
+        const QString id = cell.value(DropProxyKey::Id).toString();
+        const QRect r(cell.value(QStringLiteral("x")).toInt(), cell.value(QStringLiteral("y")).toInt(),
+                      cell.value(QStringLiteral("w")).toInt(), cell.value(QStringLiteral("h")).toInt());
+        if (id.isEmpty() || r.isEmpty()) {
+            continue;
+        }
+        QJsonObject entry;
+        entry[DropProxyKey::Id] = id;
+        entry[DropProxyKey::Rect] = rectArray(r);
+        entries.append(entry);
+    }
+    QJsonObject root;
+    root[DropProxyKey::Rect] = rectArray(rect);
+    root[DropProxyKey::Cells] = entries;
+    return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
 } // namespace PhosphorShell::PlacementMapParser

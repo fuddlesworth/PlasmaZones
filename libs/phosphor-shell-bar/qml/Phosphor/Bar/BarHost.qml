@@ -25,6 +25,17 @@
 // is one animation either way: tether first, content after; content
 // releases first, tether retracts last.
 //
+// The bar has one pane of its own besides the host's: the EXPANDED
+// PLACEMENT MAP (A2 §1.1), opened by a long-press or right-click on the
+// map chip and drawn inline under it (`mapPaneOpen`). It uses the same
+// tether and choreography, anchored to "placementmap". At most one pane
+// per screen (A2 §4.7): the host's pane opening closes the map pane, and
+// the map pane does not open while the host's is up.
+//
+// Urgency (A2 §3.3, §6): while any cell on this screen's map demands
+// attention, the rail over the map chip thickens 2 → 4 px in white,
+// entering over 200 ms and pulsing with the cell.
+//
 //   BarHost { }   // defaults match mockups-v2/bar-widgets.svg
 //
 // The centre slot anchors to the bar's true centre while the side slots
@@ -63,6 +74,55 @@ PanelWindow {
     property int paneWidth: 380
     property int paneDepth: 460
 
+    // ─── The map pane (the bar's own) ───────────────────────────────────
+    // Open when the map chip was long-pressed or right-clicked. Toggled
+    // by the chip; closed by the pane's own close row or by the host's
+    // pane opening.
+    property bool mapPaneOpen: false
+    // Opened on its menu section (a right-click).
+    property bool mapPaneMenuFocused: false
+    property int mapPaneWidth: 360
+
+    // What the pane machinery below actually shows: the host's pane, or
+    // the map pane when that is the one open.
+    readonly property bool _paneOpenEff: panel.paneOpen || panel.mapPaneOpen
+    readonly property bool _paneExternalEff: panel.mapPaneOpen ? false : panel.paneExternal
+    readonly property string _paneAnchorEff: panel.mapPaneOpen ? "placementmap" : panel.paneAnchor
+    readonly property int _paneWidthEff: panel.mapPaneOpen ? panel.mapPaneWidth : panel.paneWidth
+
+    // The map chip, once its slot has mounted it, for the expand request
+    // and the urgency thickening.
+    readonly property Item _mapWidget: {
+        void leftSlot.mountedCount;
+        void centerSlot.mountedCount;
+        void rightSlot.mountedCount;
+        const c = leftSlot.cellFor("placementmap") || centerSlot.cellFor("placementmap") || rightSlot.cellFor("placementmap");
+        return c && c.widget ? c.widget : null;
+    }
+
+    Connections {
+        target: panel._mapWidget
+
+        function onExpandRequested(menu: bool): void {
+            // One pane per screen: the host's pane wins while it is up.
+            if (panel.paneOpen)
+                return;
+            if (panel.mapPaneOpen && !menu) {
+                panel.mapPaneOpen = false;
+                return;
+            }
+            panel.mapPaneMenuFocused = menu;
+            panel.mapPaneOpen = true;
+        }
+    }
+
+    Binding {
+        target: panel._mapWidget
+        property: "expanded"
+        value: panel.mapPaneOpen
+        when: panel._mapWidget !== null && panel._mapWidget.expanded !== undefined
+    }
+
     // The band, for a host that requests compositor effects behind it
     // (phosphor-glass is real backdrop blur under the navy tint, and only
     // the compositor can blur what is behind a surface).
@@ -80,7 +140,7 @@ PanelWindow {
     // changes focus, so it is not located and the tether drops straight.
     readonly property rect paneScreenRect: {
         void panel._mapEpoch;
-        if (!panel.paneExternal || !panel.paneOpen || panel._paneCellId === "" || !panel.placementMap)
+        if (!panel._paneExternalEff || !panel._paneOpenEff || panel._paneCellId === "" || !panel.placementMap)
             return Qt.rect(0, 0, 0, 0);
         return panel.placementMap.cellRect(panel._paneCellId);
     }
@@ -88,9 +148,15 @@ PanelWindow {
     property string _focusAtOpen: ""
     property int _mapEpoch: 0
 
-    onPaneOpenChanged: {
+    on_PaneOpenEffChanged: {
         panel._paneCellId = "";
-        panel._focusAtOpen = panel.paneOpen && panel.placementMap ? panel.placementMap.focusedCellId() : "";
+        panel._focusAtOpen = panel._paneOpenEff && panel.placementMap ? panel.placementMap.focusedCellId() : "";
+    }
+    // A second pane replaces the first (A2 §4.7): the host's pane opening
+    // closes the map pane.
+    onPaneOpenChanged: {
+        if (panel.paneOpen)
+            panel.mapPaneOpen = false;
     }
 
     Connections {
@@ -98,7 +164,7 @@ PanelWindow {
 
         function onChanged(): void {
             panel._mapEpoch++;
-            if (!panel.paneOpen || !panel.paneExternal || panel._paneCellId !== "")
+            if (!panel._paneOpenEff || !panel._paneExternalEff || panel._paneCellId !== "")
                 return;
             const focused = panel.placementMap.focusedCellId();
             if (focused !== "" && focused !== panel._focusAtOpen)
@@ -125,14 +191,14 @@ PanelWindow {
     // one animation carries the whole choreography (A2 §4.4): tether drops
     // first, content enters after, and on close the content leaves first
     // and the tether retracts.
-    property real _paneProgress: panel.paneOpen ? 1 : 0
+    property real _paneProgress: panel._paneOpenEff ? 1 : 0
 
     Behavior on _paneProgress {
         NumberAnimation {
-            duration: panel.paneOpen ? Motion.duration_reveal + Motion.duration_enter_content : Motion.duration_dismiss + 250
-            easing: panel.paneOpen ? Motion.reveal : Motion.release
+            duration: panel._paneOpenEff ? Motion.duration_reveal + Motion.duration_enter_content : Motion.duration_dismiss + 250
+            easing: panel._paneOpenEff ? Motion.reveal : Motion.release
             onFinished: {
-                if (!panel.paneOpen)
+                if (!panel._paneOpenEff)
                     panel.paneClosed();
             }
         }
@@ -146,7 +212,7 @@ PanelWindow {
     // the exclusive zone, and growing it would shove tiled windows.
     // An external pane takes its own input on its own surface; the strip
     // below the band then only carries the tether, which is not clickable.
-    interactiveThickness: panel._paneProgress > 0.01 && !panel.paneExternal ? Tokens.bar_thickness + panel._usablePaneDepth : 0
+    interactiveThickness: panel._paneProgress > 0.01 && !panel._paneExternalEff ? Tokens.bar_thickness + panel._usablePaneDepth : 0
 
     // Bar layout: each slot is a list of groups; each group is an array of
     // widget ids separated from its neighbours by a hairline.
@@ -239,6 +305,65 @@ PanelWindow {
         }
     }
 
+    // Urgency: while any cell on the map demands attention, the rail over
+    // the map chip thickens 2 → 4 px in white (A2 §3.3), entering over
+    // 200 ms into the band (never into the screen) and pulsing 0.4 → 1.0
+    // at 1.2 s with the cell. Steady under reduced motion. Releases when
+    // clear.
+    Rectangle {
+        id: railUrgency
+
+        readonly property Item _cell: {
+            void leftSlot.mountedCount;
+            void centerSlot.mountedCount;
+            void rightSlot.mountedCount;
+            return leftSlot.cellFor("placementmap") || centerSlot.cellFor("placementmap") || rightSlot.cellFor("placementmap");
+        }
+        readonly property bool active: panel._mapWidget !== null && panel._mapWidget.urgent === true && _cell !== null
+        property real pulse: 1
+
+        visible: height > 0 && _cell !== null
+        x: _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0
+        y: 0
+        width: _cell ? _cell.width : 0
+        height: active ? Tokens.rail_thickness * 2 : 0
+        color: Spectrum.focus
+        opacity: active ? pulse : 0
+
+        Behavior on height {
+            NumberAnimation {
+                duration: railUrgency.active ? Motion.duration_short_4 : Motion.duration_release
+                easing: railUrgency.active ? Motion.reveal : Motion.release
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Motion.duration_release
+                easing: Motion.release
+            }
+        }
+        SequentialAnimation on pulse {
+            running: railUrgency.active && !Motion.reducedMotion
+            loops: Animation.Infinite
+            NumberAnimation {
+                from: 0.4
+                to: 1.0
+                duration: 600
+                easing: Motion.decelerated
+            }
+            NumberAnimation {
+                from: 1.0
+                to: 0.4
+                duration: 600
+                easing: Motion.accelerated
+            }
+            onRunningChanged: {
+                if (!running)
+                    railUrgency.pulse = 1;
+            }
+        }
+    }
+
     // ─── Slots ──────────────────────────────────────────────────────────
     Slot {
         id: leftSlot
@@ -282,7 +407,7 @@ PanelWindow {
         void leftSlot.mountedCount;
         void centerSlot.mountedCount;
         void rightSlot.mountedCount;
-        return leftSlot.cellFor(panel.paneAnchor) || centerSlot.cellFor(panel.paneAnchor) || rightSlot.cellFor(panel.paneAnchor);
+        return leftSlot.cellFor(panel._paneAnchorEff) || centerSlot.cellFor(panel._paneAnchorEff) || rightSlot.cellFor(panel._paneAnchorEff);
     }
     readonly property real _anchorCenterX: {
         void panel.width;
@@ -291,7 +416,10 @@ PanelWindow {
             return panel.width / 2;
         return c.mapToItem(panel.contentItem, 0, 0).x + c.width / 2;
     }
-    readonly property real _paneW: Math.min(panel.paneWidth, panel.width)
+    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width)
+    // The map pane is as deep as its content; the host's pane takes the
+    // reserved depth.
+    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight) + Tokens.rail_thickness) : panel._usablePaneDepth
     // Right-aligned under the chip, clamped to the screen: a trailing chip
     // gets a pane that ends where the chip ends.
     readonly property real _paneX: Math.max(0, Math.min(panel.width - panel._paneW, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
@@ -322,13 +450,13 @@ PanelWindow {
         x: panel._paneX
         y: Tokens.bar_thickness
         width: panel._paneW
-        height: Math.max(0, panel._usablePaneDepth * Math.max(0, Math.min(1, (panel._paneProgress - 0.2) / 0.8)))
+        height: Math.max(0, panel._paneDepthEff * Math.max(0, Math.min(1, (panel._paneProgress - 0.2) / 0.8)))
         clip: true
         // Never for an external pane: the toplevel is the pane then.
-        visible: height > 0 && !panel.paneExternal
+        visible: height > 0 && !panel._paneExternalEff
         // Gate input the instant a close starts: an opacity-0 Item is still
         // hit-testable, and the collapse outlasts the fade.
-        enabled: panel.paneOpen && !panel.paneExternal
+        enabled: panel._paneOpenEff && !panel._paneExternalEff
 
         Rectangle {
             anchors.fill: parent
@@ -340,7 +468,7 @@ PanelWindow {
             anchors.fill: parent
             radius: Tokens.radius_tile
             t: panel._paneT
-            active: panel.paneOpen
+            active: panel._paneOpenEff
         }
         // The pane's top edge carries the rail gradient over its own
         // x-range, so it matches the bar above it in hue.
@@ -371,20 +499,57 @@ PanelWindow {
             }
         }
 
+        // Content enters after the tether and the surface: opacity plus
+        // a 4 px slide, no scale.
+        readonly property real _p: Math.max(0, Math.min(1, (panel._paneProgress - 0.5) / 0.5))
+
         Loader {
             id: content
 
             anchors.fill: parent
             anchors.topMargin: Tokens.rail_thickness
-            // Content enters after the tether and the surface: opacity plus
-            // a 4 px slide, no scale.
-            readonly property real _p: Math.max(0, Math.min(1, (panel._paneProgress - 0.5) / 0.5))
-            opacity: _p
-            anchors.bottomMargin: -4 * (1 - _p)
+            opacity: pane._p
+            anchors.bottomMargin: -4 * (1 - pane._p)
             // Built on first open and kept: the tiles hold live service
-            // connections that would be re-enumerated on every open.
+            // connections that would be re-enumerated on every open. Hidden,
+            // not unloaded, while the map pane has the surface.
             active: (panel.paneOpen && !panel.paneExternal) || pane.everOpened
+            visible: !mapContent.showing
             sourceComponent: panel.paneContent
+        }
+
+        // The map pane's content, in its own loader so opening it never
+        // tears down the host's kept content. Kept through its close so
+        // the content releases before the surface collapses (A2 §4.4).
+        Loader {
+            id: mapContent
+
+            property bool showing: false
+
+            Connections {
+                target: panel
+
+                function onMapPaneOpenChanged(): void {
+                    if (panel.mapPaneOpen)
+                        mapContent.showing = true;
+                }
+                function on_PaneProgressChanged(): void {
+                    if (!panel.mapPaneOpen && panel._paneProgress <= 0.001)
+                        mapContent.showing = false;
+                }
+            }
+
+            anchors.fill: parent
+            anchors.topMargin: Tokens.rail_thickness
+            opacity: pane._p
+            anchors.bottomMargin: -4 * (1 - pane._p)
+            active: showing
+            visible: showing
+            sourceComponent: MapPane {
+                map: panel.placementMap
+                menuFocused: panel.mapPaneMenuFocused
+                onCloseRequested: panel.mapPaneOpen = false
+            }
         }
     }
 }

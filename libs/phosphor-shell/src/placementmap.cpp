@@ -3,37 +3,20 @@
 
 #include <PhosphorShell/PlacementMap.h>
 
+#include "placementmap_p.h"
+
 #include <PhosphorShell/Workspaces.h>
 
-#include <PhosphorProtocol/AutotileMarshalling.h>
-#include <PhosphorProtocol/AutotileTypes.h>
-#include <PhosphorProtocol/Registration.h>
-#include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorProtocol/WindowTypes.h>
-
-#include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDBusError>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
-#include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QSize>
 
-#include <functional>
-#include <type_traits>
+#include <algorithm>
 
-namespace {
 Q_LOGGING_CATEGORY(lcPlacementMap, "phosphorshell.placementmap")
 
-using PhosphorProtocol::Service::Name;
-using PhosphorProtocol::Service::ObjectPath;
-namespace Iface = PhosphorProtocol::Service::Interface;
-
+namespace {
 // Layout ids the daemon answers for a non-snapping context; neither is a
 // layout document worth fetching.
 constexpr QLatin1String AutotilePrefix("autotile:");
@@ -43,119 +26,11 @@ constexpr QLatin1String NoneLayout("none");
 namespace PhosphorShell {
 
 using namespace PlacementMapParser;
+using namespace PlacementMapIface;
 
-// =====================================================================
-// PlacementMapBus: one set of session-bus subscriptions per process.
-// =====================================================================
-
-/**
- * The daemon's signal fan-in. Owned by the PlacementMap singleton; every
- * PlacementMapScreen connects to the typed signals here rather than to
- * the bus, so hot-reloading the QML engine never re-subscribes.
- */
-class PlacementMapBus : public QObject
-{
-    Q_OBJECT
-
-public:
-    explicit PlacementMapBus(QObject* parent)
-        : QObject(parent)
-    {
-        PhosphorProtocol::registerWireTypes();
-        auto bus = QDBusConnection::sessionBus();
-        bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("screenLayoutChanged"), this,
-                    SLOT(onScreenLayoutChanged(QString)));
-        bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("activeLayoutForScreenChanged"), this,
-                    SLOT(onScreenLayoutChanged(QString)));
-        bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("assignmentChangesApplied"), this,
-                    SLOT(onAssignmentsApplied(QStringList)));
-        bus.connect(Name, ObjectPath, Iface::WindowTracking, QStringLiteral("windowStateChanged"), this,
-                    SLOT(onWindowStateChanged(QString, PhosphorProtocol::WindowStateEntry)));
-        bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("windowsTileRequested"), this,
-                    SLOT(onWindowsTileRequested(PhosphorProtocol::TileRequestList)));
-        bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("tilingChanged"), this,
-                    SLOT(onTilingChanged(QString)));
-        bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("focusWindowRequested"), this,
-                    SLOT(onFocusWindowRequested(QString)));
-        // Phase-2 surface: an older daemon never emits it, which is harmless.
-        bus.connect(Name, ObjectPath, Iface::Tiling, QStringLiteral("focusedWindowChanged"), this,
-                    SLOT(onFocusedWindowChanged(QString, QString)));
-        bus.connect(Name, ObjectPath, Iface::Scrolling, QStringLiteral("stripChanged"), this,
-                    SLOT(onStripChanged(QString)));
-        bus.connect(Name, ObjectPath, Iface::Scrolling, QStringLiteral("stripContextChanged"), this,
-                    SLOT(onStripChanged(QString)));
-    }
-
-    QDBusPendingCall call(const QString& interface, const QString& method, const QVariantList& args) const
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(Name, ObjectPath, interface, method);
-        msg.setArguments(args);
-        return QDBusConnection::sessionBus().asyncCall(msg);
-    }
-
-Q_SIGNALS:
-    void layoutChanged(const QString& screenId);
-    void windowStateChanged(const PhosphorProtocol::WindowStateEntry& entry);
-    void tileBatch(const QList<PlacementMapParser::TileRect>& tiles);
-    void tilingChanged(const QString& screenId);
-    void focusRequested(const QString& windowId);
-    void focusedWindowChanged(const QString& screenId, const QString& windowId);
-    void stripChanged(const QString& screenId);
-
-private Q_SLOTS:
-    void onScreenLayoutChanged(const QString& screenId)
-    {
-        Q_EMIT layoutChanged(screenId);
-    }
-    void onAssignmentsApplied(const QStringList& screenIds)
-    {
-        for (const QString& id : screenIds) {
-            Q_EMIT layoutChanged(id);
-        }
-    }
-    void onWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& entry)
-    {
-        Q_UNUSED(windowId)
-        if (!entry.validationError().isEmpty()) {
-            return;
-        }
-        Q_EMIT windowStateChanged(entry);
-    }
-    void onWindowsTileRequested(const PhosphorProtocol::TileRequestList& requests)
-    {
-        QList<TileRect> tiles;
-        tiles.reserve(requests.size());
-        for (const auto& r : requests) {
-            if (!r.validationError().isEmpty()) {
-                continue;
-            }
-            TileRect t;
-            t.windowId = r.windowId;
-            t.screenId = r.screenId;
-            t.rect = r.toRect();
-            t.floating = r.floating;
-            t.monocle = r.monocle;
-            tiles.append(t);
-        }
-        Q_EMIT tileBatch(tiles);
-    }
-    void onTilingChanged(const QString& screenId)
-    {
-        Q_EMIT tilingChanged(screenId);
-    }
-    void onFocusWindowRequested(const QString& windowId)
-    {
-        Q_EMIT focusRequested(windowId);
-    }
-    void onFocusedWindowChanged(const QString& screenId, const QString& windowId)
-    {
-        Q_EMIT focusedWindowChanged(screenId, windowId);
-    }
-    void onStripChanged(const QString& screenId)
-    {
-        Q_EMIT stripChanged(screenId);
-    }
-};
+// The bus, the call template and the verbs live in placementmap_p.h and
+// placementmap_actions.cpp; this file is the screen's data flow and the
+// singleton's shared tables.
 
 // =====================================================================
 // PlacementMapScreen
@@ -180,7 +55,12 @@ PlacementMapScreen::PlacementMapScreen(const QString& screenName, PlacementMap* 
     desktopsChanged();
 }
 
-PlacementMapScreen::~PlacementMapScreen() = default;
+PlacementMapScreen::~PlacementMapScreen()
+{
+    // Fire-and-forget: a proxy left behind would keep pointing the
+    // compositor's drag at a miniature that is gone.
+    unregisterDropProxy();
+}
 
 QString PlacementMapScreen::screenName() const
 {
@@ -230,39 +110,13 @@ int PlacementMapScreen::currentDesktop() const
 {
     return m_currentDesktop;
 }
-
-template<typename Reply, typename Fn, typename ErrFn>
-void PlacementMapScreen::call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply,
-                              ErrFn&& onError)
+bool PlacementMapScreen::isUrgent() const
 {
-    const int generation = m_generation;
-    auto* watcher = new QDBusPendingCallWatcher(m_map->m_bus->call(interface, method, args), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, generation, fn = std::forward<Fn>(onReply),
-             err = std::forward<ErrFn>(onError)](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                if (generation != m_generation) {
-                    return;
-                }
-                using ReplyT = std::conditional_t<std::is_void_v<Reply>, QDBusPendingReply<>, QDBusPendingReply<Reply>>;
-                ReplyT reply = *w;
-                if (reply.isError()) {
-                    qCDebug(lcPlacementMap) << m_screenName << reply.error().message();
-                    err(reply.error());
-                    return;
-                }
-                if constexpr (std::is_void_v<Reply>) {
-                    fn();
-                } else {
-                    fn(reply.value());
-                }
-            });
+    return m_urgent;
 }
-
-template<typename Reply, typename Fn>
-void PlacementMapScreen::call(const QString& interface, const QString& method, const QVariantList& args, Fn&& onReply)
+QVariantList PlacementMapScreen::menuModel() const
 {
-    call<Reply>(interface, method, args, std::forward<Fn>(onReply), [](const QDBusError&) { });
+    return m_menu;
 }
 
 void PlacementMapScreen::reseed()
@@ -276,6 +130,9 @@ void PlacementMapScreen::reseed()
     m_sourceStripExtentPx = 0;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
+    // A restarted daemon has no proxy for us; the bar re-registers on its
+    // next geometry pass.
+    m_dropProxyJson.clear();
     resolveScreenId();
 }
 
@@ -288,7 +145,9 @@ void PlacementMapScreen::serviceLost()
     m_sourceStripExtentPx = 0;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
-    setMode(None);
+    m_dropProxyJson.clear();
+    setState(ScreenState());
+    setMenu({});
     rebuildFromSource();
 }
 
@@ -342,9 +201,22 @@ void PlacementMapScreen::refreshMode()
         return;
     }
     call<QString>(Iface::LayoutRegistry, QStringLiteral("getScreenStates"), {}, [this](const QString& json) {
-        setMode(modeForScreen(json, m_screenId));
+        setState(screenStateFor(json, m_screenId));
         fetchModeData();
     });
+}
+
+void PlacementMapScreen::setState(const ScreenState& state)
+{
+    const bool idsChanged = state.layoutId != m_state.layoutId || state.algorithmId != m_state.algorithmId
+        || state.scrollingTemplateId != m_state.scrollingTemplateId;
+    m_state = state;
+    setMode(state.mode);
+    // A menu that is being shown re-reads so its `current` mark follows
+    // the assignment; an empty menu is nobody's and stays empty.
+    if (idsChanged && !m_menu.isEmpty()) {
+        refreshMenu();
+    }
 }
 
 void PlacementMapScreen::setMode(int mode)
@@ -353,6 +225,10 @@ void PlacementMapScreen::setMode(int mode)
         return;
     }
     m_mode = mode;
+    // The drop proxy is a snapping surface; leaving the mode withdraws it.
+    if (mode != Snapping) {
+        unregisterDropProxy();
+    }
     Q_EMIT modeChanged();
     schedulePublish();
 }
@@ -574,17 +450,33 @@ void PlacementMapScreen::rebuildFromSource()
     const QString focused = effectiveFocusedWindowId();
     switch (m_mode) {
     case Snapping:
-        applyOccupancy(m_resolved, m_map->occupancyForScreen(m_screenId), focused);
+        applyOccupancy(m_resolved, m_map->occupantsForScreen(m_screenId), focused);
         break;
     case Tiling:
         applyFocusByWindowId(m_resolved, focused);
+        applyUrgency(m_resolved, m_map->urgentWindows());
+        break;
+    case Scrolling:
+        // The strip model marks activeColumn focused itself, and the
+        // visible-cut fallback carries no window id to match, so the
+        // source focus stands either way.
+        applyUrgency(m_resolved, m_map->urgentWindows());
         break;
     default:
-        // Scrolling: the strip model marks activeColumn focused itself, and
-        // the visible-cut fallback carries no window id to match, so the
-        // source focus stands either way.
         break;
     }
+    // Labels: app id and title per window, fetched once per window and
+    // shared across screens. Cells whose window has not answered yet are
+    // published unlabelled and re-resolved when the answer lands.
+    applyMetadata(m_resolved, m_map->windowMetadata());
+    QSet<QString> referenced;
+    for (const Cell& cell : std::as_const(m_resolved)) {
+        if (!cell.windowId.isEmpty()) {
+            referenced.insert(cell.windowId);
+            m_map->requestMetadata(cell.windowId);
+        }
+    }
+    m_map->noteReferencedWindows(this, referenced);
     schedulePublish();
 }
 
@@ -627,6 +519,13 @@ void PlacementMapScreen::publish()
         m_aspect = aspect;
         Q_EMIT aspectChanged();
     }
+    const bool urgent = std::any_of(m_resolved.cbegin(), m_resolved.cend(), [](const Cell& c) {
+        return c.urgent;
+    });
+    if (urgent != m_urgent) {
+        m_urgent = urgent;
+        Q_EMIT urgentChanged();
+    }
     Q_EMIT changed();
 }
 
@@ -661,132 +560,6 @@ QString PlacementMapScreen::focusedCellId() const
     return QString();
 }
 
-void PlacementMapScreen::activate(const QString& id)
-{
-    const Cell* cell = cellById(id);
-    if (!cell || !m_map->isAvailable()) {
-        return;
-    }
-    switch (m_mode) {
-    case Snapping:
-        if (cell->occupied) {
-            // [NEW] Snap.activateWindowInZone(zoneId): no verb focuses the
-            // topmost window of a zone by zone id today.
-            return;
-        }
-        if (cell->zoneNumber > 0) {
-            m_map->m_bus->call(Iface::Snap, QStringLiteral("snapToZoneByNumber"), {cell->zoneNumber, m_screenId});
-        }
-        break;
-    case Tiling:
-        // [NEW] Tiling.focusWindow(windowId): focusNext/focusPrevious only
-        // step; a direct focus-by-id verb is needed for a click.
-        break;
-    case Scrolling:
-        if (cell->focused) {
-            return;
-        }
-        if (cell->columnIndex >= 0 && m_map->m_caps.focusColumnAt) {
-            // The stepping fallback needs the cell after the reply, and
-            // the resolved list may have been rebuilt by then, so it is
-            // re-found by id.
-            const QString cellId = cell->id;
-            call<void>(
-                Iface::Scrolling, QStringLiteral("focusColumnAt"), {m_screenId, cell->columnIndex}, [] { },
-                [this, cellId](const QDBusError& error) {
-                    if (error.type() != QDBusError::UnknownMethod) {
-                        return;
-                    }
-                    m_map->m_caps.focusColumnAt = false;
-                    stepFocusToward(cellById(cellId));
-                });
-            return;
-        }
-        stepFocusToward(cell);
-        break;
-    default:
-        break;
-    }
-}
-
-void PlacementMapScreen::stepFocusToward(const Cell* cell)
-{
-    // Older daemon: only ±1 focus steps exist, so walk from the focused
-    // column to the clicked one.
-    if (!cell) {
-        return;
-    }
-    int from = -1;
-    int to = -1;
-    for (int i = 0; i < m_resolved.size(); ++i) {
-        if (m_resolved[i].focused) {
-            from = i;
-        }
-        if (&m_resolved[i] == cell) {
-            to = i;
-        }
-    }
-    if (from < 0 || to < 0 || from == to) {
-        return;
-    }
-    const int step = to > from ? 1 : -1;
-    for (int i = from; i != to; i += step) {
-        m_map->m_bus->call(Iface::Scrolling, QStringLiteral("focusColumn"), {m_screenId, step});
-    }
-}
-
-void PlacementMapScreen::scrollViewByPx(int px)
-{
-    if (!m_map->isAvailable() || m_mode != Scrolling || px == 0 || !m_map->m_caps.scrollViewByPx) {
-        return;
-    }
-    // No pixel-precise pan exists on an older daemon; the lens drag is
-    // simply inert there rather than approximated with whole-column steps.
-    call<void>(
-        Iface::Scrolling, QStringLiteral("scrollViewByPx"), {m_screenId, px}, [] { },
-        [this](const QDBusError& error) {
-            if (error.type() == QDBusError::UnknownMethod) {
-                m_map->m_caps.scrollViewByPx = false;
-            }
-        });
-}
-
-void PlacementMapScreen::scrollView(int delta)
-{
-    if (!m_map->isAvailable() || delta == 0) {
-        return;
-    }
-    const int step = delta > 0 ? 1 : -1;
-    switch (m_mode) {
-    case Scrolling:
-        m_map->m_bus->call(Iface::Scrolling, QStringLiteral("scrollView"), {m_screenId, step});
-        break;
-    case Snapping:
-        m_map->m_bus->call(Iface::Snap, QStringLiteral("focusAdjacentZone"),
-                           {step > 0 ? QStringLiteral("right") : QStringLiteral("left")});
-        break;
-    case Tiling:
-        m_map->m_bus->call(Iface::Autotile, step > 0 ? QStringLiteral("focusNext") : QStringLiteral("focusPrevious"),
-                           {});
-        break;
-    default:
-        break;
-    }
-}
-
-void PlacementMapScreen::switchDesktop(int index)
-{
-    Workspaces* ws = m_map->workspaces();
-    if (!ws || index < 0) {
-        return;
-    }
-    const QModelIndex mi = ws->model()->index(index, 0);
-    if (!mi.isValid()) {
-        return;
-    }
-    ws->switchTo(ws->model()->data(mi, WorkspaceListModel::IdRole).toString());
-}
-
 // =====================================================================
 // PlacementMap (singleton)
 // =====================================================================
@@ -817,6 +590,37 @@ PlacementMap::PlacementMap(QObject* parent)
         applyWindowState(e.windowId, e.screenId, e.zoneIds.isEmpty() ? QStringList{e.zoneId} : e.zoneIds, e.isFloating);
         forEachScreen(&PlacementMapScreen::occupancyChanged);
     });
+    connect(m_bus, &PlacementMapBus::windowMetadataChanged, this,
+            [this](const QString& windowId, const QString& appId, const QString& title) {
+                const WindowMeta meta{appId, title};
+                auto it = m_metadata.find(windowId);
+                if (it != m_metadata.end() && it->appId == meta.appId && it->title == meta.title) {
+                    return;
+                }
+                m_metadata.insert(windowId, meta);
+                m_metadataPending.remove(windowId);
+                forEachScreen(&PlacementMapScreen::occupancyChanged);
+            });
+    connect(m_bus, &PlacementMapBus::windowUrgencyChanged, this, [this](const QString& windowId, bool urgent) {
+        const bool was = m_urgent.contains(windowId);
+        if (was == urgent) {
+            return;
+        }
+        if (urgent) {
+            m_urgent.insert(windowId);
+        } else {
+            m_urgent.remove(windowId);
+        }
+        forEachScreen(&PlacementMapScreen::occupancyChanged);
+    });
+    connect(m_bus, &PlacementMapBus::currentActivityChanged, this, [this](const QString& activityId) {
+        m_activity = activityId;
+    });
+    // Metadata for windows no screen draws any more is dropped once the
+    // burst of rebuilds that dereferenced them has settled.
+    m_prune.setSingleShot(true);
+    m_prune.setInterval(0);
+    connect(&m_prune, &QTimer::timeout, this, &PlacementMap::pruneMetadata);
     connect(m_bus, &PlacementMapBus::tileBatch, this, [this](const QList<TileRect>& tiles) {
         for (PlacementMapScreen* s : std::as_const(m_screens)) {
             s->tileBatchReceived(tiles);
@@ -902,9 +706,48 @@ QHash<QString, QStringList> PlacementMap::occupancyForScreen(const QString& scre
     return out;
 }
 
+QList<Occupant> PlacementMap::occupantsForScreen(const QString& screenId) const
+{
+    struct Ranked
+    {
+        quint64 seq;
+        Occupant occupant;
+    };
+    QList<Ranked> ranked;
+    for (auto it = m_occupancy.cbegin(); it != m_occupancy.cend(); ++it) {
+        if (it.value().screenId == screenId) {
+            ranked.append(Ranked{it.value().seq, Occupant{it.key(), it.value().zoneIds, m_urgent.contains(it.key())}});
+        }
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const Ranked& a, const Ranked& b) {
+        return a.seq < b.seq;
+    });
+    QList<Occupant> out;
+    out.reserve(ranked.size());
+    for (const Ranked& r : std::as_const(ranked)) {
+        out.append(r.occupant);
+    }
+    return out;
+}
+
 QString PlacementMap::focusedWindowId() const
 {
     return m_focusedWindowId;
+}
+
+const QHash<QString, WindowMeta>& PlacementMap::windowMetadata() const
+{
+    return m_metadata;
+}
+
+const QSet<QString>& PlacementMap::urgentWindows() const
+{
+    return m_urgent;
+}
+
+QString PlacementMap::currentActivity() const
+{
+    return m_activity;
 }
 
 void PlacementMap::setAvailable(bool available)
@@ -917,12 +760,108 @@ void PlacementMap::setAvailable(bool available)
     if (available) {
         // A restarted daemon may be a newer one: probe every surface again.
         m_caps = Capabilities();
+        m_metadata.clear();
+        m_metadataPending.clear();
+        m_urgent.clear();
         seedWindowStates();
+        seedUrgentWindows();
+        seedActivity();
         forEachScreen(&PlacementMapScreen::reseed);
     } else {
         m_occupancy.clear();
         m_focusedWindowId.clear();
+        m_activity.clear();
+        m_metadata.clear();
+        m_metadataPending.clear();
+        m_urgent.clear();
         forEachScreen(&PlacementMapScreen::serviceLost);
+    }
+}
+
+void PlacementMap::seedUrgentWindows()
+{
+    if (!m_caps.urgentWindows) {
+        return;
+    }
+    auto* watcher =
+        new QDBusPendingCallWatcher(m_bus->call(Iface::WindowTracking, QStringLiteral("getUrgentWindows"), {}), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QStringList> reply = *w;
+        if (reply.isError()) {
+            // Older daemon: urgency never fires (A2 §1.4).
+            latchUnknownMethod(m_caps.urgentWindows, reply.error());
+            return;
+        }
+        const QStringList ids = reply.value();
+        QSet<QString> urgent(ids.cbegin(), ids.cend());
+        urgent.remove(QString());
+        if (urgent == m_urgent) {
+            return;
+        }
+        m_urgent = urgent;
+        forEachScreen(&PlacementMapScreen::occupancyChanged);
+    });
+}
+
+void PlacementMap::seedActivity()
+{
+    auto* watcher =
+        new QDBusPendingCallWatcher(m_bus->call(Iface::LayoutRegistry, QStringLiteral("getCurrentActivity"), {}), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcPlacementMap) << "getCurrentActivity:" << reply.error().message();
+            return;
+        }
+        m_activity = reply.value();
+    });
+}
+
+void PlacementMap::requestMetadata(const QString& windowId)
+{
+    if (!m_available || !m_caps.windowMetadata || windowId.isEmpty() || m_metadata.contains(windowId)
+        || m_metadataPending.contains(windowId)) {
+        return;
+    }
+    m_metadataPending.insert(windowId);
+    auto* watcher = new QDBusPendingCallWatcher(
+        m_bus->call(Iface::WindowTracking, QStringLiteral("getWindowMetadata"), {windowId}), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        m_metadataPending.remove(windowId);
+        // (appId, title), plus whatever a later daemon appends after them.
+        QDBusPendingReply<QString, QString> reply = *w;
+        if (reply.isError()) {
+            // Older daemon: cells stay unlabelled, and nothing is asked again.
+            latchUnknownMethod(m_caps.windowMetadata, reply.error());
+            return;
+        }
+        m_metadata.insert(windowId, WindowMeta{reply.argumentAt<0>(), reply.argumentAt<1>()});
+        forEachScreen(&PlacementMapScreen::occupancyChanged);
+    });
+}
+
+void PlacementMap::noteReferencedWindows(PlacementMapScreen* screen, const QSet<QString>& windowIds)
+{
+    m_referenced.insert(screen, windowIds);
+    m_prune.start();
+}
+
+void PlacementMap::pruneMetadata()
+{
+    QSet<QString> keep;
+    for (auto it = m_referenced.cbegin(); it != m_referenced.cend(); ++it) {
+        if (m_screens.contains(it.key()->screenName())) {
+            keep.unite(it.value());
+        }
+    }
+    for (auto it = m_occupancy.cbegin(); it != m_occupancy.cend(); ++it) {
+        keep.insert(it.key());
+    }
+    for (auto it = m_metadata.begin(); it != m_metadata.end();) {
+        it = keep.contains(it.key()) ? std::next(it) : m_metadata.erase(it);
     }
 }
 
@@ -965,7 +904,9 @@ void PlacementMap::applyWindowState(const QString& windowId, const QString& scre
         m_occupancy.remove(windowId);
         return;
     }
-    m_occupancy.insert(windowId, WindowOccupancy{screenId, zones});
+    // The latest state change ranks topmost in its zone (A2 §1.3: the
+    // label is the topmost window's).
+    m_occupancy.insert(windowId, WindowOccupancy{screenId, zones, ++m_occupancySeq});
 }
 
 void PlacementMap::forEachScreen(void (PlacementMapScreen::*fn)())
@@ -976,5 +917,3 @@ void PlacementMap::forEachScreen(void (PlacementMapScreen::*fn)())
 }
 
 } // namespace PhosphorShell
-
-#include "placementmap.moc"

@@ -275,6 +275,18 @@ void ScrollingAdaptor::focusColumnAt(const QString& screenId, int index)
     m_engine->focusColumnAtIndex(index, screenId);
 }
 
+void ScrollingAdaptor::moveColumnTo(const QString& screenId, int from, int to)
+{
+    // focusColumnAt's gates. Both indices are refused when negative here,
+    // so a bad model never reads as a move of the first column; an index
+    // past the end goes through, because the engine answers it with the
+    // no-target OSD rather than clamping (the header explains why).
+    if (from < 0 || to < 0 || refusesScreenVerb(screenId)) {
+        return;
+    }
+    m_engine->moveColumnToIndex(from, to, screenId);
+}
+
 void ScrollingAdaptor::scrollViewByPx(const QString& screenId, int px)
 {
     // Same guard as focusColumnAt. A zero distance is refused at this

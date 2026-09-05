@@ -691,6 +691,20 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
     return true;
 }
 
+bool ScrollStrip::moveColumnTo(int from, int to, const ScrollLayoutParams& params)
+{
+    if (from < 0 || from >= m_columns.size() || to < 0 || to >= m_columns.size() || from == to) {
+        return false;
+    }
+    // Focus first, then reuse the active-column move: the moved column ends
+    // up active either way (every move verb keeps the moved column focused),
+    // and moveActiveColumnTo already owns the pre-maximize slot bookkeeping.
+    // focusColumn's own result is irrelevant here; a `from` that is already
+    // active answers false from it and the move below still applies.
+    focusColumn(from, params);
+    return moveActiveColumnTo(to, params);
+}
+
 bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)
 {
     if (m_activeColumnIdx <= 0) {

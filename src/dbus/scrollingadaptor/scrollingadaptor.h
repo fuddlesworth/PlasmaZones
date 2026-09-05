@@ -263,6 +263,27 @@ public Q_SLOTS:
     void focusColumnAt(const QString& screenId, int index);
 
     /**
+     * @brief Move a column from one strip index to another (the map's drag)
+     *
+     * The structural twin of focusColumnAt: the map lets the user drag a
+     * column past its neighbours, and this commits where it was dropped.
+     * Routed to ScrollEngine::moveColumnToIndex, which leaves the moved
+     * column active and re-anchors the view like the keyboard move verbs.
+     * Same silent gates as focusColumnAt (engine, empty screen id,
+     * ownership, per-context) plus either index negative. An index past the
+     * last column, or from equal to to, names no move and answers with the
+     * no-target OSD rather than clamping: the map numbers its columns from
+     * stripModelJson, so an out-of-range index is a stale model, not a
+     * request for the last column.
+     *
+     * @param screenId Screen whose strip should change; an empty string is
+     *                 ignored
+     * @param from Strip index of the column to move
+     * @param to Strip index it should occupy afterwards
+     */
+    void moveColumnTo(const QString& screenId, int from, int to);
+
+    /**
      * @brief Scroll the view by a pixel distance without moving focus
      *
      * The pixel twin of scrollView for a caller that already holds a distance

@@ -88,6 +88,8 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Widgets/Clock.qml
     qml/Phosphor/Bar/Widgets/FocusedApp.qml
     qml/Phosphor/Bar/Widgets/PlacementMap.qml
+    qml/Phosphor/Bar/Widgets/DropProxyGeometry.js
+    qml/Phosphor/Bar/MapPane.qml
     qml/Phosphor/Bar/Widgets/SystemMetrics.qml
     qml/Phosphor/Bar/Widgets/Network.qml
     qml/Phosphor/Bar/Widgets/Bluetooth.qml

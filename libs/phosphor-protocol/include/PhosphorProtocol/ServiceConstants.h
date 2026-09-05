@@ -265,6 +265,25 @@ inline constexpr QLatin1String CrossPx("crossPx");
 inline constexpr QLatin1String Minimized("minimized");
 }
 
+/// Keys of the drop-proxy JSON a shell registers on
+/// org.plasmazones.WindowDrag (registerDropProxy). The Phosphor shell's
+/// placement map is a miniature of a snapping screen's zones; registering it
+/// as a drop proxy lets a real compositor drag that lands on the miniature
+/// resolve to the full-size zone under the cursor. The shell builds the
+/// object, the daemon (src/dbus/windowdragadaptor/dropproxy.cpp) parses it.
+/// Every rect is [x, y, w, h] in the registering screen's own pixels, with
+/// the screen's top-left corner as the origin.
+namespace DropProxyKey {
+/// The miniature's bounding rect on its screen. A cursor outside it is not
+/// over the proxy at all.
+inline constexpr QLatin1String Rect("rect");
+/// Array of cells, one per drawn zone, each {id, rect}.
+inline constexpr QLatin1String Cells("cells");
+/// A cell's target: the snapping zone id, braces included, as the layout
+/// interfaces spell it.
+inline constexpr QLatin1String Id("id");
+}
+
 /// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.

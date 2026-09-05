@@ -176,6 +176,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistenceworker.cpp
     dbus/windowtrackingadaptor/persistenceworker.h
     dbus/windowtrackingadaptor/convenience.cpp
+    dbus/windowtrackingadaptor/shellsurface.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
@@ -187,6 +188,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
+    dbus/windowdragadaptor/dropproxy.cpp
+    dbus/windowdragadaptor/dropproxy.h
     dbus/windowdragadaptor/windowdragadaptor.h
     dbus/scrollingadaptor/scrollingadaptor.cpp
     dbus/scrollingadaptor/scrollingadaptor.h

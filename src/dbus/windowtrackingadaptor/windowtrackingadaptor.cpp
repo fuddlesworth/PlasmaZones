@@ -316,6 +316,26 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
     if (!registry) {
         return;
     }
+    // Shell-surface mirror (shellsurface.cpp): urgency set and identity
+    // announcements, fed by the same registry edges. Subscribed before the
+    // retag relay below so the urgent set is current by the time any later
+    // subscriber reads getUrgentWindows from a metadataChanged handler.
+    QObject::connect(registry, &PhosphorEngine::WindowRegistry::windowAppeared, this,
+                     [this](const QString& instanceId) {
+                         if (!m_windowRegistry) {
+                             return;
+                         }
+                         if (const auto meta = m_windowRegistry->metadata(instanceId)) {
+                             onShellRegistryMetadata(instanceId, nullptr, *meta);
+                         }
+                     });
+    QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                     [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+                            const PhosphorEngine::WindowMetadata& newMeta) {
+                         onShellRegistryMetadata(instanceId, &oldMeta, newMeta);
+                     });
+    QObject::connect(registry, &PhosphorEngine::WindowRegistry::windowDisappeared, this,
+                     &WindowTrackingAdaptor::onShellRegistryWindowGone);
     // Reactive metadata updates. Per feedback_class_change_exclusion.md we do
     // NOT retroactively enforce rules — a committed snap/autotile/float state
     // stays put even if the new class would have behaved differently at open.

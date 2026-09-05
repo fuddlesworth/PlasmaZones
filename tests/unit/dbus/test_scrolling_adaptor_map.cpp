@@ -234,6 +234,73 @@ private Q_SLOTS:
         QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
     }
 
+    void testMoveColumnTo_gatesAndReorders()
+    {
+        // Four columns in open order; app|d holds focus.
+        for (const char* id : {"app|a", "app|b", "app|c", "app|d"}) {
+            m_engine->windowOpened(QString::fromLatin1(id), QStringLiteral("DP-1"), 0, 0);
+        }
+        QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        QSignalSpy feedback(m_engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+        // Silent refusals: foreign screen, no screen, either index negative,
+        // and the closed context gate.
+        m_adaptor->moveColumnTo(QStringLiteral("HDMI-2"), 0, 2);
+        m_adaptor->moveColumnTo(QString(), 0, 2);
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), -1, 2);
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 0, -1);
+        m_adaptor->setContextGateProvider([](const QString&) {
+            return true;
+        });
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 0, 2);
+        m_adaptor->setContextGateProvider([](const QString&) {
+            return false;
+        });
+        QCOMPARE(activateSpy.count(), 0);
+        QCOMPARE(feedback.count(), 0);
+        QCOMPARE(columnOrder(),
+                 (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c"),
+                              QStringLiteral("app|d")}));
+
+        // Move the first column to index 2: b, c, a, d. The moved column
+        // becomes active and its window is activated, the map's drop.
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 0, 2);
+        QCOMPARE(columnOrder(),
+                 (QStringList{QStringLiteral("app|b"), QStringLiteral("app|c"), QStringLiteral("app|a"),
+                              QStringLiteral("app|d")}));
+        QCOMPARE(m_engine->stripModelForScreen(QStringLiteral("DP-1")).activeColumn, 2);
+        QCOMPARE(activateSpy.count(), 1);
+        QCOMPARE(activateSpy.at(0).at(0).toString(), QStringLiteral("app|a"));
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.last().at(0).toBool(), true);
+        QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("move"));
+
+        // Backwards, from the end: d moves to the front.
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 3, 0);
+        QCOMPARE(columnOrder(),
+                 (QStringList{QStringLiteral("app|d"), QStringLiteral("app|b"), QStringLiteral("app|c"),
+                              QStringLiteral("app|a")}));
+        QCOMPARE(m_engine->stripModelForScreen(QStringLiteral("DP-1")).activeColumn, 0);
+        QCOMPARE(activateSpy.count(), 2);
+        QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|d"));
+
+        // No such move: from == to, or an index past the end. Nothing moves,
+        // and unlike a focus index it does not clamp; the no-target feedback
+        // reports the refusal rather than silence.
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 1, 1);
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 99, 0);
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 0, 99);
+        QCOMPARE(columnOrder(),
+                 (QStringList{QStringLiteral("app|d"), QStringLiteral("app|b"), QStringLiteral("app|c"),
+                              QStringLiteral("app|a")}));
+        QCOMPARE(activateSpy.count(), 2);
+        QCOMPARE(feedback.count(), 5);
+        for (int i = 2; i < 5; ++i) {
+            QCOMPARE(feedback.at(i).at(0).toBool(), false);
+            QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_target"));
+        }
+    }
+
     void testScrollViewByPx_gatesAndPansExactly()
     {
         // Same overflowing strip as the scrollView test: the view sits at
@@ -297,6 +364,17 @@ private:
     static QJsonObject parse(const QString& json)
     {
         return QJsonDocument::fromJson(json.toUtf8()).object();
+    }
+
+    /// DP-1's columns in strip order, each named by its first tile.
+    QStringList columnOrder() const
+    {
+        QStringList order;
+        const PhosphorScrollEngine::ScrollStripModel model = m_engine->stripModelForScreen(QStringLiteral("DP-1"));
+        for (const PhosphorScrollEngine::ScrollStripModelColumn& column : model.columns) {
+            order.append(column.tiles.isEmpty() ? QString() : column.tiles.first().windowId);
+        }
+        return order;
     }
 };
 

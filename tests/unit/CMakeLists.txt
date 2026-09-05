@@ -1230,6 +1230,13 @@ add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
 
+# The Phosphor shell surface of WindowTrackingAdaptor (shellsurface.cpp):
+# activateWindow / getWindowMetadata / moveWindowToDesktop / getUrgentWindows
+# and the windowMetadataChanged / windowUrgencyChanged registry mirror.
+add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
+target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
+
 add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_schema COMMAND test_settings_schema)
@@ -1364,6 +1371,15 @@ target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_
 target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                             PhosphorTileEngine::PhosphorTileEngine)
 add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
+
+# The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
+# unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
+# registry, and the drag path resolving a proxy cell to its real zone through
+# updateDragCursor / endDrag on the offscreen platform's screen.
+add_executable(test_windowdrag_drop_proxy dbus/test_windowdrag_drop_proxy.cpp)
+target_link_libraries(test_windowdrag_drop_proxy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_windowdrag_drop_proxy COMMAND test_windowdrag_drop_proxy)
 
 # Truth-table guard for resolveActivationActive() - pins the per-tick
 # overlay-active decision (toggle latch + deactivation override + the
@@ -2639,5 +2655,13 @@ endforeach()
 # entry rather than fighting it.
 if(TARGET test_control_center_controller)
     phosphor_append_test_environment(test_control_center_controller
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
+endif()
+# The drop-proxy drag test resolves the cursor's screen through the QScreen
+# under it and registers its proxy under that screen's identifier. The sweep's
+# unnamed single offscreen screen identifies as the empty string, which the
+# registration refuses; the named config gives it a real id.
+if(TARGET test_windowdrag_drop_proxy)
+    phosphor_append_test_environment(test_windowdrag_drop_proxy
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
 endif()
