@@ -8,11 +8,12 @@
 // or declared in settingsschema.h because the per-domain TUs share them too
 // (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList).
 // The domains big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp's three entry points and
-// settingsschema_tiling.cpp's one); every remaining function is under ninety
-// lines, and moving one out drags its helpers into a header for a single
-// consumer. When a domain grows past that, split it the way scrolling and
-// tiling were — do not let this file cross the 1150 ceiling instead.
+// (settingsschema_scrolling.cpp's three entry points, settingsschema_tiling.cpp's
+// one, and settingsschema_workspaces.cpp's one with its named-entry validator);
+// every remaining function is under ninety lines, and moving one out drags its
+// helpers into a header for a single consumer. When a domain grows past that,
+// split it the way those were — do not let this file cross the 1150 ceiling
+// instead.
 
 #include "settingsschema.h"
 
@@ -62,6 +63,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendScrollingSchema(s);
     appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
+    appendWorkspacesSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
 
@@ -525,6 +527,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
 
     QVector<PhosphorConfig::KeyDef> globals;
+    appendWorkspacesShortcutKeys(globals);
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut(), QStringLiteral("Open zone editor."));
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut(), QStringLiteral("Open settings."));
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut(),

@@ -3,6 +3,14 @@
 
 #pragma once
 
+// SANCTIONED FILE-SIZE EXCEPTION, for the same reason settings.h carries one.
+// This header is one Q_OBJECT class declaration whose bulk is the pure-virtual
+// accessor and Q_SIGNALS surface that every setting must carry. moc requires
+// the whole Q_OBJECT class in one translation unit's header, so "splitting" it
+// would mean fragmenting one class across several headers, which buys nothing
+// and costs every reader the hunt for where a signal lives. Growth of the
+// accessor / signal surface is expected here; new non-declaration logic is not.
+//
 // ISettings — PZ global settings facade.
 //
 // Split out of interfaces.h so consumers can include just the settings
@@ -1005,6 +1013,33 @@ Q_SIGNALS:
     void autotileDecMasterCountShortcutChanged();
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
+
+    // Workspaces settings (dynamic per-monitor workspaces).
+    //
+    // Notification-only, the same shape as the autotile shortcut signals
+    // above: no matching pure-virtual getters. Every consumer of these holds a
+    // concrete Settings* and reads the value there, and the workspace surface
+    // is thirty-odd scalars plus two slot families, so mirroring it into the
+    // interface would grow ISettings by more than it would buy. A consumer
+    // that genuinely needs to read one through the interface should have the
+    // getter added here alongside its signal rather than reach around it.
+    void workspacesEnabledChanged();
+    void workspacesManageKWinPerOutputChanged();
+    void workspacesSnapBackOsdHintChanged();
+    void workspacesNamedEntriesChanged();
+    void workspacesRebindKWinShortcutsChanged();
+    void workspaceFocusUpShortcutChanged();
+    void workspaceFocusDownShortcutChanged();
+    void workspaceMoveWindowUpShortcutChanged();
+    void workspaceMoveWindowDownShortcutChanged();
+    void workspaceMoveColumnUpShortcutChanged();
+    void workspaceMoveColumnDownShortcutChanged();
+    void workspaceReorderUpShortcutChanged();
+    void workspaceReorderDownShortcutChanged();
+    void workspaceMoveToMonitorLeftShortcutChanged();
+    void workspaceMoveToMonitorRightShortcutChanged();
+    void workspaceSlotShortcutsChanged();
+    void workspaceSlotTargetsChanged();
 
     // Scrolling settings
     void scrollingEnabledChanged();

@@ -66,6 +66,44 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                                   << "(not in released set)";
                 continue;
             }
+            // A CONTEXT prune (desktop or activity destroyed) releases the
+            // windows of one (screen, desktop, activity) state while the
+            // releasing engine keeps running on that very screen. Nothing
+            // below is right for that case: the window is not returning to
+            // snapping, so clearing its float bit hands KWin an un-floated
+            // window that the surviving desktop's strip or grid then tiles.
+            // Distinguish by asking whether the RELEASING engine still claims
+            // the screen, the same mid-pass / outside-pass split the
+            // other-engine gate below uses: during a recompute the derived
+            // sets are the fresh side, outside one the live claim is. A
+            // genuine mode exit has already dropped the screen from the
+            // derived set, and a removed output answers false to
+            // isActiveOnScreen, so both of those keep their existing path.
+            if (m_reapingDesktopStateDepth > 0) {
+                // A desktop reap: this window's (screen, desktop, activity)
+                // state was destroyed, the screen's MODE did not change, and
+                // the releasing engine still runs there on every other
+                // desktop. Nothing below is a correct answer for that, and
+                // the screen-level claim test underneath cannot see it — it
+                // answers through the screen's CURRENT desktop, so a screen
+                // snapping on desktop 1 while holding scroll state on the
+                // reaped desktop 3 reads as "not mine" and the window would
+                // be un-floated and queued for a snap restore it never asked
+                // for. Skipping is the whole handling a reap needs.
+                qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId
+                                  << "- a desktop reap is a context prune, not a mode exit";
+                continue;
+            }
+            const bool releasingEngineClaims = m_updateEngineScreensInProgress
+                ? (releasedFromScroll ? m_derivedScrollingScreens.contains(windowScreen)
+                                      : m_derivedAutotileScreens.contains(windowScreen))
+                : (releasedFromScroll ? (m_scrollEngine && m_scrollEngine->isActiveOnScreen(windowScreen))
+                                      : (m_autotileEngine && m_autotileEngine->isActiveOnScreen(windowScreen)));
+            if (!windowScreen.isEmpty() && releasingEngineClaims) {
+                qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId << "on" << windowScreen
+                                  << "- the releasing engine still runs there (context prune, not a mode exit)";
+                continue;
+            }
             if (!m_snapEngine)
                 continue;
             // A screen flipping autotile→SCROLLING releases its windows

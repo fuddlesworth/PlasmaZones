@@ -3,6 +3,7 @@
 
 #include "profilestore.h"
 
+#include "config/configdefaults.h"
 #include "config/configkeys.h"
 #include "config/configmigration.h"
 #include "config/configmigration_util.h"
@@ -350,22 +351,38 @@ QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
 
 namespace {
 
-/// Keys that name THIS machine's hardware and must never ride into profiles.
-/// A captured delta would ship a hardware identity into an export another
-/// machine cannot satisfy, and applying one from an existing record would
-/// silently repoint the render GPU on profile switch (with no daemon-running
-/// gate or restart notice). Enforced on the capture side (diffConfig) and by
+/// Keys that describe THIS machine rather than a set of preferences, and must
+/// never ride into profiles.
+///
+/// Two kinds live here. Rendering.Gpu names hardware: a captured delta would
+/// ship a hardware identity into an export another machine cannot satisfy, and
+/// applying one from an existing record would silently repoint the render GPU
+/// on profile switch (with no daemon-running gate or restart notice). The two
+/// Workspaces.Behavior keys name CONSENT this machine's user gave, and each
+/// one authorises PlasmaZones to write a file it does not own:
+/// ManageKWinPerOutput lets the daemon set PerOutputVirtualDesktops in kwinrc
+/// and call KWin's reconfigure, and RebindKWinDesktopShortcuts lets it take
+/// over KWin's six stock desktop chords and rewrite kglobalshortcutsrc.
+/// Importing a profile authored on another machine must not grant either one,
+/// and switching profiles must not silently withdraw a grant already given.
+///
+/// Enforced on the capture side (diffConfig) and by
 /// stripping the key from resolveConfig's returned blob — NOT inside
 /// overlayConfig: the resolve seed comes from defaultConfig(), which carries
 /// EVERY declared key including this one at its default, so a skip during
 /// overlay would let that seeded default survive into the resolved blob and
 /// RESET the user's live pin on every profile activation. Removing the key
 /// from the resolved blob instead leaves the live value untouched, because
-/// Store::importFromJson only writes keys present in the blob. Currently
-/// just Rendering.Gpu, a PCI vendor:device pair.
+/// Store::importFromJson only writes keys present in the blob.
 bool isMachineScopedKey(const QString& group, const QString& key)
 {
-    return group == ConfigKeys::renderingGroup() && key == ConfigKeys::gpuKey();
+    if (group == ConfigDefaults::renderingGroup()) {
+        return key == ConfigDefaults::gpuKey();
+    }
+    if (group == ConfigDefaults::workspacesBehaviorGroup()) {
+        return key == ConfigDefaults::manageKWinPerOutputKey() || key == ConfigDefaults::rebindKWinShortcutsKey();
+    }
+    return false;
 }
 
 void stripMachineScopedKeys(QJsonObject& config)

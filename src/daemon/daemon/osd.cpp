@@ -459,7 +459,14 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
     case DisabledReason::DesktopDisabled: {
         QString desktopLabel;
         if (m_virtualDesktopManager) {
-            const QStringList names = m_virtualDesktopManager->desktopNames();
+            // rawDesktopNames, so an unnamed desktop comes back EMPTY and the
+            // translated fallback below actually runs. desktopNames() fills
+            // its own untranslatable "Desktop N" placeholder (the library
+            // links no i18n), which pre-empted that fallback and shipped the
+            // English string to every locale. The list is neither padded to
+            // the desktop count nor populated at all without the KWin D-Bus
+            // link, which the bounds test below already covers.
+            const QStringList names = m_virtualDesktopManager->rawDesktopNames();
             if (desktop > 0 && desktop <= names.size()) {
                 desktopLabel = names[desktop - 1];
             }

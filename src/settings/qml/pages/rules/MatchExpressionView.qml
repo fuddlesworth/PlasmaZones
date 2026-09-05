@@ -126,7 +126,7 @@ ColumnLayout {
                         var label = screens[i].displayLabel || String(value);
                         // Same disambiguation as the two monitor PICKERS
                         // (MatchLeafEditor's screenValueEditor and
-                        // ActionParamEditors' _screenIdEditor): one source
+                        // ActionParamPickers' _screenIdEditor): one source
                         // string with one context, so a translator cannot leave
                         // the tree and the picker rendering a monitor
                         // differently.

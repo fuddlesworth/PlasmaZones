@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Dynamic per-monitor workspaces**: each monitor keeps its own list of workspaces instead of every screen sharing one global set. Occupying a monitor's last empty workspace appends another, and emptying one in the middle removes it, so the list follows what you are actually using. The workspace shortcuts walk only the current monitor's own list, and the ownership map survives a restart, so a monitor comes back to the workspaces it had. Unplugging a monitor fosters its workspaces onto a surviving screen and replugging brings them home ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+- **Named workspaces and nine quick slots**: a named workspace stays put while empty and can be pinned to a chosen monitor, so a workspace you rely on is always where you left it. Nine quick slots each point at whichever named workspace you assign them on the Workspaces page. A slot carries two chords, one to focus its workspace and one to send the active window there, and both ship unbound so nothing claims a global binding on a fresh install. Bind the ones you want in the shortcut settings ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+- **Rule action, Open on workspace**: sends an app to a named workspace wherever that workspace currently lives ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+- **Dynamic workspaces need KWin's per-output virtual desktops**, which Plasma 6.7 provides. Turning the feature on asks first, then writes that key and reconfigures KWin. PlasmaZones never writes the key silently and never reverts it when you turn the feature back off. While the feature is on, KWin's stock "Switch One Desktop" chords walk the whole shared pool rather than one monitor's list, so they are taken over by default and restored on disable. The Workspaces page can turn that takeover off ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+- **Plasma's Pager and the stock Overview show every monitor's workspaces as one flat list**: both render KWin's entire desktop pool and know nothing about per-monitor ownership. Switching to another monitor's workspace through them snaps back to the owning monitor with an OSD hint, so you can leave them on the panel ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+
+### Changed
+
+- **The Open on monitor rule action checks its target id more strictly**: the action used to accept any non-empty target monitor, including one that was nothing but spaces or a payload thousands of characters long. It now requires a non-blank id of at most 128 characters, measured after trimming, which is the same bound the zone and workspace name actions carry. A rule already saved with a blank or over-long monitor id loses that action when it loads, and loses the whole rule if that was its only action. A real monitor id runs far under the bound, so a rule you built in the editor is unaffected ([#990](https://github.com/fuddlesworth/PlasmaZones/pull/990)).
+
 ## [3.4.11] - 2026-09-04
 
 ### Added

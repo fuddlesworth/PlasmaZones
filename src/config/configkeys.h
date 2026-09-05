@@ -6,22 +6,16 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
+// The disable-rule label helpers used to live at the foot of this file; they
+// moved out when it hit its size ceiling. Included here rather than at each
+// call site so everything that reached them through configkeys.h still does.
+#include "configkeys_disablelabels.h"
+
 #include <QString>
 
-// Macro to define a static config key accessor returning a QStringLiteral.
-// Usage: P_CONFIG_KEY(snappingEnabledKey, "SnappingEnabled")
-// Expands to: static QString snappingEnabledKey() { return QStringLiteral("SnappingEnabled"); }
-#define P_CONFIG_KEY(name, str)                                                                                        \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
-
-// Alias for group-name accessors — same body as P_CONFIG_KEY, single
-// definition so a future tweak to P_CONFIG_KEY (e.g. attribute
-// annotation) automatically applies to groups too. Separate macro
-// name preserved for readability at the call sites.
-#define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
+// The accessor macros. Defined in one place for the whole ConfigKeys chain,
+// undef'd again at the bottom of this file.
+#include "configkeymacro.h"
 
 // Single definition point for the per-screen group prefix spellings.
 // All five are rows in PerScreenPathResolver's prefix→category mapping table,
@@ -95,6 +89,10 @@ public:
     // Shared inner/outer gap model used by BOTH snapping and tiling. Mode-neutral
     // top-level group; the gap values are read by both engines.
     P_CONFIG_GROUP(gapsGroup, "Gaps")
+
+    // The Workspaces.* groups and keys live in configkeys_workspaces.h
+    // (ConfigKeysWorkspaces, a later link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
@@ -1088,68 +1086,9 @@ private:
     ConfigKeys() = delete;
 };
 
-// ─── Disable-rule label helpers ─────────────────────────────────────────────
-// Shared between the live Settings disable-list writer
-// (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
-// builders. Both call sites must produce the same `Rule::name` string for
-// a given (mode, screen, desktop, activity) tuple so that resaving an existing
-// disable list (e.g. after a UI edit) doesn't fork into two slightly different
-// labels for what is otherwise the same rule.
-//
-// These are NOT translated. `Rule::name` is the persisted identity
-// surface in rules.json; running the app under different locales must
-// not change its on-disk text. The rule editor surfaces the name verbatim,
-// matching the historic behaviour.
-inline QString autotileDisableRulePrefix()
-{
-    return QStringLiteral("Autotile off · ");
-}
-
-inline QString snappingDisableRulePrefix()
-{
-    return QStringLiteral("Snapping off · ");
-}
-
-inline QString scrollingDisableRulePrefix()
-{
-    return QStringLiteral("Scrolling off · ");
-}
-
-/// Persistent label-prefix for the Rule::name field of a per-mode
-/// disable rule. Exhaustive switch — a future `Mode` enum value added in
-/// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
-/// diagnostic rather than silently producing an empty prefix that lands
-/// in the persisted `Rule::name` as bare ` · DP-1` (parseable but
-/// anonymous, and identical across modes — losing the screen→mode
-/// affinity that makes the rule editor scannable).
-inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    switch (mode) {
-    case PhosphorZones::AssignmentEntry::Snapping:
-        return snappingDisableRulePrefix();
-    case PhosphorZones::AssignmentEntry::Autotile:
-        return autotileDisableRulePrefix();
-    case PhosphorZones::AssignmentEntry::Scrolling:
-        return scrollingDisableRulePrefix();
-    }
-    Q_UNREACHABLE();
-    return QString();
-}
-
-inline QString disableRuleDesktopSuffix(int desktop)
-{
-    return QStringLiteral(" · Desktop ") + QString::number(desktop);
-}
-
-inline QString disableRuleActivitySuffix()
-{
-    return QStringLiteral(" · Activity");
-}
-
 } // namespace PlasmaZones
 
-#undef P_CONFIG_KEY
-#undef P_CONFIG_GROUP
+#include "configkeymacro_undef.h"
 // P_PER_SCREEN_PREFIX_* deliberately NOT undef'd: perscreenresolver.cpp
 // consumes them after including this header (the single-definition-point
 // contract above). Do not "clean up" by undef'ing them here.

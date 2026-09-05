@@ -213,6 +213,13 @@ public:
     void focusColumnLast(const QString& screenId);
     void moveColumnToFirst(const QString& screenId);
     void moveColumnToLast(const QString& screenId);
+    /// The focused column's window ids on this screen's current strip, in
+    /// tile order (empty when the screen has no state or no active column).
+    /// Read-only; the dynamic-workspaces move-column-to-workspace verb
+    /// enumerates the group it relocates through this, and addresses it with
+    /// a PHYSICAL output id — so @p screenId is resolved through
+    /// scrollingScreenForPhysical rather than looked up verbatim.
+    QStringList focusedColumnWindows(const QString& screenId) const;
     void consumeWindowIntoColumn(const QString& screenId);
     void expelWindowFromColumn(const QString& screenId);
     /// delta -1 = towards the strip's start, +1 = towards its end (niri
@@ -717,6 +724,8 @@ public:
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
+    void reapDesktopState(int desktop) override;
+    void renumberDesktopState(const QHash<int, int>& oldToNew) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1039,6 +1048,14 @@ private:
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
+    /// The live scrolling screen belonging to the same PHYSICAL output as
+    /// @p screenId, or empty when none does. Unlike resolveOperationScreen
+    /// there is NO active-screen fallback: this answers for the output named
+    /// or not at all. When that output carries SEVERAL scrolling virtual
+    /// sub-screens, the active screen wins if it is one of them; otherwise the
+    /// call is REFUSED (empty), because any tie-break would be a guess and the
+    /// verbs built on this act on whatever it names.
+    QString scrollingScreenForPhysical(const QString& screenId) const;
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the
     /// per-screen bookkeeping (pending seed, tab-strip latch), and
@@ -1059,20 +1076,30 @@ private:
     /// its scroll-float geometry. The rects are reclaimed by
     /// pruneStaleWindows instead. AutotileEngine documents the same contract
     /// on releaseScreenStateForTeardown.
-    void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
+    ///
+    /// @p clearScreenBookkeeping drops the SCREEN-keyed maps (order/focus
+    /// seeds, tab-strip latch) along with the state. False for the desktop
+    /// and activity prunes, where the screen SURVIVES and only one of its
+    /// contexts dies: clearing there would destroy the surviving contexts'
+    /// in-flight seed. Those callers run sweepStatelessScreenBookkeeping
+    /// instead, which clears the same maps only once a screen has no state
+    /// left at all. AutotileEngine's clearScreenOrderMaps flag is the twin.
+    void releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping = true);
+    /// The per-window side-map sweep every release path owes AFTER its
+    /// windowsReleased emit: exactly the two maps releaseScreenState
+    /// deliberately keeps alive for the daemon's handler (see the contract
+    /// above). Everything else a released window leaves behind — the unfloat
+    /// slot, the parked edge, the windowed-fullscreen and column-maximized
+    /// memories — is already gone by the time the release returns, so it is
+    /// not repeated here.
+    ///
+    /// ORDERING: call this after the emit, never before. The handler reads
+    /// isModeSpecificFloated() and lastManagedRect() synchronously.
+    void sweepReleasedWindowBookkeeping(const QStringList& releasedWindows);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
     // engine_context.cpp
-    /// Shared per-window side-map sweep for the SILENT prune paths (desktop
-    /// and activity teardown), which emit no windowsReleased and so have no
-    /// downstream consumer of the float marker or the last-applied rect.
-    ///
-    /// The removed-output prune is NOT one of them: it releases live windows
-    /// and emits, so it goes through releaseScreenState and sweeps the side
-    /// maps only AFTER the emit. The mode-transition release path likewise
-    /// uses releaseScreenState; see the contract there.
-    void dropWindowBookkeeping(const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
     /// drop both entries once every listed id is consumed — MUST run on

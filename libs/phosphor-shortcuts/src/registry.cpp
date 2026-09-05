@@ -71,6 +71,20 @@ void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QSt
     it->persistent = persistent;
 }
 
+bool Registry::setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                   const QList<QKeySequence>& sequences)
+{
+    return m_backend ? m_backend->setForeignShortcuts(componentName, actionName, sequences) : false;
+}
+
+std::optional<QList<QKeySequence>> Registry::foreignShortcuts(const QString& componentName,
+                                                              const QString& actionName) const
+{
+    // A gone backend is a failed read, not an unbound action — nullopt, so a
+    // caller about to steal the chord stops instead of clearing blind.
+    return m_backend ? m_backend->foreignShortcuts(componentName, actionName) : std::nullopt;
+}
+
 void Registry::rebind(const QString& id, const QKeySequence& seq)
 {
     auto it = m_entries.find(id);
@@ -100,6 +114,11 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         it->registered = false;
         it->lastSentDefault = QKeySequence();
         it->lastSentCurrent = QKeySequence();
+        // `true` is the fresh-Entry value, deliberately not entry.persistent:
+        // this field records what was last SENT, and nothing has been. It is
+        // also never consulted while registered is false — flush() re-registers
+        // unconditionally in that case — so the two spellings are equivalent
+        // today; the fresh-Entry one keeps the "nothing sent" story uniform.
         it->lastSentPersistent = true;
         return;
     }
@@ -107,6 +126,22 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         return;
     }
     it->binding.currentSeq = seq;
+}
+
+void Registry::setActive(const QString& id, bool active)
+{
+    auto it = m_entries.find(id);
+    if (it == m_entries.end()) {
+        qCWarning(lcPhosphorShortcuts) << "setActive(): unknown shortcut id" << id;
+        return;
+    }
+    it->active = active;
+}
+
+bool Registry::isActive(const QString& id) const
+{
+    const auto it = m_entries.constFind(id);
+    return it != m_entries.constEnd() && it->active;
 }
 
 void Registry::unbind(const QString& id)
@@ -129,6 +164,20 @@ void Registry::flush()
 
     for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
         auto& entry = *it;
+        if (!entry.active) {
+            // Parked by setActive(). Release the grab through the
+            // non-destructive path so the platform keeps whatever the user
+            // customised, and reset the sent-state so reviving the entry
+            // re-registers it from scratch with the stored binding.
+            if (entry.registered) {
+                m_backend->suspendShortcut(entry.binding.id);
+                entry.registered = false;
+                entry.lastSentDefault = QKeySequence();
+                entry.lastSentCurrent = QKeySequence();
+                entry.lastSentPersistent = true;
+            }
+            continue;
+        }
         if (entry.binding.currentSeq.isEmpty()) {
             // Don't ask the backend to grab nothing — skips the stale-grab
             // hazard on KGlobalAccel. Entry stays in the registry (so a
@@ -179,6 +228,12 @@ QStringList Registry::effectiveTriggers(const QString& id) const
 {
     const auto it = m_entries.constFind(id);
     if (it == m_entries.constEnd()) {
+        return {};
+    }
+    if (!it->active) {
+        // Parked by setActive(): no key reaches this entry, so there is
+        // nothing for the user to press. Reporting the stored sequence would
+        // advertise a chord that does nothing.
         return {};
     }
     if (m_backend) {

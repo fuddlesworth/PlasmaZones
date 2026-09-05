@@ -526,10 +526,13 @@ ColumnLayout {
                         return paramEditors._zoneNamesEditor;
 
                     if (modelData.kind === "screenId")
-                        return paramEditors._screenIdEditor;
+                        return paramEditors.pickers._screenIdEditor;
 
                     if (modelData.kind === "virtualDesktop")
-                        return paramEditors._virtualDesktopEditor;
+                        return paramEditors.pickers._virtualDesktopEditor;
+
+                    if (modelData.kind === "workspaceName")
+                        return paramEditors.pickers._workspaceNameEditor;
 
                     return paramEditors._stringParamEditor;
                 }

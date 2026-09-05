@@ -107,6 +107,32 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // Dynamic per-monitor workspaces: a top-level DRILL-IN parent like the
+    // placement modes (empty qmlFile + children), carrying the same sidebar
+    // enable toggle (Main.qml trailing delegate). The parent id avoids the
+    // existing "overview" (monitor dashboard) id.
+    //
+    // preferences-desktop-virtual rather than virtual-desktops: the Virtual
+    // Screens row directly above already carries virtual-desktops, and two
+    // adjacent top-level rows sharing one glyph read as two views of the same
+    // thing (the rule the Snapping registration's icon note states). This is
+    // the glyph KDE's own Virtual Desktops module uses, so it stays on topic.
+    regVirtual(QStringLiteral("workspaces"), QString(), PhosphorI18n::tr("Workspaces"), QString(),
+               QStringLiteral("preferences-desktop-virtual"), /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-behavior"), QStringLiteral("workspaces"), PhosphorI18n::tr("Behavior"),
+               QStringLiteral("pages/workspaces/WorkspacesBehaviorPage.qml"), QStringLiteral("configure"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-named"), QStringLiteral("workspaces"), PhosphorI18n::tr("Named Workspaces"),
+               QStringLiteral("pages/workspaces/NamedWorkspacesPage.qml"), QStringLiteral("bookmark"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspaces"),
+               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/workspaces/WorkspacesShortcutsPage.qml"),
+               QStringLiteral("input-keyboard"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category. Divider after it (i.e.
     // above Appearance) sets the placement categories apart from the

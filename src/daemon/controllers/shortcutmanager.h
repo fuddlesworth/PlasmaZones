@@ -6,6 +6,7 @@
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 
 #include <QKeySequence>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -13,6 +14,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace PhosphorShortcuts {
 class IBackend;
@@ -105,6 +107,20 @@ public:
         const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings) override;
     void unregisterAdhocShortcuts(const QStringList& ids) override;
 
+    /// Foreign-component rebind (Registry pass-through; KGlobalAccel backend
+    /// only). The dynamic-workspaces stock-shortcut takeover uses these;
+    /// false on the other backends, whose callers fall back to
+    /// snap-back-with-hint.
+    bool setForeignShortcuts(const QString& componentName, const QString& actionName,
+                             const QList<QKeySequence>& sequences);
+    /// Tri-state read, see PhosphorShortcuts::IBackend::foreignShortcuts. A
+    /// nullopt means the query FAILED (no registry yet, wrong backend,
+    /// kglobalacceld unreachable) and says nothing about the action's real
+    /// binding; an engaged empty list means the action is genuinely unbound.
+    /// Callers must not treat the two the same: clearing a chord on the
+    /// strength of a failed query loses the user's binding with no backup.
+    std::optional<QList<QKeySequence>> foreignShortcuts(const QString& componentName, const QString& actionName) const;
+
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
      * one QVariantMap per row, sorted by display category, then by authored
@@ -156,13 +172,15 @@ public:
     };
 
     /**
-     * Every action id in the file-local STATIC registration table, in
-     * declaration order. The two indexed slot families (quick_layout_N,
-     * snap_to_zone_N, kIndexedSlotCount ids each) are registered separately
-     * by buildEntries() and are NOT returned here — this is the static
-     * portion of the registration surface, not all of it.
+     * Every action id in the STATIC registration table
+     * (shortcutmanager_table.cpp), in declaration order. The FOUR indexed slot
+     * families (quick_layout_N, snap_to_zone_N, workspace_move_slot_N,
+     * workspace_focus_slot_N, kIndexedSlotCount ids each) are registered
+     * separately by buildEntries() and are NOT returned here — this is the
+     * static portion of the registration surface, not all of it.
      *
-     * The table is a file-local array with internal linkage, and
+     * The table is an array in its own TU reached only through
+     * ShortcutTable::staticEntries(), and
      * cheatsheetModel() is a COMPRESSED view of it (a directional quad or a
      * digit family collapses into a single row, so its later members have no
      * rows of their own). Neither
@@ -210,6 +228,20 @@ Q_SIGNALS:
      * reflects an external rebind on its next show rather than live.
      */
     void cheatsheetModelChanged();
+
+    // Dynamic per-monitor workspaces (delta -1 = up, +1 = down; the daemon
+    // resolves the acting screen and forwards to the WorkspaceController).
+    void workspaceFocusRequested(int delta);
+    void workspaceMoveWindowRequested(int delta);
+    void workspaceMoveColumnRequested(int delta);
+    void workspaceReorderRequested(int delta);
+    void workspaceMoveToMonitorRequested(const QString& direction);
+    /// Quick-shortcut slot (1-based): send the active window to the Nth
+    /// workspace of the acting monitor's own list.
+    void workspaceMoveSlotRequested(int slot);
+    /// Switch the acting monitor to workspace `slot` (1-based) of its own
+    /// list (focus-slot family; KCM-bound only).
+    void workspaceFocusSlotRequested(int slot);
 
     void openEditorRequested();
     void openSettingsRequested();

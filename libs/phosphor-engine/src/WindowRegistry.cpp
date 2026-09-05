@@ -153,6 +153,11 @@ QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
     return m_appIdIndex.values(appId);
 }
 
+QStringList WindowRegistry::instanceIds() const
+{
+    return m_records.keys();
+}
+
 bool WindowRegistry::contains(const QString& instanceId) const
 {
     return m_records.contains(instanceId);
@@ -213,7 +218,16 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
     // known is served by asking the REGISTRY for it (currentAppIdFor, which
     // reads the metadata record and self-corrects on the class-change push),
     // never by parsing it back out of the frozen id.
-    m_canonicalByInstance.insert(instanceId, rawWindowId);
+    // Freeze nothing while clear() drains. A windowDisappeared subscriber that
+    // canonicalizes during the sweep would otherwise seed a mapping for an
+    // instance the loop has already passed, leaving a canonical-only survivor
+    // of a bulk reset that promises to empty the registry — the same leak
+    // remove() already refuses for re-entrant upserts, and the two must agree.
+    // The caller still gets its raw id back (identity is unchanged, merely not
+    // recorded), and the next canonicalize after the clear freezes it.
+    if (m_clearing == 0) {
+        m_canonicalByInstance.insert(instanceId, rawWindowId);
+    }
     return rawWindowId;
 }
 

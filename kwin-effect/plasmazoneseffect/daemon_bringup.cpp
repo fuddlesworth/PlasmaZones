@@ -258,17 +258,64 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // desktops, #648). The daemon may have just (re)registered with an empty
     // per-screen map, so push the authoritative value for every screen — bypassing
     // reportScreenDesktop's dedup — and refresh the dedup cache to match.
-    for (auto* output : KWin::effects->screens()) {
-        auto* vd = KWin::effects->currentDesktop(output);
-        if (!vd) {
-            continue;
-        }
-        const QString screenId = outputScreenId(output);
-        const int desktop = static_cast<int>(vd->x11DesktopNumber());
-        m_lastScreenDesktop.insert(screenId, desktop);
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
-        qCDebug(lcEffect) << "Re-sent screen desktop:" << screenId << "->" << desktop;
+    // An output plugged in DURING bringup (or one whose id was renamed by such
+    // a plug) is covered by onScreenAdded's own deferred forced resync, so this
+    // loop deliberately has no retry of its own.
+    resyncAllScreenDesktops(/*force=*/true);
+
+    // Report the compositor's ACTUAL per-output-desktops mode (dynamic
+    // workspaces' authoritative gate arm — the daemon's kwinrc read can
+    // disagree with the running compositor when the file changed without a
+    // reconfigure). Read straight off VirtualDesktopManager, whose
+    // perOutputVirtualDesktopsChanged the effect also watches for the runtime
+    // edge; the desktop re-sync above goes through the public EffectsHandler
+    // API instead and shares nothing with this.
+    reportPerOutputDesktopsMode();
+
+    // Replay the dynamic-workspaces map: an effect that loads after the map
+    // last changed would otherwise wait for the next change-gated push.
+    {
+        // Generation-guarded like the registerBridge watcher: serviceUnregistered
+        // bumps the counter and clears the map cache, so a reply still in flight
+        // from the dead daemon must not re-seed the cache (and with it the
+        // generation floor) behind the successor's own replay.
+        const quint64 replayGeneration = m_daemonGate.bridgeRegistrationGeneration;
+        // Epoch-guarded as well: a live push from the SAME daemon cycle
+        // supersedes this reply, and the bridge generation cannot see that.
+        // The retraction case is the one that matters — the empty-payload arm
+        // clears the cache and floors the payload generation to 0, after which
+        // this reply's map (for a feature the daemon just disabled) is accepted
+        // by the empty-cache arm and cached as current.
+        const quint64 replayEpoch = m_workspaceMapEpoch;
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("workspaceMap")),
+            this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, replayGeneration, replayEpoch](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    if (m_daemonGate.bridgeRegistrationGeneration != replayGeneration) {
+                        qCInfo(lcEffect) << "workspaceMap replay reply from a superseded daemon cycle — ignoring";
+                        return;
+                    }
+                    if (m_workspaceMapEpoch != replayEpoch) {
+                        qCInfo(lcEffect) << "workspaceMap replay superseded by a live push — ignoring";
+                        return;
+                    }
+                    QDBusPendingReply<QString> reply = *w;
+                    if (!reply.isValid()) {
+                        // Its siblings (getFloatingWindows, getPendingRestoreGeometries)
+                        // warn on the same shape; this path was silent, and the effect
+                        // then holds no workspace map until the daemon's next
+                        // change-gated push.
+                        qCWarning(lcEffect) << "workspaceMap replay failed at bringup:" << reply.error().message()
+                                            << "— no map until the next daemon push";
+                        return;
+                    }
+                    if (!reply.value().isEmpty()) {
+                        slotWorkspaceMapChanged(reply.value());
+                    }
+                });
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).
@@ -319,12 +366,21 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // session would persist in the effect, causing isWindowFloating() to return true
     // for windows that are no longer floating.
     {
+        // Generation-guarded like the workspaceMap replay: the clear below is
+        // UNCONDITIONAL, so a superseded cycle's (typically error) reply landing
+        // after the successor's own bringup would wipe the FRESH cycle's float
+        // set with no re-seed, leaving every window reading as non-floating.
+        const quint64 floatGeneration = m_daemonGate.bridgeRegistrationGeneration;
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getFloatingWindows")),
             this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, floatGeneration](QDBusPendingCallWatcher* w) {
             w->deleteLater();
+            if (m_daemonGate.bridgeRegistrationGeneration != floatGeneration) {
+                qCInfo(lcEffect) << "getFloatingWindows reply from a superseded daemon cycle — ignoring";
+                return;
+            }
             QDBusPendingReply<QStringList> reply = *w;
             // Clear the stale local float set unconditionally. This reply lands
             // during daemon bringup, so the freshly-registered daemon's float
@@ -458,44 +514,54 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // Fire-and-forget: the cache is populated asynchronously. Windows that open
     // before the reply arrives fall back to the normal async restore path.
     {
+        // Generation-guarded: the success path clears the restore cache before
+        // repopulating it, so a superseded cycle's reply would drop the fresh
+        // cycle's cached geometries and refill them from the dead daemon's.
+        const quint64 restoreGeneration = m_daemonGate.bridgeRegistrationGeneration;
         auto* geoWatcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getPendingRestoreGeometries")),
             this);
-        connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            // Both failure modes were silent. Neither is fatal — windows fall
-            // back to the async restore path — but the fallback shows as a
-            // visible flash on every window that opens during bringup, which
-            // is exactly the symptom someone would come looking for.
-            if (!reply.isValid()) {
-                qCWarning(lcEffect) << "getPendingRestoreGeometries failed at bringup:" << reply.error().message()
-                                    << "— windows opening now fall back to the async restore";
-                return;
-            }
-            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
-            if (!doc.isObject()) {
-                qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
-                return;
-            }
-            QJsonObject obj = doc.object();
-            m_snapHandler->clearRestoreCache();
-            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                QJsonObject geo = it.value().toObject();
-                // gw/gh, not w/h — `w` would shadow the lambda's watcher
-                // parameter above.
-                const int gx = geo[QLatin1String("x")].toInt();
-                const int gy = geo[QLatin1String("y")].toInt();
-                const int gw = geo[QLatin1String("width")].toInt();
-                const int gh = geo[QLatin1String("height")].toInt();
-                QString savedScreen = geo[QLatin1String("screenId")].toString();
-                if (gw > 0 && gh > 0) {
-                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
+        connect(
+            geoWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, restoreGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (m_daemonGate.bridgeRegistrationGeneration != restoreGeneration) {
+                    qCInfo(lcEffect) << "getPendingRestoreGeometries reply from a superseded daemon cycle — ignoring";
+                    return;
                 }
-            }
-            qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
-        });
+                QDBusPendingReply<QString> reply = *w;
+                // Both failure modes were silent. Neither is fatal — windows fall
+                // back to the async restore path — but the fallback shows as a
+                // visible flash on every window that opens during bringup, which
+                // is exactly the symptom someone would come looking for.
+                if (!reply.isValid()) {
+                    qCWarning(lcEffect) << "getPendingRestoreGeometries failed at bringup:" << reply.error().message()
+                                        << "— windows opening now fall back to the async restore";
+                    return;
+                }
+                QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+                if (!doc.isObject()) {
+                    qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
+                    return;
+                }
+                QJsonObject obj = doc.object();
+                m_snapHandler->clearRestoreCache();
+                for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                    QJsonObject geo = it.value().toObject();
+                    // gw/gh, not w/h — `w` would shadow the lambda's watcher
+                    // parameter above.
+                    const int gx = geo[QLatin1String("x")].toInt();
+                    const int gy = geo[QLatin1String("y")].toInt();
+                    const int gw = geo[QLatin1String("width")].toInt();
+                    const int gh = geo[QLatin1String("height")].toInt();
+                    QString savedScreen = geo[QLatin1String("screenId")].toString();
+                    if (gw > 0 && gh > 0) {
+                        m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
+                    }
+                }
+                qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
+            });
     }
 
     // Restore snap state for all untracked windows.
@@ -504,163 +570,174 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // Now that the daemon is confirmed ready, retry the restore flow using raw
     // QDBusMessage (no QDBusInterface) to avoid synchronous introspection.
     {
+        // Generation-guarded: a valid reply latches m_daemonGate.readyRestoresDone,
+        // which serviceUnregistered resets precisely so the new cycle's
+        // pendingRestoresAvailable fallback is live again. A superseded cycle's
+        // reply landing afterwards would re-latch it and disable that fallback
+        // for the whole successor session.
+        const quint64 snappedGeneration = m_daemonGate.bridgeRegistrationGeneration;
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getSnappedWindows")),
             this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
+        connect(
+            watcher, &QDBusPendingCallWatcher::finished, this, [this, snappedGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (m_daemonGate.bridgeRegistrationGeneration != snappedGeneration) {
+                    qCInfo(lcEffect) << "getSnappedWindows reply from a superseded daemon cycle — ignoring";
+                    return;
+                }
 
-            QDBusPendingReply<QStringList> reply = *w;
-            if (!reply.isValid()) {
-                // Leave m_daemonGate.readyRestoresDone false: `finished` fires for
-                // ERROR replies too, and latching the guard on a failed
-                // getSnappedWindows would permanently disable the
-                // slotPendingRestoresAvailable fallback for the session.
-                qCWarning(lcEffect) << "getSnappedWindows failed at daemon-ready:" << reply.error().message()
-                                    << "— deferring restores to pendingRestoresAvailable";
-                return;
-            }
-            // Guard: prevent slotPendingRestoresAvailable from double-processing
-            // the same windows. Set only on a VALID reply so a failed call
-            // keeps the fallback alive.
-            m_daemonGate.readyRestoresDone = true;
+                QDBusPendingReply<QStringList> reply = *w;
+                if (!reply.isValid()) {
+                    // Leave m_daemonGate.readyRestoresDone false: `finished` fires for
+                    // ERROR replies too, and latching the guard on a failed
+                    // getSnappedWindows would permanently disable the
+                    // slotPendingRestoresAvailable fallback for the session.
+                    qCWarning(lcEffect) << "getSnappedWindows failed at daemon-ready:" << reply.error().message()
+                                        << "— deferring restores to pendingRestoresAvailable";
+                    return;
+                }
+                // Guard: prevent slotPendingRestoresAvailable from double-processing
+                // the same windows. Set only on a VALID reply so a failed call
+                // keeps the fallback alive.
+                m_daemonGate.readyRestoresDone = true;
 
-            // Re-drive per-window chrome (snap border / hidden title bar,
-            // autotile border) for windows the daemon already considers managed.
-            QSet<QString> trackedWindowIds;
-            {
-                // On daemon loss the effect cleared its window-appearance state
-                // (DecorationManager::restoreAll + the handlers' tiled-tracking
-                // clears) and restored every title bar; already-tracked windows are NOT in
-                // the untracked-restore set below, so their chrome would never come
-                // back without this. Daemon-driven and engine-common: the daemon
-                // re-emits each engine's placement geometry, which routes through the
-                // normal snap-commit / tile-request paths. Fired only on a VALID
-                // reply — that proves the daemon's placement state is populated. The
-                // windows are already in their zones, so nothing moves.
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("reapplyWindowAppearance"), {}, QStringLiteral("reapplyWindowAppearance"));
+                // Re-drive per-window chrome (snap border / hidden title bar,
+                // autotile border) for windows the daemon already considers managed.
+                QSet<QString> trackedWindowIds;
+                {
+                    // On daemon loss the effect cleared its window-appearance state
+                    // (DecorationManager::restoreAll + the handlers' tiled-tracking
+                    // clears) and restored every title bar; already-tracked windows are NOT in
+                    // the untracked-restore set below, so their chrome would never come
+                    // back without this. Daemon-driven and engine-common: the daemon
+                    // re-emits each engine's placement geometry, which routes through the
+                    // normal snap-commit / tile-request paths. Fired only on a VALID
+                    // reply — that proves the daemon's placement state is populated. The
+                    // windows are already in their zones, so nothing moves.
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        this, PhosphorProtocol::Service::Interface::WindowTracking,
+                        QStringLiteral("reapplyWindowAppearance"), {}, QStringLiteral("reapplyWindowAppearance"));
 
-                const QStringList trackedWindows = reply.value();
-                for (const QString& windowId : trackedWindows) {
-                    if (!windowId.isEmpty()) {
-                        trackedWindowIds.insert(windowId);
+                    const QStringList trackedWindows = reply.value();
+                    for (const QString& windowId : trackedWindows) {
+                        if (!windowId.isEmpty()) {
+                            trackedWindowIds.insert(windowId);
+                        }
                     }
                 }
-            }
 
-            // Snapshot the current stacking order before snap restores.
-            // moveResize() on KWin 6 / Wayland implicitly raises the target
-            // window. After all restores complete, we re-raise windows in
-            // their original order — same pattern as the autotile handler's
-            // onComplete raise loop in tiling.cpp.
-            const auto allWindows = KWin::effects->stackingOrder();
-            QVector<QPointer<KWin::EffectWindow>> savedStackingOrder;
-            for (KWin::EffectWindow* w : allWindows) {
-                savedStackingOrder.append(QPointer<KWin::EffectWindow>(w));
-            }
-
-            // Collect windows that need snap restoration (untracked).
-            // Don't skip windows on autotile screens: KWin session restore may
-            // place a window in the autotile screen's area even though it was
-            // snapped in the snap screen before logout. The daemon's pending
-            // restore entry knows the correct screen; if it returns a snap
-            // geometry, the window moves off the autotile screen and the
-            // autotile handler detects the departure via VS crossing detection.
-            // Use QPointer for lifetime safety in case a window is destroyed
-            // between collection and the dispatch loop below.
-            QVector<QPointer<KWin::EffectWindow>> toRestore;
-            for (KWin::EffectWindow* window : allWindows) {
-                // !isDeleted: same deleted-window hygiene as the metadata
-                // push and aliveWindowIds walks — getWindowId on a
-                // close-grabbed dying window re-pollutes the id caches.
-                if (!window || window->isDeleted() || !shouldHandleWindow(window)) {
-                    continue;
+                // Snapshot the current stacking order before snap restores.
+                // moveResize() on KWin 6 / Wayland implicitly raises the target
+                // window. After all restores complete, we re-raise windows in
+                // their original order — same pattern as the autotile handler's
+                // onComplete raise loop in tiling.cpp.
+                const auto allWindows = KWin::effects->stackingOrder();
+                QVector<QPointer<KWin::EffectWindow>> savedStackingOrder;
+                for (KWin::EffectWindow* w : allWindows) {
+                    savedStackingOrder.append(QPointer<KWin::EffectWindow>(w));
                 }
-                if (window->isMinimized()) {
-                    continue;
-                }
-                // Skip only if THIS window is already tracked (exact id). Deduping by
-                // appId would skip an untracked window whose app has another tracked
-                // window — stranding e.g. a multi-window terminal's window that raced
-                // startup. The daemon tracks restored windows by live id, matching
-                // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable.)
-                if (trackedWindowIds.contains(getWindowId(window))) {
-                    continue;
-                }
-                toRestore.append(QPointer<KWin::EffectWindow>(window));
-            }
 
-            if (toRestore.isEmpty()) {
-                qCDebug(lcEffect) << "No untracked windows need snap restore after daemon ready";
-                return;
-            }
-
-            qCInfo(lcEffect) << "Triggered snap restore for" << toRestore.size()
-                             << "untracked windows after daemon ready";
-
-            // Track how many windows actually moved (moveResize was called).
-            // If none moved, skip the stacking restoration — no disruption occurred.
-            auto pending = std::make_shared<int>(toRestore.size());
-            auto movedCount = std::make_shared<int>(0);
-
-            for (const auto& safeWindow : toRestore) {
-                if (!safeWindow || safeWindow->isDeleted()) {
-                    // Window destroyed between collection and dispatch — count
-                    // it as done so the pending counter still reaches zero.
-                    if (--(*pending) == 0) {
-                        qCDebug(lcEffect) << "Stacking restore: all targets gone, skipping";
+                // Collect windows that need snap restoration (untracked).
+                // Don't skip windows on autotile screens: KWin session restore may
+                // place a window in the autotile screen's area even though it was
+                // snapped in the snap screen before logout. The daemon's pending
+                // restore entry knows the correct screen; if it returns a snap
+                // geometry, the window moves off the autotile screen and the
+                // autotile handler detects the departure via VS crossing detection.
+                // Use QPointer for lifetime safety in case a window is destroyed
+                // between collection and the dispatch loop below.
+                QVector<QPointer<KWin::EffectWindow>> toRestore;
+                for (KWin::EffectWindow* window : allWindows) {
+                    // !isDeleted: same deleted-window hygiene as the metadata
+                    // push and aliveWindowIds walks — getWindowId on a
+                    // close-grabbed dying window re-pollutes the id caches.
+                    if (!window || window->isDeleted() || !shouldHandleWindow(window)) {
+                        continue;
                     }
-                    continue;
+                    if (window->isMinimized()) {
+                        continue;
+                    }
+                    // Skip only if THIS window is already tracked (exact id). Deduping by
+                    // appId would skip an untracked window whose app has another tracked
+                    // window — stranding e.g. a multi-window terminal's window that raced
+                    // startup. The daemon tracks restored windows by live id, matching
+                    // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable.)
+                    if (trackedWindowIds.contains(getWindowId(window))) {
+                        continue;
+                    }
+                    toRestore.append(QPointer<KWin::EffectWindow>(window));
                 }
-                // Snapshot geometry before the async call; if it changes after
-                // applyWindowGeometry, we know a moveResize happened.
-                QRectF geoBefore = safeWindow->frameGeometry();
 
-                m_snapHandler->callResolveWindowRestore(
-                    safeWindow.data(),
-                    [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
-                        // Detect whether moveResize actually fired by comparing geometry.
-                        if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
-                            ++(*movedCount);
-                        }
+                if (toRestore.isEmpty()) {
+                    qCDebug(lcEffect) << "No untracked windows need snap restore after daemon ready";
+                    return;
+                }
 
-                        if (--(*pending) > 0) {
-                            return;
-                        }
+                qCInfo(lcEffect) << "Triggered snap restore for" << toRestore.size()
+                                 << "untracked windows after daemon ready";
 
-                        // All snap restores done.
-                        if (*movedCount == 0) {
-                            qCDebug(lcEffect) << "Stacking restore: all windows at target geometry, skipping";
-                            return;
-                        }
+                // Track how many windows actually moved (moveResize was called).
+                // If none moved, skip the stacking restoration — no disruption occurred.
+                auto pending = std::make_shared<int>(toRestore.size());
+                auto movedCount = std::make_shared<int>(0);
 
-                        // Re-raise windows in original order (bottom-to-top).
-                        auto* ws = KWin::Workspace::self();
-                        if (!ws) {
-                            return;
+                for (const auto& safeWindow : toRestore) {
+                    if (!safeWindow || safeWindow->isDeleted()) {
+                        // Window destroyed between collection and dispatch — count
+                        // it as done so the pending counter still reaches zero.
+                        if (--(*pending) == 0) {
+                            qCDebug(lcEffect) << "Stacking restore: all targets gone, skipping";
                         }
-                        for (const auto& wPtr : savedStackingOrder) {
-                            if (wPtr && !wPtr->isDeleted()) {
-                                KWin::Window* kw = wPtr->window();
-                                if (kw) {
-                                    ws->raiseWindow(kw);
+                        continue;
+                    }
+                    // Snapshot geometry before the async call; if it changes after
+                    // applyWindowGeometry, we know a moveResize happened.
+                    QRectF geoBefore = safeWindow->frameGeometry();
+
+                    m_snapHandler->callResolveWindowRestore(
+                        safeWindow.data(),
+                        [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
+                            // Detect whether moveResize actually fired by comparing geometry.
+                            if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
+                                ++(*movedCount);
+                            }
+
+                            if (--(*pending) > 0) {
+                                return;
+                            }
+
+                            // All snap restores done.
+                            if (*movedCount == 0) {
+                                qCDebug(lcEffect) << "Stacking restore: all windows at target geometry, skipping";
+                                return;
+                            }
+
+                            // Re-raise windows in original order (bottom-to-top).
+                            auto* ws = KWin::Workspace::self();
+                            if (!ws) {
+                                return;
+                            }
+                            for (const auto& wPtr : savedStackingOrder) {
+                                if (wPtr && !wPtr->isDeleted()) {
+                                    KWin::Window* kw = wPtr->window();
+                                    if (kw) {
+                                        ws->raiseWindow(kw);
+                                    }
                                 }
                             }
-                        }
-                    },
-                    /*releaseSuppressionOnMiss=*/true,
-                    // DaemonRestartSweep: this sweep re-resolves windows that
-                    // are ALREADY open and on screen, exactly like the
-                    // pending-restores sweep. It restores zone geometry and
-                    // stacking; it must not drive the cross-screen tile
-                    // reclaim and re-home the monitors of every window the
-                    // user is looking at because the daemon restarted.
-                    PhosphorEngine::RestoreReason::DaemonRestartSweep);
-            }
-        });
+                        },
+                        /*releaseSuppressionOnMiss=*/true,
+                        // DaemonRestartSweep: this sweep re-resolves windows that
+                        // are ALREADY open and on screen, exactly like the
+                        // pending-restores sweep. It restores zone geometry and
+                        // stacking; it must not drive the cross-screen tile
+                        // reclaim and re-home the monitors of every window the
+                        // user is looking at because the daemon restarted.
+                        PhosphorEngine::RestoreReason::DaemonRestartSweep);
+                }
+            });
     }
 }
 
@@ -733,6 +810,36 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
+
+    // The same move naming the desktop by its stable id, for the
+    // named-workspace route. Separate signal rather than a wider one: the
+    // directional verbs genuinely mean "the desktop at that position", and
+    // only the route holds an identity worth preserving across the hop.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowDesktopMoveByIdRequested"), this,
+                                          SLOT(slotWindowDesktopMoveByIdRequested(QString, QString)));
+
+    // Output move with no engine handoff (untracked/floating windows on the
+    // workspace verbs); windowToScreen, no-op when already there.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowOutputMoveRequested"), this,
+                                          SLOT(slotWindowOutputMoveRequested(QString, QString)));
+
+    // Dynamic-workspaces ownership map stream (change-gated daemon push; the
+    // workspaceMap() replay query covers an effect that loads after the map
+    // last changed — pulled in the registration path).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("workspaceMapChanged"), this,
+                                          SLOT(slotWorkspaceMapChanged(QString)));
+
+    // Per-output desktop switch command (workspace focus verbs + snap-back).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("setScreenDesktopRequested"), this,
+                                          SLOT(slotSetScreenDesktopRequested(QString, int)));
 
     // Daemon-initiated cross-output move: the daemon already migrated its
     // tiling state and reflowed both outputs; record the window so the
@@ -846,6 +953,66 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // here would be a build-order bug, not a runtime condition. Worded as
     // "wired", not "connected", because the returns are not checked.
     qCDebug(lcEffect) << "Navigation D-Bus signal subscriptions wired";
+}
+
+void PlasmaZonesEffect::reportPerOutputDesktopsMode()
+{
+    auto* vdm = KWin::VirtualDesktopManager::self();
+    if (!vdm || !m_daemonGate.serviceRegistered) {
+        // Nothing is lost while the daemon is away: continueDaemonReadySetup
+        // calls this again as part of every (re)registration, so the first
+        // thing the successor hears is the current mode.
+        return;
+    }
+    const bool perOutput = vdm->isPerOutputVirtualDesktops();
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("reportPerOutputDesktopsMode"), {perOutput},
+                                                   QStringLiteral("reportPerOutputDesktopsMode"));
+    qCDebug(lcEffect) << "Reported per-output desktops mode:" << perOutput;
+}
+
+void PlasmaZonesEffect::slotWorkspaceMapChanged(const QString& mapJson)
+{
+    // Every push moves the epoch, whatever the payload turns out to be. The
+    // bringup replay captures it beside the bridge generation and drops its
+    // reply when it has moved: a reply in flight from the SAME daemon cycle
+    // carries a map the daemon may since have retracted, and neither the
+    // bridge generation (unchanged) nor the payload generation (floored to 0
+    // by the empty arm below) can order it.
+    ++m_workspaceMapEpoch;
+    // Consumer stub: cached for the future overview. The payload is already
+    // change-gated daemon-side, but ORDERING is not guaranteed here: the
+    // bringup replay is an async query whose reply can land after a live
+    // push — the payload's generation counter decides which is newer, and an
+    // older map never overwrites a newer one.
+    if (mapJson.isEmpty()) {
+        // Not malformed: the interface promises an empty payload while
+        // dynamic workspaces are off or not yet adopted, and the daemon sends
+        // exactly that on a runtime disable (daemon/workspaces.cpp, the
+        // stop arm). Drop the cache AND the generation floor so a later
+        // re-enable — which restarts its counter from a fresh controller — is
+        // accepted by the empty-cache arm below instead of being rejected as
+        // older than the dead cycle's last generation.
+        m_workspaceMapJson.clear();
+        m_workspaceMapGeneration = 0;
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(mapJson.toUtf8());
+    if (!doc.isObject()) {
+        // Caching an unparseable payload verbatim would publish it as the
+        // current map AND floor the generation at 0, so the next well-formed
+        // push could only ever be accepted by the empty-cache arm below.
+        qCWarning(lcEffect) << "workspaceMapChanged: non-object payload — ignoring";
+        return;
+    }
+    // toVariant().toULongLong(), not toDouble(): the generation is an integer
+    // counter and the double round-trip loses exactness past 2^53.
+    const quint64 generation = doc.object().value(QLatin1String("generation")).toVariant().toULongLong();
+    if (!m_workspaceMapJson.isEmpty() && generation < m_workspaceMapGeneration) {
+        return;
+    }
+    m_workspaceMapGeneration = generation;
+    m_workspaceMapJson = mapJson;
 }
 
 } // namespace PlasmaZones

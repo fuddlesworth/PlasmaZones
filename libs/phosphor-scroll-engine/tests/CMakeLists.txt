@@ -143,6 +143,12 @@ pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrolls
 # different question: which blueprint ENTRY a column takes, and which events
 # leave an entry spent.
 pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstubsettings.h)
+# The dynamic-workspaces desktop axis (identity reap, renumber, and the
+# release the reap owes its still-alive windows). A NEW sibling for a new
+# concern, not a split off the per-screen suite: nothing moved out of that file,
+# which has no headroom left of its own. Same stub, different question: not
+# which channel wins, but what a dying context destroys and what it announces.
+pse_add_test(test_scrollengine_desktopreap test_scrollengine_desktopreap.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
 # sticky gate and the client-decides width and height all short-circuit on a
 # null tracker, so their per-screen resolution is unobservable without one.

@@ -16,7 +16,15 @@
 
 #include "settingscontroller.h"
 
+#include "common/kwinperoutputdesktops.h"
 #include "config/configdefaults.h"
+
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorWorkspaces/WorkspaceReconciler.h>
+
+#include <QSettings>
+#include <QStandardPaths>
+#include <QStringList>
 
 namespace PlasmaZones {
 
@@ -58,6 +66,88 @@ bool isLibraryPage(const QString& page)
 bool SettingsController::isLibraryPage(const QString& page) const
 {
     return PlasmaZones::isLibraryPage(page);
+}
+
+bool SettingsController::workspacesAtCap() const
+{
+    return m_workspaceVdm
+        && m_workspaceVdm->desktopCount() >= PhosphorWorkspaces::WorkspaceReconciler::DefaultDesktopCap;
+}
+
+// The DEFAULT cap, and CONSTANT for that reason. The running reconciler keeps
+// its own mutable copy (m_desktopCap, which setDesktopCap rewrites once the
+// controller has probed what the compositor actually accepts) and the settings
+// app has no link to that object, so a probed cap never reaches here. What QML
+// uses this for is the authoring bound on a declaration's Position, which the
+// daemon clamps again against the live cap on its own side.
+int SettingsController::workspacesDesktopCap() const
+{
+    return PhosphorWorkspaces::WorkspaceReconciler::DefaultDesktopCap;
+}
+
+int SettingsController::workspaceSlotCount() const
+{
+    return ConfigDefaults::WorkspaceSlotCount;
+}
+
+int SettingsController::workspaceNameMaxLength() const
+{
+    return ConfigDefaults::WorkspaceNameMaxLength;
+}
+
+// Carry a rename of a named workspace through the quick-slot targets.
+//
+// The workspace NAME is the wire value downstream: a quick slot stores the name
+// it sends the window to (Workspaces.Slots/TargetN), which the daemon resolves
+// at press time. Settings deliberately never validates a target, precisely so
+// a declaration and the slot naming it can be edited in either order, so a
+// rename on the Named Workspaces page would otherwise leave every slot
+// pointing at the old name silently inert. Following the rename is what the
+// user means, and the slot keeps pointing at the workspace they renamed.
+//
+// Rules are NOT carried along. A RouteToWorkspace action stores the name too,
+// but rules live in their own store with their own staging, and rewriting them
+// from here would edit a document the user may have open elsewhere. Such a
+// rule goes dormant until its action is re-pointed.
+//
+// It lives here rather than in the page's QML because of an OWNERSHIP seam.
+// Those Target keys belong to the workspaces-shortcuts manifest, and
+// pageOwnedConfigKeys holds a strict one-owner invariant, so co-listing them
+// under workspaces-named is not open to us. Written straight from QML, the
+// cascade badged the SHORTCUTS page dirty and left an edit that only that
+// page's Discard could revert, while the page the user actually edited could
+// not undo its own cascade. Recording the slots here lets
+// discardPage("workspaces-named") revert exactly those keys to the committed
+// baseline alongside its own.
+//
+// The record only ever covers UNCOMMITTED renames. Every path that re-takes
+// the committed baseline clears it (save() on a written config,
+// adoptOnDiskState() for load / global Discard / import, defaults()). Left in
+// place across a Save it would misfire: the user could hand-edit that slot on
+// the Shortcuts page and then discard the Named page for an unrelated staged
+// edit, and the cascade arm would revert the Shortcuts edit along with it.
+void SettingsController::renameWorkspaceSlotTargets(const QString& previousName, const QString& newName)
+{
+    const QString from = previousName.trimmed();
+    const QString to = newName.trimmed();
+    if (from.isEmpty() || to.isEmpty() || from == to) {
+        return;
+    }
+    for (int index = 0; index < ConfigDefaults::WorkspaceSlotCount; ++index) {
+        if (m_settings.workspaceSlotTarget(index) != from) {
+            continue;
+        }
+        m_settings.setWorkspaceSlotTarget(index, to);
+        // 1-based, the spelling ConfigDefaults::workspaceSlotTargetKey takes.
+        m_renamedWorkspaceSlots.insert(index + 1);
+    }
+}
+
+bool SettingsController::kwinPerOutputDesktopsEnabled() const
+{
+    // One shared reader with the daemon's gate. The decoding rationale, and
+    // why the two must not drift apart again, lives on the helper.
+    return kwinPerOutputVirtualDesktopsEnabled();
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain

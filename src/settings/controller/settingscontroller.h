@@ -58,6 +58,12 @@ namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
 
+namespace PhosphorWorkspaces {
+// Forward-declared for the workspaces-at-cap probe member below; the
+// complete type is needed only in settingscontroller.cpp.
+class VirtualDesktopManager;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -322,6 +328,39 @@ public:
     /// (settingscontroller_pagekeys.h) so the id triple has one home — the
     /// window-scoped layoutOperationFailed fallback in Main.qml keys off it.
     Q_INVOKABLE bool isLibraryPage(const QString& page) const;
+
+    /// Whether KWin runs with per-output virtual desktops on (kwinrc read;
+    /// the Workspaces page's consent flow consults this before enabling).
+    /// Same flat-INI read as the daemon gate's config arm
+    /// (WorkspaceController::kwinPerOutputEnabled) — duplicated because the
+    /// daemon controller is not linked into the settings app.
+    Q_INVOKABLE bool kwinPerOutputDesktopsEnabled() const;
+
+    /// True while KWin's desktop count sits at the dynamic-workspaces cap
+    /// (the Workspaces page's badge; the daemon suspends trailing-empty
+    /// appends and refuses named creates at the cap). Fed by this app's own
+    /// VirtualDesktopManager listening to KWin's countChanged.
+    Q_PROPERTY(bool workspacesAtCap READ workspacesAtCap NOTIFY workspacesAtCapChanged)
+    bool workspacesAtCap() const;
+
+    /// WorkspaceReconciler::DefaultDesktopCap and
+    /// ConfigDefaults::WorkspaceSlotCount, mirrored because QML has no other
+    /// way to read a C++ constant and would otherwise hardcode both.
+    /// workspacesDesktopCap is the DEFAULT cap, not the reconciler's probed
+    /// one — see its definition in settingscontroller_pagekeys.cpp.
+    Q_PROPERTY(int workspacesDesktopCap READ workspacesDesktopCap CONSTANT)
+    Q_PROPERTY(int workspaceSlotCount READ workspaceSlotCount CONSTANT)
+    /// ConfigDefaults::WorkspaceNameMaxLength. The Add form and the rename
+    /// handler bound a name against it so the user is refused at the field
+    /// instead of having canonicalNamedEntries drop the entry in silence.
+    Q_PROPERTY(int workspaceNameMaxLength READ workspaceNameMaxLength CONSTANT)
+    int workspacesDesktopCap() const;
+    int workspaceSlotCount() const;
+    int workspaceNameMaxLength() const;
+
+    /// Carry a named-workspace rename through the quick-slot targets — see
+    /// settingscontroller_pagekeys.cpp for the ownership seam and the record.
+    Q_INVOKABLE void renameWorkspaceSlotTargets(const QString& previousName, const QString& newName);
 
     /// The default snapping layout and default scrolling template:
     /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
@@ -802,6 +841,7 @@ Q_SIGNALS:
     /// first so a benign refusal during a global async discard never emits.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
+    void workspacesAtCapChanged();
     void scopeScreenNameChanged();
     /// Emitted whenever any per-screen override map changes (set or clear,
     /// any domain). The monitor scope map re-polls hasPerScreen*Settings()
@@ -1025,6 +1065,12 @@ private:
     /// Single Rule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
     std::unique_ptr<PhosphorRules::RuleStore> m_localRuleStore;
+    /// Live KWin desktop count for the workspaces cap badge (this app's own
+    /// read-only VirtualDesktopManager; the daemon owns the writable one).
+    std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_workspaceVdm;
+    /// Last published workspacesAtCap, so the count signal re-emits the
+    /// property only on an actual transition.
+    bool m_workspacesAtCapLast = false;
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;
@@ -1114,6 +1160,9 @@ private:
     bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
+    /// 1-based quick-slot numbers an UNCOMMITTED named-workspace rename
+    /// rewrote; every path that re-takes the committed baseline clears it.
+    QSet<int> m_renamedWorkspaceSlots;
     /// Depth counter for deferred dirtyPagesChanged emission. While > 0 the
     /// reconcile helpers mutate m_dirtyPages but record the NOTIFY in
     /// m_dirtyEmitPending instead of firing it, so a delegated Reset/Discard

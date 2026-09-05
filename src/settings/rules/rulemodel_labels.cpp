@@ -399,9 +399,38 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // label the ScreenId match-leaf surfaces (e.g. "LG Ultra HD · DP-2");
         // fall back to the raw id when no live monitor matches so a rule pinned
         // to an absent display stays legible.
-        const QString screenId = action.params.value(PhosphorRules::ActionParam::TargetScreenId).toString();
-        return screenId.isEmpty() ? PhosphorI18n::tr("Open on monitor")
-                                  : PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
+        //
+        // Trimmed and bounded the same way the RouteToWorkspace name below is.
+        // The loader measures the TRIMMED id against MaxScreenIdLength and then
+        // stores the value verbatim, so a padded id reaches this summary intact
+        // and has to be trimmed here to resolve against the live monitor
+        // lookup. A hand-edited id past the wire bound falls back to the bare
+        // label instead of flooding the summary.
+        const QString screenId = action.params.value(PhosphorRules::ActionParam::TargetScreenId).toString().trimmed();
+        if (screenId.isEmpty() || screenId.size() > PhosphorRules::MaxScreenIdLength) {
+            return PhosphorI18n::tr("Open on monitor");
+        }
+        return PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
+    }
+    if (action.type == ActionType::RouteToWorkspace) {
+        // The stored NAME renders quoted whether or not it is currently
+        // declared — an undeclared name is a dormant rule, not an error.
+        //
+        // The QUOTES are deliberate and must NOT be aligned to the colon form
+        // its RouteToScreen and RouteToDesktop siblings use. A workspace name
+        // is free-form text and may be nothing but digits, so "Open on
+        // workspace: 3" would be indistinguishable from the desktop summary's
+        // ordinal. The quotes are what keep a digit-only name reading as a
+        // name. The ActionListView.qml workspaceName pill quotes for the same
+        // reason, so the two surfaces already agree.
+        // Trimmed and bounded the same way the SnapToZone name loop above
+        // applies the validator's range: a hand-edited payload past the wire
+        // bound falls back to the bare label instead of flooding the summary.
+        const QString name = action.params.value(PhosphorRules::ActionParam::TargetWorkspaceName).toString().trimmed();
+        if (name.isEmpty() || name.size() > PhosphorRules::MaxWorkspaceNameLength) {
+            return PhosphorI18n::tr("Open on workspace");
+        }
+        return PhosphorI18n::tr("Open on workspace “%1”").arg(name);
     }
     if (action.type == ActionType::RouteToDesktop) {
         // Both ends of the descriptor's bound, not just the floor: a
@@ -801,7 +830,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             const QString family = raw.toString();
             return PhosphorI18n::tr("Tab label font: %1")
                 .arg(family.isEmpty()
-                         ? RuleAuthoring::paramEmptyValueLabel(action.type, QString(PhosphorRules::ActionParam::Value))
+                         ? RuleAuthoring::paramEmptyValueLabel(action.type, PhosphorRules::ActionParam::Value)
                          : family);
         }
         if (action.type == ActionType::SetTabIndicatorFontWeight) {

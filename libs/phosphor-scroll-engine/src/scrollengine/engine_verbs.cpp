@@ -73,6 +73,37 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
                   Detail::physicalTokenForMain(1, params.axis));
 }
 
+QStringList ScrollEngine::focusedColumnWindows(const QString& screenId) const
+{
+    // Resolve on the PHYSICAL axis. The daemon's move-column-to-workspace verb
+    // addresses this getter with a physical output id (its per-output desktop
+    // map keys physical ids), while the engine keys its states by VIRTUAL
+    // screen id — so a bare currentKeyForScreen lookup misses on every
+    // split-monitor setup and the verb dead-ends into its OSD hint.
+    // Deliberately NOT resolveOperationScreen: its active-screen fallback
+    // would answer for a different monitor entirely when the named output is
+    // not scrolling, and this getter is half of an address/action pair whose
+    // two halves must name the same output.
+    const QString resolved = scrollingScreenForPhysical(screenId);
+    if (resolved.isEmpty()) {
+        return {};
+    }
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(resolved));
+    if (!state) {
+        return {};
+    }
+    const Column* column = state->strip().activeColumn();
+    if (!column) {
+        return {};
+    }
+    QStringList windows;
+    windows.reserve(column->tiles.size());
+    for (const Tile& tile : column->tiles) {
+        windows.append(tile.windowId);
+    }
+    return windows;
+}
+
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
 // `state`, and `params` into the caller's scope and embed an early return.
 // A helper struct + lambda was considered and rejected: every verb would

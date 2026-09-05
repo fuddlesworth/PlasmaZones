@@ -601,10 +601,24 @@ void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
     // the shared-domain reset paths reconcile every leaf of a group and would
     // otherwise fire one NOTIFY per flipped leaf (the discard paths already
     // batch this way).
+    //
+    // The condensed-simple cascade reconcilePageDirty performs runs here too,
+    // so the batched form is a true superset of the single-page one and a
+    // caller can pick either on batching grounds alone. Re-syncing a simple
+    // leaf is idempotent: syncDirtyMembership matches it to its own
+    // value-based truth, whichever backing page led us to it.
     bool changed = false;
-    for (const QString& page : pages) {
-        if (syncDirtyMembership(page, isPageDirty(page))) {
+    const auto sync = [this, &changed](const QString& p) {
+        if (syncDirtyMembership(p, isPageDirty(p))) {
             changed = true;
+        }
+    };
+    const auto& backing = simplePageBackingPages();
+    for (const QString& page : pages) {
+        sync(page);
+        for (auto it = backing.constBegin(); it != backing.constEnd(); ++it) {
+            if (it.value().contains(page))
+                sync(it.key());
         }
     }
     if (changed) {

@@ -454,17 +454,32 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                             moved.blueprintIdentity = displaced.blueprintIdentity;
                         }
                         m_stripStash.insert(newKey, moved);
+                        // The consumed set travels WITH its stash, and a set
+                        // already sitting at the new key goes with the carrier
+                        // being replaced: left under a freshly inserted stash it
+                        // would mask those ids at restoreFromStripStash's guard.
+                        // Hygiene rather than a live defect (every producer of a
+                        // column-less stash clears its consumed set too), but the
+                        // two maps are one entry in two halves and move as one.
+                        m_stripStashConsumed.remove(newKey);
                         if (m_stripStashConsumed.contains(oldKey)) {
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
                     }
                     // The mid-burst deferred-apply marker is context-keyed too:
-                    // left at the old key it can never drain (endArrivalBurst
-                    // resolves live keys), silently dropping the deferred apply
-                    // and its focusWindowAfter. Same move-only-if-vacant rule
-                    // as the stash.
-                    if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
-                        m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
+                    // left at the old key the burst-end drain meets a key the
+                    // screen no longer resolves to and takes its skip arm,
+                    // silently dropping the deferred apply and its
+                    // focusWindowAfter (and, when no live key remains for the
+                    // screen in that burst, the focus seed with it).
+                    // MERGED, not move-only-if-vacant: the map's sole writer
+                    // (windowOpened's burst arm) combines with `||`, so a stored
+                    // false carries no information that should outrank a
+                    // migrated true, and a refused old-key entry has no later
+                    // path back.
+                    if (m_burstPendingApplies.contains(oldKey)) {
+                        m_burstPendingApplies[newKey] =
+                            m_burstPendingApplies.value(newKey) || m_burstPendingApplies.take(oldKey);
                     }
                     // The per-context rule/template overrides move with the
                     // state for the same reason: left at the old key the
@@ -503,16 +518,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             return displacedSet.contains(wid);
         });
         Q_EMIT windowsReleased(displacedWindows, displacedScreens);
-        // Only NOW may the per-window side maps go — the handler above has
-        // consumed the float markers and the last-applied rects (same
-        // ordering contract as pruneStatesForRemovedScreen).
-        for (const QString& windowId : std::as_const(displacedWindows)) {
-            m_lastAppliedRect.remove(windowId);
-            m_lastAppliedWindowedFs.remove(windowId);
-            m_lastAppliedMaximizedToEdges.remove(windowId);
-            m_parkedScrollEdge.remove(windowId);
-            m_scrollFloatedWindows.remove(windowId);
-        }
+        sweepReleasedWindowBookkeeping(displacedWindows);
     }
     // Strip identity last, AFTER the release above, so a consumer sees the
     // windows leave before it is told the screen is showing a different strip.
@@ -536,6 +542,18 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
     }
 }
 
+void ScrollEngine::sweepReleasedWindowBookkeeping(const QStringList& releasedWindows)
+{
+    // See the declaration for the ordering contract, and for why this is only
+    // two maps: releaseScreenState has already dropped the unfloat slot, the
+    // parked edge and the windowed-fullscreen / column-maximized memories, and
+    // every caller here builds its list out of exactly that release.
+    for (const QString& windowId : releasedWindows) {
+        m_lastAppliedRect.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
+    }
+}
+
 void ScrollEngine::setCurrentActivity(const QString& activity)
 {
     m_isDesktopContextSwitch |= m_context.setCurrentActivity(activity).armSwitch;
@@ -546,6 +564,24 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
     QSet<int> desktops;
     const auto& states = m_states.states();
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        desktops.insert(it.key().desktop);
+    }
+    // The aux maps count too, and not only the state map. This set is the
+    // ENTRY GATE for the count-based reap in Daemon::start's
+    // desktopCountChanged handler, which reaps only the desktops named here.
+    // A desktop can legitimately hold no ScrollState while still holding a
+    // stashed strip (a screen that left scrolling mode stashes its structure)
+    // or per-screen overrides pushed before any window arrived. Leaving those
+    // unnamed means they survive the desktop's death, and pruneStatesForDesktop
+    // spells out the harm: KWin hands the index out again, so the next desktop
+    // to take it resolves the deleted desktop's template. Dormant while
+    // dynamic workspaces are on, because that path reaps by identity for every
+    // removed desktop regardless of state, but the legacy path is still live
+    // whenever the feature is off.
+    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
+        desktops.insert(it.key().desktop);
+    }
+    for (auto it = m_perScreenOverrides.cbegin(); it != m_perScreenOverrides.cend(); ++it) {
         desktops.insert(it.key().desktop);
     }
     return desktops;
@@ -566,34 +602,6 @@ void ScrollEngine::consumePendingInitialOrder(const QString& screenId, const QSt
     if (consumed.size() >= it->size()) {
         m_pendingInitialOrder.erase(it);
         m_consumedInitialOrder.remove(screenId);
-    }
-}
-
-void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
-{
-    // Shared sweep for every state-destruction path: the per-window side
-    // maps must die with the state or they grow unbounded and
-    // lastManagedRect keeps answering for windows whose context is gone —
-    // the float-back poison-guard input (mirrors the autotile prunes'
-    // in-callback drops).
-    const QStringList windows = state->managedWindows();
-    for (const QString& windowId : windows) {
-        m_lastAppliedRect.remove(windowId);
-        m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedMaximizedToEdges.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        m_floatRestore.remove(windowId);
-        m_scrollFloatedWindows.remove(windowId);
-        // The dying context's windows can never answer their queued echoes;
-        // a stale entry would swallow the first genuine focus of a reused
-        // id (windowClosed and releaseScreenState sweep the same way).
-        m_pendingSelfActivations.removeAll(windowId);
-        m_pendingSelfActivationQueuedAt.remove(windowId);
-        // Identical reasoning, and the same reused-id hazard: a declined-open
-        // marker left behind swallows the first genuine focus the next window
-        // to take this id receives. Unlike its sibling above it carries no
-        // size cap, so this sweep is the only thing bounding it here.
-        m_declinedOpenFocus.remove(windowId);
     }
 }
 
@@ -662,14 +670,37 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
         cancelDragInsertPreview();
     }
     QSet<QString> touchedScreens;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [removedDesktop](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return key.desktop == removedDesktop;
         },
-        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+        [this, &touchedScreens, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key,
+                                                                    ScrollState* state) {
             touchedScreens.insert(key.screenId);
-            dropWindowBookkeeping(state);
-            state->deleteLater();
+            releasedScreens.insert(key.screenId);
+            // Through the FULL release, not a bare bookkeeping drop. Dynamic
+            // workspaces made this a POPULATED-context reap: a destroyed
+            // desktop's windows are ALIVE (KWin relocates them), so a bare drop
+            // threw each one's scrolling slot away on the way out. What the full
+            // release buys is the capturePlacement snapshot into the unified
+            // placement record — the single source of truth for cross-mode
+            // state, and the only thing that carries a window's scrolling slot
+            // (its floating slot included) across the release — plus the
+            // per-window side-map sweep the emit orders at the tail.
+            // The announcement itself is not the reason: the daemon's
+            // windowsReleased handler treats a desktop reap as a continue. Both
+            // siblings' desktop prunes already do this (AutotileEngine via
+            // releaseScreenStateForTeardown), and this engine's own
+            // removed-screen prune is the same shape.
+            //
+            // clearScreenBookkeeping=false: the SCREEN survives this prune,
+            // only one of its desktop contexts dies, so its seed and
+            // tab-strip maps belong to the surviving contexts.
+            // sweepStatelessScreenBookkeeping below clears them if this was
+            // the screen's last state, which is the pre-existing behaviour.
+            releaseScreenState(state, releasedWindows, /*clearScreenBookkeeping=*/false);
         });
     m_states.removeWindowsIf([removedDesktop](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
@@ -687,22 +718,112 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = it.key().desktop == removedDesktop ? m_perScreenOverrides.erase(it) : std::next(it);
     }
-    // Same renumbering hazard, one level indirect: these two are keyed by
-    // SCREEN and carry the context as their value, so a screen that stays
-    // scrolling keeps its entry when its desktop dies. The promotion in
-    // applyLayout and the burst drain in endArrivalBurst both gate on the
-    // stored key equalling the current one, which is exactly the compare a
-    // reused desktop index passes — the entry would then force a batch, or
-    // apply an arrival focus, for a context from before the deletion.
+    // The context-valued screen arms go with the desktop. Swept HERE rather
+    // than in reapDesktopState so the count-based caller (Daemon::start's
+    // desktopCountChanged sweep, live whenever dynamic workspaces are off)
+    // gets it too. endArrivalBurst does drain a dead burst key (it moves the
+    // WHOLE map out), but it drains it through the skip arm, which — when no
+    // live key for that screen shares the burst — also drops the screen's focus
+    // seed. A marker left here therefore rides into the next unrelated burst
+    // and eats a seed captured for a transition it has nothing to do with. The
+    // pending focus-emit contexts swept alongside carry the same hazard through
+    // applyLayout's promotion compare, which a reused desktop index passes.
     pruneContextKeyedScreenArms([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    // The emit and its side-map sweep go LAST, matching
+    // pruneStatesForRemovedScreen: windowsReleased is synchronous, so a handler
+    // that re-enters the engine must not observe a half-swept prune.
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+        sweepReleasedWindowBookkeeping(releasedWindows);
+    }
+}
+
+void ScrollEngine::reapDesktopState(int desktop)
+{
+    // Identity-based entry point. The count-based prune already sweeps
+    // everything a destroyed desktop leaves in this engine, the burst markers
+    // included, so this is a straight delegation.
+    pruneStatesForDesktop(desktop);
+}
+
+void ScrollEngine::renumberDesktopState(const QHash<int, int>& oldToNew)
+{
+    // The validity gate runs FIRST, before any side effect. Every callee below
+    // refuses a mapping with a target under 1 whole (desktopRenumberMappingIsValid),
+    // so reaching them with one would leave the preview cancelled and the dirty
+    // marks emitted for a pass in which nothing moved. Gating here keeps a
+    // refused renumber a true no-op, and keeps the warning to one line.
+    if (oldToNew.isEmpty() || !PhosphorEngine::desktopRenumberMappingIsValid(oldToNew)) {
+        return;
+    }
+    // Which screens actually have a key on the move. Collected BEFORE the
+    // rewrite, because afterwards there is no way to tell a shifted key from
+    // one that was always at that number.
+    //
+    // Only m_states and m_stripStash are walked, and that is the complete set
+    // ON PURPOSE: the dirty mark exists to force a re-save, and those two are
+    // the only maps serializeStripState writes (it reads the state map and the
+    // stash and nothing else). The other three maps the renumber rewrites are
+    // session-only — m_stripStashConsumed is a per-key latch, m_perScreenOverrides
+    // is re-applied from config/rules on re-entry, and m_burstPendingApplies is
+    // an in-flight marker — so a screen whose only renumbered key lives in one
+    // of them owes no persist. Add a map here if and only if it joins the
+    // serialized blob.
+    QSet<QString> touchedScreens;
+    const auto note = [&oldToNew, &touchedScreens](const PhosphorEngine::PlacementStateKey& key) {
+        const auto mapped = oldToNew.constFind(key.desktop);
+        if (mapped != oldToNew.constEnd() && mapped.value() != key.desktop) {
+            touchedScreens.insert(key.screenId);
+        }
+    };
+    const auto& states = m_states.states();
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        note(it.key());
+    }
+    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
+        note(it.key());
+    }
+    // A drag-insert preview is transient by contract (every prune path cancels
+    // it rather than migrating); a renumber mid-drag is no different. It sits
+    // after the validity gate, so a refused mapping does not destroy a live
+    // preview.
+    if (m_dragInsertPreview) {
+        cancelDragInsertPreview();
+    }
+    m_states.renumberDesktops(oldToNew);
+    m_context.renumberDesktops(oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_stripStash, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_stripStashConsumed, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_perScreenOverrides, oldToNew);
+    PhosphorEngine::renumberDesktopKeyedHash(m_burstPendingApplies, oldToNew);
+    // The armed background-focus contexts move with them. This one is a SET of
+    // keys rather than a keyed hash, but it is context-keyed all the same, and
+    // applyLayout's promotion compares a stored key against the current one:
+    // left at its pre-renumber number an entry either never matches again (the
+    // centering it owes is silently dropped) or matches the wrong era once KWin
+    // reuses the index. Its two prune axes already treat it as context-keyed.
+    PhosphorEngine::renumberDesktopKeyedSet(m_pendingFocusEmitContexts, oldToNew);
+    // The persisted strip blob is keyed by "screen|desktop|activity", so the
+    // rewrite changed what a save would write — and placementChanged is the
+    // SOLE producer of DirtyScrollStrips. Without this a session that renumbers
+    // and then shuts down with nothing else dirtying the save persists the
+    // PRE-renumber desktop numbers, and the next session restores every stash
+    // into the wrong desktop context.
+    for (const QString& screenId : std::as_const(touchedScreens)) {
+        Q_EMIT placementChanged(screenId);
+    }
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
-    const auto stale = [&validActivities](const QString& activity) {
-        return !activity.isEmpty() && !validActivities.contains(activity);
+    // Hashed once: `stale` is called from four separate walks over maps that
+    // can each hold an entry per context, and a linear QStringList scan per key
+    // is what both sibling engines already avoid this way.
+    const QSet<QString> validSet(validActivities.cbegin(), validActivities.cend());
+    const auto stale = [&validSet](const QString& activity) {
+        return !activity.isEmpty() && !validSet.contains(activity);
     };
     // Same preview unwind as pruneStatesForDesktop, on the activity axis.
     if (m_dragInsertPreview
@@ -711,16 +832,31 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
         cancelDragInsertPreview();
     }
     QSet<QString> touchedScreens;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&stale](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return stale(key.activity);
         },
-        [this, &touchedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+        [this, &touchedScreens, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key,
+                                                                    ScrollState* state) {
             touchedScreens.insert(key.screenId);
-            dropWindowBookkeeping(state);
-            state->deleteLater();
+            releasedScreens.insert(key.screenId);
+            // Full release for the same reason as the desktop prune above: a
+            // deleted activity's windows are alive, so their slots must reach
+            // the placement record and the daemon must hear windowsReleased.
+            // Screen-keyed bookkeeping stays for the surviving contexts.
+            releaseScreenState(state, releasedWindows, /*clearScreenBookkeeping=*/false);
         });
     m_states.removeWindowsIf([&stale](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+        return stale(key.activity);
+    });
+    // Context-valued screen arms, on the same terms as the desktop prune's
+    // sweep: a deleted activity leaves entries that survive only to be skipped
+    // by the next burst's drain, taking that screen's focus seed with them, and
+    // an activity id can come back through a restore from backup. Every sibling
+    // axis (desktop reap, removed screen, renumber) already sweeps them.
+    pruneContextKeyedScreenArms([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
     sweepStatelessScreenBookkeeping(touchedScreens);
@@ -733,19 +869,21 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
         it = stale(it.key().activity) ? m_perScreenOverrides.erase(it) : std::next(it);
     }
-    // No m_context call here, unlike the desktop prune's pruneDesktop, and the
-    // tracker has no activity analog on purpose: desktops are a PER-OUTPUT
-    // dimension it keeps a map of, so a removed one leaves per-screen entries
-    // to reap, while the activity dimension is a single current value
-    // (ScreenContextTracker's "the activity dimension is always the current
-    // activity"). setCurrentActivity replaces it wholesale, so there is no
-    // per-screen activity state for a prune to unwind.
-    //
-    // Context-valued arms, on the same terms as the desktop prune's sweep — see
-    // the rationale there.
-    pruneContextKeyedScreenArms([&stale](const PhosphorEngine::PlacementStateKey& key) {
-        return stale(key.activity);
-    });
+    // The tracker's own activity scalar outlives the prune: nothing else tells
+    // it the activity died, and it keeps naming it until the compositor's
+    // currentActivityChanged arrives. Until then currentKeyForScreen would hand
+    // out keys under a dead activity and PerScreenStates::forKey would lazily
+    // rebuild state there, undoing the prune one placement at a time. Same arm
+    // as the snap and tile engines.
+    const QString currentActivity = m_context.currentActivity();
+    if (stale(currentActivity)) {
+        m_context.pruneActivity(currentActivity);
+    }
+    // Emit and sweep LAST, for pruneStatesForDesktop's reason.
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+        sweepReleasedWindowBookkeeping(releasedWindows);
+    }
 }
 
 void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
@@ -883,20 +1021,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         m_activeScreen.clear();
     }
     if (!releasedWindows.isEmpty()) {
+        // Emit first, sweep second: the handler reads the float markers and the
+        // last-applied rects. releasedWindows is the same list
+        // releaseScreenState built from each state's managedWindows, so there is
+        // no second collection to keep in step with it.
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
-    }
-    // Only NOW may the per-window side maps go: the handler above has consumed
-    // the float markers and the last-applied rects, and nothing else answers
-    // for a departed screen's windows. releasedWindows is the same list
-    // releaseScreenState built from each state's managedWindows, so there is
-    // no second collection to keep in step with it.
-    for (const QString& windowId : std::as_const(releasedWindows)) {
-        m_lastAppliedRect.remove(windowId);
-        m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedMaximizedToEdges.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        m_floatRestore.remove(windowId);
-        m_scrollFloatedWindows.remove(windowId);
+        sweepReleasedWindowBookkeeping(releasedWindows);
     }
 }
 

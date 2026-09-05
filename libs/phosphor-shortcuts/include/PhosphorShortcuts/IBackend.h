@@ -109,6 +109,29 @@ public:
     virtual void unregisterShortcut(const QString& id) = 0;
 
     /**
+     * Release the key grab for an id WITHOUT destroying whatever the
+     * platform persists about it. The id can be brought back later with a
+     * plain registerShortcut(), which must pick the user's stored binding
+     * back up.
+     *
+     * This exists because unregisterShortcut() is deliberately destructive
+     * on KGlobalAccel: it calls removeAllShortcuts, the one path that wipes
+     * the record in kglobalshortcutsrc, so using it to park a feature-gated
+     * family destroys every chord the user customised for that family. A
+     * feature toggled off and on again must give the user back the chords
+     * they had.
+     *
+     * The default implementation forwards to unregisterShortcut(), which is
+     * the right answer for backends that keep no user-owned record of their
+     * own (Portal grabs live for the session, the D-Bus fallback has no
+     * grabs at all). KGlobalAccelBackend overrides it.
+     */
+    virtual void suspendShortcut(const QString& id)
+    {
+        unregisterShortcut(id);
+    }
+
+    /**
      * Commit any queued register/update ops. Emits ready() once the
      * underlying backend has acknowledged the batch (may be synchronous or
      * asynchronous depending on backend). unregisterShortcut() is NOT
@@ -151,6 +174,52 @@ public:
     virtual std::optional<QStringList> currentTriggers(const QString& id) const
     {
         Q_UNUSED(id);
+        return std::nullopt;
+    }
+
+    /**
+     * Rebind ANOTHER component's global shortcut (kglobalaccel's
+     * setForeignShortcutKeys, the API the Shortcuts KCM uses). The dynamic-
+     * workspaces feature neutralizes KWin's stock desktop-switch chords with
+     * this while enabled, restoring them on disable. The list carries the
+     * action's FULL binding — primary plus alternates — so a restore puts
+     * back exactly what foreignShortcuts() reported; an empty list clears
+     * the binding. Only the KGlobalAccel backend can do this; the default
+     * refuses (false) so callers fall back to snap-back-with-hint.
+     */
+    virtual bool setForeignShortcuts(const QString& componentName, const QString& actionName,
+                                     const QList<QKeySequence>& sequences)
+    {
+        Q_UNUSED(componentName);
+        Q_UNUSED(actionName);
+        Q_UNUSED(sequences);
+        return false;
+    }
+
+    /**
+     * The current bindings of another component's action (backup before a
+     * foreign rebind) — primary first, alternates after.
+     *
+     * Tri-state, for the same reason currentTriggers() above is:
+     *  - std::nullopt   → the query FAILED or this backend cannot answer (no
+     *    foreign-rebind support, binding service unreachable, malformed
+     *    reply). The caller must NOT proceed to clear the action: it has no
+     *    backup, so a later restore would write the "unbound" sentinel over a
+     *    binding the user still has.
+     *  - engaged, empty → the action is genuinely unbound; there is nothing to
+     *    back up and nothing to steal.
+     *  - engaged, non-empty → the action's full binding.
+     * Folding the first two into one empty list made an unreachable
+     * kglobalacceld look exactly like an already-unbound action.
+     *
+     * The default reports nullopt: a backend without setForeignShortcuts
+     * cannot answer this either.
+     */
+    virtual std::optional<QList<QKeySequence>> foreignShortcuts(const QString& componentName,
+                                                                const QString& actionName) const
+    {
+        Q_UNUSED(componentName);
+        Q_UNUSED(actionName);
         return std::nullopt;
     }
 

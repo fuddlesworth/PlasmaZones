@@ -16,6 +16,7 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
 
+#include <QHash>
 #include <QPoint>
 #include <QRect>
 #include <QSize>
@@ -1061,6 +1062,16 @@ public:
         Q_UNUSED(desktop)
     }
     /// Drop a screen's per-output desktop, reverting it to the global current.
+    ///
+    /// No production caller, and wiring one would be a bug — see
+    /// ScreenContextTracker::clearCurrentDesktopForScreen for the full
+    /// argument. In short: the global desktop this reverts to is written once
+    /// at startup and never updated, so a screen dropped back onto it keys
+    /// every context to the login desktop. Turning Plasma's per-output setting
+    /// off needs no call here (the effect keeps pushing, the pushes merely
+    /// become uniform), and a screen that genuinely goes away is handled by
+    /// the screen-removal prunes. Present so an engine can expose the
+    /// tracker's operation to tests without reaching through the engine.
     virtual void clearCurrentDesktopForScreen(const QString& screenId)
     {
         Q_UNUSED(screenId)
@@ -1093,6 +1104,32 @@ public:
     virtual void pruneStatesForActivities(const QStringList& validActivities)
     {
         Q_UNUSED(validActivities)
+    }
+    /// Dynamic-workspaces arm (all three engines): a virtual desktop was
+    /// destroyed — reap every piece of per-desktop state keyed to @p desktop
+    /// (1-based, the OLD number, before any renumbering of survivors).
+    /// Identity-based, unlike the count-derived CALLER of pruneStatesForDesktop.
+    /// The distinction is in the caller, not the sweep: all three
+    /// pruneStatesForDesktop implementations match on key.desktop ==
+    /// removedDesktop, which is identity matching, and it is the
+    /// desktopCountChanged handler driving them that knows only that a number
+    /// went out of range. Here the
+    /// caller knows exactly which desktop died. Engines compose their existing
+    /// desktop prune with the sweeps that prune misses (value-side desktop
+    /// ints, burst flags).
+    virtual void reapDesktopState(int desktop)
+    {
+        Q_UNUSED(desktop)
+    }
+    /// Dynamic-workspaces arm: surviving desktops were renumbered (oldInt →
+    /// newInt, 1-based, absent = unchanged). Engines rewrite every stored
+    /// desktop int — state keys, reverse maps, sticky pins, auxiliary maps —
+    /// via PerScreenStates::renumberDesktops + ScreenContextTracker::
+    /// renumberDesktops + renumberDesktopKeyedHash. Called AFTER
+    /// reapDesktopState for the removed desktops of the same settled change.
+    virtual void renumberDesktopState(const QHash<int, int>& oldToNew)
+    {
+        Q_UNUSED(oldToNew)
     }
     /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
     /// (monitor hot-unplug), matching every virtual sub-screen of the removed

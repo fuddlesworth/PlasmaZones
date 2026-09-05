@@ -861,7 +861,7 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
     if (KWin::LogicalOutput* output = activatedOutput) {
         if (auto* vd = KWin::effects->currentDesktop(output)) {
-            reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
+            reportScreenDesktop(output, static_cast<int>(vd->x11DesktopNumber()));
         }
     }
 

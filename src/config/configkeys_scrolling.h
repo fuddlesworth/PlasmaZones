@@ -5,15 +5,9 @@
 
 #include "configkeys.h"
 
-// Local copy of configkeys.h's accessor macro (that header #undefs it at end
-// of file); same expansion, undef'd again below. A tweak to the original
-// (e.g. attribute annotation) must be applied HERE by hand too — both
-// expansions compile either way, so nothing catches the drift.
-#define P_CONFIG_KEY(name, str)                                                                                        \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
+// configkeys.h above undefines the accessor macros at its end, so pull them
+// back in for this link's own declarations and undefine them again below.
+#include "configkeymacro.h"
 
 namespace PlasmaZones {
 
@@ -75,4 +69,4 @@ public:
 
 } // namespace PlasmaZones
 
-#undef P_CONFIG_KEY
+#include "configkeymacro_undef.h"

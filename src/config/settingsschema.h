@@ -77,6 +77,12 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema);
 void appendScrollingZoneSelectorSchema(PhosphorConfig::Schema& schema);
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema);
 void appendWindowsSchema(PhosphorConfig::Schema& schema);
+void appendWorkspacesSchema(PhosphorConfig::Schema& schema);
+/// The dynamic-workspaces rows of the Shortcuts.Global key list. Lives with
+/// the rest of the workspaces schema in settingsschema_workspaces.cpp;
+/// appendShortcutsSchema calls it while building that group's list, so the
+/// keys land in Shortcuts.Global alongside every other global verb.
+void appendWorkspacesShortcutKeys(QVector<PhosphorConfig::KeyDef>& globals);
 void appendGapsSchema(PhosphorConfig::Schema& schema);
 void appendDecorationsSchema(PhosphorConfig::Schema& schema);
 

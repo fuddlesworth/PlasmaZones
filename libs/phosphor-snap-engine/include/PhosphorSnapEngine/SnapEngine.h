@@ -588,6 +588,13 @@ public:
 
     void setCurrentDesktop(int desktop) override;
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
+    /// Forwarded to the shared context tracker like its setter twin above.
+    /// Both siblings override it; without this one, a screen leaving
+    /// per-output desktops would keep a stale entry HERE only, so snap's
+    /// currentKeyForScreen kept resolving the old desktop while the other two
+    /// engines followed the global one — a per-engine divergence in the key
+    /// that owns every window's placement.
+    void clearCurrentDesktopForScreen(const QString& screenId) override;
     void setCurrentActivity(const QString& activity) override;
 
     // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.
@@ -598,6 +605,8 @@ public:
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;
+    void reapDesktopState(int desktop) override;
+    void renumberDesktopState(const QHash<int, int>& oldToNew) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     // Float facade over the per-screen stores (the daemon's engine float
@@ -1012,6 +1021,27 @@ Q_SIGNALS:
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
+
+    /// Announce the placement of every window held by the stores @p matches
+    /// selects, BEFORE the caller destroys them: zone assignments through the
+    /// tracking service's unassign, float bits by windowFloatingChanged(false).
+    /// For the prunes whose windows are still ALIVE (a destroyed desktop, an
+    /// unplugged output) — a silent drop there strands every consumer on a
+    /// placement that no longer exists. MUST run before the state removal:
+    /// unassignWindow resolves the owning store through the reverse map.
+    ///
+    /// On the DESKTOP and ACTIVITY axes the window survives on the same
+    /// screen, so "unsnap without re-homing" is a deliberate choice, not an
+    /// oversight. A zone id is only meaningful inside the layout of the
+    /// (screen, desktop, activity) it was assigned in, and the desktop the
+    /// compositor relocates the window to carries its own layout in which
+    /// that id generally does not exist — there is nothing to re-home the
+    /// assignment TO. The engine also does not know the destination context
+    /// at prune time: the relocation is reported afterwards, through the
+    /// ordinary desktop-change path, which places the window in its new
+    /// context from scratch. The float bit is dropped for the same reason,
+    /// float being per (mode, context).
+    void releaseWindowsForDyingStates(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& matches);
 
     /// Canonicalize a raw windowId to its stable first-seen composite via the
     /// shared registry (passthrough when no registry is attached). The reverse map

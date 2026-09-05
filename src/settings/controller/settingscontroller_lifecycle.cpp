@@ -76,6 +76,11 @@ bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
         || (treatAsyncRevertAsClean && m_animationsPage->asyncRevertInFlight()) || m_animationsPage->revertPending();
 
     m_settings.load();
+    // Adopting disk re-takes the committed baseline, so any quick-slot rename
+    // cascade recorded by renameWorkspaceSlotTargets no longer describes an
+    // uncommitted edit. Dropping the record here keeps discardPage's cascade
+    // arm scoped to renames the user has not committed.
+    m_renamedWorkspaceSlots.clear();
     // m_settings borrows the shared m_localRuleStore, so Settings::load() above
     // deliberately does NOT reload it (the owner drives reloads — see the
     // borrowed-store note in Settings::load()). As that owner, re-read
@@ -204,6 +209,14 @@ void SettingsController::save()
     if (!configWritten) {
         qCWarning(lcConfig) << "save: writing the config file failed — baseline unmoved, values stay staged";
         commitOk = false;
+    } else {
+        // The committed baseline now carries the rename, so the quick-slot
+        // record renameWorkspaceSlotTargets left behind describes nothing
+        // uncommitted. Kept, it would let a later Discard of the Named
+        // Workspaces page revert a slot the user has since edited on the
+        // Shortcuts page. Cleared only on a written config, because a failed
+        // write leaves the baseline unmoved and the cascade still revertible.
+        m_renamedWorkspaceSlots.clear();
     }
 
     // save() re-captured the committed baseline, so the animation controller's
@@ -450,6 +463,10 @@ void SettingsController::defaults()
     }
 
     m_staging.clearAll();
+    // reset() re-took the committed baseline, so a recorded quick-slot rename
+    // cascade no longer describes an uncommitted edit (same reason as the
+    // clears in adoptOnDiskState and save).
+    m_renamedWorkspaceSlots.clear();
     // Gate the staged-order NOTIFY emits on transition (same rationale
     // as load() / save()) — CLAUDE.md emit-on-change rule.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();

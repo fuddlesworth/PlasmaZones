@@ -76,6 +76,13 @@ private Q_SLOTS:
     void rekeyWindows_rewritesMatching();
     void removeStatesIf_lockstepWithHook();
     void removeWindowsIf_byPredicate();
+    void reapDesktop_sweepsBothMaps();
+    void renumberDesktops_shiftsKeysCollisionFree();
+    void renumberDesktops_skipPredicateExemptsSentinels();
+    void renumberDesktopKeyedHash_auxMaps();
+    void reapDesktop_nullHookAndSkipPredicate();
+    void renumberDesktops_defaultSkipShiftsSentinels();
+    void renumberDesktops_rejectsTargetsBelowOne();
 
 private:
     std::vector<std::unique_ptr<FakeState>> m_owned;
@@ -238,6 +245,208 @@ void TestPerScreenStates::removeWindowsIf_byPredicate()
     });
     QVERIFY(states.hasWindow(QStringLiteral("keep")));
     QVERIFY(!states.hasWindow(QStringLiteral("drop")));
+}
+
+void TestPerScreenStates::reapDesktop_sweepsBothMaps()
+{
+    PerScreenStates<FakeState> states;
+    states.insertState(key(QStringLiteral("S1"), 2), makeState(QStringLiteral("S1")));
+    states.insertState(key(QStringLiteral("S1"), 3), makeState(QStringLiteral("S1")));
+    states.setKeyForWindow(QStringLiteral("w2"), key(QStringLiteral("S1"), 2));
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+
+    QStringList torn;
+    states.reapDesktop(2, [&torn](const PlacementStateKey&, FakeState*) {
+        torn.append(QStringLiteral("torn"));
+    });
+
+    QCOMPARE(torn.size(), 1);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+    QVERIFY(states.containsKey(key(QStringLiteral("S1"), 3)));
+    QVERIFY(!states.hasWindow(QStringLiteral("w2")));
+    QVERIFY(states.hasWindow(QStringLiteral("w3")));
+}
+
+void TestPerScreenStates::renumberDesktops_shiftsKeysCollisionFree()
+{
+    PerScreenStates<FakeState> states;
+    // Remove-desktop-2 shape: 3→2, 4→3. The collision a naive in-place rewrite
+    // would hit is 4 landing on 3, which is still PRESENT and not yet shifted
+    // out of the way. Take-then-reinsert is what makes the order irrelevant.
+    FakeState* s3 = makeState(QStringLiteral("S1"));
+    FakeState* s4 = makeState(QStringLiteral("S1"));
+    states.insertState(key(QStringLiteral("S1"), 3), s3);
+    states.insertState(key(QStringLiteral("S1"), 4), s4);
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+    states.setKeyForWindow(QStringLiteral("w4"), key(QStringLiteral("S1"), 4));
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    states.renumberDesktops(mapping);
+
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 2)), s3);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 3)), s4);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 4)));
+    QCOMPARE(states.keyForWindow(QStringLiteral("w3")).desktop, 2);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w4")).desktop, 3);
+    // MUTATION GUARD: after the pass, no key carries a stale pre-shift int.
+    for (auto it = states.states().constBegin(); it != states.states().constEnd(); ++it) {
+        QVERIFY(it.key().desktop == 2 || it.key().desktop == 3);
+    }
+
+    // SWAP mapping (1→2, 2→1): both targets are occupied at the start, so this
+    // fails for any rewrite that is not take-then-reinsert.
+    PerScreenStates<FakeState> swapped;
+    FakeState* s1 = makeState(QStringLiteral("S1"));
+    FakeState* s2 = makeState(QStringLiteral("S1"));
+    swapped.insertState(key(QStringLiteral("S1"), 1), s1);
+    swapped.insertState(key(QStringLiteral("S1"), 2), s2);
+    swapped.setKeyForWindow(QStringLiteral("w1"), key(QStringLiteral("S1"), 1));
+    swapped.setKeyForWindow(QStringLiteral("w2"), key(QStringLiteral("S1"), 2));
+
+    QHash<int, int> swapMapping;
+    swapMapping.insert(1, 2);
+    swapMapping.insert(2, 1);
+    swapped.renumberDesktops(swapMapping);
+
+    QCOMPARE(swapped.stateForKey(key(QStringLiteral("S1"), 2)), s1);
+    QCOMPARE(swapped.stateForKey(key(QStringLiteral("S1"), 1)), s2);
+    QCOMPARE(swapped.stateCount(), 2);
+    QCOMPARE(swapped.keyForWindow(QStringLiteral("w1")).desktop, 2);
+    QCOMPARE(swapped.keyForWindow(QStringLiteral("w2")).desktop, 1);
+}
+
+void TestPerScreenStates::renumberDesktops_skipPredicateExemptsSentinels()
+{
+    PerScreenStates<FakeState> states;
+    // The snap engine's global holder: empty screenId is a sentinel key whose
+    // desktop int is not a desktop context and must not shift.
+    FakeState* global = makeState(QString());
+    FakeState* normal = makeState(QStringLiteral("S1"));
+    states.insertState(key(QString(), 2), global);
+    states.insertState(key(QStringLiteral("S1"), 2), normal);
+
+    QHash<int, int> mapping;
+    mapping.insert(2, 1);
+    states.renumberDesktops(mapping, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+
+    QCOMPARE(states.stateForKey(key(QString(), 2)), global);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 1)), normal);
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+
+    // The REVERSE map honours the same predicate: a window parked under the
+    // sentinel key keeps its desktop int, or its entry stops naming the state
+    // the forward map left in place.
+    PerScreenStates<FakeState> withWindows;
+    withWindows.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+    withWindows.setKeyForWindow(QStringLiteral("wScreen"), key(QStringLiteral("S1"), 2));
+    withWindows.renumberDesktops(mapping, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+    QCOMPARE(withWindows.keyForWindow(QStringLiteral("wGlobal")).desktop, 2);
+    QCOMPARE(withWindows.keyForWindow(QStringLiteral("wScreen")).desktop, 1);
+}
+
+void TestPerScreenStates::reapDesktop_nullHookAndSkipPredicate()
+{
+    PerScreenStates<FakeState> states;
+    states.insertState(key(QString(), 2), makeState(QString()));
+    states.insertState(key(QStringLiteral("S1"), 2), makeState(QStringLiteral("S1")));
+    states.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+    states.setKeyForWindow(QStringLiteral("wScreen"), key(QStringLiteral("S1"), 2));
+
+    // A null teardown hook is legal (a container with nothing to tear down),
+    // and the skip predicate exempts the sentinel key from BOTH maps.
+    states.reapDesktop(2, nullptr, [](const PlacementStateKey& k) {
+        return k.screenId.isEmpty();
+    });
+
+    QVERIFY(states.containsKey(key(QString(), 2)));
+    QVERIFY(!states.containsKey(key(QStringLiteral("S1"), 2)));
+    QVERIFY(states.hasWindow(QStringLiteral("wGlobal")));
+    QVERIFY(!states.hasWindow(QStringLiteral("wScreen")));
+}
+
+void TestPerScreenStates::renumberDesktops_defaultSkipShiftsSentinels()
+{
+    // With no predicate the sentinel key is NOT special — it shifts like any
+    // other. An engine holding sentinel keys must pass its own skip; this
+    // pins the default so a caller cannot assume protection it did not ask for.
+    PerScreenStates<FakeState> states;
+    FakeState* global = makeState(QString());
+    states.insertState(key(QString(), 2), global);
+    states.setKeyForWindow(QStringLiteral("wGlobal"), key(QString(), 2));
+
+    QHash<int, int> mapping;
+    mapping.insert(2, 1);
+    states.renumberDesktops(mapping);
+
+    QCOMPARE(states.stateForKey(key(QString(), 1)), global);
+    QVERIFY(!states.containsKey(key(QString(), 2)));
+    QCOMPARE(states.keyForWindow(QStringLiteral("wGlobal")).desktop, 1);
+}
+
+void TestPerScreenStates::renumberDesktops_rejectsTargetsBelowOne()
+{
+    // Desktops are 1-based; a mapping target below 1 poisons the WHOLE mapping,
+    // which is then refused entirely. Rejecting only the offending entry would
+    // strand desktop 3 on 3 while its sibling 4→3 moved on top of it, which is
+    // the very collision the injectivity precondition rules out.
+    PerScreenStates<FakeState> states;
+    FakeState* s = makeState(QStringLiteral("S1"));
+    FakeState* sibling = makeState(QStringLiteral("S1"));
+    states.insertState(key(QStringLiteral("S1"), 3), s);
+    states.insertState(key(QStringLiteral("S1"), 4), sibling);
+    states.setKeyForWindow(QStringLiteral("w3"), key(QStringLiteral("S1"), 3));
+    states.setKeyForWindow(QStringLiteral("w4"), key(QStringLiteral("S1"), 4));
+
+    QHash<int, int> poisoned;
+    poisoned.insert(3, 0);
+    poisoned.insert(4, 3); // valid on its own, and must NOT be applied alone
+    states.renumberDesktops(poisoned);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 3)), s);
+    QCOMPARE(states.stateForKey(key(QStringLiteral("S1"), 4)), sibling);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w3")).desktop, 3);
+    QCOMPARE(states.keyForWindow(QStringLiteral("w4")).desktop, 4);
+
+    // Same rule in the aux-map helper.
+    QHash<PlacementStateKey, QString> aux;
+    aux.insert(key(QStringLiteral("S1"), 3), QStringLiteral("a"));
+    aux.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
+    PhosphorEngine::renumberDesktopKeyedHash(aux, poisoned);
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 3)), QStringLiteral("a"));
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 4)), QStringLiteral("b"));
+    QCOMPARE(aux.size(), 2);
+
+    // Drop the poisoned entry and the rest applies, collision-free.
+    QHash<PlacementStateKey, QString> auxClean;
+    auxClean.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
+    QHash<int, int> clean;
+    clean.insert(4, 3);
+    PhosphorEngine::renumberDesktopKeyedHash(auxClean, clean);
+    QCOMPARE(auxClean.value(key(QStringLiteral("S1"), 3)), QStringLiteral("b"));
+    QCOMPARE(auxClean.size(), 1);
+}
+
+void TestPerScreenStates::renumberDesktopKeyedHash_auxMaps()
+{
+    QHash<PlacementStateKey, QString> aux;
+    aux.insert(key(QStringLiteral("S1"), 3), QStringLiteral("a"));
+    aux.insert(key(QStringLiteral("S1"), 4), QStringLiteral("b"));
+    aux.insert(key(QStringLiteral("S2"), 1), QStringLiteral("c"));
+
+    QHash<int, int> mapping;
+    mapping.insert(3, 2);
+    mapping.insert(4, 3);
+    PhosphorEngine::renumberDesktopKeyedHash(aux, mapping);
+
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 2)), QStringLiteral("a"));
+    QCOMPARE(aux.value(key(QStringLiteral("S1"), 3)), QStringLiteral("b"));
+    QCOMPARE(aux.value(key(QStringLiteral("S2"), 1)), QStringLiteral("c"));
+    QCOMPARE(aux.size(), 3);
 }
 
 QTEST_MAIN(TestPerScreenStates)

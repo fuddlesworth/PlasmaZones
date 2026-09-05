@@ -324,11 +324,29 @@ ColumnLayout {
             // back to the raw id when the monitor isn't currently connected so the
             // user still sees what the rule pins to.
             var screens = root.appSettings && root.appSettings.screens ? root.appSettings.screens : [];
+            // Trimmed before the compare: ids are stored trimmed, and an
+            // untrimmed hand-edited payload would silently miss every screen
+            // and fall through to the raw form.
+            var screenId = rawStr.trim();
             for (var s = 0; s < screens.length; ++s) {
-                if (screens[s].name === raw)
+                if (screens[s].name === screenId)
                     return screens[s].displayLabel || screens[s].name || rawStr;
             }
             return rawStr;
+        }
+        if (kind === "workspaceName") {
+            // Quote the name like zoneNames so a digit-only workspace name
+            // cannot read as a desktop ordinal; an undeclared name still
+            // renders (the rule is dormant, not broken).
+            //
+            // Trimmed and bounded exactly like the C++ twin in
+            // rulemodel_labels.cpp: a hand-edited payload past the descriptor's
+            // bound is one the validator rejects, so it echoes raw rather than
+            // flooding the pill as if it were a real target.
+            var wsName = rawStr.trim();
+            if (!wsName || wsName.length > root._paramBound(param))
+                return rawStr;
+            return i18nc("a quoted workspace name", "“%1”", wsName);
         }
         if (kind === "virtualDesktop") {
             // Render "N: <name>" when KWin reports a name for the 1-based desktop,

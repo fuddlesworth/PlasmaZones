@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "3.5.0",
+            "date": "2026-08-30",
+            "highlights": [
+                "New: dynamic per-monitor workspaces. Each monitor keeps its own list of workspaces instead of every screen sharing one global set, and the list grows and shrinks as you use it. Filling the last empty workspace appends another, and emptying one in the middle removes it (#990)",
+                "New: named workspaces stay put while empty and can be pinned to a monitor, so a workspace you rely on is always where you left it. Nine quick slots point at whichever named workspace you assign them under Settings → Workspaces. Each slot has two chords, one to focus its workspace and one to send the active window there, and both start unbound for you to bind (#990)",
+                "New: the workspace shortcuts walk only the current monitor's own list, and the ownership map survives a restart. Unplugging a monitor fosters its workspaces onto a surviving screen and replugging brings them home (#990)",
+                "New: a rule action, Open on workspace, sends an app to a named workspace wherever that workspace currently lives (#990)",
+                "Note: dynamic workspaces need KWin's per-output virtual desktops, which Plasma 6.7 provides. PlasmaZones asks before writing that setting and never reverts it when you turn the feature off (#990)",
+                "Note: Plasma's Pager and the stock Overview show every monitor's workspaces as one flat list, because they render KWin's whole desktop pool. Switching to another monitor's workspace through them snaps back to the owning monitor with an OSD hint, so you can leave them on the panel (#990)"
+            ]
+        },
+        {
             "version": "3.4.11",
             "date": "2026-09-04",
             "highlights": [

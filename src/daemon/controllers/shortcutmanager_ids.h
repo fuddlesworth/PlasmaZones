@@ -38,6 +38,47 @@ inline constexpr auto kIdToggleWindowFloat = "toggle_window_float";
 // saved chord (same reasoning as toggle_autotile's label-only rename below —
 // the C++ constant is free to carry the mode-neutral name, the string is not).
 inline constexpr auto kIdSwitchFocusFloatTiling = "scroll_switch_focus_float_tiling";
+// Dynamic per-monitor workspaces (mode-neutral; gated on the feature).
+inline constexpr auto kIdWorkspaceFocusUp = "workspace_focus_up";
+inline constexpr auto kIdWorkspaceFocusDown = "workspace_focus_down";
+inline constexpr auto kIdWorkspaceMoveWindowUp = "workspace_move_window_up";
+inline constexpr auto kIdWorkspaceMoveWindowDown = "workspace_move_window_down";
+inline constexpr auto kIdWorkspaceMoveColumnUp = "workspace_move_column_up";
+inline constexpr auto kIdWorkspaceMoveColumnDown = "workspace_move_column_down";
+inline constexpr auto kIdWorkspaceReorderUp = "workspace_reorder_up";
+inline constexpr auto kIdWorkspaceReorderDown = "workspace_reorder_down";
+inline constexpr auto kIdWorkspaceMoveToMonitorLeft = "workspace_move_to_monitor_left";
+inline constexpr auto kIdWorkspaceMoveToMonitorRight = "workspace_move_to_monitor_right";
+// Workspace quick-shortcut slots (settings-backed, unset by default). The
+// prefix joins the adhoc collision guard like the quick-layout/snap-to-zone
+// families.
+inline constexpr auto kWorkspaceMoveSlotPrefix = "workspace_move_slot_";
+inline QString workspaceMoveSlotId(int slotZeroBased)
+{
+    return QLatin1String(kWorkspaceMoveSlotPrefix) + QString::number(slotZeroBased + 1);
+}
+inline constexpr auto kWorkspaceFocusSlotPrefix = "workspace_focus_slot_";
+inline QString workspaceFocusSlotId(int slotZeroBased)
+{
+    return QLatin1String(kWorkspaceFocusSlotPrefix) + QString::number(slotZeroBased + 1);
+}
+// Named-workspace adhoc chords. Unlike the slot families these are keyed by
+// the workspace NAME, so the id is the prefix plus the trimmed declared name
+// and the set is rebuilt on every declaration change. The prefixes live here
+// with the rest of the vocabulary for the same reason: they are on-disk record
+// keys under the "plasmazonesd" component and must never be renamed, and the
+// adhoc collision guard in shortcutmanager.cpp can only keep the families
+// apart if it reads the same definition the builder does.
+inline constexpr auto kWorkspaceNamedFocusPrefix = "workspace_named_focus:";
+inline constexpr auto kWorkspaceNamedMovePrefix = "workspace_named_move:";
+inline QString workspaceNamedFocusId(const QString& trimmedName)
+{
+    return QLatin1String(kWorkspaceNamedFocusPrefix) + trimmedName;
+}
+inline QString workspaceNamedMoveId(const QString& trimmedName)
+{
+    return QLatin1String(kWorkspaceNamedMovePrefix) + trimmedName;
+}
 inline constexpr auto kIdSwapWindowLeft = "swap_window_left";
 inline constexpr auto kIdSwapWindowRight = "swap_window_right";
 inline constexpr auto kIdSwapWindowUp = "swap_window_up";

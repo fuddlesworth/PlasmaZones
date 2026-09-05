@@ -179,6 +179,7 @@ if(USE_KDE_FRAMEWORKS)
     find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
         KCMUtils
         GlobalAccel   # KGlobalAccel shortcut backend + KCM
+        Config        # KConfig for the consented kwinrc write (QSettings would rewrite the whole file)
     )
 
     # KActivities/PlasmaActivities is optional (for activity-based layouts)

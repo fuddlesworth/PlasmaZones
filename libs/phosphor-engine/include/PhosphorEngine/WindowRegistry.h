@@ -23,7 +23,17 @@ struct WindowMetadata
     QString title;
     QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
     int pid = 0; ///< process id; 0 = unknown
-    int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    /// 1-based x11 desktop number; 0 = all desktops / unknown.
+    ///
+    /// A POSITIONAL number, not a desktop identity, and nothing in this
+    /// registry renumbers it. The effect stamps it from
+    /// KWin::VirtualDesktop::x11DesktopNumber and re-pushes metadata on
+    /// KWin::Window::desktopsChanged, which fires when a window's desktop LIST
+    /// changes. Renumbering a survivor changes the number on a VirtualDesktop
+    /// object the window keeps pointing at (KWin signals that separately, as
+    /// x11DesktopNumberChanged), so the re-push does not fire and this int
+    /// keeps the pre-renumber number until something else moves the window.
+    int virtualDesktop = 0;
     /// Full desktop list when the window spans SEVERAL (but not all) desktops;
     /// empty for the common single-desktop / sticky / unknown cases. When
     /// non-empty, virtualDesktop equals the first entry.
@@ -149,6 +159,12 @@ public:
             return activity.isEmpty() ? currentActivity : activity;
         }
     };
+    /// Takes a BARE instance id, not a composite appId|instanceId window id —
+    /// as do metadata(), appIdFor(), contains() and instancesWithAppId(). Only
+    /// isMinimized() / minimizedState() extract the instance component first.
+    /// Passing a composite here misses silently (nullopt / empty), so callers
+    /// holding a raw window id must run it through
+    /// PhosphorIdentity::WindowId::extractInstanceId themselves.
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
     /// Live compositor minimize state, collapsed to a bool: unknown reads as
@@ -166,6 +182,13 @@ public:
     /// need a deterministic sequence — anything FIFO-shaped — must sort or
     /// otherwise order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
+    /// Every instance holding a METADATA RECORD, unordered. Canonical-only
+    /// instances (a canonical id frozen before any metadata push arrived) are
+    /// NOT listed — they carry no context to seed from, which is what every
+    /// consumer of this wants (the dynamic-workspaces population census seeds
+    /// derived per-window state at attach time rather than replaying history).
+    /// Use contains() for the same record-backed question about one id.
+    QStringList instanceIds() const;
     bool contains(const QString& instanceId) const;
     int size() const;
     /// Remove every record and canonical mapping, firing windowDisappeared
@@ -207,7 +230,8 @@ private:
     /// Depth counter, non-zero while clear() drives a removal loop: remove()
     /// then DROPS re-entrant pending upserts instead of replaying them, so a
     /// subscriber re-inserting from windowDisappeared cannot make the INSTANCE
-    /// BEING REMOVED survive the bulk reset. (A subscriber upserting a
+    /// BEING REMOVED survive the bulk reset, and canonicalizeWindowId()
+    /// records no new mapping for the same reason. (A subscriber upserting a
     /// different, brand-new instance mid-clear does survive — clear() only
     /// sweeps the ids snapshotted before its loop; acceptable for a test
     /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must

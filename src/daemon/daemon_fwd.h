@@ -89,6 +89,7 @@ class WindowDragAdaptor;
 class RuleAdaptor;
 class ZoneSelectorController;
 class UnifiedLayoutController;
+class WorkspaceController;
 class TilingAdaptor;
 class AutotileAdaptor;
 class ScrollingAdaptor;

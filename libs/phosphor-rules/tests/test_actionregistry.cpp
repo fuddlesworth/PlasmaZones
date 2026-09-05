@@ -344,8 +344,9 @@ private Q_SLOTS:
     void testDisplayOrderUniqueWithinCategory()
     {
         // No consumer reads displayOrder today (the shipped picker sorts by
-        // label), but the field exists for one, and two of the twelve overlay
-        // orders come from loop tables — a collision would be silent until a
+        // label), but the field exists for one, and five of the twelve overlay
+        // orders come from loop tables (the three colours at 2/3/4 and the two
+        // opacities at 5/6) — a collision would be silent until a
         // consumer appears and the rule editor reordered under it. Pin
         // (category, displayOrder) uniqueness across every registered type.
         const ActionRegistry& reg = ActionRegistry::instance();
@@ -374,7 +375,8 @@ private Q_SLOTS:
         // leak into the process-global singleton for the rest of the binary's
         // lifetime — see the file-level comment for the cross-test
         // independence pattern.
-        const QString customType = QStringLiteral("_zz_pwrTestCustomAction");
+        constexpr QLatin1StringView customTypeToken{"_zz_pwrTestCustomAction"};
+        const QString customType = QString(customTypeToken);
         QVERIFY(!reg.isRegistered(customType));
 
         reg.registerAction(ActionDescriptor{.type = customType,
@@ -388,7 +390,7 @@ private Q_SLOTS:
                                                 },
                                             .terminal = false});
         QVERIFY(reg.isRegistered(customType));
-        QCOMPARE(reg.slotFor(makeAction(QLatin1StringView("_zz_pwrTestCustomAction"))), QStringLiteral("custom-slot"));
+        QCOMPARE(reg.slotFor(makeAction(customTypeToken)), QStringLiteral("custom-slot"));
 
         // Clean up: unregister the sentinel so the singleton is left pristine
         // for any later test (and so the binary does not carry a bespoke type).
@@ -432,6 +434,7 @@ private Q_SLOTS:
             QStringLiteral("curveEditor"),
             QStringLiteral("screenId"),
             QStringLiteral("virtualDesktop"),
+            QStringLiteral("workspaceName"),
             QStringLiteral("decorationChain"),
         };
         const ActionRegistry& reg = ActionRegistry::instance();

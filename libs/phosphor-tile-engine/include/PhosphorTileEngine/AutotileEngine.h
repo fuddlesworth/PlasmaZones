@@ -377,6 +377,8 @@ public:
      * virtual desktop is deleted so stale entries don't accumulate.
      */
     void pruneStatesForDesktop(int removedDesktop) override;
+    void reapDesktopState(int desktop) override;
+    void renumberDesktopState(const QHash<int, int>& oldToNew) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set

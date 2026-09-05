@@ -71,7 +71,7 @@ struct CatalogMeta
 {
     const char* category;
     // Sort key for the category block, NOT an index: only the relative order
-    // matters, so the values are deliberately sparse (2 and 5-7 are
+    // matters, so the values are deliberately sparse (2 and 6-7 are
     // unallocated) to leave room for a new category between two existing ones
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
@@ -260,6 +260,42 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Forward"));
         add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Backward"));
+        // ── Dynamic workspaces (mode-neutral; the feature gates the grabs,
+        // not the catalog). With the feature off the family is parked, so
+        // this cheatsheet lists the rows with no trigger against them rather
+        // than dropping them. The System Settings Shortcuts module is a
+        // different surface and does show the chords: the ids are registered
+        // with kglobalaccel once at startup precisely so they stay rebindable
+        // there while the feature is off.
+        // Short labels drop the "Workspace" the group heading already says.
+        add(kIdWorkspaceFocusUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Above"));
+        add(kIdWorkspaceFocusDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Below"));
+        add(kIdWorkspaceMoveWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Window Above"));
+        add(kIdWorkspaceMoveWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Window Below"));
+        add(kIdWorkspaceMoveColumnUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "scrolling", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Column Above"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the workspace above. Scrolling only."));
+        add(kIdWorkspaceMoveColumnDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "scrolling", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Column Below"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the workspace below. Scrolling only."));
+        add(kIdWorkspaceReorderUp, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Up"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the current workspace earlier in this monitor's list."));
+        add(kIdWorkspaceReorderDown, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move Down"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the current workspace later in this monitor's list."));
+        add(kIdWorkspaceMoveToMonitorLeft, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Left Monitor"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves the current workspace and its windows to the monitor on the left."));
+        add(kIdWorkspaceMoveToMonitorRight, QT_TRANSLATE_NOOP("plasmazones", "Workspaces"), 5, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Right Monitor"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves the current workspace and its windows to the monitor on the right."));
         add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Left"));
         add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
@@ -487,6 +523,28 @@ CatalogMeta catalogMetaForId(const QString& id)
                 nullptr,
                 9000};
     }
+    if (id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix))) {
+        return {QT_TRANSLATE_NOOP("plasmazones", "Workspaces"),
+                5,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones",
+                                  "Sends the active window to the named workspace assigned to this slot in "
+                                  "Settings under Workspaces."),
+                nullptr,
+                9000};
+    }
+    if (id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix))) {
+        return {QT_TRANSLATE_NOOP("plasmazones", "Workspaces"),
+                5,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Switches this monitor to the numbered workspace of its own list."),
+                nullptr,
+                9000};
+    }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.
     qCWarning(lcShortcuts) << "cheatsheet: no catalog metadata for shortcut id" << id;
@@ -593,10 +651,14 @@ QVariantList ShortcutManager::cheatsheetModel() const
     QStringList digitTokens;
     QStringList quickLayoutIds;
     QStringList snapToZoneIds;
+    QStringList workspaceMoveSlotIds;
+    QStringList workspaceFocusSlotIds;
     for (int i = 0; i < kIndexedSlotCount; ++i) {
         digitTokens.append(QString::number(i + 1));
         quickLayoutIds.append(quickLayoutId(i));
         snapToZoneIds.append(snapToZoneId(i));
+        workspaceMoveSlotIds.append(workspaceMoveSlotId(i));
+        workspaceFocusSlotIds.append(workspaceFocusSlotId(i));
     }
     // One spelling of the digit range everywhere: the chip token and the row
     // labels used to disagree ("1…9" against "1-9") for no reason a reader
@@ -629,6 +691,18 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // and a visible tile in scrolling, so the row itself stays out of any
         // one mode's vocabulary.
         {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone %1").arg(digitRange), digitRange},
+        // The two workspace slot families are digit families like the two
+        // above, and get the same treatment: without a spec here they show up
+        // as two nine-row walls in the Workspaces group. Both take their
+        // description from a prefix arm, so every member carries the identical
+        // wording and the merged row keeping the first member's is right. The
+        // disambiguations are needed for the same reason quick layouts' is:
+        // the registration table uses these source strings with an ordinal.
+        {workspaceMoveSlotIds, digitTokens,
+         PhosphorI18n::tr("Move Window to Workspace Slot %1", "range of workspace slots, e.g. 1-9").arg(digitRange),
+         digitRange},
+        {workspaceFocusSlotIds, digitTokens,
+         PhosphorI18n::tr("Focus Workspace %1", "range of workspace slots, e.g. 1-9").arg(digitRange), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,

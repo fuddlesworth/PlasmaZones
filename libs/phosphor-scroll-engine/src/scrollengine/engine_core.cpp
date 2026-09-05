@@ -6,6 +6,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
@@ -396,7 +397,7 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
     }
 }
 
-void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
+void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping)
 {
     const QString screenId = state->screenId();
     const QStringList windows = state->managedWindows();
@@ -435,6 +436,13 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         m_lastAppliedMaximizedToEdges.remove(windowId);
     }
     releasedWindows.append(windows);
+    if (!clearScreenBookkeeping) {
+        // A sibling context of this screen is still live and owns these maps
+        // (see the declaration): the caller sweeps them through
+        // sweepStatelessScreenBookkeeping once the screen has no state left.
+        state->deleteLater();
+        return;
+    }
     // Per-screen bookkeeping dies with the state: a stale seed must not
     // replay on re-entry, and the tab-strip overlay must be told to clear —
     // no relayout will ever run for a departed screen to do it.
@@ -1020,6 +1028,43 @@ QString ScrollEngine::resolveOperationScreen(const QString& screenId) const
     // QSet iteration order is unspecified; pick the lexicographic minimum so
     // repeated shortcut presses with no active screen land deterministically.
     return *std::min_element(m_scrollingScreens.cbegin(), m_scrollingScreens.cend());
+}
+
+QString ScrollEngine::scrollingScreenForPhysical(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    if (m_scrollingScreens.contains(screenId)) {
+        return screenId;
+    }
+    // A virtual sub-screen of the named monitor. samePhysical strips the
+    // "/vs:N" suffix, so "DP-1" matches "DP-1/vs:0" while "DP-10" does not.
+    //
+    // Exactly one match is the answer. SEVERAL matches (a monitor split into
+    // two scrolling sub-screens) are decidable only when the active screen is
+    // one of them; with the user on another monitor every tie-break is a coin
+    // toss, and the caller RELOCATES the column of whatever this names. A
+    // wrong guess silently moves a column the user never addressed, so refuse
+    // instead and leave the verb on its "needs a scrolling screen" hint.
+    QString match;
+    int matches = 0;
+    for (const QString& candidate : m_scrollingScreens) {
+        if (!PhosphorIdentity::VirtualScreenId::samePhysical(candidate, screenId)) {
+            continue;
+        }
+        if (candidate == m_activeScreen) {
+            return candidate;
+        }
+        ++matches;
+        match = candidate;
+    }
+    if (matches > 1) {
+        qCWarning(lcScrollEngine) << "scrollingScreenForPhysical: output" << screenId << "carries" << matches
+                                  << "scrolling sub-screens and none of them is the active screen — refusing to guess";
+        return {};
+    }
+    return match;
 }
 
 // ── Tracking predicates ─────────────────────────────────────────────────────

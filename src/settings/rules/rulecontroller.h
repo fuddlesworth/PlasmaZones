@@ -369,8 +369,9 @@ public:
     /// free-text editors, absent when the kind needs none). `kind` is one of
     /// the descriptor kinds the ActionRow editor dispatches on (enum, number,
     /// percent, bool, color, zoneOrdinals, zoneNames, screenId, virtualDesktop,
-    /// snappingLayout, scrollingTemplate, tilingAlgorithm, animationEvent,
-    /// shaderEffect, overlayShader, decorationChain, curveEditor). Optional
+    /// workspaceName, snappingLayout, scrollingTemplate, tilingAlgorithm,
+    /// animationEvent, shaderEffect, overlayShader, decorationChain,
+    /// curveEditor). Optional
     /// fields are carried whenever the schema declares them: `options` (a list
     /// of `{ value: QString (wire token), label }` maps, for `enum`),
     /// `min`/`max`/`scale`/`defaultDisplay` (display-unit bounds and seed; the
@@ -427,8 +428,8 @@ public:
     /// it is compatible with every action's domain. "Context field" is whatever
     /// `PhosphorRules::fieldIsContext` reports, which is every
     /// `FieldSource::Context` row of the field table: today ScreenId,
-    /// VirtualDesktop, Activity, Mode, TiledWindowCount, ScreenOrientation and
-    /// ActiveLayout. The picker uses this to flag context-domain
+    /// VirtualDesktop, Activity, Mode, TiledWindowCount, ScreenOrientation,
+    /// ActiveLayout and ColorScheme. The picker uses this to flag context-domain
     /// action types as incompatible when the current match has a
     /// window-property leaf. An empty / catch-all match counts as
     /// context-only.

@@ -39,8 +39,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level, sixteen
-    // in all. Top-level categories: placement, appearance. Mid-level
+    // leaf to any group it belongs to. Covers parents at every level, seventeen
+    // in all. Top-level categories: placement, appearance, and the standalone
+    // workspaces drill-in parent. Mid-level
     // virtual parents nested beneath them: snapping, tiling and scrolling under
     // placement; animations and decorations under appearance, each of those two
     // also a map key in its own right and not only a component of appearance;
@@ -158,7 +159,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kScrollingAllLeaves =
         QSet<QString>{kScrollingSimple, kScrollingColumns, kScrollingTabs, kScrollingWindow, kScrollingZoneSelector}
         + kScrollingConfigChildren;
+    static const QSet<QString> kWorkspacesLeaves{
+        QStringLiteral("workspaces-behavior"),
+        QStringLiteral("workspaces-named"),
+        QStringLiteral("workspaces-shortcuts"),
+    };
     static const QHash<QString, QSet<QString>> groups{
+        {QStringLiteral("workspaces"), kWorkspacesLeaves},
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
         {QStringLiteral("scrolling"), kScrollingAllLeaves},
@@ -228,6 +235,40 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
+        {QStringLiteral("workspaces-behavior"),
+         {
+             {CD::workspacesBehaviorGroup(), CD::enabledKey()},
+             {CD::workspacesBehaviorGroup(), CD::manageKWinPerOutputKey()},
+             {CD::workspacesBehaviorGroup(), CD::snapBackOsdHintKey()},
+             {CD::workspacesBehaviorGroup(), CD::rebindKWinShortcutsKey()},
+         }},
+        {QStringLiteral("workspaces-named"),
+         {
+             {CD::workspacesNamedGroup(), CD::entriesKey()},
+         }},
+        {QStringLiteral("workspaces-shortcuts"),
+         [] {
+             // Only the quick-slot TARGETS: the page assigns the workspace
+             // each slot sends the window to. The slot chords themselves
+             // (and the general workspace verb chords) are daemon globals
+             // edited in the desktop's keyboard shortcut settings, like every
+             // other PZ chord — no settings page owns them.
+             //
+             // These Target keys are ALSO written from the Named Workspaces
+             // page, whose rename cascade follows a renamed workspace into the
+             // slots pointing at it. The one-owner invariant above forbids
+             // listing them under workspaces-named as well, so that page does
+             // not own them: it goes through
+             // SettingsController::renameWorkspaceSlotTargets, which records
+             // the slots it rewrote, and discardPage("workspaces-named")
+             // reverts exactly those keys alongside its own. A target the user
+             // edits HERE stays this page's to revert.
+             Settings::ConfigKeyList keys;
+             for (int slot = 1; slot <= CD::WorkspaceSlotCount; ++slot) {
+                 keys.append({CD::workspacesSlotsGroup(), CD::workspaceSlotTargetKey(slot)});
+             }
+             return keys;
+         }()},
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
@@ -608,17 +649,24 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
 
 const Settings::ConfigKeyList& SettingsController::resetExemptModeEnableKeys()
 {
-    // The three placement enable master switches. Owned by their mode's main
-    // page (see the snapping-overlay-behavior manifest comment) so pending
-    // sidebar flips participate in dirty/save/discard, but EXEMPT from
-    // per-page Reset: "reset this page to defaults" must not switch the mode
-    // itself off or on. resetPage() filters these out of the manifest list it
-    // hands Settings::resetKeys.
+    // The feature enable master switches behind a sidebar toggle. Owned by
+    // their feature's main page (see the snapping-overlay-behavior manifest
+    // comment) so pending sidebar flips participate in dirty/save/discard, but
+    // EXEMPT from per-page Reset: "reset this page to defaults" must not switch
+    // the feature itself off or on. resetPage() filters these out of the
+    // manifest list it hands Settings::resetKeys.
+    //
+    // The three placement modes key off their mode ROOT group. Dynamic
+    // workspaces is the outlier: it has no root group of its own, so its
+    // enable lives in Workspaces.Behavior alongside that page's other keys,
+    // and the workspaces-behavior manifest owns it. Without the entry here a
+    // Reset on Workspaces → Behavior would turn the whole feature off.
     using CD = ConfigDefaults;
     static const Settings::ConfigKeyList keys = {
         {CD::snappingGroup(), CD::enabledKey()},
         {CD::tilingGroup(), CD::enabledKey()},
         {CD::scrollingGroup(), CD::enabledKey()},
+        {CD::workspacesBehaviorGroup(), CD::enabledKey()},
     };
     return keys;
 }
@@ -749,6 +797,9 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("workspaces-behavior"),
+        QStringLiteral("workspaces-named"),
+        QStringLiteral("workspaces-shortcuts"),
         QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),

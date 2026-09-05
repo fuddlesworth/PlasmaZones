@@ -484,6 +484,15 @@ public Q_SLOTS:
     void screenDesktopChanged(const QString& screenId, int desktop);
 
     /**
+     * Report the compositor's ACTUAL per-output-virtual-desktops mode
+     * (dynamic workspaces' authoritative gate arm). Called by the KWin effect
+     * at bringup; cached and re-emitted in-process as
+     * perOutputDesktopsModeReported for the workspace gate to consult.
+     * @param enabled Whether KWin is running with per-output desktops on
+     */
+    void reportPerOutputDesktopsMode(bool enabled);
+
+    /**
      * Report navigation feedback from KWin effect (D-Bus method)
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "swap")
@@ -1128,10 +1137,37 @@ public:
     /// remembered-placement fallback (the cross-screen tile reclaim).
     bool applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
-    /// Shared by the two open-routing entry points: if @p resolved carries a
-    /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
-    /// Returns whether the action MATCHED (see applyOpenDesktopRouting).
-    bool emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
+    /// Drops any workspace-route record @p windowId's open did not consume.
+    ///
+    /// The record is written by applyOpenDesktopRouting and taken by whichever
+    /// placement builder runs, but not every open reaches one: a window that
+    /// opens on a scrolling or tiling screen defers by mode, and a window
+    /// carrying a cross-screen snapped record can report a snap without the
+    /// zone builder ever running. Both leave the record behind, where
+    /// SnapEngine::unfloatToZone reaches the same reader — so a Meta+F unfloat
+    /// long afterwards would resolve against the desktop and monitor that open
+    /// was routed to. Call this at every exit of the open path; it is a no-op
+    /// when the record was already taken.
+    void clearOpenWorkspaceRoute(const QString& windowId);
+
+    /// Shared by the two open-routing entry points: send @p windowId to the
+    /// workspace or desktop @p resolved names. A RouteToWorkspace action is
+    /// tried first through the late-bound workspace resolver (named workspaces
+    /// outrank a positional number, and an undeclared name falls through); a
+    /// RouteToDesktop action then emits windowDesktopMoveRequested.
+    ///
+    /// A realized workspace route also asks for the OUTPUT leg, unless the same
+    /// cascade carries a RouteToScreen — that action owns the window's monitor
+    /// and two output moves would fight. Without the leg the window lands on
+    /// the target desktop but stays on its spawn monitor, and under per-output
+    /// virtual desktops that desktop belongs to the owner monitor's slice, so
+    /// the spawn monitor never shows it.
+    ///
+    /// Returns whether a route action MATCHED (see applyOpenDesktopRouting).
+    /// The answer does not depend on the move being carried out: a declared
+    /// workspace that is momentarily unresolvable, and a RouteToDesktop whose
+    /// target fails the guard, both matched.
+    bool emitOpenRoutingIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
 
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
@@ -1170,7 +1206,87 @@ public:
      */
     void requestReapplyWindowGeometries();
 
+    /**
+     * @brief Install the named-workspace open-routing resolver (the daemon's
+     * workspace wiring). Called with (workspaceName, windowId); returns true
+     * when the route was taken (the name resolved to a live named workspace
+     * and the move was issued), false to fall through to positional
+     * RouteToDesktop. Null while dynamic workspaces are off, which makes the
+     * RouteToWorkspace slot an inert no-op.
+     */
+    /// The resolver answers the REALIZED desktop number a RouteToWorkspace
+    /// landed the window on (> 0), 0 when the name is not realized (the
+    /// positional RouteToDesktop applies instead), or < 0 when the name is
+    /// declared but momentarily unresolvable (no route, and no positional
+    /// stand-in either — see WorkspaceController::WorkspaceRouteVerdict).
+    ///
+    /// Called with (workspaceName, windowId, moveOutput, ownerScreenOut). The
+    /// third argument asks for the OUTPUT leg as well as the desktop one —
+    /// true unless the same rule cascade carries a RouteToScreen that owns the
+    /// window's monitor. The fourth receives the workspace's owner screen so
+    /// the placement builders resolve against the destination monitor.
+    void setWorkspaceRouteResolver(std::function<int(const QString&, const QString&, bool, QString*)> resolver)
+    {
+        m_workspaceRouteResolver = std::move(resolver);
+    }
+
+    /**
+     * @brief Cache + broadcast the dynamic-workspaces ownership map.
+     *
+     * Called by the daemon's workspace relay with the controller's
+     * change-gated payload; caches it for the workspaceMap() replay query and
+     * emits workspaceMapChanged. Not a D-Bus method.
+     */
+    void setWorkspaceMapPayload(const QString& mapJson);
+
+    /**
+     * @brief The compositor's last reported per-output-virtual-desktops mode,
+     * or nullopt when the effect has not reported yet.
+     *
+     * The replay half of perOutputDesktopsModeReported, which is change-gated
+     * and so tells a late subscriber (the workspace wiring rebuilt by a runtime
+     * re-enable) nothing at all. Not a D-Bus method.
+     */
+    std::optional<bool> perOutputDesktopsMode() const
+    {
+        return m_perOutputDesktopsMode;
+    }
+
+public Q_SLOTS:
+    /**
+     * @brief The current dynamic-workspaces map payload (replay half of
+     * workspaceMapChanged, same contract as scrollTabStrips on the tiling
+     * interface). Empty string when the feature is off or not yet adopted.
+     * D-Bus method — the effect pulls it at bringup.
+     */
+    QString workspaceMap() const;
+
 Q_SIGNALS:
+    /**
+     * @brief The dynamic-workspaces ownership map changed (see the XML for
+     * the payload shape). Change-gated by the WorkspaceController.
+     */
+    void workspaceMapChanged(const QString& mapJson);
+
+    /**
+     * @brief Ask the KWin effect to switch ONE screen's current virtual
+     * desktop (effects->setCurrentDesktop(desktop, output)). KWin's own D-Bus
+     * VirtualDesktopManager only carries the global current, so per-screen
+     * switching — the workspace focus verbs and owner-wins snap-back — rides
+     * this command. Emitted by the daemon's WorkspaceController relay.
+     */
+    void setScreenDesktopRequested(const QString& screenId, int desktop);
+
+    /**
+     * @brief In-process relay of reportPerOutputDesktopsMode (the effect's
+     * authoritative probe of KWin's per-output-desktops mode). CHANGE-GATED:
+     * it fires on the first report and on every later report that flips the
+     * value, never on a repeat of the same answer. A subscriber wired up after
+     * the effect already reported therefore gets nothing and must read
+     * perOutputDesktopsMode() to learn the current answer.
+     */
+    void perOutputDesktopsModeReported(bool enabled);
+
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
@@ -1306,6 +1422,26 @@ Q_SIGNALS:
     /// Cross-desktop directional move: KWin should move @p windowId to virtual
     /// desktop @p desktop (1-based). The effect calls windowToDesktops.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
+    /// Same move, but naming the desktop by its STABLE ID instead of its
+    /// position. Used by the named-workspace route, which is the one caller
+    /// holding an id worth preserving.
+    ///
+    /// The positional signal above resolves the number daemon-side and sends
+    /// it, which loses a race this feature creates for itself: the move fills
+    /// the destination workspace, a filled workspace makes the reconciler cut
+    /// a new trailing empty, and that renumber can land before the effect
+    /// applies the number — so the window arrives on whichever desktop now
+    /// occupies that position. Observed live: a route to a workspace at
+    /// position 2 landed the window on the desktop that had just taken
+    /// position 2, one place off the intended one. A workspace NAME is the
+    /// identity that is supposed to survive renumbering (see the
+    /// RouteToWorkspace descriptor), so the id travels the wire and the
+    /// effect matches on VirtualDesktop::id().
+    void windowDesktopMoveByIdRequested(const QString& windowId, const QString& desktopId);
+    /// Move a window to another OUTPUT with no engine handoff (untracked /
+    /// floating windows on the workspace verbs); the effect calls
+    /// windowToScreen. No-op when the window already sits on the target.
+    void windowOutputMoveRequested(const QString& windowId, const QString& targetScreenId);
 
     /// Daemon-initiated cross-output move: the daemon has migrated its own
     /// tiling state for @p windowId onto @p targetScreenId and scheduled both
@@ -1424,9 +1560,48 @@ private:
      * from any invocation context (tests, invokeMethod), not just a nested
      * slot call where sender() happens to survive.
      */
-    void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
-                           const QString& targetScreenId, int targetDesktop, const QString& direction);
+    /// Emit the desktop half of a move, preferring the stable id when the
+    /// caller has one. Single place so every move path makes the same choice.
+    void emitDesktopMove(const QString& windowId, int targetDesktop, const QString& targetDesktopId);
 
+    /// @p targetDesktopId, when non-empty, names the destination desktop by
+    /// its stable id and is emitted instead of @p targetDesktop, which is a
+    /// position and can be renumbered out from under the request in flight.
+    void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
+                           const QString& targetScreenId, int targetDesktop, const QString& direction,
+                           bool allowSameEngine = false, const QString& targetDesktopId = QString());
+
+public:
+    /**
+     * @brief Dynamic-workspaces move verb: relocate a window to a target
+     * (screen, desktop) through the SAME handoff machinery the cross-mode
+     * directional moves use — source engine resolved by tracking, same-engine
+     * handoffs allowed (release + receive with toDesktop; autotile targets
+     * take the reactive catch-scan branch). An untracked (floating) window
+     * degrades to a bare compositor desktop move. Not a D-Bus method.
+     *
+     * @p rawWindowId may be a bare compositor instance id — the owner-wins
+     * reunion and removal-race re-route emitters work from the registry census,
+     * which is keyed that way. It is canonicalized to the composite id every
+     * consumer (engine tracking, the effect's window lookup) is keyed on before
+     * anything else happens.
+     *
+     * A sticky (on-all-desktops) window is refused: the effect declines the
+     * desktop move for it, so carrying the handoff would diverge daemon state
+     * from the compositor. An empty @p targetScreenId (an as-yet-unowned
+     * workspace) degrades to the window's own screen for a tracked window.
+     *
+     * @p moveOutput false performs the desktop half only and leaves the window
+     * on the monitor it is already on. The RouteToWorkspace open-path arm uses
+     * it: a workspace route names a desktop, not a monitor, and issuing an
+     * output move there fought the placement pipeline's own screen resolution
+     * (and any RouteToScreen in the same cascade). @p targetScreenId is still
+     * honoured for the engine handoff, which needs a destination context.
+     */
+    void moveWindowToWorkspaceVerb(const QString& rawWindowId, const QString& targetScreenId, int targetDesktop,
+                                   const QString& targetDesktopId, const QString& direction, bool moveOutput = true);
+
+private:
     /**
      * @brief The engine owning @p mode, or null when that engine is absent.
      *
@@ -1761,6 +1936,33 @@ private:
     bool m_hasPendingRestores = false; // True if layout has pending restores waiting
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
     bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
+
+    /// Last dynamic-workspaces map payload, the workspaceMap() replay cache
+    /// (empty until the WorkspaceController publishes after adoption).
+    QString m_lastWorkspaceMap;
+    /// Effect-probed per-output-desktops mode (unset until the first report).
+    std::optional<bool> m_perOutputDesktopsMode;
+    /// Named-workspace open-routing hook (see setWorkspaceRouteResolver).
+    std::function<int(const QString&, const QString&, bool, QString*)> m_workspaceRouteResolver;
+    /// The desktop, and the destination monitor, a RouteToWorkspace realized
+    /// for a window. Written by emitOpenRoutingIfMatched and read back by the
+    /// two placement-context builders (calculateSnapToPlacementRule's
+    /// directive and applyOpenRoutingForTiling's destination desktop), which
+    /// would otherwise resolve zones and modes in the desktop the window is
+    /// leaving.
+    ///
+    /// SINGLE USE. Both entries are TAKEN by the reader, not merely read: the
+    /// snap-side consumer (placementZonesByRule) is not open-path-only —
+    /// SnapEngine::unfloatToZone drives the same resolver on a Meta+F unfloat,
+    /// arbitrarily long after the open, and a value left standing there would
+    /// force the directive onto a desktop the window may have left hours ago.
+    /// A routing pass writes them, the one reader on that pass takes them, and
+    /// what a later non-open reader sees is nothing. Also dropped when the
+    /// window closes.
+    QHash<QString, int> m_workspaceRoutedDesktop;
+    /// The routed workspace's owner screen (see m_workspaceRoutedDesktop for
+    /// the lifetime; empty when ownership had not settled).
+    QHash<QString, QString> m_workspaceRoutedScreen;
 };
 
 } // namespace PlasmaZones

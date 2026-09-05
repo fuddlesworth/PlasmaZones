@@ -78,6 +78,8 @@ set(plasmazones_core_SRCS
     common/stripcardserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
+    common/kwinperoutputdesktops.cpp
+    common/kwinperoutputdesktops.h
     common/layoutbundlebuilder.cpp
     common/layoutbundlebuilder.h
     core/platform/supportreport.cpp
@@ -107,6 +109,7 @@ set(plasmazones_core_SRCS
     config/settings/storescalars.cpp
     config/settings/shortcuts.cpp
     config/settings/scrolling.cpp
+    config/settings/workspaces.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -120,6 +123,7 @@ set(plasmazones_core_SRCS
     config/settingsschema_p.h
     config/settingsschema_scrolling.cpp
     config/settingsschema_tiling.cpp
+    config/settingsschema_workspaces.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
@@ -501,11 +505,14 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/enginefactory.cpp
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
+    daemon/controllers/shortcutmanager_table.cpp
+    daemon/controllers/shortcutmanager_table.h
     daemon/daemon/start.cpp
     daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp
+    daemon/daemon/workspaces.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
@@ -577,6 +584,10 @@ set(plasmazones_daemon_SRCS
     # Mode tracking and smart toggle (Unified Layout Model)
     daemon/controllers/unifiedlayoutcontroller.cpp
     daemon/controllers/unifiedlayoutcontroller.h
+    # Dynamic per-monitor workspaces
+    daemon/controllers/workspacecontroller.cpp
+    daemon/controllers/workspacecontroller_verbs.cpp
+    daemon/controllers/workspacecontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 
@@ -584,6 +595,12 @@ set(plasmazones_daemon_SRCS
 qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
 
 add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
+
+if(USE_KDE_FRAMEWORKS)
+    # KConfig for the consented kwinrc write in daemon/workspaces.cpp; the
+    # Qt-only build keeps its QSettings arm behind the same #ifdef.
+    target_link_libraries(plasmazonesd PRIVATE KF6::ConfigCore)
+endif()
 
 target_link_libraries(plasmazonesd
     PRIVATE

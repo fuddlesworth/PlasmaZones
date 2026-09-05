@@ -803,10 +803,12 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // desktop by construction.
             announcedDesktops.insert(PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()), desktop);
         }
-        if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops,
-                                                                            m_effect->lastReportedScreenDesktops())) {
+        // Resolved once: the accessor builds its map on each call now that the
+        // effect keys the dedup by output rather than by screen id.
+        const QHash<QString, int> reportedDesktops = m_effect->lastReportedScreenDesktops();
+        if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops, reportedDesktops)) {
             qCInfo(lcEffect) << "slotScreensChanged: dropping a desktop-switch announce for" << screenDesktops
-                             << "— already on" << m_effect->lastReportedScreenDesktops();
+                             << "— already on" << reportedDesktops;
             return;
         }
     }

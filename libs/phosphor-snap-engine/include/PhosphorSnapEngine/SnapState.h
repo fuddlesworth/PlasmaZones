@@ -176,6 +176,46 @@ public:
         Q_EMIT stateChanged();
     }
 
+    /// The windows whose desktop tag equals @p desktop, sorted by id. Empty for
+    /// a non-positive @p desktop (0 is the all-desktops sentinel, not a
+    /// desktop). SnapEngine::reapDesktopState uses it to announce the placement
+    /// drops reapDesktopValues is about to make.
+    QStringList windowsTaggedWithDesktop(int desktop) const;
+
+    /// Dynamic-workspaces arm: release every window tagged with a destroyed
+    /// desktop and reset the last-used memo if it named that desktop. The snap
+    /// assignments are desktop-tagged per window inside EVERY state (including
+    /// the global holder), so a state whose own key survives a desktop's death
+    /// can still hold stale values — the key-level prune cannot reach these.
+    /// 0 (sticky / on-all-desktops) is a sentinel and is never touched by
+    /// either arm.
+    ///
+    /// The whole per-window record goes (removeWindowData), not just the tag.
+    /// Erasing the tag alone and keeping the zone and screen entries is the
+    /// worse of the two shapes: an absent tag and a stamped 0 are
+    /// indistinguishable to buildOccupiedZoneSet, which reads
+    /// value(windowId, 0) and passes both on every desktop, so the window's
+    /// zone reads OCCUPIED everywhere; and windowsOnScreenAndDesktop, which
+    /// matches the tag by value, excludes both, so cross-desktop directional
+    /// focus can no longer land on it. Nothing re-stamps the tag: the window
+    /// registry's virtualDesktop is a positional number KWin does not re-push
+    /// across a renumber (see WindowMetadata::virtualDesktop), and the only
+    /// production recordResidence caller is the cross-screen unfloat. So the
+    /// window is treated exactly as one in a store the desktop's death
+    /// destroys — its placement is gone, and SnapEngine::reapDesktopState
+    /// announces that to the same consumers the store prune announces to.
+    void reapDesktopValues(int desktop);
+
+    /// Dynamic-workspaces arm: rewrite the per-window desktop tags and the
+    /// last-used memo per `oldToNew` (absent = unchanged; 0 sentinel kept).
+    /// A mapping carrying ANY target below 1 is refused WHOLE
+    /// (PhosphorEngine::desktopRenumberMappingIsValid) and nothing moves — a
+    /// renumber names surviving desktops, so a 0 target is a malformed map,
+    /// not an instruction to make windows sticky. All-or-nothing rather than
+    /// per entry so this arm agrees with the state-map and context-tracker
+    /// rewrites that run beside it in SnapEngine::renumberDesktopState.
+    void renumberDesktopValues(const QHash<int, int>& oldToNew);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating State
     // ═══════════════════════════════════════════════════════════════════════════

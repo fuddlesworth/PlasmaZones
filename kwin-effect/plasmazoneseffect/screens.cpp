@@ -11,6 +11,7 @@
 
 #include <core/output.h>
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -26,6 +27,7 @@
 #include <QScreen>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
 
 #include <climits>
 
@@ -102,9 +104,9 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     return result;
 }
 
-void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop)
+void PlasmaZonesEffect::reportScreenDesktop(const KWin::LogicalOutput* output, int desktop, bool force)
 {
-    if (screenId.isEmpty() || desktop < 1) {
+    if (!output || desktop < 1) {
         return;
     }
     // Dedup KWin's per-output desktopChanged — only forward a genuine change.
@@ -112,14 +114,76 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     // registered yet; the bringup re-sync (daemon_bringup.cpp) re-pushes every
     // screen's authoritative desktop after (re)registration, so a missed live
     // report here is recovered there.
-    if (m_lastScreenDesktop.value(screenId, -1) == desktop) {
+    //
+    // `force` exists because this report doubles as a protocol ACK: the daemon's
+    // workspace reconciler retires its SetCurrent ledger entry for a screen on
+    // the next screenDesktopChanged for that screen, and allows only one
+    // SetCurrent per screen in flight. A setScreenDesktopRequested that is
+    // already satisfied produces no desktopChanged at all, so the dedup here
+    // would swallow the only report that could retire the entry and block that
+    // screen's workspace switching until the daemon-side timeout.
+    if (!force && m_lastScreenDesktop.value(output, -1) == desktop) {
         return;
     }
-    m_lastScreenDesktop.insert(screenId, desktop);
+    const QString screenId = outputScreenId(output);
+    if (screenId.isEmpty()) {
+        return;
+    }
+    m_lastScreenDesktop.insert(output, desktop);
     if (m_daemonGate.serviceRegistered) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop},
+                                                       QStringLiteral("screenDesktopChanged"));
     }
+}
+
+QHash<QString, int> PlasmaZonesEffect::lastReportedScreenDesktops() const
+{
+    // Re-resolve each output's id rather than caching one alongside the value.
+    // outputScreenId() appends "/connector" only while a duplicate model name
+    // is connected, so a cached id goes stale the moment an identical monitor
+    // is plugged or unplugged, and the gate this feeds would then compare an
+    // announce against ids no live output answers to. See reportScreenDesktop
+    // for why the dedup map is keyed by output in the first place.
+    QHash<QString, int> byScreenId;
+    byScreenId.reserve(m_lastScreenDesktop.size());
+    for (auto it = m_lastScreenDesktop.cbegin(); it != m_lastScreenDesktop.cend(); ++it) {
+        const QString screenId = outputScreenId(it.key());
+        if (!screenId.isEmpty()) {
+            byScreenId.insert(screenId, it.value());
+        }
+    }
+    return byScreenId;
+}
+
+void PlasmaZonesEffect::resyncAllScreenDesktops(bool force)
+{
+    if (!KWin::effects) {
+        return;
+    }
+    for (auto* output : KWin::effects->screens()) {
+        if (auto* vd = KWin::effects->currentDesktop(output)) {
+            reportScreenDesktop(output, static_cast<int>(vd->x11DesktopNumber()), force);
+        }
+    }
+}
+
+void PlasmaZonesEffect::scheduleScreenDesktopResync()
+{
+    if (m_screenDesktopResyncPending) {
+        return;
+    }
+    m_screenDesktopResyncPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_screenDesktopResyncPending = false;
+        // The id cache may have been repopulated during the cascade that
+        // scheduled this, while effects->screens() still held the pre-hotplug
+        // set — which is exactly the set outputScreenId's identical-model
+        // duplicate detection walks. Drop it so every id below is resolved
+        // against the settled output list.
+        clearScreenIdCache();
+        resyncAllScreenDesktops(/*force=*/true);
+    });
 }
 
 // Resolve the monitor by the window's POSITION — the KWin output whose geometry
@@ -604,6 +668,22 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
     // for the whole cascade.
     clearScreenIdCache();
+    // Report the per-screen desktop for the settled output set. Without this a
+    // hotplugged output NEVER reports its current desktop: the only other
+    // report sites are the desktopChanged lambda and the once-per-daemon-cycle
+    // bringup loop, so the daemon holds no entry for this screenId until the
+    // user happens to switch desktops on it — and a missing entry merges that
+    // screen onto the global desktop, the #648 failure the per-screen map
+    // exists to prevent.
+    //
+    // A full forced walk, not just this output: outputScreenId appends
+    // "/connector" only while a duplicate model name is connected, so plugging
+    // an identical twin RENAMES the existing monitor's id. Its dedup entry is
+    // output-keyed and therefore unchanged, so only a forced report
+    // re-registers that screen with the daemon under the id it now resolves to.
+    // Runs before the idempotence early-return below so a duplicated hotplug
+    // signal still refreshes the report.
+    scheduleScreenDesktopResync();
     // Construct a bound clock for this output. Idempotent: if the same
     // output arrives twice (rare, but possible on some compositors'
     // hotplug sequences) we keep the existing clock rather than
@@ -663,7 +743,16 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
-    m_lastScreenDesktop.remove(removedScreenId);
+    //
+    // Keyed by the output, so this also guarantees the raw pointer never
+    // outlives the LogicalOutput it names.
+    m_lastScreenDesktop.remove(output);
+
+    // Unplugging an identical-model twin RENAMES the surviving monitor's id
+    // (outputScreenId stops appending "/connector" once the duplicate is gone),
+    // so every remaining screen has to re-register its desktop under the id it
+    // now resolves to. Deferred and forced, same as the plug edge.
+    scheduleScreenDesktopResync();
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:

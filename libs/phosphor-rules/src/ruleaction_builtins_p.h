@@ -36,6 +36,31 @@ inline bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
     return v.isString() && !v.toString().isEmpty();
 }
 
+/// Validates that @p params has a string at @p key that is non-blank and at
+/// most @p maxLength characters, both measured on the TRIMMED string. The
+/// bounded twin of hasNonEmptyString, for the free-form identity strings
+/// (workspace names, screen ids). Measuring the trimmed form here keeps the
+/// loader and the read-side resolvers judging the same string, so a padded
+/// value cannot pass one and fail the other. The loader still stores the value
+/// VERBATIM; trimming is a read-side concern, mirroring the SnapToZone
+/// zone-name contract.
+///
+/// That makes trimming a REQUIREMENT of every consumer, not an observation
+/// about them. The readers that honour it today are the workspace resolver on
+/// the daemon's placement path and both routing summaries in the settings
+/// rule model (RouteToScreen and RouteToWorkspace). Any new reader of a value
+/// validated through this helper must trim before comparing, or a padded
+/// payload passes the loader and then matches nothing.
+inline bool hasNonBlankStringWithin(const QJsonObject& params, QLatin1StringView key, int maxLength)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isString()) {
+        return false;
+    }
+    const QString trimmed = v.toString().trimmed();
+    return !trimmed.isEmpty() && trimmed.size() <= maxLength;
+}
+
 /// Validates that @p params has a string at @p key, EMPTY INCLUDED. The
 /// counterpart to hasNonEmptyString, for the slots where empty is a value the
 /// user can mean rather than an unfilled field. The tab-indicator font family
