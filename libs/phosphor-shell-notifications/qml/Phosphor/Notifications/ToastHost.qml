@@ -52,6 +52,9 @@ Item {
     property real margins: Tokens.spacing_l
     // Per-app-rules hook (see header). Null = no rules.
     property var rules: null
+    // The surface pack Component every card instantiates (A1 §2.4); set
+    // by the composition root.
+    property Component decoration: null
     // This screen, for the singleton lookup; the bar's screen name.
     property string screenName: ""
     // This screen's PlacementMapScreen (or any object with its cells /
@@ -313,6 +316,7 @@ Item {
             imageSource: model.imageSource
             urgency: model.urgency
             timeout: model.timeout
+            decoration: host.decoration
             // The window's own hue, so the band agrees with the rail and
             // the map above it.
             t: cell && cell.t !== undefined ? Number(cell.t) : Spectrum.tForX(x + width / 2, host.width)
@@ -380,6 +384,7 @@ Item {
             imageSource: model.imageSource
             urgency: model.urgency
             timeout: model.timeout
+            decoration: host.decoration
             t: Spectrum.tForX(list.x + list.width / 2, host.width)
             onDismissed: host.dismiss(model.toastId)
         }

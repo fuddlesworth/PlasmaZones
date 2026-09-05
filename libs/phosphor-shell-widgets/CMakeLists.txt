@@ -66,6 +66,7 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/SpectrumUnderline.qml
     qml/Phosphor/Widgets/TabularText.qml
     qml/Phosphor/Widgets/SettleAnimation.qml
+    qml/Phosphor/Widgets/DecorationSlot.qml
     qml/Phosphor/Widgets/PlacementMiniature.qml
     qml/Phosphor/Widgets/MiniatureEdges.js
     # Phase 3.2 connected-corner primitives.

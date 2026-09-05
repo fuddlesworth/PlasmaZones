@@ -740,6 +740,8 @@ if(BUILD_PHOSPHOR_SHELL)
         shell/shellmotion.cpp
         shell/ShellGestures.h
         shell/shellgestures.cpp
+        shell/ShellChrome.h
+        shell/shellchrome.cpp
         # The launcher's registry owner: built-in providers, the model the
         # launcher popout binds, and the clipboard + Toplevels services the
         # providers read that nothing else in the shell owns yet.
@@ -816,6 +818,14 @@ if(BUILD_PHOSPHOR_SHELL)
             # ShellGestures subscribes to the daemon's gestureReported relay
             # by the protocol's interface constants.
             PhosphorProtocol::PhosphorProtocol
+            # ShellChrome: the decoration tree + pack registry (PhosphorSurface),
+            # the SurfaceShaderItem stage (plasmazones_rendering) and the shared
+            # SurfaceDecoration.qml host (org.plasmazones.common) that draws a
+            # pack chain on the chrome.
+            PhosphorSurface::PhosphorSurface
+            plasmazones_rendering
+            plasmazones_shared_qml
+            plasmazones_shared_qmlplugin
             # ShellMotion owns the profile registry behind SettleAnimation
             # and publishes the QML-side motion defaults.
             PhosphorAnimation::PhosphorAnimation

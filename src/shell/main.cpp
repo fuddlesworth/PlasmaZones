@@ -11,11 +11,14 @@
 #include "PickerController.h"
 #include "PolkitController.h"
 #include "RoutingPopoutTransport.h"
+#include "ShellChrome.h"
 #include "ShellEffects.h"
 #include "ShellGestures.h"
 #include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
 #include "ToastController.h"
+
+#include "daemon/rendering/surfaceshaderitem.h"
 
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellPicker/RetintController.h>
@@ -364,6 +367,13 @@ int main(int argc, char* argv[])
     // maps them to surfaces.
     PhosphorShellApp::ShellGestures shellGestures;
 
+    // Surface packs on the chrome: the decoration tree and the pack
+    // registry behind every DecorationSlot. The chain host is the shared
+    // SurfaceDecoration.qml, whose stages are SurfaceShaderItems, registered
+    // under the same URI the daemon and the settings app use.
+    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    PhosphorShellApp::ShellChrome shellChrome;
+
     // The pane's window rule, seeded into the daemon's store if absent so
     // the engines know where to put a toplevel with the pane's app id.
     PhosphorShellApp::PaneRules::seed(
@@ -474,6 +484,12 @@ int main(int argc, char* argv[])
     });
     engine.addEngineHook([&shellGestures](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellGestures"), &shellGestures);
+    });
+    engine.addEngineHook([&shellChrome](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellChrome"), &shellChrome);
+        // The palette is per engine; a pack's theme colours follow this one.
+        shellChrome.setPalette(qmlEngine->singletonInstance<PhosphorTheme::PaletteStore*>(
+            QStringLiteral("Phosphor.Theme"), QStringLiteral("PaletteStore")));
     });
     engine.addEngineHook([&shellEffects](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ShellEffects"), &shellEffects);

@@ -37,6 +37,10 @@ Item {
     property int timeout: 5000
     // Rail-axis hue of the card's stroke, set by the host from its x.
     property real t: 0.5
+    // The surface pack on the card (A1 §2.4, `shell.phosphor.notification`),
+    // handed down by ToastHost from the composition root. With a chain
+    // engaged the card's own stroke steps aside for the pack's.
+    property Component decoration: null
 
     signal dismissed
 
@@ -88,8 +92,22 @@ Item {
     readonly property int swipeThreshold: 72
     readonly property bool swiping: swipe.active
 
+    DecorationSlot {
+        id: decorationSlot
+
+        anchors.fill: parent
+        component: toast.decoration
+        contentItem: card
+        surfacePath: "shell.phosphor.notification"
+        focused: toast.hovered || toast.critical
+    }
+
     Item {
         id: card
+
+        // The pack's capture item: the card with its text, re-rendered
+        // through the chain.
+        property bool shaderAnchor: true
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.horizontalCenterOffset: swipe.active ? Math.max(0, swipe.translation.x) : 0
@@ -129,6 +147,7 @@ Item {
             radius: Tokens.radius_container
             t: toast.t
             active: toast.hovered
+            visible: !decorationSlot.active
         }
 
         RowLayout {

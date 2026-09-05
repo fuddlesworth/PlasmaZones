@@ -127,6 +127,9 @@ PanelWindow {
     // (phosphor-glass is real backdrop blur under the navy tint, and only
     // the compositor can blur what is behind a surface).
     readonly property Item bandItem: band
+    // The surface pack on the band (A1 §2.4): the host's decoration
+    // Component, instantiated over the band with `shell.phosphor.bar`.
+    property Component decoration: null
     readonly property rect bandRect: Qt.rect(0, Tokens.rail_thickness, panel.width, Tokens.bar_thickness - Tokens.rail_thickness)
 
     // Where the engine put the external pane, in this screen's pixels, or
@@ -230,6 +233,10 @@ PanelWindow {
     Rectangle {
         id: band
 
+        // The pack's capture item: a decoration wraps the band, and the
+        // widgets stay above it as siblings.
+        property bool shaderAnchor: true
+
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -243,6 +250,14 @@ PanelWindow {
         // tint. Without a blur backend it reads as a plain navy tint.
         color: Theme.surface
         opacity: 0.55
+    }
+
+    // The band's pack, between the band and everything drawn on it.
+    DecorationSlot {
+        anchors.fill: parent
+        component: panel.decoration
+        contentItem: band
+        surfacePath: "shell.phosphor.bar"
     }
 
     // ─── The rail ───────────────────────────────────────────────────────

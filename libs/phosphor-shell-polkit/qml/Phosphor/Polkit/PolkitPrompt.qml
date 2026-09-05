@@ -48,6 +48,10 @@ FocusScope {
     signal submitted
     signal cancelled
 
+    // The surface pack on the card (A1 §2.4, `shell.phosphor.popout`),
+    // set by the composition root.
+    property Component decoration: null
+
     readonly property real cardWidth: 360
     readonly property string message: prompt.request && prompt.request.message !== undefined ? String(prompt.request.message) : ""
     readonly property string actionId: prompt.request && prompt.request.actionId !== undefined ? String(prompt.request.actionId) : ""
@@ -118,8 +122,20 @@ FocusScope {
         }
     }
 
+    DecorationSlot {
+        id: decorationSlot
+
+        anchors.fill: parent
+        component: prompt.decoration
+        contentItem: card
+        surfacePath: "shell.phosphor.popout"
+    }
+
     Item {
         id: card
+
+        // The pack's capture item.
+        property bool shaderAnchor: true
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -138,6 +154,7 @@ FocusScope {
             radius: Tokens.radius_container
             t: 1
             active: true
+            visible: !decorationSlot.active
         }
 
         ColumnLayout {

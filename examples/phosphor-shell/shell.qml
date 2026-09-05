@@ -25,6 +25,7 @@ import Phosphor.Service.UPower
 import Phosphor.Shell
 import Phosphor.Theme
 import QtQuick
+import org.plasmazones.common as PZCommon
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
 // single TopPanel + pushed-in data sources with the production bar:
@@ -61,6 +62,29 @@ Item {
         property: "reducedMotion"
         value: ShellMotion.reducedMotion
     }
+
+    // Surface packs on the chrome (A1 §2.4): the one decoration host every
+    // surface instantiates in its DecorationSlot. ShellChrome resolves the
+    // chain for the slot's surface path from the same decoration tree the
+    // Decoration pages edit; `revision` is what re-resolves it on a tree,
+    // palette or pack change. Handed to ShellChrome rather than referenced
+    // by id, because a per-screen delegate cannot see an id in this file.
+    Component {
+        id: chromeDecoration
+
+        PZCommon.SurfaceDecoration {
+            property string surfacePath: ""
+            property bool focused: true
+
+            decorationChain: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
+            decorationOuterPadding: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.outerPaddingFor(surfacePath) : 0
+            surfaceFocused: focused
+            // The chrome sits in transformed and clipped hosts (a settling
+            // toast, a scaling dashboard), which an unlayered stage ignores.
+            layeredStages: true
+        }
+    }
+    Component.onCompleted: ShellChrome.decorationComponent = chromeDecoration
 
     // Touchpad gestures (A3, the per-surface Gesture rows). Only the
     // compositor sees them; the KWin effect reports each completed one
@@ -123,6 +147,7 @@ Item {
         delegate: BarHost {
             id: bar
 
+            decoration: ShellChrome.decorationComponent
             paneAnchor: "controlcenter"
             paneWidth: 380
             paneDepth: 460
@@ -224,6 +249,7 @@ Item {
 
                 anchors.fill: parent
                 provider: OsdRegistry
+                decoration: ShellChrome.decorationComponent
                 // Through PanelWindow.screen, not modelData.screen, for the
                 // hot-unplug reason the bar delegate gives.
                 screenName: osdSurface.screen ? osdSurface.screen.name : ""
@@ -263,6 +289,7 @@ Item {
 
                 anchors.fill: parent
                 screenName: toastSurface.screen ? toastSurface.screen.name : ""
+                decoration: ShellChrome.decorationComponent
                 // The `notify` IpcTarget below lands on the primary
                 // output's host, which is why the flag travels with the
                 // attachment.
@@ -303,6 +330,7 @@ Item {
                 id: pickerStrip
 
                 anchors.fill: parent
+                decoration: ShellChrome.decorationComponent
                 screenName: pickerSurface.screen ? pickerSurface.screen.name : ""
                 wallpaper: PhosphorShell.wallpaper
                 targetCount: PickerRegistry.targetCount
@@ -642,6 +670,7 @@ Item {
 
         Launcher {
             results: LauncherResults
+            decoration: ShellChrome.decorationComponent
             // The viewfinder: this output's placement map, keyed by the
             // output the transport's layer window landed on.
             map: Screen.name ? PlacementMap.forScreen(Screen.name) : null
@@ -768,6 +797,7 @@ Item {
 
         PolkitPrompt {
             agent: PolkitRegistry
+            decoration: ShellChrome.decorationComponent
             request: PolkitRegistry.activeRequest
             requester: PolkitRegistry.requesterName
             errorText: PolkitRegistry.lastError

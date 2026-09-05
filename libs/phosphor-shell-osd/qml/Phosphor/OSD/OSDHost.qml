@@ -49,6 +49,9 @@ Item {
     property string screenName: ""
     property int holdDuration: 1500
     property var provider: null
+    // The surface pack Component every band instantiates (A1 §2.4); set
+    // by the composition root, forwarded to each delegate that takes it.
+    property Component decoration: null
     // This screen's PlacementMapScreen (or any object with its
     // focusedCellId() / cellRect(id) / changed() surface). Bound by the
     // shell composer; resolved from the singleton when left null.
@@ -109,6 +112,8 @@ Item {
         priv.updateAnchor();
         priv.delegate = item;
         priv.currentKind = kind;
+        if (item.decoration !== undefined)
+            item.decoration = Qt.binding(() => root.decoration);
         priv.apply(item, value, active);
         priv.place(item);
         root.state = "shown";

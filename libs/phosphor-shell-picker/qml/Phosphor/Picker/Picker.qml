@@ -58,6 +58,10 @@ FocusScope {
     signal applied(string path, bool allScreens)
     signal closed
 
+    // The surface pack on the strip (A1 §2.4, `shell.phosphor.picker`),
+    // set by the composition root.
+    property Component decoration: null
+
     implicitHeight: 96
 
     Accessible.role: Accessible.Pane
@@ -213,9 +217,23 @@ FocusScope {
     // Navy glass at 0.72 with the 1 px cyan top edge: the picker's
     // material, no radius, no inset (it is the screen edge).
     Rectangle {
+        id: ground
+
+        // The pack's capture item.
+        property bool shaderAnchor: true
+
         anchors.fill: parent
         color: Theme.surface
         opacity: 0.72
+    }
+    DecorationSlot {
+        id: decorationSlot
+
+        anchors.fill: parent
+        component: picker.decoration
+        contentItem: ground
+        surfacePath: "shell.phosphor.picker"
+        focused: picker.open
     }
 
     Rectangle {
@@ -224,6 +242,7 @@ FocusScope {
         anchors.top: parent.top
         height: 1
         color: Spectrum.resting
+        visible: !decorationSlot.active
     }
 
     RowLayout {

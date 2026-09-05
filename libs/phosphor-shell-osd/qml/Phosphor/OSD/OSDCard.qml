@@ -44,6 +44,9 @@ Item {
     // How much of the band is drawn, 0..1; OSDHost animates it for the
     // enter and retract.
     property real reveal: 1
+    // The surface pack on the band (A1 §2.4, `shell.phosphor.osd`: a halo
+    // by default), handed down by OSDHost from the composition root.
+    property Component decoration: null
 
     readonly property bool _vertical: card.edge === OSDCard.Right
     readonly property real _fraction: Math.max(0, Math.min(1, card.progress))
@@ -74,6 +77,8 @@ Item {
     Rectangle {
         id: band
 
+        // The pack's capture item.
+        property bool shaderAnchor: true
         property real _len: card._length * card._fill * card.reveal
         x: card._vertical ? card.width - 3 : 0
         y: card._vertical ? card.height - _len : card.height - (card.showProgress ? 3 : 2)
@@ -87,6 +92,14 @@ Item {
         Behavior on _len {
             SettleAnimation {}
         }
+    }
+
+    DecorationSlot {
+        anchors.fill: parent
+        component: card.decoration
+        contentItem: band
+        surfacePath: "shell.phosphor.osd"
+        focused: card.reveal > 0
     }
 
     // Glyph + readout riding the fill point.

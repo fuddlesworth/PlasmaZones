@@ -2404,6 +2404,27 @@ target_link_libraries(test_shell_gestures
 target_include_directories(test_shell_gestures PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 
+# The chrome decoration resolver: tree JSON + the bundled packs to a stage
+# list per shell surface path.
+add_executable(test_shell_chrome
+    shell/test_shell_chrome.cpp
+    ${CMAKE_SOURCE_DIR}/src/shell/ShellChrome.h
+    ${CMAKE_SOURCE_DIR}/src/shell/shellchrome.cpp
+)
+target_link_libraries(test_shell_chrome
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        Qt6::Gui
+        PhosphorProtocol::PhosphorProtocol
+        PhosphorSurface::PhosphorSurface
+        PhosphorTheme::PhosphorTheme
+)
+target_compile_definitions(test_shell_chrome PRIVATE PZ_BUNDLED_SURFACE_DIR="${CMAKE_SOURCE_DIR}/data/surface")
+target_include_directories(test_shell_chrome PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
+
 # The toast broker behind the `notify` IpcTarget.
 add_executable(test_toast_controller
     shell/test_toast_controller.cpp

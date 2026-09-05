@@ -61,6 +61,11 @@ FocusScope {
     // Rail-axis hue of the card's stroke: the card is centred.
     readonly property real t: 0.5
 
+    // The surface pack on the card (A1 §2.4, `shell.phosphor.popout`),
+    // set by the composition root. With a chain engaged the card's own
+    // stroke steps aside for the pack's.
+    property Component decoration: null
+
     Binding {
         target: root.results
         property: "active"
@@ -101,16 +106,32 @@ FocusScope {
 
     // Card: container ground, stroke, no shadow.
     Rectangle {
+        id: ground
+
+        // The pack's capture item: the ground alone, so the content above
+        // stays crisp and interactive.
+        property bool shaderAnchor: true
+
         anchors.fill: parent
         radius: Tokens.radius_container
         color: Theme.surface_container
         opacity: 0.92
+    }
+    DecorationSlot {
+        id: decorationSlot
+
+        anchors.fill: parent
+        component: root.decoration
+        contentItem: ground
+        surfacePath: "shell.phosphor.popout"
+        focused: root.activeFocus
     }
     SpectrumStroke {
         anchors.fill: parent
         radius: Tokens.radius_container
         t: root.t
         active: true
+        visible: !decorationSlot.active
     }
 
     RowLayout {
