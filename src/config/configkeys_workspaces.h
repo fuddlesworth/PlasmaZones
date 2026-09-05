@@ -143,6 +143,7 @@ public:
     P_CONFIG_KEY(workspaceReorderDownKey, "WorkspaceReorderDown")
     P_CONFIG_KEY(workspaceMoveToMonitorLeftKey, "WorkspaceMoveToMonitorLeft")
     P_CONFIG_KEY(workspaceMoveToMonitorRightKey, "WorkspaceMoveToMonitorRight")
+    P_CONFIG_KEY(overviewToggleKey, "OverviewToggle")
 };
 
 } // namespace PlasmaZones

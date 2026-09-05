@@ -150,6 +150,8 @@ void appendWorkspacesShortcutKeys(QVector<PhosphorConfig::KeyDef>& globals)
                 QStringLiteral("Hands the current workspace to the monitor to the left."));
     addShortcut(globals, CD::workspaceMoveToMonitorRightKey(), CD::workspaceMoveToMonitorRightShortcut(),
                 QStringLiteral("Hands the current workspace to the monitor to the right."));
+    addShortcut(globals, CD::overviewToggleKey(), CD::overviewToggleShortcut(),
+                QStringLiteral("Opens or closes the workspace overview on every monitor."));
     // Workspace quick-shortcut slots. Both families ship unbound: a slot's
     // target workspace is unassigned until the user picks one, so a factory
     // chord would claim a global binding that resolves to nothing on a fresh

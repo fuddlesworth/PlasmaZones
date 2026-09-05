@@ -552,6 +552,7 @@ install(FILES
     dbus/org.plasmazones.EditorApp.xml
     dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
+    dbus/org.plasmazones.Overview.xml
     dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.Screen.xml
     dbus/org.plasmazones.Scrolling.xml

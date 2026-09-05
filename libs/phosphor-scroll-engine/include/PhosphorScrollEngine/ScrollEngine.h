@@ -481,6 +481,31 @@ public:
     /// screen). See the snapshot type's index contract in
     /// ScrollEngineTypes.h. Implemented in engine_snapshot.cpp.
     ScrollStripSnapshot stripSnapshot(const QString& screenId, const QString& excludeWindowId = QString()) const;
+    /// The strip under @p key, current context or not: the workspace
+    /// overview's read. Never creates state (a never-created key answers an
+    /// invalid snapshot), applies no exclusion and no drag-preview
+    /// redirection, and additionally fills every absRect and viewX. Reads
+    /// only: focus, anchor and view are untouched. Gap overrides resolve for
+    /// the screen's CURRENT context, so a non-current key renders with the
+    /// current context's gaps, the accepted approximation. (engine_snapshot.cpp)
+    ScrollStripSnapshot stripSnapshot(const PhosphorEngine::PlacementStateKey& key) const;
+
+    // IOverviewModelSource (engine_overview.cpp). Both answer std::nullopt
+    // for a key with no state, and neither creates one.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+    std::optional<PhosphorEngine::OverviewStripEntry>
+    overviewStripFor(const PhosphorEngine::PlacementStateKey& key) const override;
+    /// Pan a NON-CURRENT context's stored strip by @p deltaPx along its main
+    /// axis (the overview's scroll gesture on a workspace that is not on
+    /// screen). The daemon routes the current context to scrollViewByPercent
+    /// and only other keys here. No state for the key, or a pan the strip
+    /// refuses (already at that end), answers false. Emits no signal: the
+    /// workspace is invisible, so there is no geometry to apply, and the
+    /// next context switch's ordinary relayout lands the pan; the caller
+    /// owns marking the strip snapshot dirty for persistence, the same way
+    /// the daemon does after reapDesktopState. (engine_overview.cpp)
+    bool panStoredView(const PhosphorEngine::PlacementStateKey& key, int deltaPx);
 
     /// visibleTiles and visibleTileRectsRelative in a single resolve.
     ///

@@ -1398,6 +1398,15 @@ public:
     /// tiled here (or has closed).
     QRect lastManagedRect(const QString& rawWindowId) const override;
 
+    /// IOverviewModelSource: the windows this engine holds under @p key, read
+    /// straight from the existing TilingState without creating one. Tiled
+    /// windows carry their calculated zone (an over-cap window carries the
+    /// tile rect it was last applied at), floats carry the last tile rect
+    /// this engine emitted for them, if any. Implemented in
+    /// src/autotileengine/engine_overview.cpp.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+
 private Q_SLOTS:
     void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);

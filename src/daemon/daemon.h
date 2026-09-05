@@ -588,6 +588,24 @@ private:
     /// desktop-switch chords the takeover stole. Idempotent: a stop() with the
     /// feature off, or a second stop(), does nothing.
     void teardownWorkspaces();
+    /// Construct + wire the overview controller (daemon/overview.cpp). Called
+    /// at the tail of initializeWorkspaces: the overview is part of the
+    /// workspaces feature and reads the workspace map.
+    void initializeOverview();
+    /// Detach the overview from its adaptor (which closes an open overview)
+    /// and destroy the controller. Called first from teardownWorkspaces.
+    void teardownOverview();
+    /// Whether the KWin overview effect currently holds the overview open.
+    bool overviewOpen() const;
+    /// The two workspace OSD hints (snap-back, displaced-by-removal), gated by
+    /// their toggle, the navigation OSD gate and the open overview.
+    void wireWorkspaceOsdHints(QObject* wiring);
+    /// The screen a window sits on per the daemon's tracking (engine first,
+    /// then the placement store); empty means "cannot vouch".
+    QString trackedWindowScreen(const QString& windowId) const;
+    /// The WindowTrackingService sticky answer, the one the move slot refuses
+    /// on; false when no service is up.
+    bool isTrackedWindowSticky(const QString& windowId) const;
     void connectLayoutSignals();
     void connectOverlaySignals();
     void finalizeStartup();
@@ -1150,6 +1168,9 @@ private:
     LayoutAdaptor* m_layoutAdaptor = nullptr;
     SettingsAdaptor* m_settingsAdaptor = nullptr;
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
+    /// Workspace overview wire surface. Unconditional (always introspectable);
+    /// attached to m_overviewController only while workspaces are on.
+    OverviewAdaptor* m_overviewAdaptor = nullptr;
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     PhosphorScreens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
@@ -1182,6 +1203,8 @@ private:
     /// (initializeWorkspaces); its existence IS the runtime gate the
     /// desktopCountChanged prune consults.
     std::unique_ptr<WorkspaceController> m_workspaceController;
+    /// Workspace overview policy; lives and dies with m_workspaceController.
+    std::unique_ptr<OverviewController> m_overviewController;
     /// One-time guard for the settings connects that re-enter
     /// initializeWorkspaces on a runtime enable (lambdas cannot use
     /// Qt::UniqueConnection).

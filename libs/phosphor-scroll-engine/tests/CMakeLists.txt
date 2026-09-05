@@ -149,6 +149,12 @@ pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstu
 # which has no headroom left of its own. Same stub, different question: not
 # which channel wins, but what a dying context destroys and what it announces.
 pse_add_test(test_scrollengine_desktopreap test_scrollengine_desktopreap.cpp scrollstubsettings.h)
+# The workspace overview's write into a NON-CURRENT context (panStoredView)
+# and how that stored pan survives the desktop axis's reap and renumber.
+# Beside the reap suite because it shares its fixture and its lifecycle
+# framing; a separate file because the reap suite's question is what a dying
+# context destroys, and this one's is what an invisible context keeps.
+pse_add_test(test_scroll_engine_workspaces test_scroll_engine_workspaces.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
 # sticky gate and the client-decides width and height all short-circuit on a
 # null tracker, so their per-screen resolution is unobservable without one.

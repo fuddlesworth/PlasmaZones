@@ -1,0 +1,50 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <!-- Workspace Overview Interface -->
+    <interface name="org.plasmazones.Overview">
+        <annotation name="org.gtk.GDBus.DocString" value="The workspace overview: a zoomed-out, per-monitor view of every workspace. The daemon is the layout authority (engines are the only source of where a non-current workspace's windows belong) and publishes a per-(screen, desktop) model while the overview is open; the KWin overview effect renders it and sends every mutation back as a verb. Verbs are fire-and-forget: every refusal is a debug log and no state change, and the effect learns the outcome from the next overviewModelChanged. Screen ids are the daemon's canonical physical ids; window ids are the daemon's composite window ids; desktop ids are KWin UUID strings as workspaceMap reports them."/>
+
+        <method name="setOverviewOpen">
+            <annotation name="org.gtk.GDBus.DocString" value="Streaming gate. The effect calls this with true BEFORE its first overviewModel() replay; while closed overviewModel() answers an empty string and overviewModelChanged never fires. Opening also suppresses the workspace OSD hints (snap-back, displaced) until closed. The daemon watches the caller's unique bus name and resets to closed when it vanishes, so a crashed effect cannot leave the model streaming. Only the caller that opened may close; a close from any other name is ignored."/>
+            <arg name="open" type="b" direction="in"/>
+        </method>
+
+        <method name="overviewModel">
+            <annotation name="org.gtk.GDBus.DocString" value="Replay half of overviewModelChanged. Empty while closed, while the workspaces feature is off, or before adoption."/>
+            <arg name="modelJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Versioned JSON object, v 1: {v, generation, workspaceMapGeneration, activity, screens: {screenId: {logicalSize: {w, h}, workspaces: {desktopId: {sliceIndex, index, name, current, mode, windows: [{id, rect: {x, y, w, h}, floating, minimized, sticky, column, tile}], strip?: {viewOffset, columns: [{rect, tabbed, activeTab, tiles: [{id, rect}]}]}}}}}}. Rects are workspace-local logical pixels (relative to the output&apos;s logical geometry origin), integers, unzoomed; a null rect (all zeros) means the daemon has no geometry for that entry. sliceIndex is the workspace&apos;s position in its screen&apos;s slice (JSON objects do not preserve order), index its live 1-based global desktop number, name its declared name or empty, current whether it is the screen&apos;s current workspace. mode is one of snapping, tiling, scrolling, none. The windows array is unordered; the effect sorts by stacking order. strip is present only for scrolling workspaces: its column and tile rects already include the view offset (a parked column lies outside the workspace), and viewOffset is the strip&apos;s viewport position for the pan verb. generation orders model payloads (a receiver drops non-increasing values); workspaceMapGeneration names the workspaceMap generation the model was built against and a receiver holding a different map must re-request workspaceMap() and then overviewModel(). Both counters restart with the daemon's service name."/>
+            </arg>
+        </method>
+
+        <signal name="overviewModelChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The model changed while the overview is open. Change-gated (only a real payload difference fires) and coalesced to one emission per event-loop turn. Never fires while closed."/>
+            <arg name="modelJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Same shape as overviewModel()."/>
+            </arg>
+        </signal>
+
+        <signal name="overviewStateChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon's view of the open state changed (the setOverviewOpen gate, a watcher reset, or a feature teardown)."/>
+            <arg name="open" type="b"/>
+        </signal>
+
+        <signal name="toggleOverviewRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="The overview toggle shortcut fired daemon-side. The effect toggles its state; the toggle is a no-op there when another fullscreen effect holds the slot or the keyboard grab fails, and the effect reports the actual outcome through setOverviewOpen."/>
+        </signal>
+
+        <signal name="closeOverviewRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon asks the effect to close the overview without changing focus: the workspaces feature is being torn down, the current activity changed, or the daemon is exiting."/>
+        </signal>
+
+        <method name="reportOverviewState">
+            <annotation name="org.gtk.GDBus.DocString" value="The effect reports whether its toggle actually started or stopped the overview. A report of false while the daemon considers the overview open closes the gate the same way setOverviewOpen(false) would."/>
+            <arg name="open" type="b" direction="in"/>
+        </method>
+
+    </interface>
+</node>

@@ -38,6 +38,11 @@ using namespace ShortcutIds;
 // can decay to a function pointer for storage in the table.
 const StaticEntry kStaticEntries[] = {
     // ─── Dynamic workspaces ────────────────────────────────────────────────
+    {kIdOverviewToggle, &ConfigDefaults::overviewToggleShortcut, &Settings::overviewToggleShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Workspace Overview"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->overviewToggleRequested();
+     }},
     {kIdWorkspaceFocusUp, &ConfigDefaults::workspaceFocusUpShortcut, &Settings::workspaceFocusUpShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Focus Workspace Above"),
      [](ShortcutManager* sm) {

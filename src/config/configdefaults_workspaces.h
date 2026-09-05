@@ -90,6 +90,14 @@ public:
     {
         return QStringLiteral("Meta+Ctrl+Up");
     }
+    /// The overview toggle takes over KWin's stock Overview chord the same
+    /// way the focus pair takes over the desktop-switch chords: the stock
+    /// rebind pass backs up and clears KWin's "Overview" action while the
+    /// feature and the rebind toggle are on, and restores it on disable.
+    static QString overviewToggleShortcut()
+    {
+        return QStringLiteral("Meta+W");
+    }
     static QString workspaceFocusDownShortcut()
     {
         return QStringLiteral("Meta+Ctrl+Down");

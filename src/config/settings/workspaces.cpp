@@ -63,6 +63,8 @@ void Settings::setWorkspacesNamedEntries(const QVariantList& entries)
 // ── Verb shortcuts (Shortcuts.Global leaves, like every other chord) ────────
 
 P_STORE_GET(QString, workspaceFocusUpShortcut, shortcutsGlobalGroup, workspaceFocusUpKey, QString)
+P_STORE_GET(QString, overviewToggleShortcut, shortcutsGlobalGroup, overviewToggleKey, QString)
+P_STORE_SET_STRING(setOverviewToggleShortcut, shortcutsGlobalGroup, overviewToggleKey, overviewToggleShortcutChanged)
 P_STORE_SET_STRING(setWorkspaceFocusUpShortcut, shortcutsGlobalGroup, workspaceFocusUpKey,
                    workspaceFocusUpShortcutChanged)
 P_STORE_GET(QString, workspaceFocusDownShortcut, shortcutsGlobalGroup, workspaceFocusDownKey, QString)
@@ -211,7 +213,7 @@ void Settings::setWorkspaceMoveSlotShortcut(int index, const QString& shortcut)
 // shared family signals, which is what their setters emit too.
 
 namespace {
-/// The ten verb chords, paired getter → NOTIFY, in one table so the snapshot
+/// The eleven verb chords, paired getter → NOTIFY, in one table so the snapshot
 /// and the emit walk the same order. Adding a verb means one row here, not two
 /// hand-kept lists.
 struct WorkspaceVerbChord
@@ -220,9 +222,9 @@ struct WorkspaceVerbChord
     void (Settings::*changed)();
 };
 
-const std::array<WorkspaceVerbChord, 10>& workspaceVerbChords()
+const std::array<WorkspaceVerbChord, 11>& workspaceVerbChords()
 {
-    static const std::array<WorkspaceVerbChord, 10> table{{
+    static const std::array<WorkspaceVerbChord, 11> table{{
         {&Settings::workspaceFocusUpShortcut, &Settings::workspaceFocusUpShortcutChanged},
         {&Settings::workspaceFocusDownShortcut, &Settings::workspaceFocusDownShortcutChanged},
         {&Settings::workspaceMoveWindowUpShortcut, &Settings::workspaceMoveWindowUpShortcutChanged},
@@ -233,6 +235,7 @@ const std::array<WorkspaceVerbChord, 10>& workspaceVerbChords()
         {&Settings::workspaceReorderDownShortcut, &Settings::workspaceReorderDownShortcutChanged},
         {&Settings::workspaceMoveToMonitorLeftShortcut, &Settings::workspaceMoveToMonitorLeftShortcutChanged},
         {&Settings::workspaceMoveToMonitorRightShortcut, &Settings::workspaceMoveToMonitorRightShortcutChanged},
+        {&Settings::overviewToggleShortcut, &Settings::overviewToggleShortcutChanged},
     }};
     return table;
 }

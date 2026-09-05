@@ -187,13 +187,14 @@ Q_SIGNALS:
     void desktopsReapRequested(const QList<int>& desktops);
     void desktopRenumberRequested(const QHash<int, int>& oldToNew);
 
-private:
+public:
     /// The map, the census and the reconciler all key screens by the id the
     /// KWin effect REPORTS; ScreenManager and the settings UI hand out other
-    /// spellings. Every externally sourced screen id passes through here.
-    /// Static and private rather than file-local: the verbs TU canonicalizes
-    /// the settings-UI output ids of the named declarations with it.
+    /// spellings. Every externally sourced screen id passes through here,
+    /// including every id the overview adaptor receives on the wire.
     static QString canonicalScreenId(const QString& connectorOrId);
+
+private:
     void wireVirtualDesktops();
     void wireWindows();
     void wireScreens();

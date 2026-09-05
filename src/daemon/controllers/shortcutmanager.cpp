@@ -59,12 +59,17 @@ constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
 /// because their prefix IS their definition.
 bool isWorkspaceShortcutId(const QString& id)
 {
-    static const QSet<QString> kWorkspaceIds = {
-        QString::fromLatin1(kIdWorkspaceFocusUp),           QString::fromLatin1(kIdWorkspaceFocusDown),
-        QString::fromLatin1(kIdWorkspaceMoveWindowUp),      QString::fromLatin1(kIdWorkspaceMoveWindowDown),
-        QString::fromLatin1(kIdWorkspaceMoveColumnUp),      QString::fromLatin1(kIdWorkspaceMoveColumnDown),
-        QString::fromLatin1(kIdWorkspaceReorderUp),         QString::fromLatin1(kIdWorkspaceReorderDown),
-        QString::fromLatin1(kIdWorkspaceMoveToMonitorLeft), QString::fromLatin1(kIdWorkspaceMoveToMonitorRight)};
+    static const QSet<QString> kWorkspaceIds = {QString::fromLatin1(kIdWorkspaceFocusUp),
+                                                QString::fromLatin1(kIdWorkspaceFocusDown),
+                                                QString::fromLatin1(kIdWorkspaceMoveWindowUp),
+                                                QString::fromLatin1(kIdWorkspaceMoveWindowDown),
+                                                QString::fromLatin1(kIdWorkspaceMoveColumnUp),
+                                                QString::fromLatin1(kIdWorkspaceMoveColumnDown),
+                                                QString::fromLatin1(kIdWorkspaceReorderUp),
+                                                QString::fromLatin1(kIdWorkspaceReorderDown),
+                                                QString::fromLatin1(kIdWorkspaceMoveToMonitorLeft),
+                                                QString::fromLatin1(kIdWorkspaceMoveToMonitorRight),
+                                                QString::fromLatin1(kIdOverviewToggle)};
     return kWorkspaceIds.contains(id) || id.startsWith(QLatin1String(kWorkspaceMoveSlotPrefix))
         || id.startsWith(QLatin1String(kWorkspaceFocusSlotPrefix));
 }

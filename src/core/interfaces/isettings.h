@@ -1038,6 +1038,7 @@ Q_SIGNALS:
     void workspaceReorderDownShortcutChanged();
     void workspaceMoveToMonitorLeftShortcutChanged();
     void workspaceMoveToMonitorRightShortcutChanged();
+    void overviewToggleShortcutChanged();
     void workspaceSlotShortcutsChanged();
     void workspaceSlotTargetsChanged();
 

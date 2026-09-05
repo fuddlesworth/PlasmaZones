@@ -44,6 +44,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/scrollpark_p.h
     src/scrollengine/engine_park.cpp
     src/scrollengine/engine_snapshot.cpp
+    src/scrollengine/engine_overview.cpp
     src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp

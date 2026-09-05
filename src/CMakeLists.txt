@@ -42,6 +42,7 @@ set(plasmazones_core_SRCS
     # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
     # directly.
     core/interfaces/ioverlayservice.h
+    core/interfaces/ioverviewpolicy.h
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
     core/types/animationshadersupportedpaths.h
@@ -158,8 +159,12 @@ set(plasmazones_core_SRCS
     dbus/compositorbridgeadaptor.h
     dbus/controladaptor.cpp
     dbus/controladaptor.h
+    dbus/kwinsendertrust.cpp
+    dbus/kwinsendertrust.h
     dbus/overlayadaptor.cpp
     dbus/overlayadaptor.h
+    dbus/overviewadaptor.cpp
+    dbus/overviewadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
     dbus/ruleadaptor.cpp
@@ -513,6 +518,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp
     daemon/daemon/workspaces.cpp
+    daemon/daemon/overview.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
@@ -588,6 +594,11 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/workspacecontroller.cpp
     daemon/controllers/workspacecontroller_verbs.cpp
     daemon/controllers/workspacecontroller.h
+    daemon/controllers/overviewcontroller.cpp
+    daemon/controllers/overviewcontroller_model.cpp
+    daemon/controllers/overviewcontroller.h
+    daemon/controllers/overviewmodelbuilder.cpp
+    daemon/controllers/overviewmodelbuilder.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
 )
 

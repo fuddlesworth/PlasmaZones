@@ -1416,6 +1416,8 @@ public:
     void setWorkspaceMoveToMonitorLeftShortcut(const QString& shortcut);
     QString workspaceMoveToMonitorRightShortcut() const;
     void setWorkspaceMoveToMonitorRightShortcut(const QString& shortcut);
+    QString overviewToggleShortcut() const;
+    void setOverviewToggleShortcut(const QString& shortcut);
     /// Workspace quick-shortcut slots (0-based index over nine slots, stored
     /// as WorkspaceMoveSlotN; defaults unset — the quick-layout-slot
     /// convention). Q_INVOKABLE so the Quick Shortcuts page reads/writes them

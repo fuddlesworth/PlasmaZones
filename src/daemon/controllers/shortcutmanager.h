@@ -236,6 +236,8 @@ Q_SIGNALS:
     void workspaceMoveColumnRequested(int delta);
     void workspaceReorderRequested(int delta);
     void workspaceMoveToMonitorRequested(const QString& direction);
+    /// The workspace overview toggle chord fired.
+    void overviewToggleRequested();
     /// Quick-shortcut slot (1-based): send the active window to the Nth
     /// workspace of the acting monitor's own list.
     void workspaceMoveSlotRequested(int slot);
