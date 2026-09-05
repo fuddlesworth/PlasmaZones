@@ -194,7 +194,7 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // pointers in the right order (action gone, entry cleared) and avoid
     // relying on implicit child-destruction ordering.
     //
-    // disconnect() before delete: the per-action triggered lambda captures
+    // Cut triggered before delete: the per-action triggered lambda captures
     // `this` (the backend). If a queued QAction::triggered event is
     // dispatched during the delete loop (vanishingly unlikely on the same
     // thread, but possible across D-Bus dispatch), the lambda would emit
@@ -205,10 +205,17 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // m_impl, which this destructor destroys before ~QObject would sever the
     // connection, so cut it up front rather than leave a window where a
     // nested dispatch touches a dead Impl.
+    //
+    // Only triggered, never the wildcard action->disconnect(): KGlobalAccel
+    // keeps a destroyed-signal hook on every action it has seen, and a
+    // wildcard disconnect severs that too, which Qt 6 reports as "wildcard
+    // call disconnects from destroyed signal" and which leaves
+    // KGlobalAccel's live table pointing at a freed action until it notices
+    // by other means.
     disconnect(KGlobalAccel::self(), nullptr, this, nullptr);
     for (auto& entry : m_impl->entries) {
         if (entry.action) {
-            entry.action->disconnect();
+            QObject::disconnect(entry.action, &QAction::triggered, nullptr, nullptr);
             if (!entry.persistent) {
                 KGlobalAccel::self()->removeAllShortcuts(entry.action);
             }
@@ -392,15 +399,18 @@ void KGlobalAccelBackend::suspendShortcut(const QString& id)
         // objectName and its autoloading setShortcut picks the stored user
         // value back up.
         //
-        // disconnect() first, for the destructor's reason: the triggered
-        // lambda captures `this`, and a queued activation dispatched mid-delete
+        // Cut triggered first, for the destructor's reason: the lambda
+        // captures `this`, and a queued activation dispatched mid-delete
         // would emit activated() for an id that is no longer registered.
+        // Triggered only, not a wildcard disconnect, for the destructor's
+        // other reason: the wildcard would also sever KGlobalAccel's
+        // destroyed hook on the action.
         //
         // Deleted synchronously rather than deleteLater'd: a resume in the same
         // event-loop turn would otherwise create the replacement action while
         // the old one is still pending destruction, and the deferred ~QAction
         // would then unregister the id that had just been re-established.
-        action->disconnect();
+        QObject::disconnect(action, &QAction::triggered, nullptr, nullptr);
         delete action;
     }
 }

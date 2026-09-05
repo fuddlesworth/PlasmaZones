@@ -120,6 +120,15 @@ void Daemon::initializeOverview()
     });
     m_overviewController->setActivityManager(m_activityManager.get());
     m_overviewController->setScrollEngine(qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get()));
+    // A pan landed off screen is a strip-snapshot change the engine does not
+    // announce; mark the blob dirty so the debounced save picks it up.
+    m_overviewController->setStripDirtyMarker([this]() {
+        if (m_windowTrackingAdaptor) {
+            if (auto* service = m_windowTrackingAdaptor->service()) {
+                service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyScrollStrips);
+            }
+        }
+    });
     // The named declarations live in Settings; the overview rewrites them
     // there and the ordinary workspacesNamedEntriesChanged path re-applies.
     m_overviewController->setNamedEntriesAccess({[this]() {

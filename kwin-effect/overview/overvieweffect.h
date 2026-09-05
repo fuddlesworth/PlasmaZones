@@ -191,7 +191,16 @@ private:
     // The swipe gesture is registered once with KWin (its QActions live on
     // the togglable state and cannot be unregistered), so the setting is a
     // gate in tryStart: a gesture-driven activation is rolled back while off.
+    // The gate cannot tell a swipe from the state itself: KWin's
+    // EffectTogglableState::partialActivate sets the status (and so fires the
+    // statusChanged this effect starts on) BEFORE it raises the in-progress
+    // flag, and the swipe's end runs activate(), which lowers the flag again
+    // before setting Active. So the shortcut and daemon path, which always
+    // come through this effect's activate(), raise m_shortcutActivation for
+    // the synchronous statusChanged it causes, and every other activation
+    // is a gesture.
     bool m_gestureEnabled = true;
+    bool m_shortcutActivation = false;
 
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     PhosphorAnimation::Profile m_globalMotion;

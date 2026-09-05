@@ -339,13 +339,14 @@ void OverviewEffect::tryStart()
     if (isRunning()) {
         return;
     }
+    qCDebug(lcOverview) << "overview start requested: gesture enabled" << m_gestureEnabled << "from shortcut"
+                        << m_shortcutActivation << "in progress" << m_state->inProgress();
     if (KWin::effects->isScreenLocked()) {
         m_state->deactivate();
         return;
     }
-    // A swipe reaches here as an in-progress partial activation; the
-    // shortcut and the daemon's toggle never do.
-    if (!m_gestureEnabled && m_state->inProgress()) {
+    // Anything not flagged by activate() is a swipe (see m_shortcutActivation).
+    if (!m_gestureEnabled && !m_shortcutActivation) {
         m_state->deactivate();
         return;
     }
@@ -377,7 +378,11 @@ void OverviewEffect::activate()
     if (KWin::effects->isScreenLocked()) {
         return;
     }
+    // statusChanged, and with it tryStart, fire synchronously inside
+    // activate(), so the flag brackets exactly this activation.
+    m_shortcutActivation = true;
     m_state->activate();
+    m_shortcutActivation = false;
 }
 
 void OverviewEffect::deactivate()
@@ -474,6 +479,7 @@ void OverviewEffect::loadSettings()
     });
     loadSettingAsync(this, QStringLiteral("overviewGestureEnabled"), [this](const QVariant& v) {
         m_gestureEnabled = v.toBool();
+        qCDebug(lcOverview) << "overview gesture setting:" << m_gestureEnabled;
     });
     loadSettingAsync(this, QStringLiteral("overviewWheelSwitchesWorkspaces"), [this](const QVariant& v) {
         const bool enabled = v.toBool();

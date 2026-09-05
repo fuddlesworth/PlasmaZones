@@ -80,6 +80,12 @@ public:
     /// The scroll engine, for the strip pan verb (the model source alone
     /// cannot pan). Null leaves panStrip a no-op.
     void setScrollEngine(PhosphorScrollEngine::ScrollEngine* engine);
+    /// Fired after a pan the engine accepted. panStoredView raises no
+    /// placementChanged (the workspace is off screen), and that signal is the
+    /// strip snapshots' only producer, so without this the pan lived in
+    /// memory and was gone after a restart; the daemon marks the scroll
+    /// strips dirty here, the way it does after reapDesktopState.
+    void setStripDirtyMarker(std::function<void()> marker);
     /// Read / write access to the Workspaces.Named declarations. The pin,
     /// rename, reorder and transfer verbs rewrite declarations through it
     /// rather than calling the controller's apply directly, so the
@@ -162,6 +168,7 @@ private:
     PhosphorWorkspaces::ActivityManager* m_activities = nullptr;
     PhosphorScrollEngine::ScrollEngine* m_scrollEngine = nullptr;
     NamedEntriesAccess m_namedEntries;
+    std::function<void()> m_stripDirtyMarker;
     Sources m_sources;
     std::function<QString(const QString&)> m_windowScreenResolver;
     std::function<bool(const QString&)> m_windowStickyPredicate;

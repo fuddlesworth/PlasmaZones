@@ -28,6 +28,11 @@ void OverviewController::setScrollEngine(PhosphorScrollEngine::ScrollEngine* eng
     m_scrollEngine = engine;
 }
 
+void OverviewController::setStripDirtyMarker(std::function<void()> marker)
+{
+    m_stripDirtyMarker = std::move(marker);
+}
+
 void OverviewController::setNamedEntriesAccess(NamedEntriesAccess access)
 {
     m_namedEntries = std::move(access);
@@ -247,6 +252,9 @@ void OverviewController::panStrip(const QString& screenId, const QString& deskto
     const PhosphorEngine::PlacementStateKey key{screenId, desktop, currentActivity()};
     if (!m_scrollEngine->panStoredView(key, deltaPx)) {
         return;
+    }
+    if (m_stripDirtyMarker) {
+        m_stripDirtyMarker();
     }
     // The current context shows the pan now; any other context shows it
     // when next focused, through its ordinary relayout.
